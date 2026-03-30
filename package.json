@@ -1,0 +1,19 @@
+{
+  "name": "zk-travel-rule",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Circom circuits for ZK Travel Rule Compliance Bridge",
+  "scripts": {
+    "compile": "bash scripts/compile_circuits.sh",
+    "test:circuits": "pytest tests/unit/test_circuits.py -v",
+    "test": "pytest tests/ -v",
+    "test:unit": "pytest tests/unit/ -v",
+    "test:integration": "pytest tests/integration/ -v",
+    "test:compliance": "pytest tests/compliance/ -v"
+  },
+  "dependencies": {
+    "snarkjs": "^0.7.5",
+    "circomlib": "^2.0.5",
+    "circomlibjs": "^0.1.7"
+  }
+}

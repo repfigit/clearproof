@@ -1,0 +1,49 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+dist/
+build/
+.eggs/
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# ZK artifacts (generated, not committed)
+artifacts/
+*.ptau
+*.zkey
+*.wasm
+*.r1cs
+*.sym
+witness.wtns
+proof.json
+public.json
+verification_key.json
+
+# Node
+node_modules/
+package-lock.json
+
+# Environment
+.env
+.env.local
+.env*.local
+
+# Certs
+certs/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+
+# OS
+.DS_Store
+
+# Test
+.pytest_cache/
+htmlcov/
+.coverage
