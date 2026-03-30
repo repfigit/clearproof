@@ -84,10 +84,14 @@ class zkKYCCredential(BaseModel):
     }
 
     def _field_ints(self) -> list[int]:
-        """Return an ordered list of integer-encoded credential fields."""
+        """Return an ordered list of integer-encoded credential fields.
+
+        MUST match the circuit's Poseidon(5) input ordering in
+        credential_validity.circom:
+          Poseidon(issuer_did, kyc_tier, sanctions_clear, issued_at, expires_at)
+        """
         return [
             int.from_bytes(self.issuer_did.encode()[:16], "big"),
-            int.from_bytes(self.jurisdiction.encode(), "big"),
             self._KYC_TIER_MAP[self.kyc_tier],
             1 if self.sanctions_clear else 0,
             self.issued_at,

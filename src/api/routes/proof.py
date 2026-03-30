@@ -141,10 +141,11 @@ async def generate_proof(
     from src.prover.tier_mapping import compute_tier
     from src.prover.snarkjs_prover import SnarkJSProver
     from src.registry.sanctions_list import SanctionsMerkleTree
-    from src.registry.credential_registry import get_credential
-    from src.registry.issuer_registry import get_issuer_tree_root
-    from src.sar.sar_review import evaluate_sar_review
-    from src.sar.encryption import AuditEncryption, AuditLog
+    from src.registry.credential_registry import CredentialRegistry
+    from src.registry.issuer_registry import IssuerRegistry
+    from src.sar.sar_review import evaluate_sar_flags
+    from src.sar.encryption import derive_key, encrypt_pii
+    from src.sar.audit_log import AuditLog
     from src.protocol.compliance_proof import ComplianceProof
     from src.protocol.hybrid_payload import HybridPayload
 
@@ -152,7 +153,8 @@ async def generate_proof(
     tier = compute_tier(request.amount_usd, request.jurisdiction)
 
     # 2. Look up credential -----------------------------------------------------
-    credential = get_credential(request.credential_id)
+    cred_registry = CredentialRegistry()
+    credential = cred_registry.get(request.credential_id)
     if credential is None:
         raise HTTPException(status_code=404, detail="Credential not found")
     if credential.revoked:
@@ -160,94 +162,93 @@ async def generate_proof(
 
     # 3. Build circuit inputs ----------------------------------------------------
     sanctions_tree = SanctionsMerkleTree()
-    nonmembership_proof = sanctions_tree.generate_nonmembership_proof(
-        wallet_address_hash=_hash_wallet(request.wallet_address),
+    nonmembership_witness = await sanctions_tree.generate_nonmembership_witness(
+        wallet_address=request.wallet_address,
     )
 
+    issuer_registry = IssuerRegistry()
     input_signals = {
         "sanctions_tree_root": sanctions_tree.root,
-        "issuer_tree_root": get_issuer_tree_root(),
+        "issuer_tree_root": issuer_registry.get_root(),
         "amount_tier": tier,
         "transfer_timestamp": int(time.time()),
-        "jurisdiction": _encode_jurisdiction(request.jurisdiction),
-        "credential_commitment": credential.commitment(),
+        "jurisdiction_code": _encode_jurisdiction(request.jurisdiction),
+        "credential_commitment": await cred_registry.get_commitment(request.credential_id),
         # Private inputs
         "issuer_did": _encode_did(credential.issuer_did),
         "kyc_tier": _encode_kyc_tier(credential.kyc_tier),
-        "sanctions_clear": 1 if credential.sanctions_clear else 0,
         "issued_at": credential.issued_at,
         "expires_at": credential.expires_at,
         "wallet_address_hash": _hash_wallet(request.wallet_address),
-        # Merkle proof data
-        **nonmembership_proof,
+        # Merkle proof data from gap proof
+        "left_key": nonmembership_witness["left_neighbor"],
+        "right_key": nonmembership_witness["right_neighbor"],
     }
 
     # 4. Generate proof via SnarkJS ----------------------------------------------
     prover = SnarkJSProver()
     try:
-        result = await prover.generate_proof(input_signals)
-    except RuntimeError as exc:
+        proof_json, public_signals = await prover.fullprove(input_signals)
+    except Exception as exc:
         raise HTTPException(status_code=503, detail=f"Proof generation failed: {exc}")
 
     proof_id = str(uuid.uuid4())
+    now = int(time.time())
 
     # 5. Evaluate SAR review flags -----------------------------------------------
-    sar_flag = evaluate_sar_review(
-        proof_id=proof_id,
-        transfer_hash=_hash_transfer(request),
+    sar_result = evaluate_sar_flags(
         amount_tier=tier,
         jurisdiction=request.jurisdiction,
     )
 
     # 6. Encrypt PII for hybrid payload -----------------------------------------
-    encryption = AuditEncryption()
-    encrypted_pii = encryption.encrypt_pii(
-        {
-            "originator_name": request.originator_name,
-            "originator_address": request.originator_address,
-            "originator_account": request.originator_account or request.wallet_address,
-            "transfer_amount": str(request.amount_usd),
-            "asset": request.asset,
-        }
-    )
+    import os
+    master_key = os.environ.get("PII_MASTER_KEY", "").encode() or os.urandom(32)
+    envelope_id = request.idempotency_key
+    pii_key = derive_key(master_key, envelope_id.encode())
+    pii_plaintext = json.dumps({
+        "originator_name": request.originator_name,
+        "originator_address": request.originator_address,
+        "originator_account": request.originator_account or request.wallet_address,
+        "transfer_amount": str(request.amount_usd),
+        "asset": request.asset,
+    }).encode()
+    pii_nonce, pii_ciphertext = encrypt_pii(pii_plaintext, pii_key, envelope_id)
 
     # 7. Build ComplianceProof ---------------------------------------------------
     proof_obj = ComplianceProof(
         proof_id=proof_id,
         transfer_id=request.idempotency_key,
-        groth16_proof=json.dumps(result["proof"]),
-        public_signals=result["public_signals"],
+        groth16_proof=json.dumps(proof_json),
+        public_signals=[str(s) for s in public_signals],
         verification_key=json.dumps(_load_vk()),
         originator_vasp_did=_get_vasp_did(),
         beneficiary_vasp_did=request.destination_vasp_did,
         jurisdiction=request.jurisdiction,
         amount_tier=tier,
-        proof_generated_at=int(time.time()),
-        proof_expires_at=int(time.time()) + 300,
-        sar_review_flag=sar_flag.requires_review,
-        encrypted_audit_payload=encryption.encrypt_payload(
-            {
-                "proof_id": proof_id,
-                "sar_flag": sar_flag.model_dump(),
-            }
-        ),
+        proof_generated_at=now,
+        proof_expires_at=now + 300,
+        sar_review_flag=sar_result.requires_human_review,
+        encrypted_sar_payload=None,
     )
 
     # 8. Build hybrid payload ----------------------------------------------------
     hybrid = HybridPayload(
         compliance_proof=proof_obj,
-        encrypted_pii=encrypted_pii,
-        pii_encryption_method="AES-256-GCM",
-        created_at=int(time.time()),
+        encrypted_pii=pii_ciphertext,
+        pii_nonce=pii_nonce,
+        pii_associated_data=envelope_id,
     )
 
     # 9. Persist audit record ----------------------------------------------------
-    audit_log = AuditLog(encryption)
-    audit_log.store_record(
-        proof_id,
-        {
-            "proof": proof_obj.model_dump(),
-            "sar_flag": sar_flag.model_dump(),
+    audit_log = AuditLog()
+    audit_log.append(
+        entry_type="proof_generated",
+        actor=_get_vasp_did(),
+        transaction_ref=request.idempotency_key,
+        data={
+            "proof_id": proof_id,
+            "sar_review": sar_result.model_dump(),
             "request_hash": _hash_transfer(request),
         },
     )
@@ -271,8 +272,8 @@ async def verify_proof(
     prover = SnarkJSProver()
 
     try:
-        valid = await prover.verify_proof(request.groth16_proof, request.public_signals)
-    except RuntimeError as exc:
+        valid = await prover.verify(request.groth16_proof, request.public_signals)
+    except Exception as exc:
         raise HTTPException(status_code=503, detail=f"Proof verification unavailable: {exc}")
 
     # Decode public signals

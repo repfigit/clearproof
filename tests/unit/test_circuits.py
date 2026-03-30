@@ -119,10 +119,10 @@ class TestAETiers:
 class TestDefaultFallback:
     def test_unknown_jurisdiction_uses_default(self):
         """Unknown jurisdiction code should fall back to DEFAULT thresholds."""
-        # DEFAULT: tier2=250, tier3=3_000, tier4=10_000 (same as US)
+        # DEFAULT: tier2=250, tier3=1_000, tier4=10_000 (FATF global threshold)
         assert compute_tier(249, "XX") == 1
-        assert compute_tier(2999, "XX") == 2
-        assert compute_tier(3001, "XX") == 3
+        assert compute_tier(999, "XX") == 2
+        assert compute_tier(1001, "XX") == 3
         assert compute_tier(10001, "XX") == 4
 
     def test_case_insensitive(self):

@@ -26,7 +26,7 @@ JURISDICTION_TIERS: dict[str, dict[str, int]] = {
     "EU": {"tier2": 250, "tier3": 1_000, "tier4": 10_000},
     "SG": {"tier2": 250, "tier3": 1_500, "tier4": 10_000},
     "AE": {"tier2": 250, "tier3": 1_000, "tier4": 10_000},  # UAE (VARA)
-    "DEFAULT": {"tier2": 250, "tier3": 3_000, "tier4": 10_000},
+    "DEFAULT": {"tier2": 250, "tier3": 1_000, "tier4": 10_000},  # FATF $1,000 global threshold
 }
 
 

@@ -63,7 +63,7 @@ class HybridPayload(BaseModel):
                     "amount_tier": self.compliance_proof.amount_tier,
                     "proof_generated_at": self.compliance_proof.proof_generated_at,
                     "proof_expires_at": self.compliance_proof.proof_expires_at,
-                    "sar_review_flag": self.compliance_proof.sar_review_flag,
+                    # sar_review_flag excluded — internal advisory only (BSA anti-tipping-off)
                 },
                 "encrypted_pii": base64.b64encode(self.encrypted_pii).decode("ascii"),
                 "encryption_algorithm": self.encryption_algorithm,
@@ -99,7 +99,7 @@ class HybridPayload(BaseModel):
                     "originator_vasp_did": self.compliance_proof.originator_vasp_did,
                     "jurisdiction": self.compliance_proof.jurisdiction,
                     "amount_tier": self.compliance_proof.amount_tier,
-                    "sar_review_flag": self.compliance_proof.sar_review_flag,
+                    # sar_review_flag excluded — internal advisory only
                 },
                 "pii_nonce": base64.b64encode(self.pii_nonce).decode("ascii"),
                 "pii_associated_data": self.pii_associated_data,

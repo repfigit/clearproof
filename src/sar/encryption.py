@@ -35,7 +35,7 @@ def derive_key(master_key: bytes, context: bytes) -> bytes:
     hkdf = HKDF(
         algorithm=hashes.SHA256(),
         length=32,
-        salt=None,
+        salt=b"zk-travel-rule-v1",
         info=context,
     )
     return hkdf.derive(master_key)

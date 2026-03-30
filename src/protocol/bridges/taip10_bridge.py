@@ -93,7 +93,9 @@ class TAIP10Bridge:
                 "verification_key": compliance_proof.verification_key,
                 "jurisdiction": compliance_proof.jurisdiction,
                 "amount_tier": compliance_proof.amount_tier,
-                "sar_review_flag": compliance_proof.sar_review_flag,
+                # NOTE: sar_review_flag intentionally excluded from external VC
+                # to comply with BSA § 5318(g)(2) anti-tipping-off provisions.
+                # SAR flags are internal advisory data only.
             },
         }
 
