@@ -18,9 +18,10 @@ include "./amount_tier.circom";
  *   2. Credential is not expired (expires_at > transfer_timestamp)
  *   3. Issuer is in the trusted issuer Merkle tree
  *   4. Jurisdiction in credential matches the transfer jurisdiction
- *   5. Wallet address hash is NOT in the sanctions Merkle tree (gap proof)
- *   6. Amount tier is correctly assigned for the actual amount
- *   7. SAR review flag is set when tier >= 3
+ *   5. sanctions_clear flag in credential is true
+ *   6. Wallet address hash is NOT in the sanctions Merkle tree (gap proof)
+ *   7. Amount tier is correctly assigned for the actual amount
+ *   8. SAR review flag is set when tier >= 3
  *
  * PUBLIC INPUTS:
  *   - sanctions_tree_root: Merkle root of current OFAC/UN/EU sanctions list
@@ -29,16 +30,12 @@ include "./amount_tier.circom";
  *   - transfer_timestamp: Unix timestamp of the transfer
  *   - jurisdiction_code: ISO 3166 country code encoded as integer
  *   - credential_commitment: expected Poseidon hash of credential fields
- *
- * PRIVATE INPUTS:
- *   - Credential preimage: issuer_did, jurisdiction_code, kyc_tier, issued_at, expires_at
- *   - Wallet address hash (query_key for sanctions non-membership)
- *   - Sanctions gap proof: left_key, right_key, paths, indices
- *   - Issuer membership proof: path elements and indices
- *   - Amount tier proof: actual_amount, threshold values
+ *   - tier2_threshold: jurisdiction-specific tier 2 boundary (verifier-supplied)
+ *   - tier3_threshold: jurisdiction-specific tier 3 boundary (verifier-supplied)
+ *   - tier4_threshold: jurisdiction-specific tier 4 boundary (verifier-supplied)
  *
  * PUBLIC OUTPUTS:
- *   - is_compliant: 1 if all checks pass (credential valid + sanctions clear + tier valid)
+ *   - is_compliant: 1 if all checks pass
  *   - sar_review_flag: 1 if tier >= 3 (flags for human review)
  *
  * Merkle tree depths:
@@ -54,14 +51,19 @@ template ComplianceProof(sanctions_tree_depth, issuer_tree_depth) {
     signal input transfer_timestamp;
     signal input jurisdiction_code;
     signal input credential_commitment;
+    // Thresholds are PUBLIC (verifier-supplied) — audit fix #3
+    signal input tier2_threshold;
+    signal input tier3_threshold;
+    signal input tier4_threshold;
 
     // === PUBLIC OUTPUTS ===
-    signal output is_compliant;        // 1 if all subcircuit checks pass
-    signal output sar_review_flag;     // 1 if tier >= 3
+    signal output is_compliant;
+    signal output sar_review_flag;
 
     // === PRIVATE INPUTS: Credential preimage ===
     signal input issuer_did;
-    signal input kyc_tier;             // 1=retail, 2=professional, 3=institutional
+    signal input kyc_tier;
+    signal input sanctions_clear;      // Must be 1 — audit fix #5
     signal input issued_at;
     signal input expires_at;
 
@@ -70,27 +72,21 @@ template ComplianceProof(sanctions_tree_depth, issuer_tree_depth) {
     signal input issuer_path_indices[issuer_tree_depth];
 
     // === PRIVATE INPUTS: Sanctions non-membership (gap proof) ===
-    signal input wallet_address_hash;  // Poseidon hash of wallet address
-    signal input left_key;             // Largest sanctions key < wallet_address_hash
-    signal input right_key;            // Smallest sanctions key > wallet_address_hash
+    signal input wallet_address_hash;
+    signal input left_key;
+    signal input right_key;
     signal input left_path_elements[sanctions_tree_depth];
     signal input left_path_indices[sanctions_tree_depth];
     signal input right_path_elements[sanctions_tree_depth];
     signal input right_path_indices[sanctions_tree_depth];
-    signal input left_index;           // Leaf index of left_key
-    signal input right_index;          // Leaf index of right_key
+    // NOTE: left_index/right_index removed — now derived from path bits (audit fix #1)
 
     // === PRIVATE INPUTS: Amount tier verification ===
-    signal input actual_amount;        // Actual transfer amount in USD cents
-    signal input tier2_threshold;      // Jurisdiction-specific tier 2 boundary
-    signal input tier3_threshold;      // Jurisdiction-specific tier 3 boundary
-    signal input tier4_threshold;      // Jurisdiction-specific tier 4 boundary
+    signal input actual_amount;
 
     // ================================================================
     // SUB-CIRCUIT 1: Credential Validity
     // ================================================================
-    // Verifies: commitment matches preimage, not expired, issuer trusted,
-    // jurisdiction matches, KYC tier valid.
     component cred_check = CredentialValidity(issuer_tree_depth);
     cred_check.credential_commitment <== credential_commitment;
     cred_check.issuer_tree_root <== issuer_tree_root;
@@ -99,6 +95,7 @@ template ComplianceProof(sanctions_tree_depth, issuer_tree_depth) {
     cred_check.issuer_did <== issuer_did;
     cred_check.jurisdiction_code <== jurisdiction_code;
     cred_check.kyc_tier <== kyc_tier;
+    cred_check.sanctions_clear <== sanctions_clear;  // Audit fix #5: explicit input
     cred_check.issued_at <== issued_at;
     cred_check.expires_at <== expires_at;
     for (var i = 0; i < issuer_tree_depth; i++) {
@@ -109,7 +106,6 @@ template ComplianceProof(sanctions_tree_depth, issuer_tree_depth) {
     // ================================================================
     // SUB-CIRCUIT 2: Sanctions Non-Membership
     // ================================================================
-    // Verifies: wallet_address_hash is NOT in the sanctions tree via gap proof.
     component sanctions_check = SanctionsNonMembership(sanctions_tree_depth);
     sanctions_check.sanctions_root <== sanctions_tree_root;
     sanctions_check.query_key <== wallet_address_hash;
@@ -121,22 +117,18 @@ template ComplianceProof(sanctions_tree_depth, issuer_tree_depth) {
         sanctions_check.right_path_elements[i] <== right_path_elements[i];
         sanctions_check.right_path_indices[i] <== right_path_indices[i];
     }
-    sanctions_check.left_index <== left_index;
-    sanctions_check.right_index <== right_index;
-    // sanctions_check.valid is constrained to 1 internally
+    // Adjacency now derived from path bits internally (audit fix #1)
 
     // ================================================================
     // SUB-CIRCUIT 3: Amount Tier Verification
     // ================================================================
-    // Verifies: amount_tier matches the actual_amount given thresholds.
-    // Outputs: sar_review_flag (1 if tier >= 3).
     component tier_check = AmountTier();
     tier_check.amount_tier <== amount_tier;
-    tier_check.jurisdiction_code <== jurisdiction_code;
-    tier_check.actual_amount <== actual_amount;
+    // Thresholds are public inputs (audit fix #3)
     tier_check.tier2_threshold <== tier2_threshold;
     tier_check.tier3_threshold <== tier3_threshold;
     tier_check.tier4_threshold <== tier4_threshold;
+    tier_check.actual_amount <== actual_amount;
 
     // Wire SAR review flag from tier subcircuit to output
     sar_review_flag <== tier_check.sar_review_flag;
@@ -159,5 +151,8 @@ component main {public [
     amount_tier,
     transfer_timestamp,
     jurisdiction_code,
-    credential_commitment
+    credential_commitment,
+    tier2_threshold,
+    tier3_threshold,
+    tier4_threshold
 ]} = ComplianceProof(20, 10);
