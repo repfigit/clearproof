@@ -21,44 +21,42 @@ import type {
   TypedLogDescription,
   TypedListener,
   TypedContractMethod,
-} from "../common";
+} from "../../common";
 
-export interface SanctionsOracleInterface extends Interface {
+export interface ComplianceRegistryInterface extends Interface {
   getFunction(
     nameOrSignature:
       | "DEFAULT_ADMIN_ROLE"
-      | "MAX_HISTORY"
-      | "ORACLE_ROLE"
-      | "UPDATE_COOLDOWN"
-      | "currentRoot"
+      | "REVOKER_ROLE"
       | "getRoleAdmin"
-      | "gracePeriod"
       | "grantRole"
       | "hasRole"
-      | "historyLength"
-      | "isStale"
-      | "lastUpdated"
-      | "leafCount"
+      | "isRevoked"
+      | "isVerified"
       | "pause"
       | "paused"
+      | "proofs"
       | "renounceRole"
+      | "revokeCredential"
       | "revokeRole"
-      | "ringBufferStart"
-      | "rootHistory"
-      | "setGracePeriod"
+      | "revokedCredentials"
+      | "sanctionsOracle"
       | "supportsInterface"
       | "unpause"
-      | "updateRoot"
+      | "usedNullifiers"
+      | "vaspRegistry"
+      | "verifier"
+      | "verifyAndRecord"
   ): FunctionFragment;
 
   getEvent(
     nameOrSignatureOrTopic:
-      | "GracePeriodUpdated"
+      | "CredentialRevoked"
       | "Paused"
+      | "ProofVerified"
       | "RoleAdminChanged"
       | "RoleGranted"
       | "RoleRevoked"
-      | "SanctionsRootUpdated"
       | "Unpaused"
   ): EventFragment;
 
@@ -67,28 +65,12 @@ export interface SanctionsOracleInterface extends Interface {
     values?: undefined
   ): string;
   encodeFunctionData(
-    functionFragment: "MAX_HISTORY",
-    values?: undefined
-  ): string;
-  encodeFunctionData(
-    functionFragment: "ORACLE_ROLE",
-    values?: undefined
-  ): string;
-  encodeFunctionData(
-    functionFragment: "UPDATE_COOLDOWN",
-    values?: undefined
-  ): string;
-  encodeFunctionData(
-    functionFragment: "currentRoot",
+    functionFragment: "REVOKER_ROLE",
     values?: undefined
   ): string;
   encodeFunctionData(
     functionFragment: "getRoleAdmin",
     values: [BytesLike]
-  ): string;
-  encodeFunctionData(
-    functionFragment: "gracePeriod",
-    values?: undefined
   ): string;
   encodeFunctionData(
     functionFragment: "grantRole",
@@ -99,36 +81,35 @@ export interface SanctionsOracleInterface extends Interface {
     values: [BytesLike, AddressLike]
   ): string;
   encodeFunctionData(
-    functionFragment: "historyLength",
-    values?: undefined
+    functionFragment: "isRevoked",
+    values: [BytesLike]
   ): string;
-  encodeFunctionData(functionFragment: "isStale", values?: undefined): string;
   encodeFunctionData(
-    functionFragment: "lastUpdated",
-    values?: undefined
+    functionFragment: "isVerified",
+    values: [BytesLike]
   ): string;
-  encodeFunctionData(functionFragment: "leafCount", values?: undefined): string;
   encodeFunctionData(functionFragment: "pause", values?: undefined): string;
   encodeFunctionData(functionFragment: "paused", values?: undefined): string;
+  encodeFunctionData(functionFragment: "proofs", values: [BytesLike]): string;
   encodeFunctionData(
     functionFragment: "renounceRole",
     values: [BytesLike, AddressLike]
+  ): string;
+  encodeFunctionData(
+    functionFragment: "revokeCredential",
+    values: [BytesLike]
   ): string;
   encodeFunctionData(
     functionFragment: "revokeRole",
     values: [BytesLike, AddressLike]
   ): string;
   encodeFunctionData(
-    functionFragment: "ringBufferStart",
+    functionFragment: "revokedCredentials",
+    values: [BytesLike]
+  ): string;
+  encodeFunctionData(
+    functionFragment: "sanctionsOracle",
     values?: undefined
-  ): string;
-  encodeFunctionData(
-    functionFragment: "rootHistory",
-    values: [BigNumberish]
-  ): string;
-  encodeFunctionData(
-    functionFragment: "setGracePeriod",
-    values: [BigNumberish]
   ): string;
   encodeFunctionData(
     functionFragment: "supportsInterface",
@@ -136,8 +117,24 @@ export interface SanctionsOracleInterface extends Interface {
   ): string;
   encodeFunctionData(functionFragment: "unpause", values?: undefined): string;
   encodeFunctionData(
-    functionFragment: "updateRoot",
-    values: [BytesLike, BigNumberish]
+    functionFragment: "usedNullifiers",
+    values: [BytesLike]
+  ): string;
+  encodeFunctionData(
+    functionFragment: "vaspRegistry",
+    values?: undefined
+  ): string;
+  encodeFunctionData(functionFragment: "verifier", values?: undefined): string;
+  encodeFunctionData(
+    functionFragment: "verifyAndRecord",
+    values: [
+      BytesLike,
+      [BigNumberish, BigNumberish],
+      [[BigNumberish, BigNumberish], [BigNumberish, BigNumberish]],
+      [BigNumberish, BigNumberish],
+      BigNumberish[],
+      BytesLike
+    ]
   ): string;
 
   decodeFunctionResult(
@@ -145,58 +142,35 @@ export interface SanctionsOracleInterface extends Interface {
     data: BytesLike
   ): Result;
   decodeFunctionResult(
-    functionFragment: "MAX_HISTORY",
-    data: BytesLike
-  ): Result;
-  decodeFunctionResult(
-    functionFragment: "ORACLE_ROLE",
-    data: BytesLike
-  ): Result;
-  decodeFunctionResult(
-    functionFragment: "UPDATE_COOLDOWN",
-    data: BytesLike
-  ): Result;
-  decodeFunctionResult(
-    functionFragment: "currentRoot",
+    functionFragment: "REVOKER_ROLE",
     data: BytesLike
   ): Result;
   decodeFunctionResult(
     functionFragment: "getRoleAdmin",
     data: BytesLike
   ): Result;
-  decodeFunctionResult(
-    functionFragment: "gracePeriod",
-    data: BytesLike
-  ): Result;
   decodeFunctionResult(functionFragment: "grantRole", data: BytesLike): Result;
   decodeFunctionResult(functionFragment: "hasRole", data: BytesLike): Result;
-  decodeFunctionResult(
-    functionFragment: "historyLength",
-    data: BytesLike
-  ): Result;
-  decodeFunctionResult(functionFragment: "isStale", data: BytesLike): Result;
-  decodeFunctionResult(
-    functionFragment: "lastUpdated",
-    data: BytesLike
-  ): Result;
-  decodeFunctionResult(functionFragment: "leafCount", data: BytesLike): Result;
+  decodeFunctionResult(functionFragment: "isRevoked", data: BytesLike): Result;
+  decodeFunctionResult(functionFragment: "isVerified", data: BytesLike): Result;
   decodeFunctionResult(functionFragment: "pause", data: BytesLike): Result;
   decodeFunctionResult(functionFragment: "paused", data: BytesLike): Result;
+  decodeFunctionResult(functionFragment: "proofs", data: BytesLike): Result;
   decodeFunctionResult(
     functionFragment: "renounceRole",
     data: BytesLike
   ): Result;
+  decodeFunctionResult(
+    functionFragment: "revokeCredential",
+    data: BytesLike
+  ): Result;
   decodeFunctionResult(functionFragment: "revokeRole", data: BytesLike): Result;
   decodeFunctionResult(
-    functionFragment: "ringBufferStart",
+    functionFragment: "revokedCredentials",
     data: BytesLike
   ): Result;
   decodeFunctionResult(
-    functionFragment: "rootHistory",
-    data: BytesLike
-  ): Result;
-  decodeFunctionResult(
-    functionFragment: "setGracePeriod",
+    functionFragment: "sanctionsOracle",
     data: BytesLike
   ): Result;
   decodeFunctionResult(
@@ -204,15 +178,27 @@ export interface SanctionsOracleInterface extends Interface {
     data: BytesLike
   ): Result;
   decodeFunctionResult(functionFragment: "unpause", data: BytesLike): Result;
-  decodeFunctionResult(functionFragment: "updateRoot", data: BytesLike): Result;
+  decodeFunctionResult(
+    functionFragment: "usedNullifiers",
+    data: BytesLike
+  ): Result;
+  decodeFunctionResult(
+    functionFragment: "vaspRegistry",
+    data: BytesLike
+  ): Result;
+  decodeFunctionResult(functionFragment: "verifier", data: BytesLike): Result;
+  decodeFunctionResult(
+    functionFragment: "verifyAndRecord",
+    data: BytesLike
+  ): Result;
 }
 
-export namespace GracePeriodUpdatedEvent {
-  export type InputTuple = [oldPeriod: BigNumberish, newPeriod: BigNumberish];
-  export type OutputTuple = [oldPeriod: bigint, newPeriod: bigint];
+export namespace CredentialRevokedEvent {
+  export type InputTuple = [commitment: BytesLike, revoker: AddressLike];
+  export type OutputTuple = [commitment: string, revoker: string];
   export interface OutputObject {
-    oldPeriod: bigint;
-    newPeriod: bigint;
+    commitment: string;
+    revoker: string;
   }
   export type Event = TypedContractEvent<InputTuple, OutputTuple, OutputObject>;
   export type Filter = TypedDeferredTopicFilter<Event>;
@@ -225,6 +211,31 @@ export namespace PausedEvent {
   export type OutputTuple = [account: string];
   export interface OutputObject {
     account: string;
+  }
+  export type Event = TypedContractEvent<InputTuple, OutputTuple, OutputObject>;
+  export type Filter = TypedDeferredTopicFilter<Event>;
+  export type Log = TypedEventLog<Event>;
+  export type LogDescription = TypedLogDescription<Event>;
+}
+
+export namespace ProofVerifiedEvent {
+  export type InputTuple = [
+    transferId: BytesLike,
+    nullifier: BytesLike,
+    isCompliant: boolean,
+    sarFlag: boolean
+  ];
+  export type OutputTuple = [
+    transferId: string,
+    nullifier: string,
+    isCompliant: boolean,
+    sarFlag: boolean
+  ];
+  export interface OutputObject {
+    transferId: string;
+    nullifier: string;
+    isCompliant: boolean;
+    sarFlag: boolean;
   }
   export type Event = TypedContractEvent<InputTuple, OutputTuple, OutputObject>;
   export type Filter = TypedDeferredTopicFilter<Event>;
@@ -290,31 +301,6 @@ export namespace RoleRevokedEvent {
   export type LogDescription = TypedLogDescription<Event>;
 }
 
-export namespace SanctionsRootUpdatedEvent {
-  export type InputTuple = [
-    oldRoot: BytesLike,
-    newRoot: BytesLike,
-    leafCount: BigNumberish,
-    timestamp: BigNumberish
-  ];
-  export type OutputTuple = [
-    oldRoot: string,
-    newRoot: string,
-    leafCount: bigint,
-    timestamp: bigint
-  ];
-  export interface OutputObject {
-    oldRoot: string;
-    newRoot: string;
-    leafCount: bigint;
-    timestamp: bigint;
-  }
-  export type Event = TypedContractEvent<InputTuple, OutputTuple, OutputObject>;
-  export type Filter = TypedDeferredTopicFilter<Event>;
-  export type Log = TypedEventLog<Event>;
-  export type LogDescription = TypedLogDescription<Event>;
-}
-
 export namespace UnpausedEvent {
   export type InputTuple = [account: AddressLike];
   export type OutputTuple = [account: string];
@@ -327,11 +313,11 @@ export namespace UnpausedEvent {
   export type LogDescription = TypedLogDescription<Event>;
 }
 
-export interface SanctionsOracle extends BaseContract {
-  connect(runner?: ContractRunner | null): SanctionsOracle;
+export interface ComplianceRegistry extends BaseContract {
+  connect(runner?: ContractRunner | null): ComplianceRegistry;
   waitForDeployment(): Promise<this>;
 
-  interface: SanctionsOracleInterface;
+  interface: ComplianceRegistryInterface;
 
   queryFilter<TCEvent extends TypedContractEvent>(
     event: TCEvent,
@@ -372,17 +358,9 @@ export interface SanctionsOracle extends BaseContract {
 
   DEFAULT_ADMIN_ROLE: TypedContractMethod<[], [string], "view">;
 
-  MAX_HISTORY: TypedContractMethod<[], [bigint], "view">;
-
-  ORACLE_ROLE: TypedContractMethod<[], [string], "view">;
-
-  UPDATE_COOLDOWN: TypedContractMethod<[], [bigint], "view">;
-
-  currentRoot: TypedContractMethod<[], [string], "view">;
+  REVOKER_ROLE: TypedContractMethod<[], [string], "view">;
 
   getRoleAdmin: TypedContractMethod<[role: BytesLike], [string], "view">;
-
-  gracePeriod: TypedContractMethod<[], [bigint], "view">;
 
   grantRole: TypedContractMethod<
     [role: BytesLike, account: AddressLike],
@@ -396,20 +374,34 @@ export interface SanctionsOracle extends BaseContract {
     "view"
   >;
 
-  historyLength: TypedContractMethod<[], [bigint], "view">;
+  isRevoked: TypedContractMethod<[commitment: BytesLike], [boolean], "view">;
 
-  isStale: TypedContractMethod<[], [boolean], "view">;
-
-  lastUpdated: TypedContractMethod<[], [bigint], "view">;
-
-  leafCount: TypedContractMethod<[], [bigint], "view">;
+  isVerified: TypedContractMethod<[transferId: BytesLike], [boolean], "view">;
 
   pause: TypedContractMethod<[], [void], "nonpayable">;
 
   paused: TypedContractMethod<[], [boolean], "view">;
 
+  proofs: TypedContractMethod<
+    [arg0: BytesLike],
+    [
+      [string, bigint, boolean] & {
+        proofHash: string;
+        timestamp: bigint;
+        verified: boolean;
+      }
+    ],
+    "view"
+  >;
+
   renounceRole: TypedContractMethod<
     [role: BytesLike, callerConfirmation: AddressLike],
+    [void],
+    "nonpayable"
+  >;
+
+  revokeCredential: TypedContractMethod<
+    [commitment: BytesLike],
     [void],
     "nonpayable"
   >;
@@ -420,25 +412,9 @@ export interface SanctionsOracle extends BaseContract {
     "nonpayable"
   >;
 
-  ringBufferStart: TypedContractMethod<[], [bigint], "view">;
+  revokedCredentials: TypedContractMethod<[arg0: BytesLike], [boolean], "view">;
 
-  rootHistory: TypedContractMethod<
-    [arg0: BigNumberish],
-    [
-      [string, bigint, bigint] & {
-        root: string;
-        timestamp: bigint;
-        leafCount: bigint;
-      }
-    ],
-    "view"
-  >;
-
-  setGracePeriod: TypedContractMethod<
-    [newPeriod: BigNumberish],
-    [void],
-    "nonpayable"
-  >;
+  sanctionsOracle: TypedContractMethod<[], [string], "view">;
 
   supportsInterface: TypedContractMethod<
     [interfaceId: BytesLike],
@@ -448,9 +424,22 @@ export interface SanctionsOracle extends BaseContract {
 
   unpause: TypedContractMethod<[], [void], "nonpayable">;
 
-  updateRoot: TypedContractMethod<
-    [newRoot: BytesLike, _leafCount: BigNumberish],
-    [void],
+  usedNullifiers: TypedContractMethod<[arg0: BytesLike], [boolean], "view">;
+
+  vaspRegistry: TypedContractMethod<[], [string], "view">;
+
+  verifier: TypedContractMethod<[], [string], "view">;
+
+  verifyAndRecord: TypedContractMethod<
+    [
+      transferId: BytesLike,
+      _pA: [BigNumberish, BigNumberish],
+      _pB: [[BigNumberish, BigNumberish], [BigNumberish, BigNumberish]],
+      _pC: [BigNumberish, BigNumberish],
+      _pubSignals: BigNumberish[],
+      vaspDidHash: BytesLike
+    ],
+    [boolean],
     "nonpayable"
   >;
 
@@ -462,23 +451,11 @@ export interface SanctionsOracle extends BaseContract {
     nameOrSignature: "DEFAULT_ADMIN_ROLE"
   ): TypedContractMethod<[], [string], "view">;
   getFunction(
-    nameOrSignature: "MAX_HISTORY"
-  ): TypedContractMethod<[], [bigint], "view">;
-  getFunction(
-    nameOrSignature: "ORACLE_ROLE"
-  ): TypedContractMethod<[], [string], "view">;
-  getFunction(
-    nameOrSignature: "UPDATE_COOLDOWN"
-  ): TypedContractMethod<[], [bigint], "view">;
-  getFunction(
-    nameOrSignature: "currentRoot"
+    nameOrSignature: "REVOKER_ROLE"
   ): TypedContractMethod<[], [string], "view">;
   getFunction(
     nameOrSignature: "getRoleAdmin"
   ): TypedContractMethod<[role: BytesLike], [string], "view">;
-  getFunction(
-    nameOrSignature: "gracePeriod"
-  ): TypedContractMethod<[], [bigint], "view">;
   getFunction(
     nameOrSignature: "grantRole"
   ): TypedContractMethod<
@@ -494,23 +471,30 @@ export interface SanctionsOracle extends BaseContract {
     "view"
   >;
   getFunction(
-    nameOrSignature: "historyLength"
-  ): TypedContractMethod<[], [bigint], "view">;
+    nameOrSignature: "isRevoked"
+  ): TypedContractMethod<[commitment: BytesLike], [boolean], "view">;
   getFunction(
-    nameOrSignature: "isStale"
-  ): TypedContractMethod<[], [boolean], "view">;
-  getFunction(
-    nameOrSignature: "lastUpdated"
-  ): TypedContractMethod<[], [bigint], "view">;
-  getFunction(
-    nameOrSignature: "leafCount"
-  ): TypedContractMethod<[], [bigint], "view">;
+    nameOrSignature: "isVerified"
+  ): TypedContractMethod<[transferId: BytesLike], [boolean], "view">;
   getFunction(
     nameOrSignature: "pause"
   ): TypedContractMethod<[], [void], "nonpayable">;
   getFunction(
     nameOrSignature: "paused"
   ): TypedContractMethod<[], [boolean], "view">;
+  getFunction(
+    nameOrSignature: "proofs"
+  ): TypedContractMethod<
+    [arg0: BytesLike],
+    [
+      [string, bigint, boolean] & {
+        proofHash: string;
+        timestamp: bigint;
+        verified: boolean;
+      }
+    ],
+    "view"
+  >;
   getFunction(
     nameOrSignature: "renounceRole"
   ): TypedContractMethod<
@@ -519,6 +503,9 @@ export interface SanctionsOracle extends BaseContract {
     "nonpayable"
   >;
   getFunction(
+    nameOrSignature: "revokeCredential"
+  ): TypedContractMethod<[commitment: BytesLike], [void], "nonpayable">;
+  getFunction(
     nameOrSignature: "revokeRole"
   ): TypedContractMethod<
     [role: BytesLike, account: AddressLike],
@@ -526,24 +513,11 @@ export interface SanctionsOracle extends BaseContract {
     "nonpayable"
   >;
   getFunction(
-    nameOrSignature: "ringBufferStart"
-  ): TypedContractMethod<[], [bigint], "view">;
+    nameOrSignature: "revokedCredentials"
+  ): TypedContractMethod<[arg0: BytesLike], [boolean], "view">;
   getFunction(
-    nameOrSignature: "rootHistory"
-  ): TypedContractMethod<
-    [arg0: BigNumberish],
-    [
-      [string, bigint, bigint] & {
-        root: string;
-        timestamp: bigint;
-        leafCount: bigint;
-      }
-    ],
-    "view"
-  >;
-  getFunction(
-    nameOrSignature: "setGracePeriod"
-  ): TypedContractMethod<[newPeriod: BigNumberish], [void], "nonpayable">;
+    nameOrSignature: "sanctionsOracle"
+  ): TypedContractMethod<[], [string], "view">;
   getFunction(
     nameOrSignature: "supportsInterface"
   ): TypedContractMethod<[interfaceId: BytesLike], [boolean], "view">;
@@ -551,19 +525,35 @@ export interface SanctionsOracle extends BaseContract {
     nameOrSignature: "unpause"
   ): TypedContractMethod<[], [void], "nonpayable">;
   getFunction(
-    nameOrSignature: "updateRoot"
+    nameOrSignature: "usedNullifiers"
+  ): TypedContractMethod<[arg0: BytesLike], [boolean], "view">;
+  getFunction(
+    nameOrSignature: "vaspRegistry"
+  ): TypedContractMethod<[], [string], "view">;
+  getFunction(
+    nameOrSignature: "verifier"
+  ): TypedContractMethod<[], [string], "view">;
+  getFunction(
+    nameOrSignature: "verifyAndRecord"
   ): TypedContractMethod<
-    [newRoot: BytesLike, _leafCount: BigNumberish],
-    [void],
+    [
+      transferId: BytesLike,
+      _pA: [BigNumberish, BigNumberish],
+      _pB: [[BigNumberish, BigNumberish], [BigNumberish, BigNumberish]],
+      _pC: [BigNumberish, BigNumberish],
+      _pubSignals: BigNumberish[],
+      vaspDidHash: BytesLike
+    ],
+    [boolean],
     "nonpayable"
   >;
 
   getEvent(
-    key: "GracePeriodUpdated"
+    key: "CredentialRevoked"
   ): TypedContractEvent<
-    GracePeriodUpdatedEvent.InputTuple,
-    GracePeriodUpdatedEvent.OutputTuple,
-    GracePeriodUpdatedEvent.OutputObject
+    CredentialRevokedEvent.InputTuple,
+    CredentialRevokedEvent.OutputTuple,
+    CredentialRevokedEvent.OutputObject
   >;
   getEvent(
     key: "Paused"
@@ -571,6 +561,13 @@ export interface SanctionsOracle extends BaseContract {
     PausedEvent.InputTuple,
     PausedEvent.OutputTuple,
     PausedEvent.OutputObject
+  >;
+  getEvent(
+    key: "ProofVerified"
+  ): TypedContractEvent<
+    ProofVerifiedEvent.InputTuple,
+    ProofVerifiedEvent.OutputTuple,
+    ProofVerifiedEvent.OutputObject
   >;
   getEvent(
     key: "RoleAdminChanged"
@@ -594,13 +591,6 @@ export interface SanctionsOracle extends BaseContract {
     RoleRevokedEvent.OutputObject
   >;
   getEvent(
-    key: "SanctionsRootUpdated"
-  ): TypedContractEvent<
-    SanctionsRootUpdatedEvent.InputTuple,
-    SanctionsRootUpdatedEvent.OutputTuple,
-    SanctionsRootUpdatedEvent.OutputObject
-  >;
-  getEvent(
     key: "Unpaused"
   ): TypedContractEvent<
     UnpausedEvent.InputTuple,
@@ -609,15 +599,15 @@ export interface SanctionsOracle extends BaseContract {
   >;
 
   filters: {
-    "GracePeriodUpdated(uint256,uint256)": TypedContractEvent<
-      GracePeriodUpdatedEvent.InputTuple,
-      GracePeriodUpdatedEvent.OutputTuple,
-      GracePeriodUpdatedEvent.OutputObject
+    "CredentialRevoked(bytes32,address)": TypedContractEvent<
+      CredentialRevokedEvent.InputTuple,
+      CredentialRevokedEvent.OutputTuple,
+      CredentialRevokedEvent.OutputObject
     >;
-    GracePeriodUpdated: TypedContractEvent<
-      GracePeriodUpdatedEvent.InputTuple,
-      GracePeriodUpdatedEvent.OutputTuple,
-      GracePeriodUpdatedEvent.OutputObject
+    CredentialRevoked: TypedContractEvent<
+      CredentialRevokedEvent.InputTuple,
+      CredentialRevokedEvent.OutputTuple,
+      CredentialRevokedEvent.OutputObject
     >;
 
     "Paused(address)": TypedContractEvent<
@@ -629,6 +619,17 @@ export interface SanctionsOracle extends BaseContract {
       PausedEvent.InputTuple,
       PausedEvent.OutputTuple,
       PausedEvent.OutputObject
+    >;
+
+    "ProofVerified(bytes32,bytes32,bool,bool)": TypedContractEvent<
+      ProofVerifiedEvent.InputTuple,
+      ProofVerifiedEvent.OutputTuple,
+      ProofVerifiedEvent.OutputObject
+    >;
+    ProofVerified: TypedContractEvent<
+      ProofVerifiedEvent.InputTuple,
+      ProofVerifiedEvent.OutputTuple,
+      ProofVerifiedEvent.OutputObject
     >;
 
     "RoleAdminChanged(bytes32,bytes32,bytes32)": TypedContractEvent<
@@ -662,17 +663,6 @@ export interface SanctionsOracle extends BaseContract {
       RoleRevokedEvent.InputTuple,
       RoleRevokedEvent.OutputTuple,
       RoleRevokedEvent.OutputObject
-    >;
-
-    "SanctionsRootUpdated(bytes32,bytes32,uint32,uint64)": TypedContractEvent<
-      SanctionsRootUpdatedEvent.InputTuple,
-      SanctionsRootUpdatedEvent.OutputTuple,
-      SanctionsRootUpdatedEvent.OutputObject
-    >;
-    SanctionsRootUpdated: TypedContractEvent<
-      SanctionsRootUpdatedEvent.InputTuple,
-      SanctionsRootUpdatedEvent.OutputTuple,
-      SanctionsRootUpdatedEvent.OutputObject
     >;
 
     "Unpaused(address)": TypedContractEvent<

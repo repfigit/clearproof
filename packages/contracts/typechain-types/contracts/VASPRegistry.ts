@@ -28,6 +28,7 @@ export interface VASPRegistryInterface extends Interface {
     nameOrSignature:
       | "DEFAULT_ADMIN_ROLE"
       | "REGISTRAR_ROLE"
+      | "activeVaspCount"
       | "getRoleAdmin"
       | "grantRole"
       | "hasRole"
@@ -36,6 +37,7 @@ export interface VASPRegistryInterface extends Interface {
       | "issuerRootVersion"
       | "pause"
       | "paused"
+      | "reactivateVASP"
       | "registerVASP"
       | "renounceRole"
       | "revokeRole"
@@ -56,6 +58,7 @@ export interface VASPRegistryInterface extends Interface {
       | "RoleGranted"
       | "RoleRevoked"
       | "Unpaused"
+      | "VASPReactivated"
       | "VASPRegistered"
       | "VASPRevoked"
   ): EventFragment;
@@ -66,6 +69,10 @@ export interface VASPRegistryInterface extends Interface {
   ): string;
   encodeFunctionData(
     functionFragment: "REGISTRAR_ROLE",
+    values?: undefined
+  ): string;
+  encodeFunctionData(
+    functionFragment: "activeVaspCount",
     values?: undefined
   ): string;
   encodeFunctionData(
@@ -91,6 +98,10 @@ export interface VASPRegistryInterface extends Interface {
   ): string;
   encodeFunctionData(functionFragment: "pause", values?: undefined): string;
   encodeFunctionData(functionFragment: "paused", values?: undefined): string;
+  encodeFunctionData(
+    functionFragment: "reactivateVASP",
+    values: [BytesLike, AddressLike]
+  ): string;
   encodeFunctionData(
     functionFragment: "registerVASP",
     values: [BytesLike, AddressLike, string]
@@ -132,6 +143,10 @@ export interface VASPRegistryInterface extends Interface {
     data: BytesLike
   ): Result;
   decodeFunctionResult(
+    functionFragment: "activeVaspCount",
+    data: BytesLike
+  ): Result;
+  decodeFunctionResult(
     functionFragment: "getRoleAdmin",
     data: BytesLike
   ): Result;
@@ -148,6 +163,10 @@ export interface VASPRegistryInterface extends Interface {
   ): Result;
   decodeFunctionResult(functionFragment: "pause", data: BytesLike): Result;
   decodeFunctionResult(functionFragment: "paused", data: BytesLike): Result;
+  decodeFunctionResult(
+    functionFragment: "reactivateVASP",
+    data: BytesLike
+  ): Result;
   decodeFunctionResult(
     functionFragment: "registerVASP",
     data: BytesLike
@@ -272,6 +291,19 @@ export namespace UnpausedEvent {
   export type LogDescription = TypedLogDescription<Event>;
 }
 
+export namespace VASPReactivatedEvent {
+  export type InputTuple = [didHash: BytesLike, newWallet: AddressLike];
+  export type OutputTuple = [didHash: string, newWallet: string];
+  export interface OutputObject {
+    didHash: string;
+    newWallet: string;
+  }
+  export type Event = TypedContractEvent<InputTuple, OutputTuple, OutputObject>;
+  export type Filter = TypedDeferredTopicFilter<Event>;
+  export type Log = TypedEventLog<Event>;
+  export type LogDescription = TypedLogDescription<Event>;
+}
+
 export namespace VASPRegisteredEvent {
   export type InputTuple = [
     didHash: BytesLike,
@@ -353,6 +385,8 @@ export interface VASPRegistry extends BaseContract {
 
   REGISTRAR_ROLE: TypedContractMethod<[], [string], "view">;
 
+  activeVaspCount: TypedContractMethod<[], [bigint], "view">;
+
   getRoleAdmin: TypedContractMethod<[role: BytesLike], [string], "view">;
 
   grantRole: TypedContractMethod<
@@ -376,6 +410,12 @@ export interface VASPRegistry extends BaseContract {
   pause: TypedContractMethod<[], [void], "nonpayable">;
 
   paused: TypedContractMethod<[], [boolean], "view">;
+
+  reactivateVASP: TypedContractMethod<
+    [didHash: BytesLike, newWallet: AddressLike],
+    [void],
+    "nonpayable"
+  >;
 
   registerVASP: TypedContractMethod<
     [didHash: BytesLike, wallet: AddressLike, jurisdiction: string],
@@ -439,6 +479,9 @@ export interface VASPRegistry extends BaseContract {
     nameOrSignature: "REGISTRAR_ROLE"
   ): TypedContractMethod<[], [string], "view">;
   getFunction(
+    nameOrSignature: "activeVaspCount"
+  ): TypedContractMethod<[], [bigint], "view">;
+  getFunction(
     nameOrSignature: "getRoleAdmin"
   ): TypedContractMethod<[role: BytesLike], [string], "view">;
   getFunction(
@@ -470,6 +513,13 @@ export interface VASPRegistry extends BaseContract {
   getFunction(
     nameOrSignature: "paused"
   ): TypedContractMethod<[], [boolean], "view">;
+  getFunction(
+    nameOrSignature: "reactivateVASP"
+  ): TypedContractMethod<
+    [didHash: BytesLike, newWallet: AddressLike],
+    [void],
+    "nonpayable"
+  >;
   getFunction(
     nameOrSignature: "registerVASP"
   ): TypedContractMethod<
@@ -567,6 +617,13 @@ export interface VASPRegistry extends BaseContract {
     UnpausedEvent.OutputObject
   >;
   getEvent(
+    key: "VASPReactivated"
+  ): TypedContractEvent<
+    VASPReactivatedEvent.InputTuple,
+    VASPReactivatedEvent.OutputTuple,
+    VASPReactivatedEvent.OutputObject
+  >;
+  getEvent(
     key: "VASPRegistered"
   ): TypedContractEvent<
     VASPRegisteredEvent.InputTuple,
@@ -646,6 +703,17 @@ export interface VASPRegistry extends BaseContract {
       UnpausedEvent.InputTuple,
       UnpausedEvent.OutputTuple,
       UnpausedEvent.OutputObject
+    >;
+
+    "VASPReactivated(bytes32,address)": TypedContractEvent<
+      VASPReactivatedEvent.InputTuple,
+      VASPReactivatedEvent.OutputTuple,
+      VASPReactivatedEvent.OutputObject
+    >;
+    VASPReactivated: TypedContractEvent<
+      VASPReactivatedEvent.InputTuple,
+      VASPReactivatedEvent.OutputTuple,
+      VASPReactivatedEvent.OutputObject
     >;
 
     "VASPRegistered(bytes32,address,string)": TypedContractEvent<

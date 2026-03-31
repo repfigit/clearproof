@@ -3,14 +3,24 @@ pragma solidity ^0.8.24;
 
 import "@openzeppelin/contracts/access/AccessControl.sol";
 import "@openzeppelin/contracts/utils/Pausable.sol";
-import "./Groth16Verifier.sol";
 import "./VASPRegistry.sol";
 import "./SanctionsOracle.sol";
+
+/// @dev Interface for the Groth16 verifier with 15 public signals.
+/// The concrete Groth16Verifier.sol will be regenerated after circuit recompilation.
+interface IGroth16Verifier {
+    function verifyProof(
+        uint[2] calldata _pA,
+        uint[2][2] calldata _pB,
+        uint[2] calldata _pC,
+        uint[15] calldata _pubSignals
+    ) external view returns (bool);
+}
 
 contract ComplianceRegistry is AccessControl, Pausable {
     bytes32 public constant REVOKER_ROLE = keccak256("REVOKER_ROLE");
 
-    Groth16Verifier public immutable verifier;
+    IGroth16Verifier public immutable verifier;
     VASPRegistry public immutable vaspRegistry;
     SanctionsOracle public immutable sanctionsOracle;
 
@@ -22,12 +32,18 @@ contract ComplianceRegistry is AccessControl, Pausable {
 
     mapping(bytes32 => ProofRecord) public proofs;
     mapping(bytes32 => bool) public revokedCredentials;
+    mapping(bytes32 => bool) public usedNullifiers;
 
-    event ProofVerified(bytes32 indexed transferId, bool isCompliant, bool sarFlag);
+    event ProofVerified(bytes32 indexed transferId, bytes32 indexed nullifier, bool isCompliant, bool sarFlag);
     event CredentialRevoked(bytes32 indexed commitment, address revoker);
 
     constructor(address _verifier, address _vaspRegistry, address _sanctionsOracle) {
-        verifier = Groth16Verifier(_verifier);
+        // M-7: Zero-address validation
+        require(_verifier != address(0), "Zero verifier");
+        require(_vaspRegistry != address(0), "Zero registry");
+        require(_sanctionsOracle != address(0), "Zero oracle");
+
+        verifier = IGroth16Verifier(_verifier);
         vaspRegistry = VASPRegistry(_vaspRegistry);
         sanctionsOracle = SanctionsOracle(_sanctionsOracle);
 
@@ -40,29 +56,54 @@ contract ComplianceRegistry is AccessControl, Pausable {
         uint[2] calldata _pA,
         uint[2][2] calldata _pB,
         uint[2] calldata _pC,
-        uint[11] calldata _pubSignals,
+        uint[15] calldata _pubSignals,
         bytes32 vaspDidHash
     ) external whenNotPaused returns (bool) {
-        // Debate gate fix: prevent transferId replay/overwrite
+        // Replay prevention
         require(proofs[transferId].timestamp == 0, "Transfer already recorded");
-        require(!sanctionsOracle.isStale(), "Sanctions oracle is stale");
+
+        // H-6: Dependency health checks
+        require(!sanctionsOracle.paused(), "Sanctions oracle paused");
+        require(!vaspRegistry.paused(), "VASP registry paused");
+        require(!sanctionsOracle.isStale(), "Sanctions oracle stale");
         require(vaspRegistry.isActive(vaspDidHash), "VASP not active");
 
-        // Debate gate fix: bind msg.sender to registered VASP wallet
+        // Sender binding
         (address vaspWallet,,, ) = vaspRegistry.vasps(vaspDidHash);
-        require(msg.sender == vaspWallet, "Sender is not registered VASP wallet");
+        require(msg.sender == vaspWallet, "Not registered VASP wallet");
 
+        // C-3: Domain binding (cross-chain replay protection)
+        require(_pubSignals[11] == block.chainid, "Wrong chain");
+        require(uint256(keccak256(abi.encodePacked(address(this)))) == _pubSignals[12], "Wrong contract");
+
+        // C-4: State binding (proof matches current on-chain roots)
+        require(bytes32(_pubSignals[2]) == sanctionsOracle.currentRoot(), "Sanctions root mismatch");
+        require(bytes32(_pubSignals[3]) == vaspRegistry.issuerMerkleRoot(), "Issuer root mismatch");
+
+        // M-1: Transfer binding (proof bound to this transfer)
+        require(uint256(keccak256(abi.encodePacked(transferId))) == _pubSignals[13], "Transfer ID mismatch");
+
+        // C-5: Credential revocation check
+        require(!revokedCredentials[bytes32(_pubSignals[7])], "Credential revoked");
+
+        // M-3: Nullifier — one-time proof use (prevents same proof on different transferIds)
+        bytes32 nullifier = bytes32(_pubSignals[14]);
+        require(!usedNullifiers[nullifier], "Proof already used");
+
+        // C-1: Cryptographic verification — revert on invalid proof
         bool valid = verifier.verifyProof(_pA, _pB, _pC, _pubSignals);
+        require(valid, "Proof verification failed");
 
+        // Record
+        usedNullifiers[nullifier] = true;
         proofs[transferId] = ProofRecord({
-            proofHash: keccak256(abi.encode(_pA, _pB, _pC)),
+            proofHash: keccak256(abi.encode(_pA, _pB, _pC, _pubSignals)),  // H-1: includes pubSignals
             timestamp: block.timestamp,
-            verified: valid
+            verified: true  // Always true now (we revert on invalid)
         });
 
-        emit ProofVerified(transferId, _pubSignals[0] == 1, _pubSignals[1] == 1);
-
-        return valid;
+        emit ProofVerified(transferId, nullifier, _pubSignals[0] == 1, _pubSignals[1] == 1);
+        return true;
     }
 
     function revokeCredential(bytes32 commitment) external onlyRole(REVOKER_ROLE) {

@@ -33,6 +33,17 @@ include "./amount_tier.circom";
  *   - tier2_threshold: jurisdiction-specific tier 2 boundary (verifier-supplied)
  *   - tier3_threshold: jurisdiction-specific tier 3 boundary (verifier-supplied)
  *   - tier4_threshold: jurisdiction-specific tier 4 boundary (verifier-supplied)
+ *   - domain_chain_id: binds proof to a specific blockchain (e.g. 1=mainnet,
+ *       11155111=Sepolia). Verifier checks this matches the on-chain chainid.
+ *   - domain_contract_hash: binds proof to a specific ComplianceRegistry
+ *       deployment (truncated keccak of contract address). Verifier checks this
+ *       matches the deployed contract.
+ *   - transfer_id_hash: binds proof to a specific transfer (keccak of
+ *       transferId). Prevents the same proof from being submitted for a
+ *       different transfer.
+ *   - credential_nullifier: one-time-use nullifier derived from
+ *       Poseidon(credential_commitment, transfer_id_hash). The contract stores
+ *       used nullifiers to prevent proof reuse across transfers.
  *
  * PUBLIC OUTPUTS:
  *   - is_compliant: 1 if all checks pass
@@ -55,6 +66,26 @@ template ComplianceProof(sanctions_tree_depth, issuer_tree_depth) {
     signal input tier2_threshold;
     signal input tier3_threshold;
     signal input tier4_threshold;
+
+    // === PUBLIC INPUTS: Domain binding (prevent cross-chain replay) ===
+    // domain_chain_id: Ethereum chain ID that this proof is bound to.
+    // The verifier contract checks this matches block.chainid on-chain.
+    // No in-circuit constraint needed — security comes from the contract check.
+    signal input domain_chain_id;
+
+    // domain_contract_hash: Truncated keccak256 of the ComplianceRegistry
+    // contract address. The verifier checks this matches its own address hash.
+    // No in-circuit constraint needed — security comes from the contract check.
+    signal input domain_contract_hash;
+
+    // transfer_id_hash: keccak256 of the transferId, binding this proof to
+    // exactly one transfer. Prevents proof reuse across different transfers.
+    signal input transfer_id_hash;
+
+    // credential_nullifier: One-time-use nullifier = Poseidon(credential_commitment,
+    // transfer_id_hash). The contract stores spent nullifiers to prevent replay.
+    // Constrained in-circuit to match the Poseidon hash of the two inputs.
+    signal input credential_nullifier;
 
     // === PUBLIC OUTPUTS ===
     signal output is_compliant;
@@ -134,6 +165,24 @@ template ComplianceProof(sanctions_tree_depth, issuer_tree_depth) {
     sar_review_flag <== tier_check.sar_review_flag;
 
     // ================================================================
+    // DOMAIN BINDING: Credential Nullifier Verification
+    // ================================================================
+    // Constrain credential_nullifier === Poseidon(credential_commitment, transfer_id_hash).
+    // This binds the nullifier to both the credential and the specific transfer,
+    // so (a) each credential+transfer pair produces a unique nullifier, and
+    // (b) the contract can reject replayed proofs by checking spent nullifiers.
+    component nullifier_hash = Poseidon(2);
+    nullifier_hash.inputs[0] <== credential_commitment;
+    nullifier_hash.inputs[1] <== transfer_id_hash;
+    credential_nullifier === nullifier_hash.out;
+
+    // NOTE: domain_chain_id and domain_contract_hash are public inputs with
+    // no in-circuit constraint. Their security model relies on the verifier
+    // contract checking that these values match on-chain state (block.chainid
+    // and address(this)). Making them public signals ensures they are included
+    // in the proof and cannot be changed without invalidating it.
+
+    // ================================================================
     // COMPLIANCE OUTPUT
     // ================================================================
     // If execution reaches this point without a constraint failure, all
@@ -154,5 +203,9 @@ component main {public [
     credential_commitment,
     tier2_threshold,
     tier3_threshold,
-    tier4_threshold
+    tier4_threshold,
+    domain_chain_id,
+    domain_contract_hash,
+    transfer_id_hash,
+    credential_nullifier
 ]} = ComplianceProof(20, 10);

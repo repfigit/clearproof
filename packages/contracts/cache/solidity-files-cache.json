@@ -2,8 +2,8 @@
   "_format": "hh-sol-cache-2",
   "files": {
     "/Users/keith/Code/zk-travel-rule/packages/contracts/contracts/ComplianceRegistry.sol": {
-      "lastModificationDate": 1774918989900,
-      "contentHash": "f9d678287921998905f5d41461a37821",
+      "lastModificationDate": 1774920255080,
+      "contentHash": "cf76f5a19fc0dcdd6c7c99122086e86e",
       "sourceName": "contracts/ComplianceRegistry.sol",
       "solcConfig": {
         "version": "0.8.24",
@@ -32,7 +32,6 @@
       "imports": [
         "@openzeppelin/contracts/access/AccessControl.sol",
         "@openzeppelin/contracts/utils/Pausable.sol",
-        "./Groth16Verifier.sol",
         "./VASPRegistry.sol",
         "./SanctionsOracle.sol"
       ],
@@ -40,12 +39,13 @@
         "^0.8.24"
       ],
       "artifacts": [
-        "ComplianceRegistry"
+        "ComplianceRegistry",
+        "IGroth16Verifier"
       ]
     },
     "/Users/keith/Code/zk-travel-rule/packages/contracts/contracts/Groth16Verifier.sol": {
-      "lastModificationDate": 1774916334407,
-      "contentHash": "7384aaaae3a210c05bcf8383f4cf1079",
+      "lastModificationDate": 1774920442820,
+      "contentHash": "f708b7fc098f2c572c5cfb6700df5fe0",
       "sourceName": "contracts/Groth16Verifier.sol",
       "solcConfig": {
         "version": "0.8.24",
@@ -80,8 +80,8 @@
       ]
     },
     "/Users/keith/Code/zk-travel-rule/packages/contracts/contracts/VASPRegistry.sol": {
-      "lastModificationDate": 1774918672149,
-      "contentHash": "ed0f311d8edced6dcd8d11f2d52ba9f3",
+      "lastModificationDate": 1774920218348,
+      "contentHash": "f2773af8403a3d11d9d7092c78f1ef18",
       "sourceName": "contracts/VASPRegistry.sol",
       "solcConfig": {
         "version": "0.8.24",
@@ -119,8 +119,8 @@
       ]
     },
     "/Users/keith/Code/zk-travel-rule/packages/contracts/contracts/SanctionsOracle.sol": {
-      "lastModificationDate": 1774918680199,
-      "contentHash": "7c0c2d1ce8eb7902d061c6f9876a2e85",
+      "lastModificationDate": 1774920233843,
+      "contentHash": "c6026b50b7f4f827e54505e1448286ab",
       "sourceName": "contracts/SanctionsOracle.sol",
       "solcConfig": {
         "version": "0.8.24",

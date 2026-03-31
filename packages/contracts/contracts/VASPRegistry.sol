@@ -18,12 +18,16 @@ contract VASPRegistry is AccessControl, Pausable {
     bytes32[] public vaspIds;
     bytes32 public issuerMerkleRoot;
     uint64 public issuerRootVersion;
+    uint256 public activeVaspCount;  // M-6: Track active VASP count
 
     event VASPRegistered(bytes32 indexed didHash, address wallet, string jurisdiction);
     event VASPRevoked(bytes32 indexed didHash);
+    event VASPReactivated(bytes32 indexed didHash, address newWallet);  // H-5
     event IssuerRootUpdated(bytes32 oldRoot, bytes32 newRoot, uint64 version);
 
     constructor(address admin) {
+        // M-7: Zero-address validation
+        require(admin != address(0), "Zero admin");
         _grantRole(DEFAULT_ADMIN_ROLE, admin);
         _grantRole(REGISTRAR_ROLE, admin);
     }
@@ -36,13 +40,26 @@ contract VASPRegistry is AccessControl, Pausable {
         require(vasps[didHash].registeredAt == 0, "Already registered");
         vasps[didHash] = VASP(wallet, jurisdiction, true, uint64(block.timestamp));
         vaspIds.push(didHash);
+        activeVaspCount++;  // M-6
         emit VASPRegistered(didHash, wallet, jurisdiction);
     }
 
-    function revokeVASP(bytes32 didHash) external onlyRole(REGISTRAR_ROLE) {
+    // M-8: Added whenNotPaused — revocation requires explicit unpause for safety
+    function revokeVASP(bytes32 didHash) external onlyRole(REGISTRAR_ROLE) whenNotPaused {
         require(vasps[didHash].active, "Not active");
         vasps[didHash].active = false;
+        activeVaspCount--;  // M-6
         emit VASPRevoked(didHash);
+    }
+
+    // H-5: Reactivate a previously revoked VASP with a new wallet
+    function reactivateVASP(bytes32 didHash, address newWallet) external onlyRole(REGISTRAR_ROLE) whenNotPaused {
+        require(vasps[didHash].registeredAt != 0, "Not registered");
+        require(!vasps[didHash].active, "Already active");
+        vasps[didHash].active = true;
+        vasps[didHash].wallet = newWallet;
+        activeVaspCount++;  // M-6
+        emit VASPReactivated(didHash, newWallet);
     }
 
     function updateIssuerRoot(bytes32 newRoot) external onlyRole(REGISTRAR_ROLE) whenNotPaused {
