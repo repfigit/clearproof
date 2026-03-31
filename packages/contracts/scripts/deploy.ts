@@ -1,4 +1,4 @@
-import { ethers } from "hardhat";
+import { ethers, run } from "hardhat";
 
 async function main() {
   const [deployer] = await ethers.getSigners();
@@ -38,11 +38,44 @@ async function main() {
   const registryAddr = await registry.getAddress();
   console.log("ComplianceRegistry deployed to:", registryAddr);
 
-  console.log("\nDeployment complete:");
+  console.log("\n=== Deployment complete ===");
   console.log(`  Verifier:         ${verifierAddr}`);
   console.log(`  VASPRegistry:     ${vaspRegistryAddr}`);
   console.log(`  SanctionsOracle:  ${sanctionsOracleAddr}`);
   console.log(`  Registry:         ${registryAddr}`);
+
+  // Write deployment addresses to file for downstream tools
+  const fs = await import("fs");
+  const deployment = {
+    network: process.env.HARDHAT_NETWORK || "localhost",
+    chainId: (await ethers.provider.getNetwork()).chainId.toString(),
+    timestamp: new Date().toISOString(),
+    contracts: {
+      Groth16Verifier: verifierAddr,
+      VASPRegistry: vaspRegistryAddr,
+      SanctionsOracle: sanctionsOracleAddr,
+      ComplianceRegistry: registryAddr,
+    },
+    deployer: deployer.address,
+  };
+  const outPath = `deployments/${deployment.network}.json`;
+  fs.mkdirSync("deployments", { recursive: true });
+  fs.writeFileSync(outPath, JSON.stringify(deployment, null, 2));
+  console.log(`\nAddresses written to ${outPath}`);
+
+  // Verify on Etherscan if API key is set
+  if (process.env.ETHERSCAN_API_KEY || process.env.BASESCAN_API_KEY) {
+    console.log("\nVerifying contracts on block explorer...");
+    try {
+      await run("verify:verify", { address: verifierAddr, constructorArguments: [] });
+      await run("verify:verify", { address: vaspRegistryAddr, constructorArguments: [deployer.address] });
+      await run("verify:verify", { address: sanctionsOracleAddr, constructorArguments: [deployer.address, initialRoot, initialLeafCount] });
+      await run("verify:verify", { address: registryAddr, constructorArguments: [verifierAddr, vaspRegistryAddr, sanctionsOracleAddr] });
+      console.log("All contracts verified!");
+    } catch (e: any) {
+      console.log("Verification failed (can retry later):", e.message?.slice(0, 100));
+    }
+  }
 }
 
 main().catch((error) => {
