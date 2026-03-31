@@ -5,6 +5,28 @@
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "license": "Apache-2.0",
+  "files": [
+    "dist/",
+    "src/"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/clearproof/zk-travel-rule.git",
+    "directory": "packages/proof"
+  },
+  "homepage": "https://github.com/clearproof/zk-travel-rule/tree/main/packages/proof#readme",
+  "keywords": [
+    "zk",
+    "zero-knowledge",
+    "snarkjs",
+    "groth16",
+    "compliance",
+    "travel-rule",
+    "proof"
+  ],
+  "engines": {
+    "node": ">=18"
+  },
   "scripts": {
     "build": "tsc",
     "test": "vitest run"

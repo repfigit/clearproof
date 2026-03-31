@@ -8,6 +8,23 @@
     "clearproof": "./dist/index.js"
   },
   "license": "Apache-2.0",
+  "files": [
+    "dist/",
+    "src/"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/clearproof/zk-travel-rule.git",
+    "directory": "packages/cli"
+  },
+  "keywords": [
+    "zk",
+    "zero-knowledge",
+    "compliance",
+    "travel-rule",
+    "cli",
+    "clearproof"
+  ],
   "scripts": {
     "build": "tsc",
     "test": "vitest run"

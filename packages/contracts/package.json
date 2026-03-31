@@ -3,6 +3,26 @@
   "version": "0.1.0",
   "description": "On-chain Groth16 verifier for clearproof compliance proofs",
   "license": "Apache-2.0",
+  "files": [
+    "contracts/",
+    "artifacts/contracts/**/*.json",
+    "!artifacts/contracts/**/*.dbg.json"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/clearproof/zk-travel-rule.git",
+    "directory": "packages/contracts"
+  },
+  "keywords": [
+    "zk",
+    "zero-knowledge",
+    "groth16",
+    "solidity",
+    "verifier",
+    "compliance",
+    "travel-rule",
+    "ethereum"
+  ],
   "scripts": {
     "compile": "hardhat compile",
     "test": "hardhat test",

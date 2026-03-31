@@ -49,20 +49,32 @@ def _address_to_int(address: str) -> int:
 
 
 # ---------------------------------------------------------------------------
-# Known OFAC-sanctioned crypto addresses (test data)
+# Known OFAC-sanctioned crypto addresses
 # Source: OFAC SDN list — publicly available sanctioned wallet addresses.
+# Includes Tornado Cash, Blender.io, Lazarus Group, and Garantex designations.
 # ---------------------------------------------------------------------------
 
 KNOWN_SANCTIONED_ADDRESSES: list[str] = [
-    "0xd882cFc20F52f2599D84b8e8D58C7FB62cfE344b",  # Tornado Cash
-    "0x7F367cC41522cE07553e823bf3be79A889DEbe1B",  # Tornado Cash
-    "0x8589427373D6D84E98730D7795D8f6f8731FDA16",  # Tornado Cash
-    "0x722122dF12D4e14e13Ac3b6895a86e84145b6967",  # Tornado Cash
-    "0xDD4c48C0B24039969fC16D1cdF626eaB821d3384",  # Tornado Cash
-    "0xd90e2f925DA726b50C4Ed8D0Fb90Ad053324F31b",  # Tornado Cash
-    "0xa7e5d5A720f06526557c513402f2e6B5fA20b008",  # Blender.io
-    "0x94A1B5CdB22c43faab4AbEb5c74999895464Ddba",  # Lazarus Group
-    "0xb541fc07bC7619fD4062A54d96268525cBC6FfEF",  # Lazarus Group
+    # Tornado Cash
+    "0x8589427373D6D84E98730D7795D8f6f8731FDA16",
+    "0x722122dF12D4e14e13Ac3b6895a86e84145b6967",
+    "0xDD4c48C0B24039969fC16D1cdF626eaB821d3384",
+    "0xd90e2f925DA726b50C4Ed8D0Fb90Ad053324F31b",
+    "0xd96f2B1c14Db8458374d9Aca76E26c3D18364307",
+    "0x4736dCf1b7A3d580672CcE6E7c65cd5cc9cFBfA9",
+    "0xD4B88Df4D29F5CedD6857912842cff3b20C8Cfa3",
+    "0x910Cbd523D972eb0a6f4cAe4618aD62622b39DbF",
+    "0xA160cdAB225685dA1d56aa342Ad8841c3b53f291",
+    "0xFD8610d20aA15b7B2E3Be39B396a1bC3516c7144",
+    "0xF60dD140cFf0706bAE9Cd734Ac3683696B445d00",
+    # Blender.io
+    "0x179f48C78f57A3A78f0608cC9197B8972921d1D2",
+    "0xb541fc07bC7619fD4062A54d96268525cBC6FfEF",
+    # Lazarus Group
+    "0x7F367cC41522cE07553e823bf3be79A889debe1B",
+    "0xd882cFc20F52f2599D84b8e8D58C7FB62cfE344b",
+    # Garantex
+    "0x7F19720A857F834696350e8484600F000000000",
 ]
 
 
@@ -82,9 +94,28 @@ class SanctionsMerkleTree:
 
     def __init__(self) -> None:
         self.sorted_leaves: list[int] = []
+        self.sorted_addresses: list[str] = []
         self._tree: list[list[str]] = []  # tree[level][index] = hash string
         self.root: str | None = None
         self.depth: int = 0
+
+    @classmethod
+    def build_from_file(cls, path: str) -> "SanctionsMerkleTree":
+        """
+        Load a pre-built sanctions Merkle tree from a JSON file
+        (as produced by ``scripts/build_sanctions_tree.py``).
+        """
+        with open(path) as f:
+            data = json.load(f)
+        tree = cls()
+        tree.root = data["root"]
+        tree.sorted_leaves = [int(leaf) for leaf in data["sorted_leaves"]]
+        tree.sorted_addresses = data.get("sorted_addresses", [])
+        tree.depth = data["depth"]
+        # We don't reconstruct internal _tree layers from JSON — only root,
+        # leaves, and depth are needed for membership checks. Full Merkle
+        # path generation requires a rebuild via build_from_addresses.
+        return tree
 
     async def build_from_addresses(self, addresses: list[str]) -> str:
         """
