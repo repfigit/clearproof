@@ -1,0 +1,86 @@
+[
+  {
+    "inputs": [
+      {
+        "internalType": "bytes32",
+        "name": "transferId",
+        "type": "bytes32"
+      },
+      {
+        "internalType": "bytes32",
+        "name": "proofHash",
+        "type": "bytes32"
+      }
+    ],
+    "name": "recordProof",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "bytes32",
+        "name": "commitment",
+        "type": "bytes32"
+      }
+    ],
+    "name": "revokeCredential",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "bytes32",
+        "name": "commitment",
+        "type": "bytes32"
+      }
+    ],
+    "name": "isRevoked",
+    "outputs": [
+      {
+        "internalType": "bool",
+        "name": "",
+        "type": "bool"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "bytes32",
+        "name": "transferId",
+        "type": "bytes32"
+      }
+    ],
+    "name": "getProofRecord",
+    "outputs": [
+      {
+        "internalType": "bytes32",
+        "name": "transferId_",
+        "type": "bytes32"
+      },
+      {
+        "internalType": "bytes32",
+        "name": "proofHash",
+        "type": "bytes32"
+      },
+      {
+        "internalType": "uint256",
+        "name": "verifiedAt",
+        "type": "uint256"
+      },
+      {
+        "internalType": "address",
+        "name": "verifier",
+        "type": "address"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  }
+]

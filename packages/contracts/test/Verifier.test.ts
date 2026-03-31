@@ -153,14 +153,33 @@ describe("ComplianceRegistry", function () {
           "1000000",
         ];
 
-    // Deploy verifier and registry
+    const [admin] = await ethers.getSigners();
+
+    // Deploy verifier, VASP registry, sanctions oracle, and compliance registry
     const Verifier = await ethers.getContractFactory("Groth16Verifier");
     const verifier = await Verifier.deploy();
     await verifier.waitForDeployment();
 
+    const VASPRegistry = await ethers.getContractFactory("VASPRegistry");
+    const vaspRegistry = await VASPRegistry.deploy(admin.address);
+    await vaspRegistry.waitForDeployment();
+
+    const initialRoot = ethers.keccak256(ethers.toUtf8Bytes("sanctions-root"));
+    const SanctionsOracle = await ethers.getContractFactory("SanctionsOracle");
+    const sanctionsOracle = await SanctionsOracle.deploy(admin.address, initialRoot, 10);
+    await sanctionsOracle.waitForDeployment();
+
     const Registry = await ethers.getContractFactory("ComplianceRegistry");
-    const registry = await Registry.deploy(await verifier.getAddress());
+    const registry = await Registry.deploy(
+      await verifier.getAddress(),
+      await vaspRegistry.getAddress(),
+      await sanctionsOracle.getAddress()
+    );
     await registry.waitForDeployment();
+
+    // Register a VASP
+    const vaspDid = ethers.keccak256(ethers.toUtf8Bytes("did:web:test-vasp.example"));
+    await vaspRegistry.registerVASP(vaspDid, admin.address, "US");
 
     // Format proof
     const pA: [bigint, bigint] = [BigInt(proof.pi_a[0]), BigInt(proof.pi_a[1])];
@@ -174,7 +193,7 @@ describe("ComplianceRegistry", function () {
     const transferId = ethers.id("test-transfer-001");
 
     // Verify and record
-    const tx = await registry.verifyAndRecord(transferId, pA, pB, pC, pubSignals);
+    const tx = await registry.verifyAndRecord(transferId, pA, pB, pC, pubSignals, vaspDid);
     const receipt = await tx.wait();
 
     // Check event was emitted
