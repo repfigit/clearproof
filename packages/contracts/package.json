@@ -1,0 +1,16 @@
+{
+  "name": "@clearproof/contracts",
+  "version": "0.1.0",
+  "description": "On-chain Groth16 verifier for clearproof compliance proofs",
+  "license": "Apache-2.0",
+  "scripts": {
+    "compile": "hardhat compile",
+    "test": "hardhat test",
+    "deploy": "hardhat run scripts/deploy.ts"
+  },
+  "devDependencies": {
+    "@nomicfoundation/hardhat-toolbox": "^5.0",
+    "hardhat": "^2.22",
+    "typescript": "^5.4"
+  }
+}

@@ -1,0 +1,19 @@
+{
+  "name": "@clearproof/proof",
+  "version": "0.1.0",
+  "description": "TypeScript SDK for generating and verifying ZK compliance proofs",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "license": "Apache-2.0",
+  "scripts": {
+    "build": "tsc",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "snarkjs": "^0.7.5"
+  },
+  "devDependencies": {
+    "typescript": "^5.4",
+    "vitest": "^1.6"
+  }
+}

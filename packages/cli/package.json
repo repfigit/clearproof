@@ -1,0 +1,23 @@
+{
+  "name": "@clearproof/cli",
+  "version": "0.1.0",
+  "description": "CLI for generating and verifying ZK compliance proofs",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "bin": {
+    "clearproof": "./dist/index.js"
+  },
+  "license": "Apache-2.0",
+  "scripts": {
+    "build": "tsc",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@clearproof/proof": "*",
+    "commander": "^12.1"
+  },
+  "devDependencies": {
+    "typescript": "^5.4",
+    "vitest": "^1.6"
+  }
+}
