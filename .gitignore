@@ -35,6 +35,10 @@ package-lock.json
 # Certs
 certs/
 
+# Claude Code
+.claude/
+.claude-octopus/
+
 # IDE
 .idea/
 .vscode/
