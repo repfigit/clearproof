@@ -96,7 +96,7 @@ export const demoCommand = new Command('demo')
       'tier3_threshold',
       'tier4_threshold',
     ];
-    publicSignals.forEach((s, i) => {
+    publicSignals.forEach((s: string, i: number) => {
       const label = signalLabels[i] ?? `signal_${i}`;
       console.log(`    [${i}] ${label}: ${s}`);
     });

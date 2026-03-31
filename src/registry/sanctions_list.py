@@ -92,12 +92,51 @@ class SanctionsMerkleTree:
     - Generating non-membership (gap) witnesses for a given address.
     """
 
+    # Maximum age (seconds) before the tree file is considered stale.
+    # Default: 86400 (24 hours) — matches OFAC SDN daily update cadence.
+    MAX_TREE_AGE_SECONDS = int(os.environ.get("SANCTIONS_TREE_MAX_AGE", "86400"))
+
     def __init__(self) -> None:
         self.sorted_leaves: list[int] = []
         self.sorted_addresses: list[str] = []
         self._tree: list[list[str]] = []  # tree[level][index] = hash string
         self.root: str | None = None
         self.depth: int = 0
+
+    @classmethod
+    def load(cls) -> "SanctionsMerkleTree":
+        """
+        Load the sanctions tree from the pre-built artifact file.
+
+        Raises RuntimeError if the file is missing (operator must run
+        ``scripts/build_sanctions_tree.py`` before starting the service).
+        Logs a warning if the file is older than MAX_TREE_AGE_SECONDS.
+        """
+        import logging
+        import time
+
+        _log = logging.getLogger(__name__)
+        tree_path = os.path.join(
+            os.environ.get("CIRCUIT_ARTIFACTS_DIR", "./artifacts"),
+            "sanctions_tree.json",
+        )
+
+        if not os.path.exists(tree_path):
+            raise RuntimeError(
+                f"Sanctions tree file not found at {tree_path}. "
+                "Run `python scripts/build_sanctions_tree.py` before starting the service."
+            )
+
+        age = time.time() - os.path.getmtime(tree_path)
+        if age > cls.MAX_TREE_AGE_SECONDS:
+            _log.warning(
+                "Sanctions tree is %.1f hours old (max %d s). "
+                "Re-run `python scripts/build_sanctions_tree.py` or set up a cron job.",
+                age / 3600,
+                cls.MAX_TREE_AGE_SECONDS,
+            )
+
+        return cls.build_from_file(tree_path)
 
     @classmethod
     def build_from_file(cls, path: str) -> "SanctionsMerkleTree":
@@ -200,28 +239,37 @@ class SanctionsMerkleTree:
                 break
 
         if left_idx == -1:
-            # addr_hash is smaller than all leaves — use sentinel 0 as left
-            # and first leaf as right
-            right_idx = 0
-            left_path = self._get_merkle_path(0)  # placeholder path
-            right_path = self._get_merkle_path(0)
+            # addr_hash is smaller than all leaves — boundary gap proof:
+            # sentinel 0 as left neighbor, first real leaf as right neighbor.
+            # Left path uses index 0 (the first leaf's Merkle path — circuit
+            # verifies that left_neighbor < addr_hash < right_neighbor, and
+            # sentinel 0 satisfies left_neighbor < addr_hash trivially).
+            if not self._tree:
+                raise RuntimeError(
+                    "Cannot generate boundary gap proof: tree was loaded from "
+                    "file without internal layers. Rebuild via build_from_addresses()."
+                )
             return {
                 "left_neighbor": 0,
-                "right_neighbor": self.sorted_leaves[right_idx],
-                "left_path": left_path,
-                "right_path": right_path,
+                "right_neighbor": self.sorted_leaves[0],
+                "left_path": self._get_merkle_path(0),
+                "right_path": self._get_merkle_path(0),
             }
 
         if left_idx >= len(self.sorted_leaves) - 1:
-            # addr_hash is larger than all leaves — use last leaf as left
-            # and sentinel max as right
-            left_path = self._get_merkle_path(left_idx)
-            right_path = self._get_merkle_path(left_idx)  # placeholder
+            # addr_hash is larger than all leaves — boundary gap proof:
+            # last real leaf as left neighbor, sentinel max as right neighbor.
+            if not self._tree:
+                raise RuntimeError(
+                    "Cannot generate boundary gap proof: tree was loaded from "
+                    "file without internal layers. Rebuild via build_from_addresses()."
+                )
+            last = len(self.sorted_leaves) - 1
             return {
-                "left_neighbor": self.sorted_leaves[left_idx],
+                "left_neighbor": self.sorted_leaves[last],
                 "right_neighbor": 0,  # sentinel: no right neighbor
-                "left_path": left_path,
-                "right_path": right_path,
+                "left_path": self._get_merkle_path(last),
+                "right_path": self._get_merkle_path(last),
             }
 
         return {

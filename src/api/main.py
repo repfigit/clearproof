@@ -28,6 +28,14 @@ async def lifespan(app: FastAPI):
         app.version,
     )
     logger.info("Circuit artifacts dir: %s", os.getenv("CIRCUIT_ARTIFACTS_DIR", "./artifacts"))
+
+    # Fail fast: PII encryption key must be configured
+    if not os.getenv("PII_MASTER_KEY"):
+        raise RuntimeError(
+            "PII_MASTER_KEY environment variable is required. "
+            "Set a stable 32+ byte key for PII encryption."
+        )
+
     yield
     logger.info("ZK Travel Rule Compliance Bridge shutting down.")
 
@@ -50,8 +58,8 @@ def create_app() -> FastAPI:
         CORSMiddleware,
         allow_origins=allowed_origins,
         allow_credentials=True,
-        allow_methods=["*"],
-        allow_headers=["*"],
+        allow_methods=["GET", "POST", "OPTIONS"],
+        allow_headers=["Authorization", "Content-Type", "X-Idempotency-Key"],
     )
 
     # --- Routers --------------------------------------------------------

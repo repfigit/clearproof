@@ -29,6 +29,7 @@ export interface VASPRegistryInterface extends Interface {
       | "DEFAULT_ADMIN_ROLE"
       | "REGISTRAR_ROLE"
       | "activeVaspCount"
+      | "getActiveVaspCount"
       | "getRoleAdmin"
       | "grantRole"
       | "hasRole"
@@ -73,6 +74,10 @@ export interface VASPRegistryInterface extends Interface {
   ): string;
   encodeFunctionData(
     functionFragment: "activeVaspCount",
+    values?: undefined
+  ): string;
+  encodeFunctionData(
+    functionFragment: "getActiveVaspCount",
     values?: undefined
   ): string;
   encodeFunctionData(
@@ -144,6 +149,10 @@ export interface VASPRegistryInterface extends Interface {
   ): Result;
   decodeFunctionResult(
     functionFragment: "activeVaspCount",
+    data: BytesLike
+  ): Result;
+  decodeFunctionResult(
+    functionFragment: "getActiveVaspCount",
     data: BytesLike
   ): Result;
   decodeFunctionResult(
@@ -387,6 +396,8 @@ export interface VASPRegistry extends BaseContract {
 
   activeVaspCount: TypedContractMethod<[], [bigint], "view">;
 
+  getActiveVaspCount: TypedContractMethod<[], [bigint], "view">;
+
   getRoleAdmin: TypedContractMethod<[role: BytesLike], [string], "view">;
 
   grantRole: TypedContractMethod<
@@ -480,6 +491,9 @@ export interface VASPRegistry extends BaseContract {
   ): TypedContractMethod<[], [string], "view">;
   getFunction(
     nameOrSignature: "activeVaspCount"
+  ): TypedContractMethod<[], [bigint], "view">;
+  getFunction(
+    nameOrSignature: "getActiveVaspCount"
   ): TypedContractMethod<[], [bigint], "view">;
   getFunction(
     nameOrSignature: "getRoleAdmin"

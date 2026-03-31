@@ -27,6 +27,7 @@ export interface ComplianceRegistryInterface extends Interface {
   getFunction(
     nameOrSignature:
       | "DEFAULT_ADMIN_ROLE"
+      | "MAX_PROOF_AGE"
       | "REVOKER_ROLE"
       | "getRoleAdmin"
       | "grantRole"
@@ -62,6 +63,10 @@ export interface ComplianceRegistryInterface extends Interface {
 
   encodeFunctionData(
     functionFragment: "DEFAULT_ADMIN_ROLE",
+    values?: undefined
+  ): string;
+  encodeFunctionData(
+    functionFragment: "MAX_PROOF_AGE",
     values?: undefined
   ): string;
   encodeFunctionData(
@@ -139,6 +144,10 @@ export interface ComplianceRegistryInterface extends Interface {
 
   decodeFunctionResult(
     functionFragment: "DEFAULT_ADMIN_ROLE",
+    data: BytesLike
+  ): Result;
+  decodeFunctionResult(
+    functionFragment: "MAX_PROOF_AGE",
     data: BytesLike
   ): Result;
   decodeFunctionResult(
@@ -358,6 +367,8 @@ export interface ComplianceRegistry extends BaseContract {
 
   DEFAULT_ADMIN_ROLE: TypedContractMethod<[], [string], "view">;
 
+  MAX_PROOF_AGE: TypedContractMethod<[], [bigint], "view">;
+
   REVOKER_ROLE: TypedContractMethod<[], [string], "view">;
 
   getRoleAdmin: TypedContractMethod<[role: BytesLike], [string], "view">;
@@ -450,6 +461,9 @@ export interface ComplianceRegistry extends BaseContract {
   getFunction(
     nameOrSignature: "DEFAULT_ADMIN_ROLE"
   ): TypedContractMethod<[], [string], "view">;
+  getFunction(
+    nameOrSignature: "MAX_PROOF_AGE"
+  ): TypedContractMethod<[], [bigint], "view">;
   getFunction(
     nameOrSignature: "REVOKER_ROLE"
   ): TypedContractMethod<[], [string], "view">;

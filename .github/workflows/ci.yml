@@ -22,6 +22,8 @@ jobs:
         with:
           node-version: 20
       - run: npm install
+      - name: Build @clearproof/proof (dependency of cli)
+        run: cd packages/proof && npx tsc
       - run: cd packages/proof && npx tsc --noEmit
       - run: cd packages/cli && npx tsc --noEmit
 
@@ -48,4 +50,6 @@ jobs:
           curl -L https://github.com/iden3/circom/releases/download/v2.2.2/circom-linux-amd64 -o /usr/local/bin/circom
           chmod +x /usr/local/bin/circom
       - name: Compile circuits (syntax check)
-        run: circom circuits/compliance.circom --r1cs --sym -l node_modules -o /tmp/circuit-build
+        run: |
+          mkdir -p /tmp/circuit-build
+          circom circuits/compliance.circom --r1cs --sym -l node_modules -o /tmp/circuit-build

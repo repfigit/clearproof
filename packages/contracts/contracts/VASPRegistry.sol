@@ -77,6 +77,11 @@ contract VASPRegistry is AccessControl, Pausable {
         return vaspIds.length;
     }
 
+    /// @notice Returns the number of currently active (non-revoked) VASPs.
+    function getActiveVaspCount() external view returns (uint256) {
+        return activeVaspCount;
+    }
+
     function pause() external onlyRole(DEFAULT_ADMIN_ROLE) {
         _pause();
     }

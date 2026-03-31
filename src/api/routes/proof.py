@@ -81,9 +81,16 @@ def _hash_transfer(request: ProofGenerateRequest) -> str:
     return hashlib.sha256(payload.encode()).hexdigest()
 
 
+# BN128 scalar field order
+_BN128_R = 21888242871839275222246405745257275088548364400416034343698204186575808495617
+
+
 def _encode_jurisdiction(code: str) -> int:
     """Encode ISO-3166-1 alpha-2 to an integer for the circuit."""
-    return int.from_bytes(code.upper().encode("ascii"), byteorder="big")
+    val = int.from_bytes(code.upper().encode("ascii"), byteorder="big")
+    if val >= _BN128_R:
+        raise ValueError(f"Jurisdiction encoding {val} overflows BN128 scalar field")
+    return val
 
 
 def _encode_did(did: str) -> int:
@@ -152,6 +159,16 @@ async def generate_proof(
     # 1. Compute tier from amount + jurisdiction --------------------------------
     tier = compute_tier(request.amount_usd, request.jurisdiction)
 
+    # 1b. IVMS101 validation — originator name is mandatory above Travel Rule threshold
+    if tier >= 3 and not request.originator_name:
+        raise HTTPException(
+            status_code=422,
+            detail=(
+                "IVMS101 requires originator_name for Travel Rule transfers "
+                f"(tier {tier}, amount ${request.amount_usd:.2f})"
+            ),
+        )
+
     # 2. Look up credential -----------------------------------------------------
     cred_registry = CredentialRegistry()
     credential = cred_registry.get(request.credential_id)
@@ -161,7 +178,7 @@ async def generate_proof(
         raise HTTPException(status_code=400, detail="Credential revoked")
 
     # 3. Build circuit inputs ----------------------------------------------------
-    sanctions_tree = SanctionsMerkleTree()
+    sanctions_tree = SanctionsMerkleTree.load()
     nonmembership_witness = await sanctions_tree.generate_nonmembership_witness(
         wallet_address=request.wallet_address,
     )
@@ -203,7 +220,13 @@ async def generate_proof(
 
     # 6. Encrypt PII for hybrid payload -----------------------------------------
     import os
-    master_key = os.environ.get("PII_MASTER_KEY", "").encode() or os.urandom(32)
+    raw_key = os.environ.get("PII_MASTER_KEY", "")
+    if not raw_key:
+        raise HTTPException(
+            status_code=500,
+            detail="PII_MASTER_KEY environment variable is required but not set",
+        )
+    master_key = raw_key.encode()
     envelope_id = request.idempotency_key
     pii_key = derive_key(master_key, envelope_id.encode())
     pii_plaintext = json.dumps({

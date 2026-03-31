@@ -24,6 +24,10 @@ contract ComplianceRegistry is AccessControl, Pausable {
     VASPRegistry public immutable vaspRegistry;
     SanctionsOracle public immutable sanctionsOracle;
 
+    /// @dev Maximum age of a proof (seconds) before it is considered expired.
+    /// Matches the 300s TTL set by the prover in proof_expires_at.
+    uint256 public constant MAX_PROOF_AGE = 300;
+
     struct ProofRecord {
         bytes32 proofHash;
         uint256 timestamp;
@@ -76,6 +80,10 @@ contract ComplianceRegistry is AccessControl, Pausable {
         require(_pubSignals[11] == block.chainid, "Wrong chain");
         require(uint256(keccak256(abi.encodePacked(address(this)))) == _pubSignals[12], "Wrong contract");
 
+        // Proof expiration: transfer_timestamp (signal[5]) must be within MAX_PROOF_AGE
+        require(block.timestamp <= _pubSignals[5] + MAX_PROOF_AGE, "Proof expired");
+        require(_pubSignals[5] <= block.timestamp, "Proof timestamp in future");
+
         // C-4: State binding (proof matches current on-chain roots)
         require(bytes32(_pubSignals[2]) == sanctionsOracle.currentRoot(), "Sanctions root mismatch");
         require(bytes32(_pubSignals[3]) == vaspRegistry.issuerMerkleRoot(), "Issuer root mismatch");
@@ -102,7 +110,10 @@ contract ComplianceRegistry is AccessControl, Pausable {
             verified: true  // Always true now (we revert on invalid)
         });
 
-        emit ProofVerified(transferId, nullifier, _pubSignals[0] == 1, _pubSignals[1] == 1);
+        // Hash the nullifier before emitting to prevent blockchain observers
+        // from correlating transfer patterns across ProofVerified events.
+        bytes32 blindedNullifier = keccak256(abi.encodePacked(nullifier));
+        emit ProofVerified(transferId, blindedNullifier, _pubSignals[0] == 1, _pubSignals[1] == 1);
         return true;
     }
 
