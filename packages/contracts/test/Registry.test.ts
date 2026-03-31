@@ -355,6 +355,6 @@ function getDummyProof() {
       [BigInt(3), BigInt(4)],
     ] as [[bigint, bigint], [bigint, bigint]],
     pC: [BigInt(1), BigInt(2)] as [bigint, bigint],
-    pubSignals: Array(15).fill(BigInt(0)) as bigint[],
+    pubSignals: Array(16).fill(BigInt(0)) as bigint[],
   };
 }

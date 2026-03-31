@@ -44,6 +44,9 @@ include "./amount_tier.circom";
  *   - credential_nullifier: one-time-use nullifier derived from
  *       Poseidon(credential_commitment, transfer_id_hash). The contract stores
  *       used nullifiers to prevent proof reuse across transfers.
+ *   - proof_expires_at: Unix timestamp after which this proof is invalid.
+ *       Must be > transfer_timestamp (in-circuit constraint). The verifier
+ *       contract checks proof_expires_at >= block.timestamp.
  *
  * PUBLIC OUTPUTS:
  *   - is_compliant: 1 if all checks pass
@@ -86,6 +89,11 @@ template ComplianceProof(sanctions_tree_depth, issuer_tree_depth) {
     // transfer_id_hash). The contract stores spent nullifiers to prevent replay.
     // Constrained in-circuit to match the Poseidon hash of the two inputs.
     signal input credential_nullifier;
+
+    // proof_expires_at: Unix timestamp after which this proof is no longer valid.
+    // Constrained in-circuit: must be strictly greater than transfer_timestamp.
+    // The verifier contract checks proof_expires_at >= block.timestamp.
+    signal input proof_expires_at;
 
     // === PUBLIC OUTPUTS ===
     signal output is_compliant;
@@ -183,6 +191,18 @@ template ComplianceProof(sanctions_tree_depth, issuer_tree_depth) {
     // in the proof and cannot be changed without invalidating it.
 
     // ================================================================
+    // PROOF EXPIRATION: In-circuit validity check
+    // ================================================================
+    // Ensure proof_expires_at > transfer_timestamp (proof can't expire before
+    // it was created). The verifier contract separately checks that
+    // proof_expires_at >= block.timestamp (proof hasn't expired yet).
+    // Uses 64-bit comparison — sufficient for Unix timestamps until year 2554.
+    component expiry_check = GreaterThan(64);
+    expiry_check.in[0] <== proof_expires_at;
+    expiry_check.in[1] <== transfer_timestamp;
+    expiry_check.out === 1;
+
+    // ================================================================
     // COMPLIANCE OUTPUT
     // ================================================================
     // If execution reaches this point without a constraint failure, all
@@ -207,5 +227,6 @@ component main {public [
     domain_chain_id,
     domain_contract_hash,
     transfer_id_hash,
-    credential_nullifier
+    credential_nullifier,
+    proof_expires_at
 ]} = ComplianceProof(20, 10);

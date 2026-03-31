@@ -55,7 +55,7 @@ describe("Groth16Verifier", function () {
       [BigInt(3), BigInt(4)],
     ];
     const pC: [bigint, bigint] = [BigInt(1), BigInt(2)];
-    const pubSignals = Array(15).fill(BigInt(0));
+    const pubSignals = Array(16).fill(BigInt(0));
 
     // Invalid proof should return false (the snarkjs verifier reverts on
     // invalid curve points, so we accept either false or a revert)

@@ -6,14 +6,14 @@ import "@openzeppelin/contracts/utils/Pausable.sol";
 import "./VASPRegistry.sol";
 import "./SanctionsOracle.sol";
 
-/// @dev Interface for the Groth16 verifier with 15 public signals.
+/// @dev Interface for the Groth16 verifier with 16 public signals.
 /// The concrete Groth16Verifier.sol will be regenerated after circuit recompilation.
 interface IGroth16Verifier {
     function verifyProof(
         uint[2] calldata _pA,
         uint[2][2] calldata _pB,
         uint[2] calldata _pC,
-        uint[15] calldata _pubSignals
+        uint[16] calldata _pubSignals
     ) external view returns (bool);
 }
 
@@ -23,10 +23,6 @@ contract ComplianceRegistry is AccessControl, Pausable {
     IGroth16Verifier public immutable verifier;
     VASPRegistry public immutable vaspRegistry;
     SanctionsOracle public immutable sanctionsOracle;
-
-    /// @dev Maximum age of a proof (seconds) before it is considered expired.
-    /// Matches the 300s TTL set by the prover in proof_expires_at.
-    uint256 public constant MAX_PROOF_AGE = 300;
 
     struct ProofRecord {
         bytes32 proofHash;
@@ -60,7 +56,7 @@ contract ComplianceRegistry is AccessControl, Pausable {
         uint[2] calldata _pA,
         uint[2][2] calldata _pB,
         uint[2] calldata _pC,
-        uint[15] calldata _pubSignals,
+        uint[16] calldata _pubSignals,
         bytes32 vaspDidHash
     ) external whenNotPaused returns (bool) {
         // Replay prevention
@@ -78,10 +74,16 @@ contract ComplianceRegistry is AccessControl, Pausable {
 
         // C-3: Domain binding (cross-chain replay protection)
         require(_pubSignals[11] == block.chainid, "Wrong chain");
-        require(uint256(keccak256(abi.encodePacked(address(this)))) == _pubSignals[12], "Wrong contract");
+        // Circuit signals are reduced mod BN128 scalar field order (r).
+        // keccak256 produces 256-bit values that may exceed r, so we must
+        // reduce the contract-side hash to match what the circuit stores.
+        uint256 BN128_R = 21888242871839275222246405745257275088548364400416034343698204186575808495617;
+        require(uint256(keccak256(abi.encodePacked(address(this)))) % BN128_R == _pubSignals[12], "Wrong contract");
 
-        // Proof expiration: transfer_timestamp (signal[5]) must be within MAX_PROOF_AGE
-        require(block.timestamp <= _pubSignals[5] + MAX_PROOF_AGE, "Proof expired");
+        // Proof expiration: proof_expires_at (signal[15]) is a circuit public signal.
+        // The circuit constrains proof_expires_at > transfer_timestamp.
+        // Here we check the proof hasn't expired yet.
+        require(block.timestamp <= _pubSignals[15], "Proof expired");
         require(_pubSignals[5] <= block.timestamp, "Proof timestamp in future");
 
         // C-4: State binding (proof matches current on-chain roots)
@@ -89,7 +91,7 @@ contract ComplianceRegistry is AccessControl, Pausable {
         require(bytes32(_pubSignals[3]) == vaspRegistry.issuerMerkleRoot(), "Issuer root mismatch");
 
         // M-1: Transfer binding (proof bound to this transfer)
-        require(uint256(keccak256(abi.encodePacked(transferId))) == _pubSignals[13], "Transfer ID mismatch");
+        require(uint256(keccak256(abi.encodePacked(transferId))) % BN128_R == _pubSignals[13], "Transfer ID mismatch");
 
         // C-5: Credential revocation check
         require(!revokedCredentials[bytes32(_pubSignals[7])], "Credential revoked");

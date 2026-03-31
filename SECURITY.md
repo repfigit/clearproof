@@ -30,8 +30,10 @@ The following areas are in scope for security reports:
 - **ZK circuits** (`circuits/`): Soundness issues, constraint under-specification, proof forgery vectors
 - **Encryption and key management**: Weaknesses in data encryption, key derivation, or secret handling
 - **Protocol bridges**: Vulnerabilities in cross-chain message passing or verification logic
-- **Smart contracts** (`packages/contracts/`): Reentrancy, access control, or verification bypass issues
+- **Smart contracts** (`packages/contracts/`): Reentrancy, access control, verification bypass, domain binding bypass, or proof replay issues in ComplianceRegistry, VASPRegistry, or SanctionsOracle
+- **Sanctions oracle** (`SanctionsOracle.sol`): Issues that could allow stale or manipulated sanctions roots
 - **Proof SDK** (`packages/proof/`): Issues that could allow invalid proofs to be accepted
+- **Proof expiration**: Bypass of on-chain `proof_expires_at` enforcement
 
 ## Out of Scope
 

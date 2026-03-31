@@ -55,18 +55,19 @@ uv run pytest tests/unit/test_circuits.py -v
 cd packages/proof && npx tsc --noEmit
 cd packages/cli && npx tsc --noEmit
 
-# Run Hardhat contract tests
+# Run Hardhat contract tests (24 tests including E2E)
 cd packages/contracts && npx hardhat test
 ```
 
 ### Circuit Compilation
 
 ```bash
-# Compile circuits (syntax check + R1CS generation)
-circom circuits/compliance.circom --r1cs --sym -l node_modules -o build/
-
-# Or use the project script
+# Full compile + trusted setup + verification key export
 bash scripts/compile_circuits.sh
+
+# Syntax check only (no trusted setup)
+mkdir -p /tmp/circuit-build
+circom circuits/compliance.circom --r1cs --sym -l node_modules -o /tmp/circuit-build
 ```
 
 ## Pull Request Process
@@ -83,7 +84,7 @@ bash scripts/compile_circuits.sh
 - [ ] All existing tests pass
 - [ ] New tests added for new functionality
 - [ ] TypeScript compiles without errors
-- [ ] Circuit changes include constraint count analysis
+- [ ] Circuit changes include constraint count analysis (current: ~31K constraints, 16 public signals)
 - [ ] No secrets or private keys committed
 
 ## Code Style

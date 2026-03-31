@@ -184,13 +184,17 @@ async def generate_proof(
     )
 
     issuer_registry = IssuerRegistry()
+    now_ts = int(time.time())
+    proof_ttl = 300  # 5 minutes
+
     input_signals = {
         "sanctions_tree_root": sanctions_tree.root,
         "issuer_tree_root": issuer_registry.get_root(),
         "amount_tier": tier,
-        "transfer_timestamp": int(time.time()),
+        "transfer_timestamp": now_ts,
         "jurisdiction_code": _encode_jurisdiction(request.jurisdiction),
         "credential_commitment": await cred_registry.get_commitment(request.credential_id),
+        "proof_expires_at": now_ts + proof_ttl,
         # Private inputs
         "issuer_did": _encode_did(credential.issuer_did),
         "kyc_tier": _encode_kyc_tier(credential.kyc_tier),
@@ -210,7 +214,6 @@ async def generate_proof(
         raise HTTPException(status_code=503, detail=f"Proof generation failed: {exc}")
 
     proof_id = str(uuid.uuid4())
-    now = int(time.time())
 
     # 5. Evaluate SAR review flags -----------------------------------------------
     sar_result = evaluate_sar_flags(
@@ -249,8 +252,8 @@ async def generate_proof(
         beneficiary_vasp_did=request.destination_vasp_did,
         jurisdiction=request.jurisdiction,
         amount_tier=tier,
-        proof_generated_at=now,
-        proof_expires_at=now + 300,
+        proof_generated_at=now_ts,
+        proof_expires_at=now_ts + proof_ttl,
         sar_review_flag=sar_result.requires_human_review,
         encrypted_sar_payload=None,
     )
@@ -299,16 +302,20 @@ async def verify_proof(
     except Exception as exc:
         raise HTTPException(status_code=503, detail=f"Proof verification unavailable: {exc}")
 
-    # Decode public signals
+    # Decode public signals (16 total)
+    # [0] is_compliant, [1] sar_review_flag, [2] sanctions_root, [3] issuer_root,
+    # [4] amount_tier, [5] transfer_timestamp, [6] jurisdiction_code,
+    # [7] credential_commitment, [8-10] thresholds, [11] chain_id,
+    # [12] contract_hash, [13] transfer_id_hash, [14] nullifier,
+    # [15] proof_expires_at
     signals = request.public_signals
-    if len(signals) < 4:
-        raise HTTPException(status_code=400, detail="Insufficient public signals (expected >= 4)")
+    if len(signals) < 16:
+        raise HTTPException(status_code=400, detail="Insufficient public signals (expected 16)")
 
     attestations = {
-        "credential_valid": int(signals[0]) == 1,
-        "sanctions_clear": int(signals[1]) == 1,
-        "amount_tier": int(signals[2]),
-        "jurisdiction_match": int(signals[3]) == 1,
+        "is_compliant": int(signals[0]) == 1,
+        "sar_review_flag": int(signals[1]) == 1,
+        "amount_tier": int(signals[4]),
     }
 
     # Check expected tier matches

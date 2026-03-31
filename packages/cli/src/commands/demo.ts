@@ -53,6 +53,15 @@ const DEMO_INPUT: ComplianceInput = {
   ],
   rightPathIndices: ['1', ...Array(19).fill('0')],
 
+  // === Public inputs: Domain binding (zeros for demo — not deployed to chain) ===
+  domainChainId: 0,
+  domainContractHash: '0',
+  transferIdHash: '0',
+  // nullifier = Poseidon(credentialCommitment, transferIdHash=0)
+  credentialNullifier:
+    '13240535717232054844213623400351701779147624874153591729536053257199079312660',
+  proofExpiresAt: 1711670400 + 300, // transfer_timestamp + 300s TTL
+
   // === Private inputs: Amount ===
   actualAmount: 100000, // $1,000.00 in cents — tier 2 (between $250 and $3,000)
 };
@@ -95,6 +104,11 @@ export const demoCommand = new Command('demo')
       'tier2_threshold',
       'tier3_threshold',
       'tier4_threshold',
+      'domain_chain_id',
+      'domain_contract_hash',
+      'transfer_id_hash',
+      'credential_nullifier',
+      'proof_expires_at',
     ];
     publicSignals.forEach((s: string, i: number) => {
       const label = signalLabels[i] ?? `signal_${i}`;

@@ -32,6 +32,13 @@ spike-ezkl:
 build-sanctions-tree:
 	python scripts/build_sanctions_tree.py
 
+update-sanctions-oracle:
+	@echo "Step 1: Rebuild sanctions tree from live feeds..."
+	python scripts/build_sanctions_tree.py
+	@echo ""
+	@echo "Step 2: Submit new root to on-chain oracle..."
+	cd packages/contracts && npx hardhat run scripts/update-sanctions-root.ts --network $(NETWORK)
+
 benchmark:
 	python scripts/benchmark_proof_latency.py
 

@@ -16,6 +16,13 @@ export interface ComplianceInput {
   tier3Threshold: number;
   tier4Threshold: number;
 
+  // === Public inputs: Domain binding & expiration ===
+  domainChainId?: number;
+  domainContractHash?: string;
+  transferIdHash?: string;
+  credentialNullifier?: string;
+  proofExpiresAt?: number;
+
   // === Private inputs: Credential preimage ===
   issuerDid: string;
   kycTier: number;

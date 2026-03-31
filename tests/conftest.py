@@ -111,7 +111,7 @@ def sample_compliance_proof() -> ComplianceProof:
         proof_id=str(uuid.uuid4()),
         transfer_id=str(uuid.uuid4()),
         groth16_proof=base64.b64encode(b'{"pi_a":[],"pi_b":[],"pi_c":[]}').decode(),
-        public_signals=["1", "1", "2", "1", "12345", "67890"],
+        public_signals=["1", "0", "0", "0", "2", str(now), "21843", "0", "25000", "300000", "1000000", "0", "0", "0", "0", str(now + 300)],
         verification_key=base64.b64encode(b'{"vk_alpha_1":[]}').decode(),
         originator_vasp_did="did:web:originator.example.com",
         beneficiary_vasp_did="did:web:beneficiary.example.com",
@@ -171,7 +171,7 @@ def mock_prover():
         "curve": "bn128",
         "_meta": {"proving_time_ms": 1500},
     }
-    mock_public_signals = ["1", "1", "2", "1", "98765", "43210", "1"]
+    mock_public_signals = ["1", "0", "0", "0", "2", "1711670400", "21843", "0", "25000", "300000", "1000000", "0", "0", "0", "0", "1711670700"]
 
     prover.fullprove = AsyncMock(return_value=(mock_proof, mock_public_signals))
     prover.verify = AsyncMock(return_value=True)
