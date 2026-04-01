@@ -49,6 +49,13 @@ jobs:
         run: |
           curl -L https://github.com/iden3/circom/releases/download/v2.2.2/circom-linux-amd64 -o /usr/local/bin/circom
           chmod +x /usr/local/bin/circom
+      - name: Verify circom checksum
+        run: |
+          # TODO: Replace with the actual SHA-256 hash from the circom v2.2.2 release.
+          # Obtain it by running: sha256sum /usr/local/bin/circom
+          # after a verified download, then pin it here.
+          EXPECTED_SHA256="PLACEHOLDER_REPLACE_WITH_ACTUAL_SHA256_OF_CIRCOM_V2_2_2_LINUX_AMD64"
+          echo "${EXPECTED_SHA256}  /usr/local/bin/circom" | sha256sum -c -
       - name: Compile circuits (syntax check)
         run: |
           mkdir -p /tmp/circuit-build

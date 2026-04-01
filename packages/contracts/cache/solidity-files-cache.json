@@ -44,8 +44,8 @@
       ]
     },
     "/Users/keith/Code/zk-travel-rule/packages/contracts/contracts/Groth16Verifier.sol": {
-      "lastModificationDate": 1774967692058,
-      "contentHash": "b4bd12679416eec5dd3a676711d321f4",
+      "lastModificationDate": 1774988631987,
+      "contentHash": "f9e2c248007d347506c58d7cb6cf398f",
       "sourceName": "contracts/Groth16Verifier.sol",
       "solcConfig": {
         "version": "0.8.24",

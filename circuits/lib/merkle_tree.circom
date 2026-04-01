@@ -97,6 +97,11 @@ template MerkleTreeVerifier(levels) {
 // Non-membership proof via sorted-tree gap proof
 // ============================================================
 //
+// DEPRECATED: This template uses free-input adjacency which is vulnerable.
+// Use SanctionsNonMembership from sanctions_nonmembership.circom instead,
+// which derives adjacency from Merkle path bits.
+// TODO: Remove in v0.3.0
+//
 // A sorted Merkle tree stores keys in ascending order by leaf index.
 // To prove query_key is NOT in the tree, the prover shows two adjacent
 // leaves (left_key at index N, right_key at index N+1) that bracket

@@ -17,6 +17,20 @@ export async function generateProof(
   wasmPath: string,
   zkeyPath: string,
 ): Promise<ProofResult> {
+  // --- Input validation ---------------------------------------------------
+  if (input.proofExpiresAt <= input.transferTimestamp) {
+    throw new Error('proofExpiresAt must be greater than transferTimestamp');
+  }
+  if (!input.credentialNullifier || input.credentialNullifier === '0') {
+    throw new Error('credentialNullifier must not be zero or empty');
+  }
+  if (input.domainChainId === 0 || input.domainChainId === undefined) {
+    console.warn(
+      '[clearproof] WARNING: domainChainId is 0 or unset — proof has no domain binding. ' +
+      'Set domainChainId to the target chain ID for replay protection.',
+    );
+  }
+
   const start = Date.now();
 
   // Map camelCase SDK fields to snake_case circuit signal names
@@ -33,8 +47,8 @@ export async function generateProof(
     domain_chain_id: String(input.domainChainId ?? 0),
     domain_contract_hash: input.domainContractHash ?? '0',
     transfer_id_hash: input.transferIdHash ?? '0',
-    credential_nullifier: input.credentialNullifier ?? '0',
-    proof_expires_at: String(input.proofExpiresAt ?? 0),
+    credential_nullifier: input.credentialNullifier,
+    proof_expires_at: String(input.proofExpiresAt),
     issuer_did: input.issuerDid,
     kyc_tier: String(input.kycTier),
     sanctions_clear: String(input.sanctionsClear),

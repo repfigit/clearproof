@@ -1,6 +1,6 @@
 {
   "name": "@clearproof/cli",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "CLI for generating and verifying ZK compliance proofs",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -14,9 +14,10 @@
   ],
   "repository": {
     "type": "git",
-    "url": "https://github.com/clearproof/zk-travel-rule.git",
+    "url": "https://github.com/clearproof/clearproof.git",
     "directory": "packages/cli"
   },
+  "homepage": "https://github.com/clearproof/clearproof",
   "keywords": [
     "zk",
     "zero-knowledge",

@@ -86,23 +86,35 @@ class ChainWriter:
         transfer_id: bytes,
         proof: dict,
         public_signals: list[str],
+        vasp_did_hash: int,
     ) -> str:
-        """Submit proof verification to ComplianceRegistry.
+        """Submit proof verification to ComplianceRegistry via verifyAndRecord.
 
         Args:
             transfer_id: Unique transfer identifier as bytes32.
-            proof: Groth16 proof dict with keys a, b, c.
+            proof: Groth16 proof dict with keys pi_a, pi_b, pi_c.
             public_signals: List of public signal strings.
+            vasp_did_hash: Integer hash of the VASP DID.
 
         Returns:
             Transaction hash (hex string, 0x-prefixed).
         """
-        # Encode proof hash as keccak of the serialised proof
-        proof_bytes = self._w3.keccak(text=json.dumps(proof, sort_keys=True))
+        # Destructure Groth16 proof components for on-chain verifier
+        _pA = [int(x) for x in proof["pi_a"][:2]]
+        _pB = [
+            [int(proof["pi_b"][0][1]), int(proof["pi_b"][0][0])],
+            [int(proof["pi_b"][1][1]), int(proof["pi_b"][1][0])],
+        ]
+        _pC = [int(x) for x in proof["pi_c"][:2]]
+        _pubSignals = [int(s) for s in public_signals]
 
-        tx_func = self._compliance_registry.functions.recordProof(
+        tx_func = self._compliance_registry.functions.verifyAndRecord(
             transfer_id,
-            proof_bytes,
+            _pA,
+            _pB,
+            _pC,
+            _pubSignals,
+            vasp_did_hash,
         )
         return await self._send_tx(tx_func)
 

@@ -125,7 +125,7 @@ class ChainReader:
         if cached is not None:
             return cached
 
-        root: bytes = await self._sanctions_oracle.functions.sanctionsRoot().call()
+        root: bytes = await self._sanctions_oracle.functions.currentRoot().call()
         hex_root = "0x" + root.hex()
         _cache_set("sanctions_root", hex_root)
         return hex_root
@@ -146,7 +146,7 @@ class ChainReader:
         if cached is not None:
             return cached
 
-        root: bytes = await self._vasp_registry.functions.issuerRoot().call()
+        root: bytes = await self._vasp_registry.functions.issuerMerkleRoot().call()
         hex_root = "0x" + root.hex()
         _cache_set("issuer_root", hex_root)
         return hex_root
@@ -199,7 +199,7 @@ class ChainReader:
 
         transfer_bytes = bytes.fromhex(transfer_id.removeprefix("0x"))
         try:
-            record = await self._compliance_registry.functions.getProofRecord(transfer_bytes).call()
+            record = await self._compliance_registry.functions.proofs(transfer_bytes).call()
         except Exception:
             logger.debug("No proof record found for transfer_id=%s", transfer_id)
             return None

@@ -14,10 +14,14 @@ from fastapi import APIRouter, HTTPException, Depends
 from pydantic import BaseModel, Field
 
 from src.api.middleware.auth import JWTAuthDependency
+from src.registry.credential_registry import CredentialRegistry, zkKYCCredential
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/credential", tags=["credential"])
+
+# Module-level singleton (C-3 fix: use CredentialRegistry class, not missing functions)
+_registry = CredentialRegistry()
 
 
 # ---------------------------------------------------------------------------
@@ -32,8 +36,8 @@ class CredentialIssueRequest(BaseModel):
     jurisdiction: str = Field(..., min_length=2, max_length=2, description="ISO 3166-1 alpha-2")
     kyc_tier: str = Field(
         ...,
-        description="KYC verification tier: basic, standard, or enhanced",
-        pattern=r"^(basic|standard|enhanced)$",
+        description="KYC verification tier: retail, professional, or institutional",
+        pattern=r"^(retail|professional|institutional)$",
     )
     expires_in_seconds: int = Field(
         default=31536000,
@@ -98,21 +102,20 @@ async def issue_credential(
     The returned commitment is a Poseidon hash of the credential fields,
     suitable for inclusion in Merkle trees and ZK circuit inputs.
     """
-    from src.registry.credential_registry import create_credential, register_credential
-
     now = int(time.time())
     expires_at = now + request.expires_in_seconds
 
-    credential = create_credential(
+    credential = zkKYCCredential(
         issuer_did=request.issuer_did,
         subject_wallet=request.subject_wallet,
         jurisdiction=request.jurisdiction,
         kyc_tier=request.kyc_tier,
+        sanctions_clear=True,
         issued_at=now,
         expires_at=expires_at,
     )
 
-    register_credential(credential)
+    commitment = await _registry.issue(credential)
 
     logger.info(
         "Credential issued: id=%s issuer=%s subject=%s jurisdiction=%s",
@@ -124,7 +127,7 @@ async def issue_credential(
 
     return CredentialIssueResponse(
         credential_id=credential.credential_id,
-        commitment=credential.commitment(),
+        commitment=commitment,
         issuer_did=credential.issuer_did,
         subject_wallet=request.subject_wallet,
         jurisdiction=credential.jurisdiction,
@@ -144,16 +147,14 @@ async def revoke_credential(
 
     Revoked credentials will fail any subsequent proof generation attempt.
     """
-    from src.registry.credential_registry import get_credential, revoke_credential as do_revoke
-
-    credential = get_credential(request.credential_id)
+    credential = _registry.get(request.credential_id)
     if credential is None:
         raise HTTPException(status_code=404, detail="Credential not found")
 
     if credential.revoked:
         raise HTTPException(status_code=400, detail="Credential already revoked")
 
-    do_revoke(request.credential_id, reason=request.reason)
+    _registry.revoke(request.credential_id)
 
     logger.info(
         "Credential revoked: id=%s reason=%s",
@@ -183,9 +184,7 @@ async def get_credential_status(
     Does **not** return the full credential data or PII — only metadata
     sufficient for the caller to decide whether to proceed with proof generation.
     """
-    from src.registry.credential_registry import get_credential
-
-    credential = get_credential(credential_id)
+    credential = _registry.get(credential_id)
     if credential is None:
         raise HTTPException(status_code=404, detail="Credential not found")
 

@@ -156,18 +156,23 @@ class SanctionsMerkleTree:
         # path generation requires a rebuild via build_from_addresses.
         return tree
 
+    # Maximum 252-bit sentinel value for boundary gap proofs (H-6)
+    _MAX_SENTINEL = (2 ** 252) - 1
+
     async def build_from_addresses(self, addresses: list[str]) -> str:
         """
         Build the sorted Merkle tree from a list of hex wallet addresses.
 
         Returns the root hash.
         """
-        # Hash each address through Poseidon (single-input) and sort
+        # Hash each address through Poseidon with domain tag 1 (M-2)
         hashed: list[int] = []
         for addr in addresses:
-            h = await _poseidon_hash([_address_to_int(addr)])
+            h = await _poseidon_hash([1, _address_to_int(addr)])
             hashed.append(int(h))
         hashed.sort()
+        # Insert boundary sentinels (H-6)
+        hashed = [0] + hashed + [self._MAX_SENTINEL]
         self.sorted_leaves = hashed
 
         if not hashed:
@@ -221,7 +226,7 @@ class SanctionsMerkleTree:
         if not self.sorted_leaves:
             raise RuntimeError("Tree is empty — build first")
 
-        addr_hash = int(await _poseidon_hash([_address_to_int(wallet_address)]))
+        addr_hash = int(await _poseidon_hash([1, _address_to_int(wallet_address)]))
 
         # Verify the address is NOT in the tree (otherwise it IS sanctioned)
         if addr_hash in self.sorted_leaves:
@@ -239,26 +244,23 @@ class SanctionsMerkleTree:
                 break
 
         if left_idx == -1:
-            # addr_hash is smaller than all leaves — boundary gap proof:
-            # sentinel 0 as left neighbor, first real leaf as right neighbor.
-            # Left path uses index 0 (the first leaf's Merkle path — circuit
-            # verifies that left_neighbor < addr_hash < right_neighbor, and
-            # sentinel 0 satisfies left_neighbor < addr_hash trivially).
+            # addr_hash is smaller than all leaves — boundary gap proof
+            # using minimum sentinel (0) at position 0 as left neighbor.
             if not self._tree:
                 raise RuntimeError(
                     "Cannot generate boundary gap proof: tree was loaded from "
                     "file without internal layers. Rebuild via build_from_addresses()."
                 )
             return {
-                "left_neighbor": 0,
-                "right_neighbor": self.sorted_leaves[0],
+                "left_neighbor": self.sorted_leaves[0],  # sentinel: 0
+                "right_neighbor": self.sorted_leaves[1],
                 "left_path": self._get_merkle_path(0),
-                "right_path": self._get_merkle_path(0),
+                "right_path": self._get_merkle_path(1),
             }
 
         if left_idx >= len(self.sorted_leaves) - 1:
-            # addr_hash is larger than all leaves — boundary gap proof:
-            # last real leaf as left neighbor, sentinel max as right neighbor.
+            # addr_hash is larger than all leaves — boundary gap proof
+            # using maximum sentinel (2^252 - 1) at last position as right neighbor.
             if not self._tree:
                 raise RuntimeError(
                     "Cannot generate boundary gap proof: tree was loaded from "
@@ -266,9 +268,9 @@ class SanctionsMerkleTree:
                 )
             last = len(self.sorted_leaves) - 1
             return {
-                "left_neighbor": self.sorted_leaves[last],
-                "right_neighbor": 0,  # sentinel: no right neighbor
-                "left_path": self._get_merkle_path(last),
+                "left_neighbor": self.sorted_leaves[last - 1],
+                "right_neighbor": self.sorted_leaves[last],  # sentinel: 2^252 - 1
+                "left_path": self._get_merkle_path(last - 1),
                 "right_path": self._get_merkle_path(last),
             }
 

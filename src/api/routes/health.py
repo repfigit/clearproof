@@ -7,8 +7,10 @@ GET /metrics — Basic operational metrics.
 
 import time
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends
 from pydantic import BaseModel
+
+from src.api.middleware.auth import JWTAuthDependency
 
 router = APIRouter(tags=["health"])
 
@@ -85,7 +87,7 @@ async def health():
 
 
 @router.get("/metrics", response_model=MetricsResponse, summary="Operational metrics")
-async def get_metrics():
+async def get_metrics(_auth: dict = Depends(JWTAuthDependency)):
     """
     Basic operational metrics.
 

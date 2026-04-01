@@ -104,7 +104,7 @@ class TRPBridge:
                     "amount_tier": compliance_proof.amount_tier,
                     "proof_generated_at": compliance_proof.proof_generated_at,
                     "proof_expires_at": compliance_proof.proof_expires_at,
-                    "sar_review_flag": compliance_proof.sar_review_flag,
+                    # sar_review_flag excluded — internal advisory only (BSA anti-tipping-off)
                     # Encrypted PII nonce + AAD for envelope binding
                     "pii_nonce": base64.b64encode(
                         hybrid_payload.pii_nonce

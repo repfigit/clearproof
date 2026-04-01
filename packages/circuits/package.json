@@ -1,6 +1,6 @@
 {
   "name": "@clearproof/circuits",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Circom circuits for ZK compliance proofs — sanctions non-membership, credential validity, amount tier encoding",
   "license": "Apache-2.0",
   "main": "index.js",
@@ -15,10 +15,10 @@
   ],
   "repository": {
     "type": "git",
-    "url": "https://github.com/repfigit/clearproof.git",
+    "url": "https://github.com/clearproof/clearproof.git",
     "directory": "packages/circuits"
   },
-  "homepage": "https://github.com/repfigit/clearproof",
+  "homepage": "https://github.com/clearproof/clearproof",
   "keywords": [
     "zk",
     "zero-knowledge",

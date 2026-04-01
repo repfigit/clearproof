@@ -32,14 +32,26 @@ Originator VASP                          Beneficiary VASP
 ## Quick Start
 
 ```bash
-# Install circuit package
-npm install @clearproof/circuits
-
-# Generate a compliance proof (60 seconds)
+# Clone and build (circuit compilation required)
+git clone https://github.com/clearproof/clearproof.git
+cd clearproof
+npm install && uv sync --all-extras
+bash scripts/compile_circuits.sh    # ~5 min, requires circom
 npx @clearproof/cli demo
+```
 
-# Or use the Python SDK
-pip install clearproof
+You can also install the circuits package standalone:
+
+```bash
+npm install @clearproof/circuits
+```
+
+> **Note:** The CLI currently requires locally compiled circuit artifacts. The `@clearproof/circuits` npm package will bundle pre-compiled artifacts in a future release.
+
+For the Python SDK, install locally (PyPI publishing is planned):
+
+```bash
+pip install -e ".[all]"
 ```
 
 ## What's Inside
@@ -158,6 +170,8 @@ cd packages/cli && npx tsc --noEmit
 PII_MASTER_KEY=your-32-byte-key uv run uvicorn src.api.main:app --reload --port 8000
 ```
 
+Start the API server and visit `http://localhost:8000/docs` for interactive Swagger documentation.
+
 ### Environment Variables
 
 | Variable | Required | Description |
@@ -168,6 +182,10 @@ PII_MASTER_KEY=your-32-byte-key uv run uvicorn src.api.main:app --reload --port 
 | `CORS_ALLOWED_ORIGINS` | No | Comma-separated origins (default: `http://localhost:3000`) |
 | `DEPLOYER_PRIVATE_KEY` | For deploy | Wallet private key for contract deployment |
 | `SEPOLIA_RPC_URL` | For deploy | Sepolia RPC endpoint |
+
+## Documentation Roadmap
+
+Detailed documentation is planned for the `docs/` directory, including `docs/architecture.md`, `docs/threat-model.md`, and `docs/integration-guide.md`. Contributions welcome.
 
 ## Architecture Decisions
 
@@ -200,10 +218,10 @@ A daily `sanctions-update` cron job rebuilds the sanctions Merkle tree from live
 
 | Package | Version | Description |
 |---------|---------|-------------|
-| [`@clearproof/circuits`](https://www.npmjs.com/package/@clearproof/circuits) | 0.1.0 | Compiled circuit artifacts (WASM + zkey) |
-| [`@clearproof/proof`](https://www.npmjs.com/package/@clearproof/proof) | 0.1.0 | TypeScript SDK for proof generation/verification |
-| [`@clearproof/cli`](https://www.npmjs.com/package/@clearproof/cli) | 0.1.0 | CLI tool with demo command |
-| [`@clearproof/contracts`](https://www.npmjs.com/package/@clearproof/contracts) | 0.1.0 | Solidity contracts + ABIs |
+| [`@clearproof/circuits`](https://www.npmjs.com/package/@clearproof/circuits) | 0.2.0 | Compiled circuit artifacts (WASM + zkey) |
+| [`@clearproof/proof`](https://www.npmjs.com/package/@clearproof/proof) | 0.2.0 | TypeScript SDK for proof generation/verification |
+| [`@clearproof/cli`](https://www.npmjs.com/package/@clearproof/cli) | 0.2.0 | CLI tool with demo command |
+| [`@clearproof/contracts`](https://www.npmjs.com/package/@clearproof/contracts) | 0.2.0 | Solidity contracts + ABIs |
 
 ## License
 

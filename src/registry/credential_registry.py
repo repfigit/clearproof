@@ -90,8 +90,9 @@ class zkKYCCredential(BaseModel):
         credential_validity.circom:
           Poseidon(issuer_did, kyc_tier, sanctions_clear, issued_at, expires_at)
         """
+        import hashlib as _hashlib
         return [
-            int.from_bytes(self.issuer_did.encode()[:16], "big"),
+            int.from_bytes(_hashlib.sha256(self.issuer_did.encode()).digest()[:16], "big"),
             self._KYC_TIER_MAP[self.kyc_tier],
             1 if self.sanctions_clear else 0,
             self.issued_at,

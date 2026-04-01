@@ -20,8 +20,8 @@ export interface ComplianceInput {
   domainChainId?: number;
   domainContractHash?: string;
   transferIdHash?: string;
-  credentialNullifier?: string;
-  proofExpiresAt?: number;
+  credentialNullifier: string;
+  proofExpiresAt: number;
 
   // === Private inputs: Credential preimage ===
   issuerDid: string;

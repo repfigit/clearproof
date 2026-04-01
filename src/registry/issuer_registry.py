@@ -42,8 +42,13 @@ async def _poseidon_hash(inputs: list[int | str]) -> str:
 
 
 def _did_to_int(did: str) -> int:
-    """Deterministically convert a DID string to an integer for Poseidon."""
-    return int.from_bytes(did.encode()[:16], "big")
+    """Deterministically convert a DID string to an integer for Poseidon.
+
+    Uses SHA-256 of the full DID to avoid collision risk from truncating
+    raw UTF-8 bytes (M-3 fix).
+    """
+    import hashlib
+    return int.from_bytes(hashlib.sha256(did.encode()).digest()[:16], "big")
 
 
 # ---------------------------------------------------------------------------
@@ -140,10 +145,10 @@ class IssuerRegistry:
             self.depth = 0
             return "0"
 
-        # Compute leaf hashes
+        # Compute leaf hashes with domain tag 2 (M-1: matches circuit's Poseidon(2, issuer_did))
         self._leaf_hashes = []
         for did in self._issuers:
-            h = await _poseidon_hash([_did_to_int(did)])
+            h = await _poseidon_hash([2, _did_to_int(did)])
             self._leaf_hashes.append(h)
 
         n = len(self._leaf_hashes)

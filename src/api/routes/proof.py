@@ -16,10 +16,28 @@ from fastapi import APIRouter, HTTPException, Depends
 from pydantic import BaseModel, Field
 
 from src.api.middleware.auth import JWTAuthDependency
+from src.api.middleware.rate_limit import RateLimiter
+from src.prover.snarkjs_prover import SnarkJSProver
+from src.registry.sanctions_list import SanctionsMerkleTree, _poseidon_hash, _address_to_int
+from src.registry.credential_registry import CredentialRegistry
+from src.registry.issuer_registry import IssuerRegistry
+from src.sar.audit_log import AuditLog
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/proof", tags=["proof"])
+
+# ---------------------------------------------------------------------------
+# Module-level singletons (H-5: avoid per-request instantiation)
+# ---------------------------------------------------------------------------
+_cred_registry = CredentialRegistry()
+_issuer_registry = IssuerRegistry()
+_prover = SnarkJSProver()
+_audit_log = AuditLog()
+
+# Rate limiters (H-8)
+_proof_generate_limiter = RateLimiter(max_requests=30, window_seconds=60)
+_proof_verify_limiter = RateLimiter(max_requests=30, window_seconds=60)
 
 
 # ---------------------------------------------------------------------------
@@ -70,9 +88,13 @@ class ProofVerifyResponse(BaseModel):
 # Helpers
 # ---------------------------------------------------------------------------
 
-def _hash_wallet(address: str) -> str:
-    """Deterministic hash of a wallet address for circuit input."""
-    return hashlib.sha256(address.encode()).hexdigest()
+async def _hash_wallet(address: str) -> str:
+    """Deterministic Poseidon hash of a wallet address for circuit input.
+
+    Uses the same Poseidon hashing as the sanctions tree (C-1 fix)
+    so that wallet_address_hash is consistent across the system.
+    """
+    return await _poseidon_hash([1, _address_to_int(address)])
 
 
 def _hash_transfer(request: ProofGenerateRequest) -> str:
@@ -94,14 +116,21 @@ def _encode_jurisdiction(code: str) -> int:
 
 
 def _encode_did(did: str) -> int:
-    """Encode a DID string to a field-compatible integer (truncated hash)."""
-    h = hashlib.sha256(did.encode()).digest()
-    return int.from_bytes(h[:16], byteorder="big")
+    """Encode a DID string to a field-compatible integer.
+
+    Uses SHA-256 of the raw UTF-8 bytes, truncated to 16 bytes (M-3 fix).
+    Matches credential_registry._field_ints() and issuer_registry._did_to_int().
+    """
+    return int.from_bytes(hashlib.sha256(did.encode()).digest()[:16], byteorder="big")
 
 
 def _encode_kyc_tier(tier: str) -> int:
-    """Map a KYC tier label to an integer."""
-    mapping = {"basic": 1, "standard": 2, "enhanced": 3}
+    """Map a KYC tier label to an integer.
+
+    Labels match the credential model's Literal type (H-2 fix):
+    retail=1, professional=2, institutional=3.
+    """
+    mapping = {"retail": 1, "professional": 2, "institutional": 3}
     return mapping.get(tier.lower(), 1)
 
 
@@ -113,7 +142,10 @@ def _get_vasp_did() -> str:
 
 
 def _load_vk() -> dict:
-    """Load the Groth16 verification key from disk."""
+    """Load the Groth16 verification key from disk.
+
+    Raises RuntimeError if the file is missing (M-11 fix).
+    """
     import os
 
     vk_path = os.path.join(
@@ -124,8 +156,10 @@ def _load_vk() -> dict:
         with open(vk_path, "r") as f:
             return json.load(f)
     except FileNotFoundError:
-        logger.warning("Verification key not found at %s — using empty stub", vk_path)
-        return {}
+        raise RuntimeError(
+            f"Verification key not found at {vk_path}. "
+            "Circuit artifacts must be compiled before starting the service."
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -136,6 +170,7 @@ def _load_vk() -> dict:
 async def generate_proof(
     request: ProofGenerateRequest,
     _auth: dict = Depends(JWTAuthDependency),
+    _rl: None = Depends(_proof_generate_limiter),
 ):
     """
     Generate a ZK compliance proof + hybrid payload for a travel rule transfer.
@@ -145,14 +180,9 @@ async def generate_proof(
 
     Latency target: <5 s for tier 1-2, <10 s for tier 3-4.
     """
-    from src.prover.tier_mapping import compute_tier
-    from src.prover.snarkjs_prover import SnarkJSProver
-    from src.registry.sanctions_list import SanctionsMerkleTree
-    from src.registry.credential_registry import CredentialRegistry
-    from src.registry.issuer_registry import IssuerRegistry
+    from src.prover.tier_mapping import compute_tier, JURISDICTION_TIERS
     from src.sar.sar_review import evaluate_sar_flags
     from src.sar.encryption import derive_key, encrypt_pii
-    from src.sar.audit_log import AuditLog
     from src.protocol.compliance_proof import ComplianceProof
     from src.protocol.hybrid_payload import HybridPayload
 
@@ -170,8 +200,7 @@ async def generate_proof(
         )
 
     # 2. Look up credential -----------------------------------------------------
-    cred_registry = CredentialRegistry()
-    credential = cred_registry.get(request.credential_id)
+    credential = _cred_registry.get(request.credential_id)
     if credential is None:
         raise HTTPException(status_code=404, detail="Credential not found")
     if credential.revoked:
@@ -183,35 +212,86 @@ async def generate_proof(
         wallet_address=request.wallet_address,
     )
 
-    issuer_registry = IssuerRegistry()
     now_ts = int(time.time())
     proof_ttl = 300  # 5 minutes
 
+    # Issuer membership witness for Merkle path (H-9)
+    issuer_witness = await _issuer_registry.generate_membership_witness(
+        credential.issuer_did
+    )
+
+    # Domain binding: chain ID + contract address hash (H-9)
+    import os
+    chain_id = int(os.getenv("CHAIN_ID", "11155111"))  # default: Sepolia
+    contract_address = os.getenv("COMPLIANCE_REGISTRY_ADDRESS", "")
+    contract_hash = int(
+        hashlib.sha256(contract_address.encode()).hexdigest()[:32], 16
+    ) if contract_address else 0
+
+    # Transfer ID hash (H-9)
+    transfer_id_hash = int(
+        hashlib.sha256(request.idempotency_key.encode()).hexdigest()[:32], 16
+    )
+
+    # Credential nullifier (H-9): deterministic from credential_id + wallet
+    nullifier_preimage = f"{request.credential_id}:{request.wallet_address}"
+    credential_nullifier = int(
+        hashlib.sha256(nullifier_preimage.encode()).hexdigest()[:32], 16
+    )
+
+    # Per-jurisdiction thresholds for circuit (H-9)
+    thresholds = JURISDICTION_TIERS.get(
+        request.jurisdiction.upper(),
+        JURISDICTION_TIERS["DEFAULT"],
+    )
+
     input_signals = {
         "sanctions_tree_root": sanctions_tree.root,
-        "issuer_tree_root": issuer_registry.get_root(),
+        "issuer_tree_root": _issuer_registry.get_root(),
         "amount_tier": tier,
         "transfer_timestamp": now_ts,
         "jurisdiction_code": _encode_jurisdiction(request.jurisdiction),
-        "credential_commitment": await cred_registry.get_commitment(request.credential_id),
+        "credential_commitment": _cred_registry.get_commitment(request.credential_id),
         "proof_expires_at": now_ts + proof_ttl,
         # Private inputs
         "issuer_did": _encode_did(credential.issuer_did),
         "kyc_tier": _encode_kyc_tier(credential.kyc_tier),
         "issued_at": credential.issued_at,
         "expires_at": credential.expires_at,
-        "wallet_address_hash": _hash_wallet(request.wallet_address),
-        # Merkle proof data from gap proof
+        "wallet_address_hash": await _hash_wallet(request.wallet_address),
+        "sanctions_clear": 1 if credential.sanctions_clear else 0,
+        "actual_amount": int(request.amount_usd * 100),  # cents for integer arithmetic
+        # Tier thresholds for circuit verification (H-9)
+        "tier2_threshold": thresholds["tier2"],
+        "tier3_threshold": thresholds["tier3"],
+        "tier4_threshold": thresholds["tier4"],
+        # Domain binding (H-9)
+        "domain_chain_id": chain_id,
+        "domain_contract_hash": contract_hash,
+        "transfer_id_hash": transfer_id_hash,
+        "credential_nullifier": credential_nullifier,
+        # Issuer Merkle path (H-9)
+        "issuer_path_elements": issuer_witness["siblings"],
+        "issuer_path_indices": issuer_witness["indices"],
+        # Sanctions gap proof Merkle paths (H-9)
         "left_key": nonmembership_witness["left_neighbor"],
         "right_key": nonmembership_witness["right_neighbor"],
+        "left_path_elements": nonmembership_witness["left_path"]["siblings"],
+        "left_path_indices": nonmembership_witness["left_path"]["indices"],
+        "right_path_elements": nonmembership_witness["right_path"]["siblings"],
+        "right_path_indices": nonmembership_witness["right_path"]["indices"],
     }
 
     # 4. Generate proof via SnarkJS ----------------------------------------------
-    prover = SnarkJSProver()
     try:
-        proof_json, public_signals = await prover.fullprove(input_signals)
-    except Exception as exc:
-        raise HTTPException(status_code=503, detail=f"Proof generation failed: {exc}")
+        proof_json, public_signals = await _prover.fullprove(input_signals)
+    except Exception:
+        # M-12: log full exception server-side, return generic message to client
+        logger.exception("Proof generation failed")
+        raise HTTPException(
+            status_code=503,
+            detail="Proof generation temporarily unavailable",
+        )
 
     proof_id = str(uuid.uuid4())
 
@@ -222,7 +302,6 @@ async def generate_proof(
     )
 
     # 6. Encrypt PII for hybrid payload -----------------------------------------
-    import os
     raw_key = os.environ.get("PII_MASTER_KEY", "")
     if not raw_key:
         raise HTTPException(
@@ -267,16 +346,16 @@ async def generate_proof(
     )
 
     # 9. Persist audit record ----------------------------------------------------
-    audit_log = AuditLog()
-    audit_log.append(
+    # H-1: AuditLog.append() expects bytes, not dict — serialize first
+    _audit_log.append(
         entry_type="proof_generated",
         actor=_get_vasp_did(),
         transaction_ref=request.idempotency_key,
-        data={
+        data=json.dumps({
             "proof_id": proof_id,
             "sar_review": sar_result.model_dump(),
             "request_hash": _hash_transfer(request),
-        },
+        }).encode("utf-8"),
     )
 
     return hybrid.model_dump()
@@ -286,6 +365,7 @@ async def generate_proof(
 async def verify_proof(
     request: ProofVerifyRequest,
     _auth: dict = Depends(JWTAuthDependency),
+    _rl: None = Depends(_proof_verify_limiter),
 ):
     """
     Verify a ZK compliance proof received from a counterparty VASP.
@@ -293,12 +373,8 @@ async def verify_proof(
     Deterministic verification — no network call required.
     Latency target: <50 ms (Groth16 verification is O(1)).
     """
-    from src.prover.snarkjs_prover import SnarkJSProver
-
-    prover = SnarkJSProver()
-
     try:
-        valid = await prover.verify(request.groth16_proof, request.public_signals)
+        valid = await _prover.verify(request.groth16_proof, request.public_signals)
     except Exception as exc:
         raise HTTPException(status_code=503, detail=f"Proof verification unavailable: {exc}")
 

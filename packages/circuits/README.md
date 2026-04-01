@@ -44,7 +44,7 @@ circom my-circuit.circom \
 | `credential_validity.circom` | — | Poseidon commitment + expiry + issuer |
 | `amount_tier.circom` | — | Jurisdiction threshold encoding |
 
-## Public Signals (15)
+## Public Signals (16)
 
 | Index | Signal | Description |
 |-------|--------|-------------|
@@ -61,6 +61,7 @@ circom my-circuit.circom \
 | 12 | `domain_contract_hash` | Verifier contract hash |
 | 13 | `transfer_id_hash` | Transfer binding |
 | 14 | `credential_nullifier` | One-time use |
+| 15 | `proof_expires_at` | Proof TTL enforced on-chain |
 
 ## License
 

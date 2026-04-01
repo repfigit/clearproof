@@ -32,10 +32,15 @@ def derive_key(master_key: bytes, context: bytes) -> bytes:
     Returns:
         32-byte derived key suitable for AES-256-GCM.
     """
+    # H-7: HKDF salt is configurable via environment variable.
+    # Production recommendation: use a unique, random 32-byte salt per deployment
+    # and store it alongside the master key in your secrets manager.
+    salt_env = os.environ.get("HKDF_SALT")
+    salt = salt_env.encode("utf-8") if salt_env else b"zk-travel-rule-v1"
     hkdf = HKDF(
         algorithm=hashes.SHA256(),
         length=32,
-        salt=b"zk-travel-rule-v1",
+        salt=salt,
         info=context,
     )
     return hkdf.derive(master_key)

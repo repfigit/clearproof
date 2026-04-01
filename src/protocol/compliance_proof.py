@@ -19,13 +19,23 @@ class ComplianceProof(BaseModel):
     """
     The ZK attestation component of the hybrid Travel Rule payload.
 
-    Public signals layout:
-      [0]: 1 if originator credential valid, 0 if not
-      [1]: 1 if originator sanctions-clear, 0 if not
-      [2]: amount_tier (1-4)
-      [3]: credential jurisdiction matches transfer jurisdiction
-      [4]: Merkle root of sanctions list used
-      [5]: Merkle root of issuer list used
+    Public signals layout (16 signals):
+      [0]  is_compliant           — 1 if all checks pass, 0 otherwise
+      [1]  sar_review_flag        — 1 if SAR human review recommended
+      [2]  sanctions_root         — Merkle root of the sanctions list used
+      [3]  issuer_root            — Merkle root of the trusted issuer list
+      [4]  amount_tier            — compliance tier (1-4)
+      [5]  transfer_timestamp     — Unix timestamp of the transfer
+      [6]  jurisdiction_code      — encoded ISO 3166-1 alpha-2
+      [7]  credential_commitment  — Poseidon commitment of the credential
+      [8]  tier2_threshold        — lower bound of tier 2 (USD)
+      [9]  tier3_threshold        — lower bound of tier 3 (USD)
+      [10] tier4_threshold        — lower bound of tier 4 (USD)
+      [11] domain_chain_id        — EVM chain ID for domain binding
+      [12] domain_contract_hash   — hash of the verifier contract address
+      [13] transfer_id_hash       — hash of the transfer identifier
+      [14] credential_nullifier   — nullifier to prevent double-spending
+      [15] proof_expires_at       — Unix timestamp when proof expires
     """
 
     proof_id: str = Field(..., description="UUID for audit trail")

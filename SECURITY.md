@@ -2,7 +2,7 @@
 
 ## Reporting a Vulnerability
 
-We take the security of ZK Travel Rule seriously. If you discover a security vulnerability, please report it responsibly.
+We take the security of clearproof seriously. If you discover a security vulnerability, please report it responsibly.
 
 **Do not open a public GitHub issue for security vulnerabilities.**
 

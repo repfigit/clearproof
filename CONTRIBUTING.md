@@ -1,6 +1,6 @@
-# Contributing to ZK Travel Rule
+# Contributing to clearproof
 
-Thank you for your interest in contributing to the ZK Travel Rule compliance bridge. This guide will help you get started.
+Thank you for your interest in contributing to the clearproof compliance bridge. This guide will help you get started.
 
 ## Development Environment Setup
 

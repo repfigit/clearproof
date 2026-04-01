@@ -1,7 +1,7 @@
 .PHONY: install dev lint test test-unit test-integration test-compliance spike-ezkl docker-up docker-down benchmark
 
 install:
-	pip install -e ".[all]"
+	uv sync --all-extras
 
 dev:
 	uvicorn src.api.main:app --reload --port 8000
@@ -15,16 +15,16 @@ format:
 	ruff check --fix src/ tests/
 
 test:
-	pytest tests/ -v
+	uv run pytest tests/ -v
 
 test-unit:
-	pytest tests/unit/ -v
+	uv run pytest tests/unit/ -v
 
 test-integration:
-	pytest tests/integration/ -v
+	uv run pytest tests/integration/ -v
 
 test-compliance:
-	pytest tests/compliance/ -v
+	uv run pytest tests/compliance/ -v
 
 spike-ezkl:
 	python scripts/spike_ezkl.py
@@ -42,8 +42,11 @@ update-sanctions-oracle:
 benchmark:
 	python scripts/benchmark_proof_latency.py
 
+# Docker support is planned. See https://github.com/clearproof/clearproof/issues
 docker-up:
-	docker compose -f docker/docker-compose.yml up -d
+	@echo "Docker support is planned. See https://github.com/clearproof/clearproof/issues"
+	# docker compose -f docker/docker-compose.yml up -d
 
 docker-down:
-	docker compose -f docker/docker-compose.yml down
+	@echo "Docker support is planned. See https://github.com/clearproof/clearproof/issues"
+	# docker compose -f docker/docker-compose.yml down

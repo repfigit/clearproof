@@ -8,14 +8,18 @@ POST /auth/verify — Verify a signed SIWE message and return a session token.
 import logging
 import os
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 
 from src.auth.siwe_auth import SIWEAuth
+from src.api.middleware.rate_limit import RateLimiter
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/auth", tags=["auth"])
+
+# H-8 + H-10: rate limit nonce endpoint
+_nonce_limiter = RateLimiter(max_requests=60, window_seconds=60)
 
 # Module-level SIWE handler (lazy init)
 _siwe: SIWEAuth | None = None
@@ -56,7 +60,7 @@ class VerifyResponse(BaseModel):
 
 
 @router.get("/nonce", response_model=NonceResponse, summary="Generate SIWE nonce")
-async def get_nonce():
+async def get_nonce(_rl: None = Depends(_nonce_limiter)):
     """Generate a random nonce for constructing a SIWE message.
 
     The nonce is valid for 5 minutes and can only be used once.

@@ -1,6 +1,6 @@
 {
   "name": "@clearproof/contracts",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "On-chain Groth16 verifier for clearproof compliance proofs",
   "license": "Apache-2.0",
   "files": [
@@ -10,9 +10,10 @@
   ],
   "repository": {
     "type": "git",
-    "url": "https://github.com/clearproof/zk-travel-rule.git",
+    "url": "https://github.com/clearproof/clearproof.git",
     "directory": "packages/contracts"
   },
+  "homepage": "https://github.com/clearproof/clearproof",
   "keywords": [
     "zk",
     "zero-knowledge",

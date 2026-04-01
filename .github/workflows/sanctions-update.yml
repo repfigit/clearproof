@@ -8,6 +8,7 @@ on:
 
 permissions:
   contents: write
+  pull-requests: write
 
 jobs:
   update-sanctions-tree:
@@ -25,6 +26,16 @@ jobs:
 
       - run: uv sync --all-extras
 
+      - name: Save previous leaf count
+        id: prev
+        run: |
+          if [ -f artifacts/sanctions_tree.json ]; then
+            PREV_COUNT=$(python3 -c "import json; d=json.load(open('artifacts/sanctions_tree.json')); print(len(d.get('leaves', d.get('entries', []))))" 2>/dev/null || echo "0")
+          else
+            PREV_COUNT=0
+          fi
+          echo "leaf_count=$PREV_COUNT" >> "$GITHUB_OUTPUT"
+
       - name: Build sanctions Merkle tree
         run: uv run python scripts/build_sanctions_tree.py
 
@@ -33,11 +44,43 @@ jobs:
         run: |
           git diff --quiet artifacts/sanctions_tree.json && echo "changed=false" >> "$GITHUB_OUTPUT" || echo "changed=true" >> "$GITHUB_OUTPUT"
 
-      - name: Commit updated sanctions tree
+      - name: Sanity check leaf count
         if: steps.diff.outputs.changed == 'true'
+        id: sanity
+        env:
+          PREV_COUNT: ${{ steps.prev.outputs.leaf_count }}
         run: |
+          NEW_COUNT=$(python3 -c "import json; d=json.load(open('artifacts/sanctions_tree.json')); print(len(d.get('leaves', d.get('entries', []))))" 2>/dev/null || echo "0")
+          echo "new_count=$NEW_COUNT" >> "$GITHUB_OUTPUT"
+          echo "Previous leaf count: $PREV_COUNT"
+          echo "New leaf count: $NEW_COUNT"
+
+          if [ "$PREV_COUNT" -gt 0 ] && [ "$NEW_COUNT" -gt 0 ]; then
+            # Check if the new count dropped by more than 50%
+            THRESHOLD=$(( PREV_COUNT / 2 ))
+            if [ "$NEW_COUNT" -lt "$THRESHOLD" ]; then
+              echo "::error::Sanctions leaf count dropped more than 50% ($PREV_COUNT -> $NEW_COUNT). Aborting — this may indicate a data source issue."
+              exit 1
+            fi
+          fi
+
+      - name: Create branch and open PR
+        if: steps.diff.outputs.changed == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PREV_LEAF_COUNT: ${{ steps.prev.outputs.leaf_count }}
+          NEW_LEAF_COUNT: ${{ steps.sanity.outputs.new_count }}
+        run: |
+          BRANCH_NAME="sanctions-update/$(date +%Y-%m-%d)"
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git checkout -b "$BRANCH_NAME"
           git add artifacts/sanctions_tree.json
           git commit -m "chore: update sanctions Merkle tree (automated daily refresh)"
-          git push
+          git push origin "$BRANCH_NAME"
+          gh pr create \
+            --title "chore: sanctions tree update $(date +%Y-%m-%d)" \
+            --body "Automated sanctions tree rebuild from OFAC/EU feeds. Please review leaf count changes before merging.
+
+          **Previous leaf count:** $PREV_LEAF_COUNT
+          **New leaf count:** $NEW_LEAF_COUNT"

@@ -1,6 +1,6 @@
 [project]
-name = "zk-travel-rule"
-version = "0.1.0"
+name = "clearproof"
+version = "0.2.0"
 description = "ZK Travel Rule Compliance Bridge — replace raw PII with zero-knowledge proofs for FATF Travel Rule compliance"
 requires-python = ">=3.11"
 dependencies = [
@@ -26,7 +26,7 @@ dev = [
     "ruff>=0.4",
     "httpx>=0.27",
 ]
-all = ["zk-travel-rule[zk,dev]"]
+all = ["clearproof[zk,dev]"]
 
 [build-system]
 requires = ["setuptools>=68"]
