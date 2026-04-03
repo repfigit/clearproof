@@ -67,7 +67,9 @@ class TestSanctionsTreeBuild:
 
         assert root is not None
         assert tree.root == root
-        assert len(tree.sorted_leaves) == 3
+        # The tree prepends a 0 sentinel and appends _MAX_SENTINEL for gap proofs,
+        # so 3 addresses → 5 leaves: [0, hash1, hash2, hash3, MAX_SENTINEL].
+        assert len(tree.sorted_leaves) == 5
         assert tree.depth >= 1
 
     @pytest.mark.asyncio

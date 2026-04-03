@@ -54,7 +54,7 @@ async def test_health_returns_200(client: AsyncClient):
 
 @pytest.mark.asyncio
 async def test_metrics_returns_200(client: AsyncClient):
-    resp = await client.get("/metrics")
+    resp = await client.get("/metrics", headers={"X-API-Key": API_KEY})
     assert resp.status_code == 200
     body = resp.json()
     assert "proof_generated_count" in body
@@ -142,13 +142,9 @@ async def test_proof_verify_missing_fields_returns_422(client: AsyncClient):
 @pytest.mark.asyncio
 async def test_proof_verify_with_valid_input(client: AsyncClient):
     """POST /proof/verify with valid structure should reach the prover (mocked)."""
-    mock_verify = AsyncMock(return_value=True)
-
-    with patch("src.api.routes.proof.SnarkJSProver") as MockProver:
-        instance = MagicMock()
-        instance.verify = mock_verify
-        MockProver.return_value = instance
-
+    # Patch the _prover singleton directly — patching the class doesn't affect
+    # the already-instantiated module-level singleton used by the endpoint.
+    with patch("src.api.routes.proof._prover.verify", new_callable=AsyncMock, return_value=True):
         public_signals = ["1", "0"] + ["0"] * 14  # 16 signals total
 
         resp = await client.post(
@@ -178,32 +174,24 @@ async def test_proof_verify_with_valid_input(client: AsyncClient):
 @pytest.mark.asyncio
 async def test_credential_issue_creates_credential(client: AsyncClient):
     """POST /credential/issue with valid input should return the credential."""
-    mock_cred = MagicMock()
-    mock_cred.credential_id = "cred-123"
-    mock_cred.commitment.return_value = "0xdeadbeef"
-    mock_cred.issuer_did = "did:web:issuer.example.com"
-    mock_cred.jurisdiction = "US"
-    mock_cred.kyc_tier = "basic"
-    mock_cred.issued_at = int(time.time())
-    mock_cred.expires_at = int(time.time()) + 31536000
-
-    with (
-        patch("src.api.routes.credential.create_credential", return_value=mock_cred),
-        patch("src.api.routes.credential.register_credential"),
-    ):
+    # The endpoint constructs zkKYCCredential internally and calls _registry.issue().
+    # Mock _registry.issue() to return a known commitment without touching state.
+    with patch("src.api.routes.credential._registry.issue", new_callable=AsyncMock) as mock_issue:
+        mock_issue.return_value = "0xdeadbeef"
         resp = await client.post(
             "/credential/issue",
             json={
                 "issuer_did": "did:web:issuer.example.com",
                 "subject_wallet": "0x1234567890abcdef",
                 "jurisdiction": "US",
-                "kyc_tier": "basic",
+                "kyc_tier": "retail",
             },
             headers={"X-API-Key": API_KEY},
         )
         assert resp.status_code == 200
         body = resp.json()
-        assert body["credential_id"] == "cred-123"
+        assert body["credential_id"] is not None
+        assert body["commitment"] == "0xdeadbeef"
         assert body["issuer_did"] == "did:web:issuer.example.com"
 
 
@@ -230,7 +218,7 @@ async def test_credential_issue_requires_auth(client: AsyncClient):
 @pytest.mark.asyncio
 async def test_credential_get_not_found(client: AsyncClient):
     """GET /credential/{id} for a non-existent credential should return 404."""
-    with patch("src.api.routes.credential.get_credential", return_value=None):
+    with patch("src.api.routes.credential._registry.get", return_value=None):
         resp = await client.get(
             "/credential/nonexistent-id",
             headers={"X-API-Key": API_KEY},
@@ -246,10 +234,11 @@ async def test_credential_get_existing(client: AsyncClient):
     mock_cred.expires_at = int(time.time()) + 86400
     mock_cred.issuer_did = "did:web:issuer.example.com"
     mock_cred.jurisdiction = "US"
-    mock_cred.kyc_tier = "basic"
+    mock_cred.kyc_tier = "retail"
     mock_cred.issued_at = int(time.time()) - 3600
+    mock_cred.credential_id = "cred-123"
 
-    with patch("src.api.routes.credential.get_credential", return_value=mock_cred):
+    with patch("src.api.routes.credential._registry.get", return_value=mock_cred):
         resp = await client.get(
             "/credential/cred-123",
             headers={"X-API-Key": API_KEY},
@@ -272,8 +261,8 @@ async def test_credential_revoke_success(client: AsyncClient):
     mock_cred.revoked = False
 
     with (
-        patch("src.api.routes.credential.get_credential", return_value=mock_cred),
-        patch("src.api.routes.credential.revoke_credential"),
+        patch("src.api.routes.credential._registry.get", return_value=mock_cred),
+        patch("src.api.routes.credential._registry.revoke"),
     ):
         resp = await client.post(
             "/credential/revoke",
@@ -292,7 +281,7 @@ async def test_credential_revoke_success(client: AsyncClient):
 @pytest.mark.asyncio
 async def test_credential_revoke_not_found(client: AsyncClient):
     """POST /credential/revoke for a non-existent credential returns 404."""
-    with patch("src.api.routes.credential.get_credential", return_value=None):
+    with patch("src.api.routes.credential._registry.get", return_value=None):
         resp = await client.post(
             "/credential/revoke",
             json={"credential_id": "nonexistent"},
@@ -307,7 +296,7 @@ async def test_credential_revoke_already_revoked(client: AsyncClient):
     mock_cred = MagicMock()
     mock_cred.revoked = True
 
-    with patch("src.api.routes.credential.get_credential", return_value=mock_cred):
+    with patch("src.api.routes.credential._registry.get", return_value=mock_cred):
         resp = await client.post(
             "/credential/revoke",
             json={"credential_id": "cred-123"},
