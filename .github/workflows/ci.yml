@@ -51,11 +51,14 @@ jobs:
           chmod +x /usr/local/bin/circom
       - name: Verify circom checksum
         run: |
-          # TODO: Replace with the actual SHA-256 hash from the circom v2.2.2 release.
-          # Obtain it by running: sha256sum /usr/local/bin/circom
-          # after a verified download, then pin it here.
-          EXPECTED_SHA256="PLACEHOLDER_REPLACE_WITH_ACTUAL_SHA256_OF_CIRCOM_V2_2_2_LINUX_AMD64"
-          echo "${EXPECTED_SHA256}  /usr/local/bin/circom" | sha256sum -c -
+          EXPECTED_SHA256="f3d8d1fdbc123779b80e210c909ee941d7a1e130c70365524646b48b8b0fe9d5"
+          ACTUAL_SHA256=$(sha256sum /usr/local/bin/circom | awk '{print $1}')
+          echo "Expected: ${EXPECTED_SHA256}"
+          echo "Actual:   ${ACTUAL_SHA256}"
+          if [ "${ACTUAL_SHA256}" != "${EXPECTED_SHA256}" ]; then
+            echo "ERROR: circom binary SHA256 mismatch!"
+            exit 1
+          fi
       - name: Compile circuits (syntax check)
         run: |
           mkdir -p /tmp/circuit-build

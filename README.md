@@ -33,7 +33,7 @@ Originator VASP                          Beneficiary VASP
 
 ```bash
 # Clone and build (circuit compilation required)
-git clone https://github.com/clearproof/clearproof.git
+git clone https://github.com/repfigit/clearproof.git
 cd clearproof
 npm install && uv sync --all-extras
 bash scripts/compile_circuits.sh    # ~5 min, requires circom

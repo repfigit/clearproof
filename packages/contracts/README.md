@@ -27,7 +27,7 @@ npx hardhat test
 
 ## Links
 
-- [Main repository](https://github.com/clearproof/clearproof)
+- [Main repository](https://github.com/repfigit/clearproof)
 
 ## License
 

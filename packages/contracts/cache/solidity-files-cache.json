@@ -1,8 +1,8 @@
 {
   "_format": "hh-sol-cache-2",
   "files": {
-    "/Users/keith/Code/clearproof/packages/contracts/contracts/ComplianceRegistry.sol": {
-      "lastModificationDate": 1775096451817,
+    "/home/openclaw/repos/clearproof/packages/contracts/contracts/ComplianceRegistry.sol": {
+      "lastModificationDate": 1775254152666,
       "contentHash": "f3c4bd85238bb3650733e50592f438bd",
       "sourceName": "contracts/ComplianceRegistry.sol",
       "solcConfig": {
@@ -43,8 +43,8 @@
         "IGroth16Verifier"
       ]
     },
-    "/Users/keith/Code/clearproof/packages/contracts/contracts/VASPRegistry.sol": {
-      "lastModificationDate": 1775096453158,
+    "/home/openclaw/repos/clearproof/packages/contracts/contracts/VASPRegistry.sol": {
+      "lastModificationDate": 1775254152667,
       "contentHash": "3886f1da34eb9a257563092651b77cb1",
       "sourceName": "contracts/VASPRegistry.sol",
       "solcConfig": {
@@ -82,8 +82,8 @@
         "VASPRegistry"
       ]
     },
-    "/Users/keith/Code/clearproof/packages/contracts/contracts/SanctionsOracle.sol": {
-      "lastModificationDate": 1775096451136,
+    "/home/openclaw/repos/clearproof/packages/contracts/contracts/SanctionsOracle.sol": {
+      "lastModificationDate": 1775254152667,
       "contentHash": "19fb960fb19108d58b8813c519a977f5",
       "sourceName": "contracts/SanctionsOracle.sol",
       "solcConfig": {
@@ -121,8 +121,8 @@
         "SanctionsOracle"
       ]
     },
-    "/Users/keith/Code/clearproof/node_modules/@openzeppelin/contracts/access/AccessControl.sol": {
-      "lastModificationDate": 1774918658745,
+    "/home/openclaw/repos/clearproof/node_modules/@openzeppelin/contracts/access/AccessControl.sol": {
+      "lastModificationDate": 1775254718710,
       "contentHash": "798a29e3c30dbd3eda1a67add26571e2",
       "sourceName": "@openzeppelin/contracts/access/AccessControl.sol",
       "solcConfig": {
@@ -161,8 +161,8 @@
         "AccessControl"
       ]
     },
-    "/Users/keith/Code/clearproof/node_modules/@openzeppelin/contracts/utils/Pausable.sol": {
-      "lastModificationDate": 1774918658773,
+    "/home/openclaw/repos/clearproof/node_modules/@openzeppelin/contracts/utils/Pausable.sol": {
+      "lastModificationDate": 1775254720337,
       "contentHash": "0d47b53e10b1985efbb396f937626279",
       "sourceName": "@openzeppelin/contracts/utils/Pausable.sol",
       "solcConfig": {
@@ -199,44 +199,8 @@
         "Pausable"
       ]
     },
-    "/Users/keith/Code/clearproof/node_modules/@openzeppelin/contracts/access/IAccessControl.sol": {
-      "lastModificationDate": 1774918658763,
-      "contentHash": "def1e8f7b6cac577cf2600655bf3bdf8",
-      "sourceName": "@openzeppelin/contracts/access/IAccessControl.sol",
-      "solcConfig": {
-        "version": "0.8.24",
-        "settings": {
-          "optimizer": {
-            "enabled": true,
-            "runs": 200
-          },
-          "evmVersion": "paris",
-          "outputSelection": {
-            "*": {
-              "*": [
-                "abi",
-                "evm.bytecode",
-                "evm.deployedBytecode",
-                "evm.methodIdentifiers",
-                "metadata"
-              ],
-              "": [
-                "ast"
-              ]
-            }
-          }
-        }
-      },
-      "imports": [],
-      "versionPragmas": [
-        ">=0.8.4"
-      ],
-      "artifacts": [
-        "IAccessControl"
-      ]
-    },
-    "/Users/keith/Code/clearproof/node_modules/@openzeppelin/contracts/utils/Context.sol": {
-      "lastModificationDate": 1774918658749,
+    "/home/openclaw/repos/clearproof/node_modules/@openzeppelin/contracts/utils/Context.sol": {
+      "lastModificationDate": 1775254719055,
       "contentHash": "67bfbc07588eb8683b3fd8f6f909563e",
       "sourceName": "@openzeppelin/contracts/utils/Context.sol",
       "solcConfig": {
@@ -271,8 +235,44 @@
         "Context"
       ]
     },
-    "/Users/keith/Code/clearproof/node_modules/@openzeppelin/contracts/utils/introspection/ERC165.sol": {
-      "lastModificationDate": 1774918658755,
+    "/home/openclaw/repos/clearproof/node_modules/@openzeppelin/contracts/access/IAccessControl.sol": {
+      "lastModificationDate": 1775254719925,
+      "contentHash": "def1e8f7b6cac577cf2600655bf3bdf8",
+      "sourceName": "@openzeppelin/contracts/access/IAccessControl.sol",
+      "solcConfig": {
+        "version": "0.8.24",
+        "settings": {
+          "optimizer": {
+            "enabled": true,
+            "runs": 200
+          },
+          "evmVersion": "paris",
+          "outputSelection": {
+            "*": {
+              "*": [
+                "abi",
+                "evm.bytecode",
+                "evm.deployedBytecode",
+                "evm.methodIdentifiers",
+                "metadata"
+              ],
+              "": [
+                "ast"
+              ]
+            }
+          }
+        }
+      },
+      "imports": [],
+      "versionPragmas": [
+        ">=0.8.4"
+      ],
+      "artifacts": [
+        "IAccessControl"
+      ]
+    },
+    "/home/openclaw/repos/clearproof/node_modules/@openzeppelin/contracts/utils/introspection/ERC165.sol": {
+      "lastModificationDate": 1775254719470,
       "contentHash": "0906d06dca25210d4696dcef6dad2909",
       "sourceName": "@openzeppelin/contracts/utils/introspection/ERC165.sol",
       "solcConfig": {
@@ -309,8 +309,8 @@
         "ERC165"
       ]
     },
-    "/Users/keith/Code/clearproof/node_modules/@openzeppelin/contracts/utils/introspection/IERC165.sol": {
-      "lastModificationDate": 1774918658765,
+    "/home/openclaw/repos/clearproof/node_modules/@openzeppelin/contracts/utils/introspection/IERC165.sol": {
+      "lastModificationDate": 1775254720018,
       "contentHash": "7074c93b1ea0a122063f26ddd1db1032",
       "sourceName": "@openzeppelin/contracts/utils/introspection/IERC165.sol",
       "solcConfig": {
@@ -345,8 +345,8 @@
         "IERC165"
       ]
     },
-    "/Users/keith/Code/clearproof/packages/contracts/contracts/SanctionsRootRelay.sol": {
-      "lastModificationDate": 1775096454068,
+    "/home/openclaw/repos/clearproof/packages/contracts/contracts/SanctionsRootRelay.sol": {
+      "lastModificationDate": 1775254152667,
       "contentHash": "90e83e6ecccc846ecbf00c96cacbd71c",
       "sourceName": "contracts/SanctionsRootRelay.sol",
       "solcConfig": {
@@ -385,8 +385,8 @@
         "SanctionsRootRelay"
       ]
     },
-    "/Users/keith/Code/clearproof/packages/contracts/contracts/ISanctionsRootReceiver.sol": {
-      "lastModificationDate": 1775096455138,
+    "/home/openclaw/repos/clearproof/packages/contracts/contracts/ISanctionsRootReceiver.sol": {
+      "lastModificationDate": 1775254152667,
       "contentHash": "d9799a69efb63da1ba7a89dca98a0679",
       "sourceName": "contracts/ISanctionsRootReceiver.sol",
       "solcConfig": {
@@ -421,8 +421,8 @@
         "ISanctionsRootReceiver"
       ]
     },
-    "/Users/keith/Code/clearproof/packages/contracts/contracts/Groth16Verifier.sol": {
-      "lastModificationDate": 1774988631987,
+    "/home/openclaw/repos/clearproof/packages/contracts/contracts/Groth16Verifier.sol": {
+      "lastModificationDate": 1775254152667,
       "contentHash": "f9e2c248007d347506c58d7cb6cf398f",
       "sourceName": "contracts/Groth16Verifier.sol",
       "solcConfig": {
