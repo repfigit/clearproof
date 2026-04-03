@@ -51,3 +51,4 @@ certs/
 .pytest_cache/
 htmlcov/
 .coverage
+uv.lock
