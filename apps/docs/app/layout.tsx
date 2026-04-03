@@ -17,17 +17,13 @@ const navbar = (
     logo={
       <span style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontWeight: 700 }}>
         <img src="/logo.png" alt="" width={28} height={28} />
-        clear
-        <span
+        <span>clear<span
           style={{
             background: 'linear-gradient(to right, #6366f1, #06b6d4)',
             WebkitBackgroundClip: 'text',
             WebkitTextFillColor: 'transparent',
-            marginLeft: '-0.25rem',
           }}
-        >
-          proof
-        </span>
+        >proof</span></span>
       </span>
     }
     projectLink="https://github.com/clearproof/clearproof"
