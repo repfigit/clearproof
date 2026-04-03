@@ -46,9 +46,17 @@ declare module "hardhat/types/runtime" {
       signerOrOptions?: ethers.Signer | FactoryOptions
     ): Promise<Contracts.Groth16Verifier__factory>;
     getContractFactory(
+      name: "ISanctionsRootReceiver",
+      signerOrOptions?: ethers.Signer | FactoryOptions
+    ): Promise<Contracts.ISanctionsRootReceiver__factory>;
+    getContractFactory(
       name: "SanctionsOracle",
       signerOrOptions?: ethers.Signer | FactoryOptions
     ): Promise<Contracts.SanctionsOracle__factory>;
+    getContractFactory(
+      name: "SanctionsRootRelay",
+      signerOrOptions?: ethers.Signer | FactoryOptions
+    ): Promise<Contracts.SanctionsRootRelay__factory>;
     getContractFactory(
       name: "VASPRegistry",
       signerOrOptions?: ethers.Signer | FactoryOptions
@@ -95,10 +103,20 @@ declare module "hardhat/types/runtime" {
       signer?: ethers.Signer
     ): Promise<Contracts.Groth16Verifier>;
     getContractAt(
+      name: "ISanctionsRootReceiver",
+      address: string | ethers.Addressable,
+      signer?: ethers.Signer
+    ): Promise<Contracts.ISanctionsRootReceiver>;
+    getContractAt(
       name: "SanctionsOracle",
       address: string | ethers.Addressable,
       signer?: ethers.Signer
     ): Promise<Contracts.SanctionsOracle>;
+    getContractAt(
+      name: "SanctionsRootRelay",
+      address: string | ethers.Addressable,
+      signer?: ethers.Signer
+    ): Promise<Contracts.SanctionsRootRelay>;
     getContractAt(
       name: "VASPRegistry",
       address: string | ethers.Addressable,
@@ -138,9 +156,17 @@ declare module "hardhat/types/runtime" {
       signerOrOptions?: ethers.Signer | DeployContractOptions
     ): Promise<Contracts.Groth16Verifier>;
     deployContract(
+      name: "ISanctionsRootReceiver",
+      signerOrOptions?: ethers.Signer | DeployContractOptions
+    ): Promise<Contracts.ISanctionsRootReceiver>;
+    deployContract(
       name: "SanctionsOracle",
       signerOrOptions?: ethers.Signer | DeployContractOptions
     ): Promise<Contracts.SanctionsOracle>;
+    deployContract(
+      name: "SanctionsRootRelay",
+      signerOrOptions?: ethers.Signer | DeployContractOptions
+    ): Promise<Contracts.SanctionsRootRelay>;
     deployContract(
       name: "VASPRegistry",
       signerOrOptions?: ethers.Signer | DeployContractOptions
@@ -187,10 +213,20 @@ declare module "hardhat/types/runtime" {
       signerOrOptions?: ethers.Signer | DeployContractOptions
     ): Promise<Contracts.Groth16Verifier>;
     deployContract(
+      name: "ISanctionsRootReceiver",
+      args: any[],
+      signerOrOptions?: ethers.Signer | DeployContractOptions
+    ): Promise<Contracts.ISanctionsRootReceiver>;
+    deployContract(
       name: "SanctionsOracle",
       args: any[],
       signerOrOptions?: ethers.Signer | DeployContractOptions
     ): Promise<Contracts.SanctionsOracle>;
+    deployContract(
+      name: "SanctionsRootRelay",
+      args: any[],
+      signerOrOptions?: ethers.Signer | DeployContractOptions
+    ): Promise<Contracts.SanctionsRootRelay>;
     deployContract(
       name: "VASPRegistry",
       args: any[],

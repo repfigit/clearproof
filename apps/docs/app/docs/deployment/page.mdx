@@ -1,0 +1,52 @@
+# Deployment
+
+## Environment variables
+
+| Variable | Required | Default | Description |
+| --- | --- | --- | --- |
+| `PII_MASTER_KEY` | **Yes** | — | 32+ byte key for PII encryption |
+| `VASP_DID` | No | `did:web:vasp.example.com` | This VASP's DID |
+| `CIRCUIT_ARTIFACTS_DIR` | No | `./artifacts` | Path to compiled artifacts |
+| `CORS_ALLOWED_ORIGINS` | No | `http://localhost:3000` | Comma-separated origins |
+| `DEPLOYER_PRIVATE_KEY` | For deploy | — | Wallet private key |
+| `SEPOLIA_RPC_URL` | For deploy | — | Sepolia RPC endpoint |
+| `SIWE_DOMAIN` | No | `localhost` | SIWE domain |
+| `CHAIN_ID` | No | `11155111` | EVM chain ID |
+| `HKDF_SALT` | No | `zk-travel-rule-v1` | Salt for HKDF key derivation. Set explicitly for production. |
+| `COMPLIANCE_REGISTRY_ADDRESS` | For on-chain | — | Deployed ComplianceRegistry address (used for domain binding) |
+
+## Startup validation
+
+The server validates at startup:
+
+1. **PII_MASTER_KEY entropy** — must be ≥32 bytes
+2. **Verification key** — must exist in artifacts directory
+3. **CORS configuration** — rejects `*` wildcard with credentials
+
+## Infrastructure
+
+**Minimum**: 2 vCPUs, 4 GB RAM, Python 3.11+, Node.js 20+
+
+**Recommended**: 4 vCPUs, 8 GB RAM, SSD storage
+
+## CI/CD
+
+| Job | Description |
+| --- | --- |
+| `python-tests` | ~100 pytest tests |
+| `typescript-build` | Type-check proof SDK and CLI |
+| `hardhat-tests` | 26 contract tests |
+| `circuits` | Circom compilation + constraint check |
+
+Daily: `sanctions-update` rebuilds the tree and opens a PR.
+
+## Make targets
+
+```bash
+make install && npm install # Install Python + Node dependencies
+make dev                    # Start API dev server
+make test                   # Run all tests
+make build-sanctions-tree   # Rebuild sanctions tree
+make update-sanctions-oracle NETWORK=sepolia
+make benchmark              # Proof latency benchmark
+```

@@ -221,22 +221,35 @@ async def generate_proof(
     )
 
     # Domain binding: chain ID + contract address hash (H-9)
+    # Must use keccak256 % BN128_R to match on-chain verification in ComplianceRegistry.sol
     import os
+    from web3 import Web3
+
+    BN128_R = 21888242871839275222246405745257275088548364400416034343698204186575808495617
+
     chain_id = int(os.getenv("CHAIN_ID", "11155111"))  # default: Sepolia
     contract_address = os.getenv("COMPLIANCE_REGISTRY_ADDRESS", "")
-    contract_hash = int(
-        hashlib.sha256(contract_address.encode()).hexdigest()[:32], 16
-    ) if contract_address else 0
+    if contract_address:
+        # Match Solidity: uint256(keccak256(abi.encodePacked(address))) % BN128_R
+        addr_bytes = bytes.fromhex(contract_address.removeprefix("0x"))
+        contract_hash = int.from_bytes(Web3.keccak(addr_bytes), "big") % BN128_R
+    else:
+        contract_hash = 0
 
     # Transfer ID hash (H-9)
-    transfer_id_hash = int(
-        hashlib.sha256(request.idempotency_key.encode()).hexdigest()[:32], 16
+    # Match Solidity: uint256(keccak256(abi.encodePacked(transferId))) % BN128_R
+    transfer_id_bytes = bytes.fromhex(
+        Web3.keccak(text=request.idempotency_key).hex().removeprefix("0x")
     )
+    transfer_id_hash = int.from_bytes(transfer_id_bytes, "big") % BN128_R
 
-    # Credential nullifier (H-9): deterministic from credential_id + wallet
-    nullifier_preimage = f"{request.credential_id}:{request.wallet_address}"
+    # Credential nullifier (H-9): circuit constrains
+    # credential_nullifier === Poseidon(credential_commitment, transfer_id_hash).
+    # We must compute the correct Poseidon hash here; circuit rejects mismatches.
+    from src.registry.credential_registry import poseidon_hash as _poseidon
+    commitment_val = _cred_registry.get_commitment(request.credential_id)
     credential_nullifier = int(
-        hashlib.sha256(nullifier_preimage.encode()).hexdigest()[:32], 16
+        await _poseidon([int(commitment_val), transfer_id_hash])
     )
 
     # Per-jurisdiction thresholds for circuit (H-9)

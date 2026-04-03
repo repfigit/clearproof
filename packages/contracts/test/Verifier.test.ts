@@ -111,7 +111,7 @@ describe("ComplianceRegistry (domain-bound)", function () {
 
     // Register a VASP
     const vaspDid = ethers.keccak256(ethers.toUtf8Bytes("did:web:test-vasp.example"));
-    await vaspRegistry.registerVASP(vaspDid, admin.address, "US");
+    await vaspRegistry.registerVASP(vaspDid, admin.address, "US", "");
 
     // Format proof
     const pA: [bigint, bigint] = [BigInt(proof.pi_a[0]), BigInt(proof.pi_a[1])];

@@ -1,0 +1,42 @@
+# Introduction
+
+**clearproof** generates zero-knowledge proofs that FATF Travel Rule compliance was performed correctly — without transmitting raw PII between counterparties.
+
+Encrypted PII travels alongside the proof in a hybrid payload, satisfying regulatory "transmit" requirements while minimizing data exposure.
+
+## Terminology
+
+**VASP** — Virtual Asset Service Provider. Any business that conducts exchange, transfer, safekeeping, or administration of virtual assets on behalf of customers. This includes cryptocurrency exchanges, custodial wallet providers, and financial institutions offering crypto services. VASPs are the regulated entities that the FATF Travel Rule applies to — they are the ones who must exchange originator and beneficiary information during transfers.
+
+## Why this exists
+
+The FATF Travel Rule requires VASPs (Virtual Asset Service Providers) to exchange originator and beneficiary information for transfers above jurisdiction-specific thresholds. Current implementations transmit PII in cleartext between counterparties, creating honeypots.
+
+clearproof replaces cleartext exchange with a **hybrid payload**:
+
+1. A **Groth16 ZK proof** (192 bytes) that compliance checks passed
+2. **AES-256-GCM encrypted PII** that only the counterparty can decrypt
+3. **On-chain verification** that the proof is valid and domain-bound
+
+The counterparty receives cryptographic certainty that compliance was performed, plus encrypted PII for their own records — without either party broadcasting sensitive data.
+
+## What's inside
+
+| Package | Description |
+| --- | --- |
+| `circuits/` | Circom circuits — compliance, sanctions, credentials, amount tiers |
+| `packages/proof` | TypeScript SDK for proof generation and verification |
+| `packages/cli` | CLI tool with demo proof flow |
+| `packages/contracts` | Solidity contracts for on-chain verification |
+| `src/` | Python FastAPI server — proof generation API, registries, chain interaction |
+
+## Key design decisions
+
+| Decision | Choice | Rationale |
+| --- | --- | --- |
+| Proof system | Circom / Groth16 | Smallest proofs (192B), cheapest on-chain verification |
+| Proving | VASP-local | No external network dependency; deterministic latency |
+| PII handling | Hybrid payload | Satisfies regulatory "transmit" requirement |
+| SAR logic | Advisory flags | FinCEN SAR is activity-based, not automatic |
+| On-chain | Domain-bound verification | Prevents cross-chain and cross-contract replay |
+| Sanctions | Operator-confirmed updates | Human review before on-chain propagation |

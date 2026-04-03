@@ -83,4 +83,35 @@ jobs:
             --body "Automated sanctions tree rebuild from OFAC/EU feeds. Please review leaf count changes before merging.
 
           **Previous leaf count:** $PREV_LEAF_COUNT
-          **New leaf count:** $NEW_LEAF_COUNT"
+          **New leaf count:** $NEW_LEAF_COUNT
+
+          After merging, run the multi-chain relayer to update on-chain roots:
+          \`\`\`
+          RELAY_NETWORKS=sepolia,base-sepolia,arbitrum-sepolia make relay-sanctions
+          \`\`\`"
+
+  # Relay root to all deployed chains after PR merge
+  relay-sanctions-root:
+    runs-on: ubuntu-latest
+    if: github.event_name == 'workflow_dispatch'
+    needs: update-sanctions-tree
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - run: cd packages/contracts && npm install
+
+      - name: Relay sanctions root to all chains
+        env:
+          DEPLOYER_PRIVATE_KEY: ${{ secrets.DEPLOYER_PRIVATE_KEY }}
+          RELAY_NETWORKS: ${{ vars.RELAY_NETWORKS || 'sepolia' }}
+          SKIP_CONFIRM: "1"
+          SEPOLIA_RPC_URL: ${{ secrets.SEPOLIA_RPC_URL }}
+          BASE_SEPOLIA_RPC_URL: ${{ secrets.BASE_SEPOLIA_RPC_URL }}
+          ARBITRUM_SEPOLIA_RPC_URL: ${{ secrets.ARBITRUM_SEPOLIA_RPC_URL }}
+          POLYGON_AMOY_RPC_URL: ${{ secrets.POLYGON_AMOY_RPC_URL }}
+          OPTIMISM_SEPOLIA_RPC_URL: ${{ secrets.OPTIMISM_SEPOLIA_RPC_URL }}
+        run: cd packages/contracts && npx ts-node scripts/relay-sanctions-root.ts

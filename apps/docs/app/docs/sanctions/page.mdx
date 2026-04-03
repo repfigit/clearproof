@@ -1,0 +1,47 @@
+# Sanctions Oracle
+
+The sanctions oracle maintains a Poseidon Merkle tree of sanctioned wallet hashes. The ZK circuit proves **non-membership** — that a given wallet is not in the tree.
+
+## Tree structure
+
+- **Hash function**: Poseidon with domain tag `1`
+- **Depth**: 20 levels (~1M entries)
+- **Leaf format**: `Poseidon(1, wallet_hash)` (domain-separated)
+- **Sorting**: Leaves sorted by value for gap proofs
+- **Boundary sentinels**: `0` and `2^252 - 1` are permanent entries
+
+## Update workflow
+
+Updates follow a **PR-based workflow** (not direct push):
+
+1. Daily GitHub Action fetches sanctions data from configured feeds
+2. Rebuilds Merkle tree locally
+3. **Sanity check** compares leaf count against previous — fails if delta exceeds threshold
+4. Opens a **pull request** with the updated tree
+5. Human operator reviews and merges
+6. New Merkle root submitted to `SanctionsOracle` contract
+
+This prevents automated corruption of the sanctions list.
+
+## On-chain safeguards
+
+The `SanctionsOracle` contract enforces:
+
+- **Update cooldown**: 1 hour between root updates (prevents rapid manipulation)
+- **Leaf count floor**: new leaf count must be ≥ 50% of current (prevents accidental list clearing)
+- **Root history**: ring buffer stores the last 1000 roots with timestamps
+- **Configurable staleness**: `isStale()` returns true if the root is older than `gracePeriod` (default 24h, adjustable 6h–168h via `setGracePeriod()`)
+- **Pause/unpause**: admin can halt updates in emergencies
+
+Updates are forwarded through the `SanctionsRootRelay` adapter, which allows swapping the transport layer (operator EOA, LayerZero, CCIP) without redeploying the oracle.
+
+## Staleness
+
+Monitor `SanctionsOracle.isStale()`. If the daily update fails and the root exceeds the grace period, on-chain proof verification will revert.
+
+## Manual rebuild
+
+```bash
+make build-sanctions-tree
+make update-sanctions-oracle NETWORK=sepolia
+```

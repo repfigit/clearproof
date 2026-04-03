@@ -28,7 +28,9 @@
     "compile": "hardhat compile",
     "test": "hardhat test",
     "deploy": "hardhat run scripts/deploy.ts",
-    "update-sanctions": "hardhat run scripts/update-sanctions-root.ts"
+    "deploy:multi": "hardhat run scripts/deploy-multichain.ts",
+    "update-sanctions": "hardhat run scripts/update-sanctions-root.ts",
+    "relay-sanctions": "ts-node scripts/relay-sanctions-root.ts"
   },
   "devDependencies": {
     "@nomicfoundation/hardhat-toolbox": "^5.0",

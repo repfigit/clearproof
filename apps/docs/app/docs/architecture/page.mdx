@@ -1,0 +1,162 @@
+# Architecture
+
+## Overview
+
+clearproof is a monorepo spanning four languages:
+
+- **Circom** — ZK circuit definitions
+- **TypeScript** — Proof SDK, CLI, contract bindings
+- **Python** — FastAPI server, registries, chain interaction
+- **Solidity** — On-chain verifier, registries, compliance recording
+
+## Component map
+
+### VASP server
+
+```mermaid
+graph TD
+    API["FastAPI Server"] --> CR["Credential Registry"]
+    API --> ST["Sanctions Tree"]
+    API --> IR["Issuer Registry"]
+    CR --> Prover["Groth16 Prover"]
+    ST --> Prover
+    IR --> Prover
+    Prover --> SAR["SAR Review"]
+    SAR --> Enc["PII Encryption"]
+    Enc --> HP["Hybrid Payload"]
+
+    click API "/docs/api" "API Reference"
+    click Prover "/docs/circuits" "Circuits"
+    click Enc "/docs/security#pii-protection" "PII encryption"
+    click CR "/docs/circuits#credential-validity" "Credential validity"
+    click ST "/docs/sanctions" "Sanctions oracle"
+
+    style API fill:#1e1b4b,stroke:#6366f1,color:#e2e8f0
+    style Prover fill:#1e1b4b,stroke:#6366f1,color:#e2e8f0
+    style Enc fill:#1e1b4b,stroke:#06b6d4,color:#e2e8f0
+    style SAR fill:#1e293b,stroke:#94a3b8,color:#e2e8f0
+    style CR fill:#1e293b,stroke:#94a3b8,color:#e2e8f0
+    style ST fill:#1e293b,stroke:#94a3b8,color:#e2e8f0
+    style IR fill:#1e293b,stroke:#94a3b8,color:#e2e8f0
+    style HP fill:#065f46,stroke:#10b981,color:#ecfdf5
+```
+
+The [API server](/docs/api) collects witnesses from the [credential](/docs/circuits#credential-validity), [sanctions](/docs/sanctions), and [issuer](/docs/circuits#credential-validity) registries, passes all inputs to the [Groth16 prover](/docs/circuits), evaluates [SAR flags](/docs/security), [encrypts PII](/docs/security#pii-protection), and assembles the hybrid payload. This is a sequential pipeline, not parallel.
+
+### On-chain contracts
+
+```mermaid
+graph TD
+    Comp["ComplianceRegistry"] --> G16["Groth16Verifier"]
+    Comp --> VR["VASPRegistry"]
+    Comp --> SO["SanctionsOracle"]
+    Relay["SanctionsRootRelay"] --> SO
+
+    click Comp "/docs/contracts#complianceregistry" "ComplianceRegistry"
+    click G16 "/docs/contracts#groth16verifier" "Groth16Verifier"
+    click VR "/docs/contracts#vaspregistry" "VASPRegistry"
+    click SO "/docs/contracts#sanctionsoracle" "SanctionsOracle"
+
+    style Comp fill:#1e1b4b,stroke:#6366f1,color:#e2e8f0
+    style G16 fill:#0f172a,stroke:#22d3ee,color:#e2e8f0
+    style VR fill:#0f172a,stroke:#22d3ee,color:#e2e8f0
+    style SO fill:#0f172a,stroke:#22d3ee,color:#e2e8f0
+    style Relay fill:#1e293b,stroke:#94a3b8,color:#e2e8f0
+```
+
+[ComplianceRegistry](/docs/contracts#complianceregistry) is the main entry point. It calls [Groth16Verifier](/docs/contracts#groth16verifier) for cryptographic verification, checks [VASPRegistry](/docs/contracts#vaspregistry) for VASP identity and issuer roots, and validates the sanctions root against [SanctionsOracle](/docs/contracts#sanctionsoracle). [SanctionsRootRelay](/docs/contracts) receives root updates from a relayer or cross-chain bridge and forwards them to the oracle.
+
+### How they connect
+
+```mermaid
+graph LR
+    Server["VASP Server"] -->|"hybrid payload"| Bridge["TRISA / TRP /<br/>TAIP-10"]
+    Bridge --> Counter["Counterparty<br/>VASP"]
+    Server -.->|"on-chain<br/>recording"| Chain["ComplianceRegistry"]
+
+    click Server "/docs/api" "API"
+    click Chain "/docs/contracts" "Contracts"
+
+    style Server fill:#1e1b4b,stroke:#6366f1,color:#e2e8f0
+    style Bridge fill:#1e293b,stroke:#94a3b8,color:#e2e8f0
+    style Counter fill:#1e1b4b,stroke:#06b6d4,color:#e2e8f0
+    style Chain fill:#0f172a,stroke:#22d3ee,color:#e2e8f0
+```
+
+## Data flow: compliant transfer
+
+```mermaid
+sequenceDiagram
+    participant OV as Originating VASP
+    participant BV as Beneficiary VASP
+    participant Chain as EVM Chain
+
+    OV->>OV: 1. Look up zkKYC credential
+    OV->>OV: 2. Build sanctions + issuer witnesses
+    OV->>OV: 3. Generate Groth16 proof
+    OV->>OV: 4. Evaluate SAR review flags
+    OV->>OV: 5. Encrypt PII (AES-256-GCM)
+    OV->>OV: 6. Assemble hybrid payload
+    OV->>BV: 7. Send via TRISA / TRP / TAIP-10
+    BV->>BV: 8. Verify proof (<1ms)
+    BV->>BV: 9. Decrypt PII for records
+
+    opt On-chain recording (either VASP)
+        OV->>Chain: 10. verifyAndRecord()
+        Chain-->>OV: ProofVerified event
+    end
+```
+
+Steps 1-6 happen sequentially inside the originating VASP. The SAR review (step 4) evaluates whether the transfer warrants human compliance review — this is advisory only, not an automatic SAR filing. On-chain recording (step 10) can be submitted by either the originating or beneficiary VASP.
+
+See the [system diagram](/docs/system-diagram) for the full visual breakdown of each step.
+
+## Hybrid payload
+
+```mermaid
+graph LR
+    ZK["ZK Proof<br/>(192 bytes)"] --> HP["Hybrid<br/>Payload"]
+    PII["Encrypted PII<br/>(AES-256-GCM)"] --> HP
+    Bind["Envelope binding<br/>(transfer_id as AAD)"] --> HP
+
+    click ZK "/docs/circuits#public-signals" "Public signals"
+    click PII "/docs/security#pii-protection" "PII encryption"
+
+    style ZK fill:#1e1b4b,stroke:#6366f1,color:#e2e8f0
+    style PII fill:#1e1b4b,stroke:#06b6d4,color:#e2e8f0
+    style Bind fill:#1e293b,stroke:#94a3b8,color:#e2e8f0
+    style HP fill:#065f46,stroke:#10b981,color:#ecfdf5
+```
+
+The [proof](/docs/circuits) is publicly verifiable. The [PII](/docs/security#pii-protection) is only readable by the intended counterparty. The envelope binding uses the transfer_id as AES-256-GCM associated data, preventing the encrypted PII from being replayed in a different transfer context.
+
+## Security properties
+
+The circuit proves all six properties simultaneously in a single Groth16 proof. They are independent — not sequential.
+
+```mermaid
+graph TD
+    Proof["ZK Proof"] --> A["Valid credential<br/>from trusted issuer"]
+    Proof --> B["Wallet NOT on<br/>sanctions list"]
+    Proof --> C["Amount in<br/>claimed tier"]
+    Proof --> D["Bound to specific<br/>chain + contract"]
+    Proof --> E["Credential not<br/>reused (nullifier)"]
+    Proof --> F["Proof expires<br/>in 5 minutes"]
+
+    click A "/docs/circuits#credential-validity" "Credential validity"
+    click B "/docs/circuits#sanctions-non-membership" "Sanctions non-membership"
+    click C "/docs/circuits#amount-tier" "Amount tier"
+    click D "/docs/circuits#public-signals" "Domain binding"
+    click E "/docs/circuits#public-signals" "Nullifier"
+    click F "/docs/circuits#public-signals" "Expiration"
+
+    style Proof fill:#1e1b4b,stroke:#6366f1,color:#e2e8f0
+    style A fill:#065f46,stroke:#10b981,color:#ecfdf5
+    style B fill:#065f46,stroke:#10b981,color:#ecfdf5
+    style C fill:#065f46,stroke:#10b981,color:#ecfdf5
+    style D fill:#065f46,stroke:#10b981,color:#ecfdf5
+    style E fill:#065f46,stroke:#10b981,color:#ecfdf5
+    style F fill:#065f46,stroke:#10b981,color:#ecfdf5
+```
+
+Click any property to see how the [circuit](/docs/circuits) enforces it.

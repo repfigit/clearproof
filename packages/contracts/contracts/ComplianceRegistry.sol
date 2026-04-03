@@ -1,4 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
+// clearproof — ZK-proven compliance without transmitting PII
+// https://clearproof.world | https://docs.clearproof.world
 pragma solidity ^0.8.24;
 
 import "@openzeppelin/contracts/access/AccessControl.sol";
@@ -69,7 +71,7 @@ contract ComplianceRegistry is AccessControl, Pausable {
         require(vaspRegistry.isActive(vaspDidHash), "VASP not active");
 
         // Sender binding
-        (address vaspWallet,,, ) = vaspRegistry.vasps(vaspDidHash);
+        (address vaspWallet,,,, ) = vaspRegistry.vasps(vaspDidHash);
         require(msg.sender == vaspWallet, "Not registered VASP wallet");
 
         // C-3: Domain binding (cross-chain replay protection)

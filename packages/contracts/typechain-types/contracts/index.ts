@@ -4,5 +4,7 @@
 import type * as complianceRegistrySol from "./ComplianceRegistry.sol";
 export type { complianceRegistrySol };
 export type { Groth16Verifier } from "./Groth16Verifier";
+export type { ISanctionsRootReceiver } from "./ISanctionsRootReceiver";
 export type { SanctionsOracle } from "./SanctionsOracle";
+export type { SanctionsRootRelay } from "./SanctionsRootRelay";
 export type { VASPRegistry } from "./VASPRegistry";

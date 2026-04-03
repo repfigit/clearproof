@@ -1,0 +1,230 @@
+# System Diagram
+
+## The core flow
+
+```mermaid
+graph LR
+    A["🏦 Originating<br/>VASP"] -->|"ZK proof +<br/>encrypted PII"| B["🏦 Beneficiary<br/>VASP"]
+    B -->|"optional"| C["⛓️ On-chain<br/>verification"]
+
+    click A "/docs#terminology" "What is a VASP?"
+    click C "/docs/contracts" "Smart Contracts"
+
+    style A fill:#1e1b4b,stroke:#6366f1,color:#e2e8f0
+    style B fill:#1e1b4b,stroke:#06b6d4,color:#e2e8f0
+    style C fill:#0f172a,stroke:#22d3ee,color:#e2e8f0
+```
+
+The originating [VASP](/docs#terminology) generates a [ZK proof](/docs/circuits) that compliance was performed, encrypts the PII, and sends both to the counterparty. The counterparty verifies the proof without seeing the raw data. [On-chain recording](/docs/contracts) is optional.
+
+---
+
+## Step by step
+
+### 1. Proof generation (originating VASP)
+
+```mermaid
+graph TD
+    Req["Transfer request"] --> Cred["Look up<br/>zkKYC credential"]
+    Req --> Sanc["Build sanctions<br/>gap proof"]
+    Req --> Iss["Build issuer<br/>membership proof"]
+
+    Cred --> Circuit["Circom circuit<br/>(Groth16, ~500ms)"]
+    Sanc --> Circuit
+    Iss --> Circuit
+
+    Circuit --> Proof["192-byte proof<br/>+ 16 public signals"]
+
+    click Cred "/docs/circuits#credential-validity" "Credential validity circuit"
+    click Sanc "/docs/circuits#sanctions-non-membership" "Sanctions non-membership circuit"
+    click Iss "/docs/circuits#credential-validity" "Issuer membership proof"
+    click Circuit "/docs/circuits" "Circuit architecture"
+    click Proof "/docs/circuits#public-signals" "16 public signals"
+
+    style Req fill:#1e293b,stroke:#94a3b8,color:#e2e8f0
+    style Circuit fill:#1e1b4b,stroke:#6366f1,color:#e2e8f0
+    style Proof fill:#065f46,stroke:#10b981,color:#ecfdf5
+```
+
+The [Circom circuit](/docs/circuits) composes four subcircuits: [credential validity](/docs/circuits#credential-validity), [sanctions non-membership](/docs/circuits#sanctions-non-membership), [amount tier](/docs/circuits#amount-tier), and domain binding + expiration. Output is a 192-byte Groth16 proof with [16 public signals](/docs/circuits#public-signals).
+
+### 2. What goes into the hybrid payload
+
+```mermaid
+graph LR
+    subgraph Payload["Hybrid Payload"]
+        direction TB
+        ZK["ZK Proof<br/>192 bytes<br/>(publicly verifiable)"]
+        PII["Encrypted PII<br/>AES-256-GCM<br/>(only counterparty<br/>can decrypt)"]
+        Meta["Metadata<br/>proof_id, expires_at,<br/>vasp_did"]
+    end
+
+    click ZK "/docs/circuits" "Circuit architecture"
+    click PII "/docs/security#pii-protection" "PII encryption details"
+
+    style Payload fill:#0f172a,stroke:#6366f1,color:#e2e8f0
+    style ZK fill:#1e1b4b,stroke:#6366f1,color:#e2e8f0
+    style PII fill:#1e1b4b,stroke:#06b6d4,color:#e2e8f0
+    style Meta fill:#1e293b,stroke:#94a3b8,color:#e2e8f0
+```
+
+The [hybrid payload](/docs/architecture#hybrid-payload) bundles the [ZK proof](/docs/circuits) with [AES-256-GCM encrypted PII](/docs/security#pii-protection). The proof is publicly verifiable. The PII is readable only by the intended counterparty.
+
+### 3. Transmission options
+
+```mermaid
+graph TD
+    HP["Hybrid Payload"] --> TRISA["TRISA<br/>gRPC + mTLS"]
+    HP --> TRP["TRP / OpenVASP<br/>HTTPS REST"]
+    HP --> TAIP["TAIP-10<br/>W3C Verifiable<br/>Presentation"]
+
+    click HP "/docs/architecture#hybrid-payload" "Hybrid payload structure"
+
+    style HP fill:#1e1b4b,stroke:#6366f1,color:#e2e8f0
+    style TRISA fill:#1e293b,stroke:#94a3b8,color:#e2e8f0
+    style TRP fill:#1e293b,stroke:#94a3b8,color:#e2e8f0
+    style TAIP fill:#1e293b,stroke:#94a3b8,color:#e2e8f0
+```
+
+The payload is transmitted via existing Travel Rule protocols. clearproof replaces the payload content, not the transport.
+
+### 4. Beneficiary verification
+
+```mermaid
+graph LR
+    Receive["Receive<br/>payload"] --> Verify["Verify ZK<br/>proof (<1ms)"]
+    Verify --> Decrypt["Decrypt PII<br/>for records"]
+    Decrypt --> Store["Store 5 years<br/>(FATF requirement)"]
+
+    click Verify "/docs/sdk" "TypeScript SDK — verifyProof()"
+    click Decrypt "/docs/security#pii-protection" "PII decryption"
+    click Store "/docs/security" "Security & retention"
+
+    style Receive fill:#1e293b,stroke:#94a3b8,color:#e2e8f0
+    style Verify fill:#065f46,stroke:#10b981,color:#ecfdf5
+    style Decrypt fill:#1e1b4b,stroke:#06b6d4,color:#e2e8f0
+    style Store fill:#1e293b,stroke:#94a3b8,color:#e2e8f0
+```
+
+The beneficiary [verifies the proof](/docs/sdk) locally in under 1ms using the [TypeScript SDK](/docs/sdk). PII is [decrypted](/docs/security#pii-protection) for record-keeping as required by FATF.
+
+---
+
+## On-chain contracts
+
+```mermaid
+graph TD
+    CR["ComplianceRegistry<br/>Verifies proofs on-chain<br/>Records compliance events"] --> G16["Groth16Verifier<br/>Cryptographic verification<br/>~220K gas"]
+    CR --> VR["VASPRegistry<br/>VASP identities + wallets<br/>Discovery endpoints<br/>Issuer Merkle root"]
+    CR --> SO["SanctionsOracle<br/>Current sanctions root<br/>Staleness check<br/>1000-root history"]
+    SRR["SanctionsRootRelay<br/>Receives updates from<br/>relayer or bridge"] --> SO
+
+    click CR "/docs/contracts#complianceregistry" "ComplianceRegistry"
+    click G16 "/docs/contracts#groth16verifier" "Groth16Verifier"
+    click VR "/docs/contracts#vaspregistry" "VASPRegistry"
+    click SO "/docs/contracts#sanctionsoracle" "SanctionsOracle"
+
+    style CR fill:#1e1b4b,stroke:#6366f1,color:#e2e8f0
+    style G16 fill:#0f172a,stroke:#22d3ee,color:#e2e8f0
+    style VR fill:#0f172a,stroke:#22d3ee,color:#e2e8f0
+    style SO fill:#0f172a,stroke:#22d3ee,color:#e2e8f0
+    style SRR fill:#1e293b,stroke:#94a3b8,color:#e2e8f0
+```
+
+Four contracts deployed on [Sepolia](/docs/contracts#development). [ComplianceRegistry](/docs/contracts#complianceregistry) orchestrates verification by calling the [Groth16Verifier](/docs/contracts#groth16verifier), checking the [VASPRegistry](/docs/contracts#vaspregistry), and validating against the [SanctionsOracle](/docs/contracts#sanctionsoracle).
+
+---
+
+## What the proof reveals vs. hides
+
+```mermaid
+graph LR
+    subgraph Revealed["✓ Public in proof"]
+        R1["Compliance passed"]
+        R2["Sanctions list used"]
+        R3["Jurisdiction + tier"]
+        R4["Chain + contract binding"]
+        R5["Proof expiration"]
+    end
+
+    subgraph Hidden["✗ Never revealed"]
+        H1["Originator name"]
+        H2["Originator address"]
+        H3["Exact amount"]
+        H4["Wallet address"]
+        H5["KYC credential"]
+    end
+
+    click R1 "/docs/circuits#public-signals" "Signal 0: is_compliant"
+    click R2 "/docs/sanctions" "Sanctions oracle"
+    click R3 "/docs/circuits#amount-tier" "Amount tier circuit"
+    click R5 "/docs/circuits#public-signals" "Signal 15: proof_expires_at"
+
+    style Revealed fill:#065f46,stroke:#10b981,color:#ecfdf5
+    style Hidden fill:#7f1d1d,stroke:#ef4444,color:#fef2f2
+```
+
+All [16 public signals](/docs/circuits#public-signals) are designed to prove compliance without exposing private data. See the [circuits page](/docs/circuits) for the full signal table.
+
+---
+
+## Sanctions oracle update
+
+```mermaid
+graph LR
+    Fetch["Fetch OFAC +<br/>EU lists daily"] --> Build["Build Poseidon<br/>Merkle tree"]
+    Build --> PR["Open PR for<br/>human review"]
+    PR --> Relay["Relay root<br/>to on-chain oracle"]
+
+    click Build "/docs/sanctions#tree-structure" "Sanctions tree structure"
+    click PR "/docs/sanctions#update-workflow" "PR-based update workflow"
+    click Relay "/docs/sanctions#staleness" "Oracle staleness checks"
+
+    style Fetch fill:#1e293b,stroke:#94a3b8,color:#e2e8f0
+    style Build fill:#1e1b4b,stroke:#6366f1,color:#e2e8f0
+    style PR fill:#1e293b,stroke:#94a3b8,color:#e2e8f0
+    style Relay fill:#0f172a,stroke:#22d3ee,color:#e2e8f0
+```
+
+The [sanctions Merkle tree](/docs/sanctions#tree-structure) is rebuilt daily from OFAC and EU data. Updates follow a [PR-based workflow](/docs/sanctions#update-workflow) with human review before the root is [relayed on-chain](/docs/sanctions#staleness).
+
+---
+
+## VASP discovery
+
+```mermaid
+graph LR
+    New["New VASP"] -->|"1. Publish<br/>/.well-known/<br/>clearproof.json"| Web["VASP domain"]
+    New -->|"2. Register<br/>on-chain"| Reg["VASPRegistry"]
+    Reg -->|"3. Other VASPs<br/>discover<br/>automatically"| Others["All existing<br/>VASPs"]
+
+    click Reg "/docs/contracts#vaspregistry" "VASPRegistry contract"
+
+    style New fill:#1e1b4b,stroke:#6366f1,color:#e2e8f0
+    style Web fill:#1e293b,stroke:#94a3b8,color:#e2e8f0
+    style Reg fill:#0f172a,stroke:#22d3ee,color:#e2e8f0
+    style Others fill:#065f46,stroke:#10b981,color:#ecfdf5
+```
+
+New VASPs join by publishing a [well-known JSON file](/docs/quickstart) and [registering on-chain](/docs/contracts#vaspregistry). Discovery is automatic — no manual configuration.
+
+---
+
+## Regulatory audit path
+
+```mermaid
+graph LR
+    Reg["Regulator<br/>issues subpoena"] --> VASP["VASP retrieves<br/>proof + encrypted PII<br/>from records"]
+    VASP --> Decrypt["Decrypt PII via<br/>HKDF key re-derivation"]
+    Decrypt --> Produce["Produce plaintext<br/>IVMS101 data +<br/>on-chain audit trail"]
+
+    click VASP "/docs/security#pii-protection" "PII encryption & key management"
+    click Produce "/docs/security" "Security architecture"
+
+    style Reg fill:#1e293b,stroke:#94a3b8,color:#e2e8f0
+    style VASP fill:#1e1b4b,stroke:#6366f1,color:#e2e8f0
+    style Decrypt fill:#1e1b4b,stroke:#06b6d4,color:#e2e8f0
+    style Produce fill:#065f46,stroke:#10b981,color:#ecfdf5
+```
+
+Regulators access plaintext PII through the [VASP's internal records](/docs/security#pii-protection), not through the blockchain. The ZK proof and [on-chain events](/docs/contracts#complianceregistry) provide a verifiable audit trail.

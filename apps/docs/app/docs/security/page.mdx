@@ -1,0 +1,49 @@
+# Security
+
+## Reporting vulnerabilities
+
+Email **security@clearproof.dev** with description, reproduction steps, and impact assessment. We acknowledge within 48 hours.
+
+## Scope
+
+| Component | Examples |
+| --- | --- |
+| ZK circuits | Soundness bugs, constraint under-specification, range check bypasses |
+| Encryption | Key derivation flaws, PII exposure, nonce reuse |
+| Protocol bridges | Information leakage in TRP/TRISA/TAIP-10 payloads |
+| Smart contracts | Replay attacks, access control bypasses, reentrancy |
+| Sanctions oracle | Tree manipulation, staleness exploitation |
+| TypeScript SDK | Input validation bypasses, unsafe defaults |
+
+**Out of scope**: third-party dependencies, test infrastructure, social engineering.
+
+## Security architecture
+
+### PII protection
+
+- AES-256-GCM encryption before PII leaves the VASP
+- HKDF-derived keys from `PII_MASTER_KEY` with per-transfer context
+- Key entropy validated at startup (≥32 bytes)
+- HKDF salt defaults to `zk-travel-rule-v1` — set `HKDF_SALT` explicitly for production
+- PII never logged or included in error messages
+
+### Proof security
+
+- Domain-bound to chain ID + contract address
+- Credential nullifiers prevent double-use
+- Expiration timestamps enforced on-chain and off-chain
+- SAR flag never included in bridge payloads (BSA anti-tipping-off)
+
+### Rate limiting
+
+- Proof generation: 30/min per IP
+- Proof verification: 30/min per IP
+- Nonce generation: 60/min per IP
+
+## Disclosure policy
+
+Coordinated disclosure. 90-day window before public disclosure.
+
+## Bug bounty
+
+Coming soon.

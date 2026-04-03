@@ -1,12 +1,13 @@
 {
   "network": "sepolia",
   "chainId": "11155111",
-  "timestamp": "2026-03-31T20:26:37.050Z",
+  "timestamp": "2026-04-02T04:14:12.977Z",
   "contracts": {
-    "Groth16Verifier": "0xb8BaAc48639227Ae76fC79508a0cecC69C0dBcb9",
-    "VASPRegistry": "0xdCaCF0d749A79376F08C36a050de96f54C6b77Ce",
-    "SanctionsOracle": "0xb394B066e784eCF152D662c0Fa6fCBd770dFaC4B",
-    "ComplianceRegistry": "0x763648FC1b5BB9a05C76E369D91546cF584cD1A0"
+    "Groth16Verifier": "0xD2E419C913F2f3aA661DB422A295026F5A1CB71c",
+    "VASPRegistry": "0xa8aB6DBA49307617945a46b4Ae4A27d922AE5962",
+    "SanctionsOracle": "0xFf14ef1021D081DD2A536a2cf8066F5334340919",
+    "ComplianceRegistry": "0x4B889625d263fdD17F609c137ca9ea5463350d75",
+    "SanctionsRootRelay": "0x1e808E9739f24b80bEb379B1a88e4152eB41635A"
   },
-  "deployer": "0x2FcA8f0072eb3A31FE18bFc3aA5E6Cf62Ad57C39"
+  "deployer": "0x6e42dA3124edd6FFE164a8b9611d8FaCF8107E92"
 }

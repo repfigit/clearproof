@@ -1,4 +1,4 @@
-.PHONY: install dev lint test test-unit test-integration test-compliance spike-ezkl docker-up docker-down benchmark
+.PHONY: install dev lint test test-unit test-integration test-compliance spike-ezkl docker-up docker-down benchmark deploy relay-sanctions
 
 install:
 	uv sync --all-extras
@@ -41,6 +41,21 @@ update-sanctions-oracle:
 
 benchmark:
 	python scripts/benchmark_proof_latency.py
+
+# Multi-chain deployment — deploy all contracts to a single network
+# Usage: make deploy NETWORK=arbitrum-sepolia
+deploy:
+	cd packages/contracts && npx hardhat run scripts/deploy-multichain.ts --network $(NETWORK)
+
+# Multi-chain sanctions relay — sync root to all deployed networks
+# Usage: make relay-sanctions
+# Usage: RELAY_NETWORKS=sepolia,base-sepolia make relay-sanctions
+relay-sanctions:
+	@echo "Step 1: Rebuild sanctions tree from live feeds..."
+	python scripts/build_sanctions_tree.py
+	@echo ""
+	@echo "Step 2: Relay root to all deployed chains..."
+	cd packages/contracts && npx ts-node scripts/relay-sanctions-root.ts
 
 # Docker support is planned. See https://github.com/clearproof/clearproof/issues
 docker-up:

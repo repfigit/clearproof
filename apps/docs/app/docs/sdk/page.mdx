@@ -1,0 +1,115 @@
+# TypeScript SDK
+
+`@clearproof/proof` — generate and verify ZK compliance proofs, and discover counterparty VASPs.
+
+## Installation
+
+```bash
+npm install @clearproof/proof
+```
+
+Requires Node.js 18+ and compiled circuit artifacts.
+
+## Generate a proof
+
+```typescript
+import { generateProof } from '@clearproof/proof';
+
+const result = await generateProof(
+  {
+    // Public inputs
+    sanctionsTreeRoot: '...',
+    issuerTreeRoot: '...',
+    amountTier: 2,
+    transferTimestamp: Math.floor(Date.now() / 1000),
+    jurisdictionCode: 840,
+    credentialCommitment: '...',
+    tier2Threshold: 3000,
+    tier3Threshold: 10000,
+    tier4Threshold: 50000,
+    credentialNullifier: '0xabc...',
+    proofExpiresAt: Math.floor(Date.now() / 1000) + 3600,
+    domainChainId: 11155111,           // Sepolia
+    domainContractHash: '0x...',       // keccak256(registry address) % BN128_R
+    transferIdHash: '0x...',           // keccak256(transferId) % BN128_R
+
+    // Private inputs: credential preimage
+    issuerDid: '...',
+    kycTier: 2,
+    sanctionsClear: 1,
+    issuedAt: 1700000000,
+    expiresAt: 1800000000,
+
+    // Private inputs: issuer Merkle membership proof
+    issuerPathElements: ['...', '...'],
+    issuerPathIndices: ['0', '1'],
+
+    // Private inputs: sanctions non-membership gap proof
+    walletAddressHash: '...',
+    leftKey: '...',
+    rightKey: '...',
+    leftPathElements: ['...'],
+    leftPathIndices: ['0'],
+    rightPathElements: ['...'],
+    rightPathIndices: ['1'],
+
+    // Private inputs: amount
+    actualAmount: 1500000,             // cents (integer arithmetic)
+  },
+  'artifacts/compliance_js/compliance.wasm',
+  'artifacts/compliance_final.zkey',
+);
+
+console.log(result.proof);         // { pi_a, pi_b, pi_c, protocol, curve }
+console.log(result.publicSignals); // string[16]
+console.log(result.proofTime);     // milliseconds
+```
+
+The SDK maps camelCase field names to the snake_case signal names the Circom circuit expects.
+
+## Verify a proof
+
+```typescript
+import { verifyProof } from '@clearproof/proof';
+
+const result = await verifyProof(
+  proof,
+  publicSignals,
+  'artifacts/verification_key.json',
+);
+
+console.log(result.valid);         // true
+console.log(result.isCompliant);   // true
+console.log(result.sarReviewFlag); // false
+```
+
+## Discover counterparty VASPs
+
+```typescript
+import { discoverVASP, supportsChain } from '@clearproof/proof';
+
+// Discover a VASP by domain
+const info = await discoverVASP('exchange.example');
+if (info) {
+  console.log(info.clearproof.endpoint);    // https://exchange.example/clearproof/v1
+  console.log(info.clearproof.publicKey);   // encryption public key
+  console.log(info.clearproof.supportedChains); // [1, 42161, 8453]
+}
+
+// Quick check: does this VASP support Ethereum mainnet?
+const ok = await supportsChain('exchange.example', 1);
+```
+
+Discovery fetches `https://<domain>/.well-known/clearproof.json` and caches results for 1 hour.
+
+## Validation rules
+
+As of v0.2.0, these fields are validated at runtime:
+
+- `proofExpiresAt` — must be greater than `transferTimestamp` (not just "in the future")
+- `credentialNullifier` — must be non-zero and non-empty
+- `domainChainId` — if zero or unset, a warning is logged (proof has no domain binding)
+
+## Dependencies
+
+- `snarkjs` ^0.7.5 (peer dependency)

@@ -30,6 +30,7 @@ export interface VASPRegistryInterface extends Interface {
       | "REGISTRAR_ROLE"
       | "activeVaspCount"
       | "getActiveVaspCount"
+      | "getDiscoveryEndpoint"
       | "getRoleAdmin"
       | "grantRole"
       | "hasRole"
@@ -45,6 +46,7 @@ export interface VASPRegistryInterface extends Interface {
       | "revokeVASP"
       | "supportsInterface"
       | "unpause"
+      | "updateDiscoveryEndpoint"
       | "updateIssuerRoot"
       | "vaspCount"
       | "vaspIds"
@@ -53,6 +55,7 @@ export interface VASPRegistryInterface extends Interface {
 
   getEvent(
     nameOrSignatureOrTopic:
+      | "DiscoveryEndpointUpdated"
       | "IssuerRootUpdated"
       | "Paused"
       | "RoleAdminChanged"
@@ -79,6 +82,10 @@ export interface VASPRegistryInterface extends Interface {
   encodeFunctionData(
     functionFragment: "getActiveVaspCount",
     values?: undefined
+  ): string;
+  encodeFunctionData(
+    functionFragment: "getDiscoveryEndpoint",
+    values: [BytesLike]
   ): string;
   encodeFunctionData(
     functionFragment: "getRoleAdmin",
@@ -109,7 +116,7 @@ export interface VASPRegistryInterface extends Interface {
   ): string;
   encodeFunctionData(
     functionFragment: "registerVASP",
-    values: [BytesLike, AddressLike, string]
+    values: [BytesLike, AddressLike, string, string]
   ): string;
   encodeFunctionData(
     functionFragment: "renounceRole",
@@ -128,6 +135,10 @@ export interface VASPRegistryInterface extends Interface {
     values: [BytesLike]
   ): string;
   encodeFunctionData(functionFragment: "unpause", values?: undefined): string;
+  encodeFunctionData(
+    functionFragment: "updateDiscoveryEndpoint",
+    values: [BytesLike, string]
+  ): string;
   encodeFunctionData(
     functionFragment: "updateIssuerRoot",
     values: [BytesLike]
@@ -153,6 +164,10 @@ export interface VASPRegistryInterface extends Interface {
   ): Result;
   decodeFunctionResult(
     functionFragment: "getActiveVaspCount",
+    data: BytesLike
+  ): Result;
+  decodeFunctionResult(
+    functionFragment: "getDiscoveryEndpoint",
     data: BytesLike
   ): Result;
   decodeFunctionResult(
@@ -192,12 +207,29 @@ export interface VASPRegistryInterface extends Interface {
   ): Result;
   decodeFunctionResult(functionFragment: "unpause", data: BytesLike): Result;
   decodeFunctionResult(
+    functionFragment: "updateDiscoveryEndpoint",
+    data: BytesLike
+  ): Result;
+  decodeFunctionResult(
     functionFragment: "updateIssuerRoot",
     data: BytesLike
   ): Result;
   decodeFunctionResult(functionFragment: "vaspCount", data: BytesLike): Result;
   decodeFunctionResult(functionFragment: "vaspIds", data: BytesLike): Result;
   decodeFunctionResult(functionFragment: "vasps", data: BytesLike): Result;
+}
+
+export namespace DiscoveryEndpointUpdatedEvent {
+  export type InputTuple = [didHash: BytesLike, endpoint: string];
+  export type OutputTuple = [didHash: string, endpoint: string];
+  export interface OutputObject {
+    didHash: string;
+    endpoint: string;
+  }
+  export type Event = TypedContractEvent<InputTuple, OutputTuple, OutputObject>;
+  export type Filter = TypedDeferredTopicFilter<Event>;
+  export type Log = TypedEventLog<Event>;
+  export type LogDescription = TypedLogDescription<Event>;
 }
 
 export namespace IssuerRootUpdatedEvent {
@@ -317,17 +349,20 @@ export namespace VASPRegisteredEvent {
   export type InputTuple = [
     didHash: BytesLike,
     wallet: AddressLike,
-    jurisdiction: string
+    jurisdiction: string,
+    discoveryEndpoint: string
   ];
   export type OutputTuple = [
     didHash: string,
     wallet: string,
-    jurisdiction: string
+    jurisdiction: string,
+    discoveryEndpoint: string
   ];
   export interface OutputObject {
     didHash: string;
     wallet: string;
     jurisdiction: string;
+    discoveryEndpoint: string;
   }
   export type Event = TypedContractEvent<InputTuple, OutputTuple, OutputObject>;
   export type Filter = TypedDeferredTopicFilter<Event>;
@@ -398,6 +433,12 @@ export interface VASPRegistry extends BaseContract {
 
   getActiveVaspCount: TypedContractMethod<[], [bigint], "view">;
 
+  getDiscoveryEndpoint: TypedContractMethod<
+    [didHash: BytesLike],
+    [string],
+    "view"
+  >;
+
   getRoleAdmin: TypedContractMethod<[role: BytesLike], [string], "view">;
 
   grantRole: TypedContractMethod<
@@ -429,7 +470,12 @@ export interface VASPRegistry extends BaseContract {
   >;
 
   registerVASP: TypedContractMethod<
-    [didHash: BytesLike, wallet: AddressLike, jurisdiction: string],
+    [
+      didHash: BytesLike,
+      wallet: AddressLike,
+      jurisdiction: string,
+      discoveryEndpoint: string
+    ],
     [void],
     "nonpayable"
   >;
@@ -456,6 +502,12 @@ export interface VASPRegistry extends BaseContract {
 
   unpause: TypedContractMethod<[], [void], "nonpayable">;
 
+  updateDiscoveryEndpoint: TypedContractMethod<
+    [didHash: BytesLike, newEndpoint: string],
+    [void],
+    "nonpayable"
+  >;
+
   updateIssuerRoot: TypedContractMethod<
     [newRoot: BytesLike],
     [void],
@@ -469,9 +521,10 @@ export interface VASPRegistry extends BaseContract {
   vasps: TypedContractMethod<
     [arg0: BytesLike],
     [
-      [string, string, boolean, bigint] & {
+      [string, string, string, boolean, bigint] & {
         wallet: string;
         jurisdiction: string;
+        discoveryEndpoint: string;
         active: boolean;
         registeredAt: bigint;
       }
@@ -495,6 +548,9 @@ export interface VASPRegistry extends BaseContract {
   getFunction(
     nameOrSignature: "getActiveVaspCount"
   ): TypedContractMethod<[], [bigint], "view">;
+  getFunction(
+    nameOrSignature: "getDiscoveryEndpoint"
+  ): TypedContractMethod<[didHash: BytesLike], [string], "view">;
   getFunction(
     nameOrSignature: "getRoleAdmin"
   ): TypedContractMethod<[role: BytesLike], [string], "view">;
@@ -537,7 +593,12 @@ export interface VASPRegistry extends BaseContract {
   getFunction(
     nameOrSignature: "registerVASP"
   ): TypedContractMethod<
-    [didHash: BytesLike, wallet: AddressLike, jurisdiction: string],
+    [
+      didHash: BytesLike,
+      wallet: AddressLike,
+      jurisdiction: string,
+      discoveryEndpoint: string
+    ],
     [void],
     "nonpayable"
   >;
@@ -565,6 +626,13 @@ export interface VASPRegistry extends BaseContract {
     nameOrSignature: "unpause"
   ): TypedContractMethod<[], [void], "nonpayable">;
   getFunction(
+    nameOrSignature: "updateDiscoveryEndpoint"
+  ): TypedContractMethod<
+    [didHash: BytesLike, newEndpoint: string],
+    [void],
+    "nonpayable"
+  >;
+  getFunction(
     nameOrSignature: "updateIssuerRoot"
   ): TypedContractMethod<[newRoot: BytesLike], [void], "nonpayable">;
   getFunction(
@@ -578,9 +646,10 @@ export interface VASPRegistry extends BaseContract {
   ): TypedContractMethod<
     [arg0: BytesLike],
     [
-      [string, string, boolean, bigint] & {
+      [string, string, string, boolean, bigint] & {
         wallet: string;
         jurisdiction: string;
+        discoveryEndpoint: string;
         active: boolean;
         registeredAt: bigint;
       }
@@ -588,6 +657,13 @@ export interface VASPRegistry extends BaseContract {
     "view"
   >;
 
+  getEvent(
+    key: "DiscoveryEndpointUpdated"
+  ): TypedContractEvent<
+    DiscoveryEndpointUpdatedEvent.InputTuple,
+    DiscoveryEndpointUpdatedEvent.OutputTuple,
+    DiscoveryEndpointUpdatedEvent.OutputObject
+  >;
   getEvent(
     key: "IssuerRootUpdated"
   ): TypedContractEvent<
@@ -653,6 +729,17 @@ export interface VASPRegistry extends BaseContract {
   >;
 
   filters: {
+    "DiscoveryEndpointUpdated(bytes32,string)": TypedContractEvent<
+      DiscoveryEndpointUpdatedEvent.InputTuple,
+      DiscoveryEndpointUpdatedEvent.OutputTuple,
+      DiscoveryEndpointUpdatedEvent.OutputObject
+    >;
+    DiscoveryEndpointUpdated: TypedContractEvent<
+      DiscoveryEndpointUpdatedEvent.InputTuple,
+      DiscoveryEndpointUpdatedEvent.OutputTuple,
+      DiscoveryEndpointUpdatedEvent.OutputObject
+    >;
+
     "IssuerRootUpdated(bytes32,bytes32,uint64)": TypedContractEvent<
       IssuerRootUpdatedEvent.InputTuple,
       IssuerRootUpdatedEvent.OutputTuple,
@@ -730,7 +817,7 @@ export interface VASPRegistry extends BaseContract {
       VASPReactivatedEvent.OutputObject
     >;
 
-    "VASPRegistered(bytes32,address,string)": TypedContractEvent<
+    "VASPRegistered(bytes32,address,string,string)": TypedContractEvent<
       VASPRegisteredEvent.InputTuple,
       VASPRegisteredEvent.OutputTuple,
       VASPRegisteredEvent.OutputObject

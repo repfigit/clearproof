@@ -1,4 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
+// clearproof — ZK-proven compliance without transmitting PII
+// https://clearproof.world | https://docs.clearproof.world
 pragma solidity ^0.8.24;
 
 import "@openzeppelin/contracts/access/AccessControl.sol";
@@ -10,6 +12,7 @@ contract VASPRegistry is AccessControl, Pausable {
     struct VASP {
         address wallet;
         string jurisdiction;
+        string discoveryEndpoint; // e.g. "https://vasp.example/.well-known/clearproof"
         bool active;
         uint64 registeredAt;
     }
@@ -20,9 +23,10 @@ contract VASPRegistry is AccessControl, Pausable {
     uint64 public issuerRootVersion;
     uint256 public activeVaspCount;  // M-6: Track active VASP count
 
-    event VASPRegistered(bytes32 indexed didHash, address wallet, string jurisdiction);
+    event VASPRegistered(bytes32 indexed didHash, address wallet, string jurisdiction, string discoveryEndpoint);
     event VASPRevoked(bytes32 indexed didHash);
     event VASPReactivated(bytes32 indexed didHash, address newWallet);  // H-5
+    event DiscoveryEndpointUpdated(bytes32 indexed didHash, string endpoint);
     event IssuerRootUpdated(bytes32 oldRoot, bytes32 newRoot, uint64 version);
 
     constructor(address admin) {
@@ -35,13 +39,27 @@ contract VASPRegistry is AccessControl, Pausable {
     function registerVASP(
         bytes32 didHash,
         address wallet,
-        string calldata jurisdiction
+        string calldata jurisdiction,
+        string calldata discoveryEndpoint
     ) external onlyRole(REGISTRAR_ROLE) whenNotPaused {
         require(vasps[didHash].registeredAt == 0, "Already registered");
-        vasps[didHash] = VASP(wallet, jurisdiction, true, uint64(block.timestamp));
+        vasps[didHash] = VASP(wallet, jurisdiction, discoveryEndpoint, true, uint64(block.timestamp));
         vaspIds.push(didHash);
         activeVaspCount++;  // M-6
-        emit VASPRegistered(didHash, wallet, jurisdiction);
+        emit VASPRegistered(didHash, wallet, jurisdiction, discoveryEndpoint);
+    }
+
+    function updateDiscoveryEndpoint(
+        bytes32 didHash,
+        string calldata newEndpoint
+    ) external onlyRole(REGISTRAR_ROLE) whenNotPaused {
+        require(vasps[didHash].active, "Not active");
+        vasps[didHash].discoveryEndpoint = newEndpoint;
+        emit DiscoveryEndpointUpdated(didHash, newEndpoint);
+    }
+
+    function getDiscoveryEndpoint(bytes32 didHash) external view returns (string memory) {
+        return vasps[didHash].discoveryEndpoint;
     }
 
     // M-8: Added whenNotPaused — revocation requires explicit unpause for safety

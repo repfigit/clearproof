@@ -1,4 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
+// clearproof — ZK-proven compliance without transmitting PII
+// https://clearproof.world | https://docs.clearproof.world
 pragma solidity ^0.8.24;
 
 import "@openzeppelin/contracts/access/AccessControl.sol";

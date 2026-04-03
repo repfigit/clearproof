@@ -22,7 +22,11 @@ export type { IGroth16Verifier } from "./contracts/ComplianceRegistry.sol/IGroth
 export { IGroth16Verifier__factory } from "./factories/contracts/ComplianceRegistry.sol/IGroth16Verifier__factory";
 export type { Groth16Verifier } from "./contracts/Groth16Verifier";
 export { Groth16Verifier__factory } from "./factories/contracts/Groth16Verifier__factory";
+export type { ISanctionsRootReceiver } from "./contracts/ISanctionsRootReceiver";
+export { ISanctionsRootReceiver__factory } from "./factories/contracts/ISanctionsRootReceiver__factory";
 export type { SanctionsOracle } from "./contracts/SanctionsOracle";
 export { SanctionsOracle__factory } from "./factories/contracts/SanctionsOracle__factory";
+export type { SanctionsRootRelay } from "./contracts/SanctionsRootRelay";
+export { SanctionsRootRelay__factory } from "./factories/contracts/SanctionsRootRelay__factory";
 export type { VASPRegistry } from "./contracts/VASPRegistry";
 export { VASPRegistry__factory } from "./factories/contracts/VASPRegistry__factory";

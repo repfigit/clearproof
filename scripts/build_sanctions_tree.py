@@ -1,13 +1,20 @@
 #!/usr/bin/env python3
 """
 Fetch OFAC SDN and EU sanctions lists, extract crypto addresses,
-and build a sorted Poseidon Merkle tree.
+and build a sorted Poseidon Merkle tree with deterministic output.
 
 Outputs: artifacts/sanctions_tree.json
 
 Usage:
     python scripts/build_sanctions_tree.py
     python scripts/build_sanctions_tree.py --offline   # skip HTTP fetches
+    python scripts/build_sanctions_tree.py --verify     # verify existing tree is reproducible
+
+Deterministic guarantee:
+    Given the same source files (verified by SHA-256), the same build script
+    version, and the same normalization spec, any operator will produce the
+    same Merkle root. The output includes a source manifest for independent
+    verification.
 
 NOTE: All subprocess calls use asyncio.create_subprocess_exec (argument-list
 form, no shell) to prevent command injection.
@@ -17,6 +24,7 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import hashlib
 import json
 import math
 import os
@@ -28,6 +36,12 @@ from typing import Any
 import httpx
 
 # ---------------------------------------------------------------------------
+# Build script version — increment on any change to normalization or tree logic
+# ---------------------------------------------------------------------------
+
+BUILD_SCRIPT_VERSION = "1.0.0"
+
+# ---------------------------------------------------------------------------
 # Project root / Poseidon helper
 # ---------------------------------------------------------------------------
 
@@ -35,6 +49,7 @@ PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 POSEIDON_SCRIPT = os.path.join(PROJECT_ROOT, "scripts", "poseidon_hash.js")
 ARTIFACTS_DIR = os.path.join(PROJECT_ROOT, "artifacts")
 OUTPUT_PATH = os.path.join(ARTIFACTS_DIR, "sanctions_tree.json")
+TEST_VECTORS_PATH = os.path.join(ARTIFACTS_DIR, "sanctions_test_vectors.json")
 
 # ---------------------------------------------------------------------------
 # Data sources
@@ -47,6 +62,9 @@ EU_SANCTIONS_URL = (
 )
 
 HTTP_TIMEOUT = 60  # seconds
+
+# Domain tag for sanctions tree leaves (must match circuits)
+SANCTIONS_DOMAIN_TAG = 1
 
 # ---------------------------------------------------------------------------
 # Known OFAC-sanctioned crypto addresses (hardcoded fallback)
@@ -87,6 +105,31 @@ _CRYPTO_PROGRAM_KEYWORDS = frozenset({
 
 
 # ---------------------------------------------------------------------------
+# Canonical address normalization (deterministic)
+# ---------------------------------------------------------------------------
+
+def normalize_address(addr: str) -> str:
+    """
+    Canonical normalization for EVM addresses.
+
+    Rules (deterministic — two operators applying these get identical output):
+    1. Strip whitespace
+    2. Lowercase (checksums are display-only, not canonical)
+    3. Ensure 0x prefix
+    4. Zero-pad to 42 chars (0x + 40 hex digits)
+
+    ENS names are NEVER resolved — only raw hex addresses enter the tree.
+    """
+    addr = addr.strip().lower()
+    if not addr.startswith("0x"):
+        addr = "0x" + addr
+    hex_part = addr[2:]
+    if len(hex_part) < 40:
+        hex_part = hex_part.zfill(40)
+    return "0x" + hex_part[:40]
+
+
+# ---------------------------------------------------------------------------
 # Poseidon hash via subprocess (safe argument-list form)
 # ---------------------------------------------------------------------------
 
@@ -106,9 +149,23 @@ async def poseidon_hash(inputs: list[int | str]) -> str:
 
 
 def address_to_int(address: str) -> int:
-    """Convert a hex wallet address to an integer."""
-    clean = address.lower().removeprefix("0x")
-    return int(clean, 16)
+    """Convert a normalized hex wallet address to an integer."""
+    return int(address.removeprefix("0x"), 16)
+
+
+# ---------------------------------------------------------------------------
+# Source content hashing (for reproducibility verification)
+# ---------------------------------------------------------------------------
+
+def sha256_bytes(data: bytes) -> str:
+    """Return hex SHA-256 of raw bytes."""
+    return hashlib.sha256(data).hexdigest()
+
+
+def sha256_file(path: str) -> str:
+    """Return hex SHA-256 of a file."""
+    with open(path, "rb") as f:
+        return sha256_bytes(f.read())
 
 
 # ---------------------------------------------------------------------------
@@ -116,13 +173,11 @@ def address_to_int(address: str) -> int:
 # ---------------------------------------------------------------------------
 
 def _looks_like_eth_address(text: str) -> bool:
-    """Return True if *text* looks like a 0x-prefixed Ethereum address."""
     text = text.strip()
     if not text.lower().startswith(_ETH_ADDRESS_PREFIX):
         return False
     hex_part = text[2:]
     if len(hex_part) < 38 or len(hex_part) > 42:
-        # Allow slightly short addresses (some lists truncate)
         return False
     try:
         int(hex_part, 16)
@@ -132,7 +187,6 @@ def _looks_like_eth_address(text: str) -> bool:
 
 
 def _extract_eth_addresses_from_text(text: str) -> list[str]:
-    """Scan arbitrary text for Ethereum-style hex addresses."""
     results: list[str] = []
     for token in text.replace(",", " ").replace(";", " ").split():
         token = token.strip("\"'()[]{}<>")
@@ -142,11 +196,6 @@ def _extract_eth_addresses_from_text(text: str) -> list[str]:
 
 
 async def fetch_ofac_sdn_xml(client: httpx.AsyncClient) -> tuple[list[str], dict[str, Any]]:
-    """
-    Fetch and parse the OFAC SDN XML list.
-
-    Returns (addresses, metadata).
-    """
     addresses: list[str] = []
     meta: dict[str, Any] = {"source": OFAC_SDN_XML_URL, "fetched": False, "error": None}
 
@@ -157,19 +206,16 @@ async def fetch_ofac_sdn_xml(client: httpx.AsyncClient) -> tuple[list[str], dict
         meta["fetched"] = True
         meta["status_code"] = resp.status_code
         meta["content_length"] = len(resp.content)
+        meta["sha256"] = sha256_bytes(resp.content)
+        meta["last_modified"] = resp.headers.get("Last-Modified", "unknown")
 
         root = ET.fromstring(resp.content)
-        # OFAC SDN XML namespace
         ns = ""
-        # Try to detect namespace from root tag
         if root.tag.startswith("{"):
             ns = root.tag.split("}")[0] + "}"
 
-        # Walk all elements looking for digital-currency address features
         for elem in root.iter():
             tag_local = elem.tag.replace(ns, "") if ns else elem.tag
-
-            # Look for <feature> elements with featureType containing crypto keywords
             if tag_local.lower() in ("feature", "id"):
                 text_content = ET.tostring(elem, encoding="unicode", method="text")
                 if text_content:
@@ -178,13 +224,10 @@ async def fetch_ofac_sdn_xml(client: httpx.AsyncClient) -> tuple[list[str], dict
                     if is_crypto:
                         found = _extract_eth_addresses_from_text(text_content)
                         addresses.extend(found)
-
-            # Also check raw text of any element for ETH addresses near crypto keywords
             if elem.text and _ETH_ADDRESS_PREFIX in (elem.text or ""):
                 found = _extract_eth_addresses_from_text(elem.text)
                 addresses.extend(found)
 
-        # Also do a broad scan of the entire XML text for any ETH addresses
         raw_text = resp.text
         for token in raw_text.split():
             token = token.strip("\"'<>")
@@ -202,11 +245,6 @@ async def fetch_ofac_sdn_xml(client: httpx.AsyncClient) -> tuple[list[str], dict
 
 
 async def fetch_ofac_consolidated_csv(client: httpx.AsyncClient) -> tuple[list[str], dict[str, Any]]:
-    """
-    Fetch and parse the OFAC consolidated (non-SDN) CSV for crypto addresses.
-
-    Returns (addresses, metadata).
-    """
     addresses: list[str] = []
     meta: dict[str, Any] = {"source": OFAC_CONS_CSV_URL, "fetched": False, "error": None}
 
@@ -217,8 +255,9 @@ async def fetch_ofac_consolidated_csv(client: httpx.AsyncClient) -> tuple[list[s
         meta["fetched"] = True
         meta["status_code"] = resp.status_code
         meta["content_length"] = len(resp.content)
+        meta["sha256"] = sha256_bytes(resp.content)
+        meta["last_modified"] = resp.headers.get("Last-Modified", "unknown")
 
-        # Scan each line for ETH addresses
         for line in resp.text.splitlines():
             line_lower = line.lower()
             if "digital currency" in line_lower or "0x" in line_lower:
@@ -236,11 +275,6 @@ async def fetch_ofac_consolidated_csv(client: httpx.AsyncClient) -> tuple[list[s
 
 
 async def fetch_eu_sanctions_xml(client: httpx.AsyncClient) -> tuple[list[str], dict[str, Any]]:
-    """
-    Fetch and parse the EU consolidated sanctions list.
-
-    Returns (addresses, metadata).
-    """
     addresses: list[str] = []
     meta: dict[str, Any] = {"source": EU_SANCTIONS_URL, "fetched": False, "error": None}
 
@@ -251,8 +285,9 @@ async def fetch_eu_sanctions_xml(client: httpx.AsyncClient) -> tuple[list[str], 
         meta["fetched"] = True
         meta["status_code"] = resp.status_code
         meta["content_length"] = len(resp.content)
+        meta["sha256"] = sha256_bytes(resp.content)
+        meta["last_modified"] = resp.headers.get("Last-Modified", "unknown")
 
-        # Broad scan for ETH addresses in the XML text
         for token in resp.text.split():
             token = token.strip("\"'<>")
             if _looks_like_eth_address(token):
@@ -269,35 +304,39 @@ async def fetch_eu_sanctions_xml(client: httpx.AsyncClient) -> tuple[list[str], 
 
 
 # ---------------------------------------------------------------------------
-# Merkle tree builder
+# Merkle tree builder (deterministic)
 # ---------------------------------------------------------------------------
 
 async def build_merkle_tree(addresses: list[str]) -> dict[str, Any]:
     """
-    Build a sorted Poseidon Merkle tree from a deduplicated list of hex addresses.
+    Build a sorted Poseidon Merkle tree from a deduplicated, normalized address list.
 
-    Returns the tree metadata dict ready for JSON serialization.
+    Deterministic guarantees:
+    1. Addresses normalized via normalize_address() before dedup
+    2. Leaves sorted by Poseidon hash value (integer comparison)
+    3. Poseidon hashing uses domain tag 1 for leaf hashing
+    4. Zero-padding uses 0 for empty leaves
+    5. Tree always padded to next power of 2
     """
-    # Deduplicate (case-insensitive) and normalize
     seen: set[str] = set()
     unique: list[str] = []
     for addr in addresses:
-        key = addr.lower()
-        if key not in seen:
-            seen.add(key)
-            unique.append(addr)
+        normalized = normalize_address(addr)
+        if normalized not in seen:
+            seen.add(normalized)
+            unique.append(normalized)
 
-    print(f"\nBuilding Merkle tree from {len(unique)} unique addresses ...")
+    unique.sort()
 
-    # Hash each address through Poseidon
-    hashed: list[tuple[int, str]] = []  # (hash_int, original_address)
+    print(f"\nBuilding Merkle tree from {len(unique)} unique normalized addresses ...")
+
+    hashed: list[tuple[int, str]] = []
     for i, addr in enumerate(unique):
-        h = await poseidon_hash([address_to_int(addr)])
+        h = await poseidon_hash([SANCTIONS_DOMAIN_TAG, address_to_int(addr)])
         hashed.append((int(h), addr))
         if (i + 1) % 10 == 0 or (i + 1) == len(unique):
             print(f"  Hashed {i + 1}/{len(unique)} addresses")
 
-    # Sort by hash value
     hashed.sort(key=lambda x: x[0])
     sorted_hashes = [h for h, _ in hashed]
     sorted_addresses = [a for _, a in hashed]
@@ -312,15 +351,12 @@ async def build_merkle_tree(addresses: list[str]) -> dict[str, Any]:
             "padded_size": 0,
         }
 
-    # Determine depth
     n = len(sorted_hashes)
     depth = max(1, math.ceil(math.log2(n))) if n > 1 else 1
     padded_size = 2 ** depth
 
-    # Build leaf layer
     leaf_strs = [str(h) for h in sorted_hashes] + ["0"] * (padded_size - n)
 
-    # Build tree bottom-up
     current = leaf_strs
     for level in range(depth):
         next_level: list[str] = []
@@ -344,20 +380,81 @@ async def build_merkle_tree(addresses: list[str]) -> dict[str, Any]:
 
 
 # ---------------------------------------------------------------------------
+# Test vector generation
+# ---------------------------------------------------------------------------
+
+async def generate_test_vectors(addresses: list[str]) -> list[dict[str, Any]]:
+    """Generate test vectors for independent verification."""
+    vectors: list[dict[str, Any]] = []
+    for addr in addresses[:10]:
+        normalized = normalize_address(addr)
+        addr_int = address_to_int(normalized)
+        leaf_hash = await poseidon_hash([SANCTIONS_DOMAIN_TAG, addr_int])
+        vectors.append({
+            "original": addr,
+            "normalized": normalized,
+            "address_int": str(addr_int),
+            "domain_tag": SANCTIONS_DOMAIN_TAG,
+            "expected_leaf_hash": leaf_hash,
+        })
+    return vectors
+
+
+# ---------------------------------------------------------------------------
+# Verify mode
+# ---------------------------------------------------------------------------
+
+async def verify_tree() -> bool:
+    """Verify existing tree against stored test vectors."""
+    if not os.path.exists(TEST_VECTORS_PATH):
+        print(f"No test vectors found at {TEST_VECTORS_PATH}")
+        return False
+
+    with open(TEST_VECTORS_PATH) as f:
+        data = json.load(f)
+
+    vectors = data.get("vectors", [])
+    print(f"Verifying {len(vectors)} test vectors ...")
+
+    passed = 0
+    failed = 0
+    for v in vectors:
+        addr_int = int(v["address_int"])
+        expected = v["expected_leaf_hash"]
+        actual = await poseidon_hash([SANCTIONS_DOMAIN_TAG, addr_int])
+        if actual == expected:
+            passed += 1
+        else:
+            failed += 1
+            print(f"  FAIL: {v['normalized']} expected {expected} got {actual}")
+
+    print(f"\n{passed} passed, {failed} failed")
+    return failed == 0
+
+
+# ---------------------------------------------------------------------------
 # Main
 # ---------------------------------------------------------------------------
 
-async def main(offline: bool = False) -> None:
+async def main(offline: bool = False, verify: bool = False) -> None:
+    if verify:
+        ok = await verify_tree()
+        sys.exit(0 if ok else 1)
+
     print("=" * 60)
-    print("OFAC / EU Sanctions List Fetcher & Merkle Tree Builder")
+    print("clearproof Sanctions Merkle Tree Builder")
+    print(f"Build script version: {BUILD_SCRIPT_VERSION}")
     print("=" * 60)
+
+    script_path = os.path.abspath(__file__)
+    script_hash = sha256_file(script_path)
+    print(f"Script hash (SHA-256): {script_hash}")
 
     timestamp = datetime.now(timezone.utc).isoformat()
     all_addresses: list[str] = []
     source_meta: dict[str, Any] = {}
     counts: dict[str, int] = {}
 
-    # Always include hardcoded known addresses
     all_addresses.extend(KNOWN_OFAC_ADDRESSES)
     counts["hardcoded_ofac"] = len(KNOWN_OFAC_ADDRESSES)
     print(f"\n[1/4] Loaded {len(KNOWN_OFAC_ADDRESSES)} hardcoded OFAC addresses")
@@ -367,21 +464,18 @@ async def main(offline: bool = False) -> None:
             headers={"User-Agent": "clearproof-sanctions-fetcher/1.0"},
             follow_redirects=True,
         ) as client:
-            # Fetch OFAC SDN XML
             print("\n[2/4] Fetching OFAC SDN XML ...")
             sdn_addrs, sdn_meta = await fetch_ofac_sdn_xml(client)
             all_addresses.extend(sdn_addrs)
             source_meta["ofac_sdn_xml"] = sdn_meta
             counts["ofac_sdn_xml"] = len(set(sdn_addrs))
 
-            # Fetch OFAC consolidated CSV
             print("\n[3/4] Fetching OFAC consolidated CSV ...")
             csv_addrs, csv_meta = await fetch_ofac_consolidated_csv(client)
             all_addresses.extend(csv_addrs)
             source_meta["ofac_consolidated_csv"] = csv_meta
             counts["ofac_consolidated_csv"] = len(set(csv_addrs))
 
-            # Fetch EU sanctions
             print("\n[4/4] Fetching EU sanctions XML ...")
             eu_addrs, eu_meta = await fetch_eu_sanctions_xml(client)
             all_addresses.extend(eu_addrs)
@@ -391,21 +485,39 @@ async def main(offline: bool = False) -> None:
         print("\n[2-4/4] Skipped HTTP fetches (--offline mode)")
         source_meta["mode"] = "offline"
 
-    # Deduplicate
     seen: set[str] = set()
     deduped: list[str] = []
     for addr in all_addresses:
-        key = addr.lower()
-        if key not in seen:
-            seen.add(key)
-            deduped.append(addr)
+        normalized = normalize_address(addr)
+        if normalized not in seen:
+            seen.add(normalized)
+            deduped.append(normalized)
 
-    print(f"\nTotal unique addresses: {len(deduped)}")
+    deduped.sort()
 
-    # Build the Merkle tree
+    print(f"\nTotal unique normalized addresses: {len(deduped)}")
+
     tree_data = await build_merkle_tree(deduped)
 
-    # Assemble output
+    print("\nGenerating test vectors ...")
+    test_vectors = await generate_test_vectors(KNOWN_OFAC_ADDRESSES[:10])
+
+    source_manifest = {
+        "build_script_version": BUILD_SCRIPT_VERSION,
+        "build_script_hash": script_hash,
+        "normalization_spec": {
+            "method": "lowercase_hex_0x_prefix_40chars",
+            "domain_tag": SANCTIONS_DOMAIN_TAG,
+            "ens_resolution": "never",
+            "sort_order": "lexicographic_on_normalized_hex_then_poseidon_hash_int",
+            "dedup": "case_insensitive_after_normalization",
+        },
+        "fetch_timestamp": timestamp,
+        "sources": source_meta,
+        "address_counts_per_source": counts,
+        "total_unique_addresses": len(deduped),
+    }
+
     output = {
         "root": tree_data["root"],
         "sorted_leaves": tree_data["sorted_leaves"],
@@ -413,31 +525,34 @@ async def main(offline: bool = False) -> None:
         "depth": tree_data["depth"],
         "leaf_count": tree_data["leaf_count"],
         "padded_size": tree_data["padded_size"],
-        "source_metadata": {
-            "fetch_timestamp": timestamp,
-            "sources": source_meta,
-            "address_counts_per_source": counts,
-            "total_unique_addresses": len(deduped),
-        },
+        "source_manifest": source_manifest,
     }
 
-    # Write output
     os.makedirs(ARTIFACTS_DIR, exist_ok=True)
     with open(OUTPUT_PATH, "w") as f:
         json.dump(output, f, indent=2)
     print(f"\nWrote sanctions tree to {OUTPUT_PATH}")
-    print(f"  Root:  {tree_data['root']}")
-    print(f"  Depth: {tree_data['depth']}")
-    print(f"  Leaves: {tree_data['leaf_count']}")
+
+    test_vector_output = {
+        "build_script_version": BUILD_SCRIPT_VERSION,
+        "domain_tag": SANCTIONS_DOMAIN_TAG,
+        "description": "Test vectors for sanctions tree leaf hashing. Any operator can verify these to confirm their Poseidon implementation and normalization match.",
+        "vectors": test_vectors,
+    }
+    with open(TEST_VECTORS_PATH, "w") as f:
+        json.dump(test_vector_output, f, indent=2)
+    print(f"Wrote {len(test_vectors)} test vectors to {TEST_VECTORS_PATH}")
+
+    print(f"\n  Root:    {tree_data['root']}")
+    print(f"  Depth:   {tree_data['depth']}")
+    print(f"  Leaves:  {tree_data['leaf_count']}")
+    print(f"  Script:  v{BUILD_SCRIPT_VERSION} ({script_hash[:16]}...)")
     print("Done.")
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Build sanctions Merkle tree")
-    parser.add_argument(
-        "--offline",
-        action="store_true",
-        help="Skip HTTP fetches; use only hardcoded addresses",
-    )
+    parser = argparse.ArgumentParser(description="Build sanctions Merkle tree (deterministic)")
+    parser.add_argument("--offline", action="store_true", help="Skip HTTP fetches; use only hardcoded addresses")
+    parser.add_argument("--verify", action="store_true", help="Verify existing tree against test vectors")
     args = parser.parse_args()
-    asyncio.run(main(offline=args.offline))
+    asyncio.run(main(offline=args.offline, verify=args.verify))

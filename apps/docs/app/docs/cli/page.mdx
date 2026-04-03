@@ -1,0 +1,68 @@
+# CLI
+
+`@clearproof/cli` — command-line tool for proof generation, verification, and demos.
+
+## Installation
+
+```bash
+npm install -g @clearproof/cli
+# or
+npx @clearproof/cli <command>
+```
+
+## Commands
+
+### `demo`
+
+Runs a full proof generation and verification flow with sample data.
+
+```bash
+clearproof demo
+```
+
+1. Loads compiled circuit artifacts from `./artifacts`
+2. Generates a sample compliance proof with mock credential data
+3. Verifies the proof locally
+4. Prints all 16 public signals with labels
+
+### `prove`
+
+Generates a ZK compliance proof from a JSON input file.
+
+```bash
+clearproof prove --input inputs.json
+clearproof prove --input inputs.json --artifacts ./artifacts --output proof.json
+```
+
+Options:
+- `--input <file>` — (required) Path to JSON file with circuit inputs matching the `ComplianceInput` schema
+- `--artifacts <dir>` — Path to circuit artifacts directory (default: `./artifacts`)
+- `--output <file>` — Write proof JSON to file (default: stdout)
+
+The input JSON must contain all fields from the `ComplianceInput` type — both public inputs (sanctions root, issuer root, thresholds, etc.) and private inputs (credential preimage, Merkle paths, etc.).
+
+### `verify`
+
+Verifies a ZK compliance proof against the verification key.
+
+```bash
+clearproof verify --proof proof.json
+clearproof verify --proof proof.json --artifacts ./artifacts
+```
+
+Options:
+- `--proof <file>` — (required) Path to proof JSON (output of `prove`)
+- `--artifacts <dir>` — Path to circuit artifacts directory (default: `./artifacts`)
+
+Returns JSON with `valid`, `isCompliant`, `sarReviewFlag`, and `publicSignals`. Exit code 0 if valid, 1 if invalid.
+
+### `--version`
+
+```bash
+clearproof --version
+# 0.2.0
+```
+
+## Requirements
+
+Requires locally compiled circuit artifacts. Run `bash scripts/compile_circuits.sh` first.

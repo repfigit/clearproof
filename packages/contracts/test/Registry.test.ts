@@ -17,9 +17,9 @@ describe("VASPRegistry", function () {
     const didHash = ethers.keccak256(ethers.toUtf8Bytes("did:web:vasp1.example"));
     const wallet = ethers.Wallet.createRandom().address;
 
-    await expect(registry.registerVASP(didHash, wallet, "US"))
+    await expect(registry.registerVASP(didHash, wallet, "US", "https://vasp1.example/.well-known/clearproof"))
       .to.emit(registry, "VASPRegistered")
-      .withArgs(didHash, wallet, "US");
+      .withArgs(didHash, wallet, "US", "https://vasp1.example/.well-known/clearproof");
 
     expect(await registry.isActive(didHash)).to.equal(true);
     expect(await registry.vaspCount()).to.equal(1);
@@ -30,8 +30,8 @@ describe("VASPRegistry", function () {
     const didHash = ethers.keccak256(ethers.toUtf8Bytes("did:web:vasp1.example"));
     const wallet = ethers.Wallet.createRandom().address;
 
-    await registry.registerVASP(didHash, wallet, "US");
-    await expect(registry.registerVASP(didHash, wallet, "US")).to.be.revertedWith(
+    await registry.registerVASP(didHash, wallet, "US", "https://vasp1.example/.well-known/clearproof");
+    await expect(registry.registerVASP(didHash, wallet, "US", "https://vasp1.example/.well-known/clearproof")).to.be.revertedWith(
       "Already registered"
     );
   });
@@ -41,7 +41,7 @@ describe("VASPRegistry", function () {
     const didHash = ethers.keccak256(ethers.toUtf8Bytes("did:web:vasp2.example"));
     const wallet = ethers.Wallet.createRandom().address;
 
-    await registry.registerVASP(didHash, wallet, "SG");
+    await registry.registerVASP(didHash, wallet, "SG", "https://vasp2.example/.well-known/clearproof");
     await expect(registry.revokeVASP(didHash))
       .to.emit(registry, "VASPRevoked")
       .withArgs(didHash);
@@ -67,13 +67,38 @@ describe("VASPRegistry", function () {
     expect(await registry.issuerRootVersion()).to.equal(1);
   });
 
+  it("should store and retrieve discovery endpoint", async function () {
+    const { registry } = await deployVASPRegistry();
+    const didHash = ethers.keccak256(ethers.toUtf8Bytes("did:web:discoverable.example"));
+    const wallet = ethers.Wallet.createRandom().address;
+    const endpoint = "https://discoverable.example/.well-known/clearproof";
+
+    await registry.registerVASP(didHash, wallet, "SG", endpoint);
+    expect(await registry.getDiscoveryEndpoint(didHash)).to.equal(endpoint);
+  });
+
+  it("should update discovery endpoint", async function () {
+    const { registry } = await deployVASPRegistry();
+    const didHash = ethers.keccak256(ethers.toUtf8Bytes("did:web:updatable.example"));
+    const wallet = ethers.Wallet.createRandom().address;
+
+    await registry.registerVASP(didHash, wallet, "US", "https://old.example/.well-known/clearproof");
+
+    const newEndpoint = "https://new.example/.well-known/clearproof";
+    await expect(registry.updateDiscoveryEndpoint(didHash, newEndpoint))
+      .to.emit(registry, "DiscoveryEndpointUpdated")
+      .withArgs(didHash, newEndpoint);
+
+    expect(await registry.getDiscoveryEndpoint(didHash)).to.equal(newEndpoint);
+  });
+
   it("should reject unauthorized registration", async function () {
     const { registry, other } = await deployVASPRegistry();
     const didHash = ethers.keccak256(ethers.toUtf8Bytes("did:web:unauth.example"));
     const wallet = ethers.Wallet.createRandom().address;
 
     await expect(
-      registry.connect(other).registerVASP(didHash, wallet, "US")
+      registry.connect(other).registerVASP(didHash, wallet, "US", "")
     ).to.be.reverted;
   });
 
@@ -85,11 +110,11 @@ describe("VASPRegistry", function () {
     const wallet = ethers.Wallet.createRandom().address;
 
     await expect(
-      registry.registerVASP(didHash, wallet, "US")
+      registry.registerVASP(didHash, wallet, "US", "https://vasp1.example/.well-known/clearproof")
     ).to.be.revertedWithCustomError(registry, "EnforcedPause");
 
     await registry.unpause();
-    await expect(registry.registerVASP(didHash, wallet, "US")).to.not.be.reverted;
+    await expect(registry.registerVASP(didHash, wallet, "US", "https://vasp1.example/.well-known/clearproof")).to.not.be.reverted;
   });
 });
 
@@ -238,7 +263,7 @@ describe("ComplianceRegistry (extended)", function () {
     // Register a VASP first
     const didHash = ethers.keccak256(ethers.toUtf8Bytes("did:web:vasp.example"));
     const wallet = ethers.Wallet.createRandom().address;
-    await vaspRegistry.registerVASP(didHash, wallet, "US");
+    await vaspRegistry.registerVASP(didHash, wallet, "US", "");
 
     // Make oracle stale
     await time.increase(72 * 3600 + 1);
@@ -313,7 +338,7 @@ describe("Integration: Full Flow", function () {
 
     // 1. Register VASP
     const vaspDid = ethers.keccak256(ethers.toUtf8Bytes("did:web:clearproof.io"));
-    await vaspRegistry.registerVASP(vaspDid, admin.address, "US");
+    await vaspRegistry.registerVASP(vaspDid, admin.address, "US", "https://clearproof.io/.well-known/clearproof");
     expect(await vaspRegistry.isActive(vaspDid)).to.equal(true);
 
     // 2. Update sanctions root

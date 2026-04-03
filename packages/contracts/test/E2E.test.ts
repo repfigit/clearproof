@@ -63,7 +63,7 @@ describe("E2E: Prove -> Submit On-Chain -> Verify", function () {
 
     // Register a VASP (admin is the VASP wallet)
     const vaspDid = ethers.keccak256(ethers.toUtf8Bytes("did:web:e2e-vasp.example"));
-    await vaspRegistry.registerVASP(vaspDid, admin.address, "US");
+    await vaspRegistry.registerVASP(vaspDid, admin.address, "US", "");
 
     // Update sanctions root to match what we'll put in the proof
     const sanctionsTreeRoot =
