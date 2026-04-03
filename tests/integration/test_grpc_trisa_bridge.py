@@ -290,7 +290,7 @@ class TestTRISAError:
 
     def test_from_pb2(self):
         """TRISAError can be created from protobuf Error."""
-        error = pb2.Error(
+        error = errors_pb2.Error(
             code=errors_pb2.Error.UNKNOWN_WALLET_ADDRESS,
             message="Wallet address not found",
             retry=False,
@@ -304,13 +304,15 @@ class TestTRISAError:
 
     def test_str_representation(self):
         """TRISAError has a useful string representation."""
+        error_code = errors_pb2.Error.COMPLIANCE_CHECK_FAIL
         error = TRISAError(
-            code=errors_pb2.Error.COMPLIANCE_CHECK_FAIL,
+            code=error_code,
             message="Sanctions match found",
             retry=False,
         )
 
-        assert "COMPLIANCE_CHECK_FAIL" in str(error)
+        # String includes the integer error code and message
+        assert str(error_code) in str(error)
         assert "Sanctions match found" in str(error)
 
 

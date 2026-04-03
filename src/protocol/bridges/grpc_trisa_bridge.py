@@ -164,8 +164,9 @@ class SecureEnvelopeBuilder:
         encrypted_payload = aesgcm.encrypt(nonce, inner_payload, None)
 
         # Generate HMAC secret
-        hmac_secret = os.urandom(32)
-        hmac_signature = self.compute_hmac(encrypted_payload, hmac_secret)
+        hmac_secret=os.urandom(32)
+        # HMAC over nonce || ciphertext (the full encrypted blob, matching TRISA spec)
+        hmac_signature = self.compute_hmac(nonce + encrypted_payload, hmac_secret)
 
         # Wrap AES key with beneficiary public key (RSA-OAEP)
         pub_key = serialization.load_der_public_key(self.beneficiary_public_key)
@@ -238,7 +239,7 @@ class SecureEnvelopeBuilder:
                 ),
             )
 
-            # Verify HMAC
+            # Verify HMAC — HMAC is over nonce || ciphertext (same as build_envelope)
             computed_hmac = self.compute_hmac(envelope.payload, hmac_secret)
             if computed_hmac != envelope.hmac:
                 raise TRISAError(

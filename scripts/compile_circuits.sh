@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
-# compile_circuits.sh — Compile ZK Travel Rule circuits and generate proving keys.
+# compile_circuits.sh — Compile ZK Travel Rule circuits and generate Groth16 proving/verification keys.
 #
 # Usage:
 #   bash scripts/compile_circuits.sh
 #
 # Prerequisites:
-#   - circom (https://docs.circom.io/getting-started/installation/)
-#   - snarkjs (npm install snarkjs)
+#   - circom v2.x (https://docs.circom.io/getting-started/installation/)
+#   - snarkjs v0.7.x (npm install snarkjs)
 #
 # Output artifacts are written to artifacts/.
 
@@ -16,6 +16,7 @@ CIRCUITS_DIR="circuits"
 BUILD_DIR="artifacts"
 PTAU_POWER=18  # 2^18 constraints (dev; increase for production)
 PTAU_FILE="$BUILD_DIR/pot${PTAU_POWER}_final.ptau"
+CONTRACTS_DIR="packages/contracts/contracts"
 
 echo "=== ZK Travel Rule Circuit Compilation ==="
 echo ""
@@ -34,15 +35,15 @@ if ! command -v npx &>/dev/null; then
     echo "ERROR: npx not found in PATH (need Node.js + npm)."
     exit 1
 fi
-
-# Verify snarkjs is available
-if ! npx snarkjs --version &>/dev/null; then
+# snarkjs --help exits 99 (help mode) but outputs to stdout.
+# Using || true on the command so set -o pipefail doesn't abort on non-zero exit.
+SNARKJS_VER=$(npx snarkjs --help 2>/dev/null | head -1 || true)
+if [ -z "$SNARKJS_VER" ]; then
     echo "ERROR: snarkjs not found. Run: npm install snarkjs"
     exit 1
 fi
-
 echo "circom version: $(circom --version)"
-echo "snarkjs version: $(npx snarkjs --version)"
+echo "snarkjs version: $SNARKJS_VER"
 echo ""
 
 # Create build directory
@@ -51,6 +52,8 @@ mkdir -p "$BUILD_DIR"
 # ---------------------------------------------------------------------------
 # Step 1: Powers of tau ceremony (dev: single party, 2^18)
 # ---------------------------------------------------------------------------
+# WARNING: For production, use a multi-party ceremony!
+# See: https://github.com/iden3/perpetual-powers-of-tau
 
 if [ ! -f "$PTAU_FILE" ]; then
     echo "Running powers of tau ceremony (2^${PTAU_POWER}, dev single-party)..."
@@ -96,12 +99,19 @@ circom "$CIRCUITS_DIR/compliance.circom" \
 echo "Circuit compiled. Constraints:"
 npx snarkjs r1cs info "$BUILD_DIR/compliance.r1cs"
 
+# Verify WASM was generated
+if [ ! -f "$BUILD_DIR/compliance_js/compliance.wasm" ]; then
+    echo "ERROR: WASM file not generated!"
+    exit 1
+fi
+
 # ---------------------------------------------------------------------------
 # Step 3: Generate proving and verification keys (Groth16 phase 2)
 # ---------------------------------------------------------------------------
 
 echo ""
 echo "Running Groth16 trusted setup (phase 2)..."
+
 npx snarkjs groth16 setup \
     "$BUILD_DIR/compliance.r1cs" \
     "$PTAU_FILE" \
@@ -123,6 +133,52 @@ npx snarkjs zkey export verificationkey \
     "$BUILD_DIR/verification_key.json"
 
 # ---------------------------------------------------------------------------
+# Step 4: Generate Solidity verifier
+# ---------------------------------------------------------------------------
+
+echo ""
+echo "Generating Solidity verifier..."
+
+npx snarkjs zkey export solidityverifier \
+    "$BUILD_DIR/compliance_final.zkey" \
+    "$CONTRACTS_DIR/Groth16Verifier.sol"
+
+echo "Solidity verifier written to: $CONTRACTS_DIR/Groth16Verifier.sol"
+
+# ---------------------------------------------------------------------------
+# Step 5: Verify all artifacts exist
+# ---------------------------------------------------------------------------
+
+echo ""
+echo "=== Verifying artifacts ==="
+
+ARTIFACTS=(
+    "$BUILD_DIR/compliance.r1cs"
+    "$BUILD_DIR/compliance.sym"
+    "$BUILD_DIR/compliance_js/compliance.wasm"
+    "$BUILD_DIR/compliance_final.zkey"
+    "$BUILD_DIR/verification_key.json"
+    "$CONTRACTS_DIR/Groth16Verifier.sol"
+)
+
+ALL_OK=true
+for artifact in "${ARTIFACTS[@]}"; do
+    if [ -f "$artifact" ]; then
+        SIZE=$(stat -c%s "$artifact" 2>/dev/null || stat -f%z "$artifact" 2>/dev/null || echo "?")
+        echo "  [OK] $artifact ($SIZE bytes)"
+    else
+        echo "  [MISSING] $artifact"
+        ALL_OK=false
+    fi
+done
+
+if [ "$ALL_OK" = false ]; then
+    echo ""
+    echo "ERROR: Some artifacts are missing!"
+    exit 1
+fi
+
+# ---------------------------------------------------------------------------
 # Done
 # ---------------------------------------------------------------------------
 
@@ -133,3 +189,4 @@ echo "  $BUILD_DIR/compliance_js/compliance.wasm"
 echo "  $BUILD_DIR/compliance_final.zkey"
 echo "  $BUILD_DIR/verification_key.json"
 echo "  $BUILD_DIR/compliance.r1cs"
+echo "  $CONTRACTS_DIR/Groth16Verifier.sol"
