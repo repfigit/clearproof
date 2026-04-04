@@ -17,12 +17,25 @@ gRPC bridge over the legacy dict-based TRISABridge.
 from .taip10_bridge import TAIP10Bridge
 from .trisa_bridge import TRISABridge
 from .trp_bridge import TRPBridge
-from .grpc_trisa_bridge import (
-    TRISAClient,
-    TRISAServer,
-    SecureEnvelopeBuilder,
-    TRISAError,
-)
+
+
+def __getattr__(name: str):
+    """Lazy-import gRPC bridge components to avoid hard grpcio dependency."""
+    _grpc_exports = {"TRISAClient", "TRISAServer", "SecureEnvelopeBuilder", "TRISAError"}
+    if name in _grpc_exports:
+        from .grpc_trisa_bridge import (
+            TRISAClient,
+            TRISAServer,
+            SecureEnvelopeBuilder,
+            TRISAError,
+        )
+        # Cache in module globals so __getattr__ is not called again
+        _resolved = locals()
+        for _n in _grpc_exports:
+            globals()[_n] = _resolved[_n]
+        return _resolved[name]
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+
 
 __all__ = [
     "TRPBridge",

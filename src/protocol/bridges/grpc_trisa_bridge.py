@@ -13,7 +13,9 @@ Key components:
 from __future__ import annotations
 
 import base64
+import hmac as hmac_module
 import json
+import logging
 import os
 import time
 from datetime import datetime, timezone
@@ -32,6 +34,8 @@ from src.protocol.compliance_proof import ComplianceProof
 from src.protocol.hybrid_payload import HybridPayload
 
 __all__ = ["TRISAClient", "TRISAServer", "SecureEnvelopeBuilder", "TRISAError"]
+
+_logger = logging.getLogger(__name__)
 
 
 # TRISA envelope type for ZK Travel Rule payloads
@@ -161,7 +165,7 @@ class SecureEnvelopeBuilder:
         aes_key = os.urandom(32)
         nonce = os.urandom(12)
         aesgcm = AESGCM(aes_key)
-        encrypted_payload = aesgcm.encrypt(nonce, inner_payload, None)
+        encrypted_payload = aesgcm.encrypt(nonce, inner_payload, transfer_id.encode("utf-8"))
 
         # Generate HMAC secret
         hmac_secret=os.urandom(32)
@@ -240,8 +244,9 @@ class SecureEnvelopeBuilder:
             )
 
             # Verify HMAC — HMAC is over nonce || ciphertext (same as build_envelope)
+            # Use constant-time comparison to prevent timing attacks
             computed_hmac = self.compute_hmac(envelope.payload, hmac_secret)
-            if computed_hmac != envelope.hmac:
+            if not hmac_module.compare_digest(computed_hmac, envelope.hmac):
                 raise TRISAError(
                     errors_pb2.Error.INVALID_SIGNATURE,
                     "HMAC verification failed",
@@ -252,7 +257,7 @@ class SecureEnvelopeBuilder:
             nonce = envelope.payload[:12]
             ciphertext = envelope.payload[12:]
             aesgcm = AESGCM(aes_key)
-            inner_payload = aesgcm.decrypt(nonce, ciphertext, None)
+            inner_payload = aesgcm.decrypt(nonce, ciphertext, envelope.id.encode("utf-8"))
         else:
             inner_payload = envelope.payload
 
@@ -278,11 +283,19 @@ class TRISAClient:
 
         Args:
             target: The TRISA node address (e.g., "trisa.example.com:18000")
-            credentials: gRPC channel credentials (mTLS recommended)
+            credentials: gRPC channel credentials. For TRISA compliance,
+                         pass mTLS credentials via grpc.ssl_channel_credentials(
+                             root_certificates=...,
+                             private_key=...,
+                             certificate_chain=...,
+                         ). Falls back to server-only TLS if not provided.
         """
         self.target = target
         if credentials is None:
-            # Insecure channel for testing; use mTLS credentials in production
+            _logger.warning(
+                "No mTLS credentials provided — using server-only TLS. "
+                "TRISA requires mTLS for production peer-to-peer exchanges."
+            )
             credentials = grpc.ssl_channel_credentials()
         self.channel = grpc.aio.secure_channel(target, credentials)
         self.stub = pb2_grpc.TRISANetworkStub(self.channel)
@@ -378,9 +391,12 @@ class TRISAClient:
         return await self.stub.KeyExchange(signing_key)
 
 
-class TRISAServer:
+class TRISAServer(pb2_grpc.TRISANetworkServicer):
     """
     gRPC server servant for handling incoming TRISA transfers.
+
+    Inherits from the generated TRISANetworkServicer so that any
+    unimplemented RPCs return proper gRPC UNIMPLEMENTED status codes.
 
     Inherit from this class and implement handle_transfer() to add
     custom transfer handling logic.
@@ -436,12 +452,13 @@ class TRISAServer:
                     retry=e.retry,
                 ),
             )
-        except Exception as e:
+        except Exception:
+            _logger.exception("Unhandled error processing transfer %s", request.id)
             return pb2.SecureEnvelope(
                 id=request.id,
                 error=pb2.Error(
                     code=errors_pb2.Error.INTERNAL_ERROR,
-                    message=str(e),
+                    message="Internal server error",
                     retry=True,
                 ),
             )
@@ -514,6 +531,8 @@ async def create_trisa_server(
     private_key_path: str,
     certificate_path: str,
     port: int = _DEFAULT_TRISA_PORT,
+    trusted_ca_path: str | None = None,
+    require_mtls: bool = True,
 ) -> grpc.aio.server:
     """
     Create a gRPC server with TRISA service handler.
@@ -522,13 +541,17 @@ async def create_trisa_server(
         private_key_path: Path to RSA private key PEM file
         certificate_path: Path to TLS certificate PEM file
         port: Port to listen on
+        trusted_ca_path: Path to trusted CA certificate(s) for mTLS client verification.
+                         Required when require_mtls=True.
+        require_mtls: Whether to require mTLS (default True, per TRISA spec).
 
     Returns:
         Configured grpc.aio.Server
     """
     # Load keys
     with open(private_key_path, "rb") as f:
-        private_key = serialization.load_pem_private_key(f.read(), password=None)
+        private_key_pem = f.read()
+        private_key = serialization.load_pem_private_key(private_key_pem, password=None)
         assert isinstance(private_key, rsa.RSAPrivateKey)
 
     with open(certificate_path, "rb") as f:
@@ -546,14 +569,36 @@ async def create_trisa_server(
         signing_key_data=cert_data,
     )
 
-    # Create server with mTLS credentials
+    # Build TLS/mTLS server credentials
+    if require_mtls:
+        if trusted_ca_path is None:
+            raise ValueError(
+                "trusted_ca_path is required when require_mtls=True. "
+                "TRISA mandates mTLS for all peer-to-peer exchanges."
+            )
+        with open(trusted_ca_path, "rb") as f:
+            trusted_ca_data = f.read()
+        server_credentials = grpc.ssl_server_credentials(
+            [(private_key_pem, cert_data)],
+            root_certificates=trusted_ca_data,
+            require_client_auth=True,
+        )
+    else:
+        _logger.warning(
+            "Starting TRISA server WITHOUT mTLS — only use for local testing"
+        )
+        server_credentials = grpc.ssl_server_credentials(
+            [(private_key_pem, cert_data)],
+        )
+
+    # Create server
     server = grpc.aio.server(
         options=[
-            ("grpc.max_send_message_length", 50 * 1024 * 1024),
-            ("grpc.max_receive_message_length", 50 * 1024 * 1024),
+            ("grpc.max_send_message_length", 4 * 1024 * 1024),
+            ("grpc.max_receive_message_length", 4 * 1024 * 1024),
         ]
     )
     pb2_grpc.add_TRISANetworkServicer_to_server(servant, server)
-    server.add_insecure_port(f"[::]:{port}")
+    server.add_secure_port(f"[::]:{port}", server_credentials)
 
     return server

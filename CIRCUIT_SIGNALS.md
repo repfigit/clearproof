@@ -6,7 +6,7 @@ This document provides the complete signal specification for all ZK Travel Rule 
 
 **File**: `circuits/compliance.circom`
 **Instantiation**: `ComplianceProof(20, 10)` (sanctions_depth=20, issuer_depth=10)
-**Total Public Inputs**: 14
+**Total Public Inputs**: 14 (+ 2 public outputs = 16 total public signals)
 **Total Private Inputs**: 12 + 60 Merkle proof elements (see below)
 
 ### Public Inputs (verifier-supplied)
@@ -208,18 +208,25 @@ function verifyProof(
     uint[2] calldata _pA,      // Groth16 proof element A
     uint[2][2] calldata _pB,    // Groth16 proof element B
     uint[2] calldata _pC,       // Groth16 proof element C
-    uint[16] calldata _pubSignals  // 14 public signals (2 slots reserved)
+    uint[16] calldata _pubSignals  // 16 public signals (2 outputs + 14 inputs)
 ) public view returns (bool)
 ```
 
-The verifier accepts 16 slots but only validates the first 14. Slots 14 and 15 must still be valid field elements but are ignored by ComplianceRegistry.
+snarkjs outputs public signals in this order: **outputs first** (indices 0-1), then **public inputs** in declaration order (indices 2-15). All 16 slots are actively validated by ComplianceRegistry:
 
-## Reserved Signal Slots
-
-| Slot | Status | Purpose |
-|------|--------|---------|
-| 14 | Reserved | Available for future domain binding extension |
-| 15 | Reserved | Available for additional nullifier fields |
+| Slot | Signal | On-Chain Usage |
+|------|--------|----------------|
+| 0 | `is_compliant` | Must equal 1 for proof acceptance |
+| 1 | `sar_review_flag` | Stored in `userSARFlags` mapping |
+| 2 | `sanctions_tree_root` | Checked against `SanctionsOracle.root()` |
+| 3 | `issuer_tree_root` | Checked against `IssuerRegistry.root()` |
+| 5 | `transfer_timestamp` | Must be ≤ `block.timestamp` |
+| 7 | `credential_commitment` | Used for credential binding |
+| 11 | `domain_chain_id` | Must equal `block.chainid` |
+| 12 | `domain_contract_hash` | Must equal keccak256 of registry address |
+| 13 | `transfer_id_hash` | Unique per transfer, prevents replay |
+| 14 | `credential_nullifier` | Stored on-chain, prevents credential reuse |
+| 15 | `proof_expires_at` | Must be ≥ `block.timestamp` |
 
 ## Signal Hashing Schemes
 

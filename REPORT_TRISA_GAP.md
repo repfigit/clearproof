@@ -137,7 +137,7 @@ Comprehensive tests added:
 
 | Gap | Priority | Description |
 |-----|----------|-------------|
-| mTLS Certificate Handling | High | Need integration with GDS for certs |
+| mTLS Certificate Handling | Medium | Server-side mTLS enforced (`create_trisa_server` with `require_mtls=True`). Remaining: GDS integration for automatic cert provisioning |
 | IVMS101 Serialization | High | Use official ivms101 proto for payload |
 | Address Confirmation | Medium | Implement wallet control verification |
 | Key Exchange RPC | Medium | Exchange signing keys with counterparties |
@@ -248,7 +248,7 @@ The TAIP-10 bridge (`src/protocol/bridges/taip10_bridge.py`) is **complete** for
 Run tests to verify implementation:
 
 ```bash
-cd /home/openclaw/repos/clearproof
+cd clearproof
 python -m pytest tests/integration/test_grpc_trisa_bridge.py -v
 ```
 

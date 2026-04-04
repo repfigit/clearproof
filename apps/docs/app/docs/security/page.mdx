@@ -22,10 +22,18 @@ Email **security@clearproof.dev** with description, reproduction steps, and impa
 ### PII protection
 
 - AES-256-GCM encryption before PII leaves the VASP
+- `transfer_id` bound as AES-GCM associated data (AAD) — prevents cross-envelope payload replay
 - HKDF-derived keys from `PII_MASTER_KEY` with per-transfer context
 - Key entropy validated at startup (≥32 bytes)
 - HKDF salt defaults to `zk-travel-rule-v1` — set `HKDF_SALT` explicitly for production
 - PII never logged or included in error messages
+
+### TRISA protocol security
+
+- mTLS enforced by default on gRPC server (`require_client_auth=True`)
+- Constant-time HMAC verification (`hmac.compare_digest`) prevents timing attacks
+- Internal error details never leaked to counterparties over gRPC
+- `TRISAServer` inherits from generated servicer base — unimplemented RPCs return proper gRPC `UNIMPLEMENTED` status
 
 ### Proof security
 

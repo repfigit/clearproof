@@ -45,6 +45,11 @@ jobs:
         with:
           node-version: 20
       - run: npm install
+      - name: Cache Powers of Tau
+        uses: actions/cache@v4
+        with:
+          path: artifacts/pot18_final.ptau
+          key: ptau-bn128-2pow18-v1
       - name: Install circom
         run: |
           curl -L https://github.com/iden3/circom/releases/download/v2.2.2/circom-linux-amd64 -o /usr/local/bin/circom

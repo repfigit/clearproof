@@ -120,7 +120,7 @@ async def test_proof_generate_requires_auth(client: AsyncClient):
         "/proof/generate",
         json={"credential_id": "cred-1"},
     )
-    assert resp.status_code in (401, 422)
+    assert resp.status_code == 401
 
 
 # -----------------------------------------------------------------------
@@ -144,7 +144,7 @@ async def test_proof_verify_with_valid_input(client: AsyncClient):
     """POST /proof/verify with valid structure should reach the prover (mocked)."""
     # Patch the _prover singleton directly — patching the class doesn't affect
     # the already-instantiated module-level singleton used by the endpoint.
-    with patch("src.api.routes.proof._prover.verify", new_callable=AsyncMock, return_value=True):
+    with patch("src.api.routes.proof._prover.verify", new_callable=AsyncMock, return_value=True) as mock_verify:
         public_signals = ["1", "0"] + ["0"] * 14  # 16 signals total
 
         resp = await client.post(
@@ -164,6 +164,8 @@ async def test_proof_verify_with_valid_input(client: AsyncClient):
         assert "valid" in body
         assert "proof_id" in body
         assert body["proof_id"] == "test-proof-id"
+        # Verify the prover was actually invoked
+        mock_verify.assert_called_once()
 
 
 # -----------------------------------------------------------------------
@@ -306,45 +308,102 @@ async def test_credential_revoke_already_revoked(client: AsyncClient):
 
 
 # -----------------------------------------------------------------------
+# POST /proof/generate — happy path
+# -----------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_proof_generate_happy_path(client: AsyncClient):
+    """POST /proof/generate with valid input should return a hybrid payload."""
+    mock_credential = MagicMock()
+    mock_credential.revoked = False
+    mock_credential.sanctions_clear = True
+    mock_credential.issuer_did = "did:web:issuer.example.com"
+    mock_credential.kyc_tier = "retail"
+    mock_credential.issued_at = int(time.time()) - 3600
+    mock_credential.expires_at = int(time.time()) + 86400
+
+    mock_proof_json = {"pi_a": ["1", "2"], "pi_b": [["3", "4"], ["5", "6"]], "pi_c": ["7", "8"]}
+    mock_public_signals = ["1", "0"] + ["0"] * 14
+
+    mock_witness = {
+        "left_neighbor": "100",
+        "right_neighbor": "200",
+        "left_path": {"siblings": ["1", "2", "3"], "indices": [0, 1, 0]},
+        "right_path": {"siblings": ["4", "5", "6"], "indices": [1, 0, 1]},
+    }
+
+    mock_issuer_witness = {"siblings": ["10", "20", "30"], "indices": [0, 1, 0]}
+
+    with (
+        patch("src.api.routes.proof._cred_registry.get", return_value=mock_credential),
+        patch("src.api.routes.proof._cred_registry.get_commitment", return_value="12345"),
+        patch("src.api.routes.proof._issuer_registry.generate_membership_witness", new_callable=AsyncMock, return_value=mock_issuer_witness),
+        patch("src.api.routes.proof._issuer_registry.get_root", return_value="99999"),
+        patch("src.api.routes.proof.SanctionsMerkleTree.load") as mock_tree_load,
+        patch("src.api.routes.proof._prover.fullprove", new_callable=AsyncMock, return_value=(mock_proof_json, mock_public_signals)) as mock_fullprove,
+        patch("src.api.routes.proof._load_vk", return_value={"vk_alpha_1": []}),
+        patch("src.api.routes.proof._audit_log.append"),
+        patch("src.registry.credential_registry._poseidon_hash", new_callable=AsyncMock, return_value="42"),
+        patch("src.sar.encryption.encrypt_pii", return_value=(b"0" * 12, b"encrypted-pii")),
+        patch("src.sar.encryption.derive_key", return_value=b"k" * 32),
+    ):
+        mock_tree = MagicMock()
+        mock_tree.root = "55555"
+        mock_tree.generate_nonmembership_witness = AsyncMock(return_value=mock_witness)
+        mock_tree_load.return_value = mock_tree
+
+        resp = await client.post(
+            "/proof/generate",
+            json={
+                "credential_id": "cred-1",
+                "wallet_address": "0x1234567890abcdef1234567890abcdef12345678",
+                "amount_usd": 500.0,
+                "asset": "USDC",
+                "destination_wallet": "0xabcdefabcdefabcdefabcdefabcdefabcdefabcd",
+                "jurisdiction": "US",
+                "idempotency_key": "test-idempotency-key-001",
+            },
+            headers={"X-API-Key": API_KEY},
+        )
+        assert resp.status_code == 200
+        body = resp.json()
+        assert "compliance_proof" in body
+        assert "encrypted_pii" in body
+        assert body["compliance_proof"]["jurisdiction"] == "US"
+        mock_fullprove.assert_called_once()
+
+
+# -----------------------------------------------------------------------
 # Rate limiting — 429 after threshold
 # -----------------------------------------------------------------------
 
 
 @pytest.mark.asyncio
-async def test_rate_limiting_returns_429(client: AsyncClient):
-    """Endpoints using RateLimiter should return 429 after exceeding the limit.
+async def test_rate_limiter_unit_returns_429():
+    """RateLimiter enforces request limits and raises 429 after threshold.
 
-    We patch the RateLimiter to simulate the threshold being exceeded.
+    Note: This is a unit test of the RateLimiter component, not an
+    integration test of rate limiting at the endpoint level. The limiter
+    is injected via Depends() in the route definitions.
     """
     from fastapi import HTTPException
+    from src.api.middleware.rate_limit import RateLimiter
 
-    async def raise_429(request):
-        raise HTTPException(
-            status_code=429,
-            detail="Rate limit exceeded",
-            headers={"Retry-After": "60"},
-        )
+    limiter = RateLimiter(max_requests=2, window_seconds=60)
 
-    with patch("src.api.routes.proof._proof_verify_limiter", side_effect=raise_429):
-        # The rate limiter is defined at module level but not injected as a
-        # Depends() in the current route definitions, so we test the limiter
-        # object directly instead.
-        from src.api.middleware.rate_limit import RateLimiter
+    # Build a minimal mock request
+    mock_request = MagicMock()
+    mock_request.headers = {"X-API-Key": "rate-limit-test"}
+    mock_request.client = MagicMock()
+    mock_request.client.host = "127.0.0.1"
 
-        limiter = RateLimiter(max_requests=2, window_seconds=60)
+    # First two requests should pass
+    await limiter(mock_request)
+    await limiter(mock_request)
 
-        # Build a minimal mock request
-        mock_request = MagicMock()
-        mock_request.headers = {"X-API-Key": "rate-limit-test"}
-        mock_request.client = MagicMock()
-        mock_request.client.host = "127.0.0.1"
-
-        # First two requests should pass
+    # Third request should raise 429
+    with pytest.raises(HTTPException) as exc_info:
         await limiter(mock_request)
-        await limiter(mock_request)
-
-        # Third request should raise 429
-        with pytest.raises(HTTPException) as exc_info:
-            await limiter(mock_request)
-        assert exc_info.value.status_code == 429
-        assert "Rate limit" in exc_info.value.detail
+    assert exc_info.value.status_code == 429
+    assert "Rate limit" in exc_info.value.detail

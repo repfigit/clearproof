@@ -156,7 +156,7 @@ The Groth16 verifier has a fixed number of public signal slots (16 for the curre
 2. A new Groth16Verifier.sol must be generated
 3. The ComplianceRegistry.sol must be updated to handle the new signal layout
 
-Currently, only 14 of 16 available signal slots are used. The remaining 2 slots are reserved for future use (e.g., additional domain binding or extension fields).
+All 16 public signal slots are actively used: 14 public inputs (sanctions root, issuer root, thresholds, domain binding, nullifier, expiration) plus 2 public outputs (`is_compliant`, `sar_review_flag`). See CIRCUIT_SIGNALS.md for the complete signal mapping.
 
 ## Troubleshooting
 

@@ -44,9 +44,9 @@ def rsa_keypair():
 
 
 @pytest.fixture
-def originator_keypair():
+def originator_keypair(rsa_keypair):
     """Generate an originator signing key pair."""
-    return rsa_keypair()
+    return rsa_keypair
 
 
 class TestSecureEnvelopeBuilder:
@@ -72,8 +72,8 @@ class TestSecureEnvelopeBuilder:
             hybrid_payload=sample_hybrid_payload,
         )
 
-        # Verify all proto3 required fields are present
-        assert envelope.id
+        # Verify all proto3 required fields are present with correct values
+        assert envelope.id == sample_compliance_proof.transfer_id
         assert len(envelope.payload) > 0
         assert len(envelope.encryption_key) > 0
         assert envelope.encryption_algorithm == "AES-256-GCM"
@@ -81,7 +81,7 @@ class TestSecureEnvelopeBuilder:
         assert len(envelope.hmac_secret) > 0
         assert envelope.hmac_algorithm == "HMAC-SHA256"
         assert envelope.sealed is True
-        assert envelope.timestamp
+        assert len(envelope.timestamp) > 0  # ISO-8601 timestamp string
         assert envelope.transfer_state == pb2.STARTED
 
     def test_envelope_roundtrip_decryption(
@@ -369,3 +369,28 @@ class TestEnvelopeBuilderDirectUsage:
         # Roundtrip
         parsed = builder.parse_envelope(envelope, private_key)
         assert "zk_compliance_proof" in parsed
+
+
+class TestUnsealedEnvelope:
+    """Tests for parse_envelope with sealed=False path (M6)."""
+
+    def test_parse_unsealed_envelope(self, rsa_keypair):
+        """Unsealed envelope payload is parsed as raw JSON without decryption."""
+        private_key, public_key_der = rsa_keypair
+
+        builder = SecureEnvelopeBuilder(
+            beneficiary_public_key=public_key_der,
+            originator_signing_key=b"test-signing-key",
+        )
+
+        raw_payload = {"test_key": "test_value", "number": 42}
+        envelope = pb2.SecureEnvelope(
+            id="test-unsealed",
+            payload=json.dumps(raw_payload).encode("utf-8"),
+            sealed=False,
+            timestamp="2025-01-01T00:00:00Z",
+            transfer_state=pb2.STARTED,
+        )
+
+        parsed = builder.parse_envelope(envelope, private_key)
+        assert parsed == raw_payload
