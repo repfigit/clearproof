@@ -238,10 +238,9 @@ async def generate_proof(
 
     # Transfer ID hash (H-9)
     # Match Solidity: uint256(keccak256(abi.encodePacked(transferId))) % BN128_R
-    transfer_id_bytes = bytes.fromhex(
-        Web3.keccak(text=request.idempotency_key).hex().removeprefix("0x")
-    )
-    transfer_id_hash = int.from_bytes(transfer_id_bytes, "big") % BN128_R
+    transfer_id_hash = int.from_bytes(
+        Web3.keccak(text=request.idempotency_key), "big"
+    ) % BN128_R
 
     # Credential nullifier (H-9): circuit constrains
     # credential_nullifier === Poseidon(credential_commitment, transfer_id_hash).
@@ -321,7 +320,10 @@ async def generate_proof(
             status_code=500,
             detail="PII_MASTER_KEY environment variable is required but not set",
         )
-    master_key = raw_key.encode()
+    try:
+        master_key = bytes.fromhex(raw_key)
+    except ValueError:
+        master_key = raw_key.encode()
     envelope_id = request.idempotency_key
     pii_key = derive_key(master_key, envelope_id.encode())
     pii_plaintext = json.dumps({

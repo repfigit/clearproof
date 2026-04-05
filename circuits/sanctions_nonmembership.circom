@@ -116,11 +116,10 @@ template SanctionsNonMembership(tree_depth) {
     right_idx.index === left_idx.index + 1;
 
     // === CONSTRAINT 4: left_key is a valid leaf in the sanctions tree ===
-    component left_leaf_hash = SanctionsLeafHash();
-    left_leaf_hash.key <== left_key;
-
+    // left_key is already domain-separated (Poseidon(1, addr_int)) by the tree builder.
+    // No re-hashing needed — the leaf value IS the hash.
     component left_verifier = MerkleTreeVerifier(tree_depth);
-    left_verifier.leaf <== left_leaf_hash.out;
+    left_verifier.leaf <== left_key;
     left_verifier.root <== sanctions_root;
     for (var i = 0; i < tree_depth; i++) {
         left_verifier.pathElements[i] <== left_path_elements[i];
@@ -129,11 +128,9 @@ template SanctionsNonMembership(tree_depth) {
     // MerkleTreeVerifier internally constrains proof.valid === 1
 
     // === CONSTRAINT 5: right_key is a valid leaf in the sanctions tree ===
-    component right_leaf_hash = SanctionsLeafHash();
-    right_leaf_hash.key <== right_key;
-
+    // right_key is already domain-separated (Poseidon(1, addr_int)) by the tree builder.
     component right_verifier = MerkleTreeVerifier(tree_depth);
-    right_verifier.leaf <== right_leaf_hash.out;
+    right_verifier.leaf <== right_key;
     right_verifier.root <== sanctions_root;
     for (var i = 0; i < tree_depth; i++) {
         right_verifier.pathElements[i] <== right_path_elements[i];
