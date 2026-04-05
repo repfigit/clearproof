@@ -15,10 +15,12 @@ sequenceDiagram
     O->>O: Encrypt PII (AES-256-GCM)
     O->>O: Build hybrid payload
 
-    Note over O,B: Hybrid Payload<br/>ZK Proof: sanctions clear, credential valid, tier correct<br/>Encrypted PII: AES-256-GCM
-
+    rect rgb(40, 40, 60)
+    Note over O,B: Hybrid Payload = ZK Proof + Encrypted PII
     O->>B: Transmit hybrid payload
-    B->>B: Verify proof (<50ms)
+    end
+
+    B->>B: Verify proof (under 50ms)
     B->>B: Decrypt PII if needed
     B->>B: Log to audit trail
 ```

@@ -14,6 +14,9 @@
     "directory": "packages/contracts"
   },
   "homepage": "https://github.com/repfigit/clearproof",
+  "publishConfig": {
+    "registry": "https://npm.pkg.github.com"
+  },
   "keywords": [
     "zk",
     "zero-knowledge",
