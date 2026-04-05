@@ -1,6 +1,6 @@
 {
   "name": "@clearproof/contracts",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "On-chain Groth16 verifier for clearproof compliance proofs",
   "license": "Apache-2.0",
   "files": [
@@ -14,9 +14,6 @@
     "directory": "packages/contracts"
   },
   "homepage": "https://github.com/repfigit/clearproof",
-  "publishConfig": {
-    "registry": "https://npm.pkg.github.com"
-  },
   "keywords": [
     "zk",
     "zero-knowledge",
