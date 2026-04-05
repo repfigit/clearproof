@@ -1,0 +1,90 @@
+---
+title: Circuits
+category: concepts
+order: 3
+cli-topic: circuits
+---
+
+# Circuits
+
+clearproof uses **Circom 2.1.6** with **Groth16** proving. The main circuit composes four subcircuits into a single proof with **16 public signals** and ~31K constraints.
+
+## Circuit hierarchy
+
+```
+ComplianceProof(20, 10)
++-- SanctionsNonMembership(20)     ~18K constraints
++-- CredentialValidity(10)          ~8K constraints
++-- AmountTier()                    ~3K constraints
++-- Domain binding + expiration     ~2K constraints
+```
+
+- **20** = sanctions tree depth (supports ~1M entries)
+- **10** = issuer tree depth (supports ~1K issuers)
+
+## Public signals
+
+All 16 signals are public outputs. No private data is revealed.
+
+| # | Signal | Type | Description |
+|---|--------|------|-------------|
+| 0 | `is_compliant` | bool | 1 if all checks passed |
+| 1 | `sar_review_flag` | bool | 1 if amount tier >= 3 (advisory only) |
+| 2 | `sanctions_root` | field | Merkle root of the sanctions list |
+| 3 | `issuer_root` | field | Merkle root of trusted issuers |
+| 4 | `amount_tier` | uint | Claimed amount tier (1-4) |
+| 5 | `transfer_timestamp` | uint64 | When the transfer was initiated |
+| 6 | `jurisdiction_code` | uint16 | ISO 3166-1 alpha-2 encoded as big-endian integer (e.g., "US" -> 0x5553 -> 21843) |
+| 7 | `credential_commitment` | field | Poseidon hash of the credential |
+| 8 | `tier2_threshold` | uint | Tier 2 amount threshold |
+| 9 | `tier3_threshold` | uint | Tier 3 amount threshold |
+| 10 | `tier4_threshold` | uint | Tier 4 amount threshold |
+| 11 | `domain_chain_id` | uint | EVM chain ID for replay protection |
+| 12 | `domain_contract_hash` | field | keccak256 of the ComplianceRegistry address, reduced mod BN128 scalar field |
+| 13 | `transfer_id_hash` | field | Hash of the unique transfer ID |
+| 14 | `credential_nullifier` | field | Prevents credential double-use |
+| 15 | `proof_expires_at` | uint64 | Proof expiration timestamp |
+
+## Sanctions non-membership
+
+Proves a wallet hash is **not** in the sanctions Merkle tree using a sorted-tree gap proof:
+
+1. Prover provides two adjacent leaves `(left, right)` such that `left < wallet_hash < right`
+2. Circuit verifies both leaves are in the tree via Merkle membership proofs
+3. Circuit range-checks all values to 252 bits (prevents field overflow attacks)
+4. Adjacency is derived from path bits (audit fix), not asserted by the prover
+
+The tree uses **Poseidon hashing** with domain tag `1` for leaves.
+
+**Boundary sentinels**: The tree includes `0` and `2^252 - 1` as permanent entries, ensuring a gap always exists for any non-sanctioned address.
+
+## Credential validity
+
+Proves the originator holds a valid zkKYC credential:
+
+- **Commitment verification**: Poseidon hash of credential fields matches the public commitment
+- **Expiry check**: `expires_at > current_timestamp`
+- **Issuer membership**: Credential issuer is in the trusted issuer Merkle tree (domain tag `2`)
+- **Jurisdiction match**: Credential jurisdiction matches the claimed jurisdiction
+- **KYC tier validation**: Credential tier is sufficient for the transfer
+
+Range checks: 16-bit jurisdiction, 2-bit tier, 64-bit timestamps.
+
+## Amount tier
+
+Proves the transfer amount falls in the claimed tier without revealing the exact amount:
+
+- Tier 1: `amount < tier2_threshold`
+- Tier 2: `tier2_threshold <= amount < tier3_threshold`
+- Tier 3: `tier3_threshold <= amount < tier4_threshold`
+- Tier 4: `amount >= tier4_threshold`
+
+Thresholds are public inputs (not hardcoded) so jurisdictions can set their own values. The `sar_review_flag` is set to `1` when `amount_tier >= 3` -- this is advisory only.
+
+## Compiling
+
+```bash
+bash scripts/compile_circuits.sh
+```
+
+> **Warning:** The `MerkleNonMembership` template in `lib/merkle_tree.circom` is **deprecated**. Use `SanctionsNonMembership` from `sanctions_nonmembership.circom` instead.

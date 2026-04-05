@@ -38,8 +38,8 @@ Circuit artifacts (WASM, zkey, verification key) must be compiled locally or obt
 
 ## Links
 
-- [Main repository](https://github.com/clearproof/clearproof)
-- [Circuit documentation](https://github.com/clearproof/clearproof/tree/main/packages/circuits)
+- [Main repository](https://github.com/repfigit/clearproof)
+- [Circuit documentation](https://github.com/repfigit/clearproof/tree/main/packages/circuits)
 
 ## License
 

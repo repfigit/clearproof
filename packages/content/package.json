@@ -1,42 +1,39 @@
 {
-  "name": "@clearproof/cli",
+  "name": "@clearproof/content",
   "version": "0.2.0",
-  "description": "CLI for generating and verifying ZK compliance proofs",
+  "description": "Single source of truth for all clearproof developer-facing content",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
-  "bin": {
-    "clearproof": "./dist/index.js"
-  },
   "license": "Apache-2.0",
   "files": [
-    "dist/",
-    "src/"
+    "dist",
+    "content"
   ],
   "repository": {
     "type": "git",
     "url": "https://github.com/repfigit/clearproof.git",
-    "directory": "packages/cli"
+    "directory": "packages/content"
   },
   "homepage": "https://github.com/repfigit/clearproof",
   "keywords": [
+    "clearproof",
+    "content",
+    "documentation",
     "zk",
-    "zero-knowledge",
-    "compliance",
-    "travel-rule",
-    "cli",
-    "clearproof"
+    "compliance"
   ],
+  "engines": {
+    "node": ">=18"
+  },
   "scripts": {
     "build": "tsc",
     "test": "vitest run"
   },
   "dependencies": {
-    "@clearproof/content": "*",
-    "@clearproof/proof": "*",
-    "chalk": "^5.3",
-    "commander": "^12.1"
+    "js-yaml": "^4.1.0"
   },
   "devDependencies": {
+    "@types/js-yaml": "^4.0.9",
     "typescript": "^5.4",
     "vitest": "^1.6"
   }

@@ -1,4 +1,4 @@
-.PHONY: install dev lint test test-unit test-integration test-compliance spike-ezkl docker-up docker-down benchmark deploy relay-sanctions
+.PHONY: install dev lint format test test-unit test-integration test-compliance build-sanctions-tree update-sanctions-oracle benchmark deploy relay-sanctions
 
 install:
 	uv sync --all-extras
@@ -25,9 +25,6 @@ test-integration:
 
 test-compliance:
 	uv run pytest tests/compliance/ -v
-
-spike-ezkl:
-	python scripts/spike_ezkl.py
 
 build-sanctions-tree:
 	python scripts/build_sanctions_tree.py
@@ -56,12 +53,3 @@ relay-sanctions:
 	@echo ""
 	@echo "Step 2: Relay root to all deployed chains..."
 	cd packages/contracts && npx ts-node scripts/relay-sanctions-root.ts
-
-# Docker support is planned. See https://github.com/clearproof/clearproof/issues
-docker-up:
-	@echo "Docker support is planned. See https://github.com/clearproof/clearproof/issues"
-	# docker compose -f docker/docker-compose.yml up -d
-
-docker-down:
-	@echo "Docker support is planned. See https://github.com/clearproof/clearproof/issues"
-	# docker compose -f docker/docker-compose.yml down

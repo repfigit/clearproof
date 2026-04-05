@@ -1,0 +1,76 @@
+---
+title: Quick Start
+category: getting-started
+order: 1
+cli-topic: quickstart
+---
+
+# Quick Start
+
+Get clearproof running locally in under 10 minutes.
+
+## Prerequisites
+
+- **Python 3.11+** with [uv](https://docs.astral.sh/uv/)
+- **Node.js 20+** with npm
+- **circom 2.2.2+** ([install guide](https://docs.circom.io/getting-started/installation/))
+
+## Installation
+
+```bash
+git clone https://github.com/repfigit/clearproof.git
+cd clearproof
+
+# Install Python dependencies
+uv sync --all-extras
+
+# Install Node dependencies
+npm install
+```
+
+## Compile circuits
+
+Circuit compilation generates the WASM prover, verification key, and zkey. Takes ~5 minutes on first run.
+
+```bash
+bash scripts/compile_circuits.sh
+```
+
+This produces artifacts in `artifacts/`:
+- `compliance_js/compliance.wasm` -- WASM prover
+- `compliance_final.zkey` -- proving key (phase 2 trusted setup)
+- `verification_key.json` -- verification key
+
+> **Note:** The trusted setup uses a dev-only ceremony. Production deployments require a proper multi-party ceremony.
+
+## Run the demo
+
+The CLI demo generates a proof, verifies it locally, and prints the 16 public signals:
+
+```bash
+npx @clearproof/cli demo
+```
+
+## Start the API server
+
+```bash
+export PII_MASTER_KEY=$(openssl rand -hex 32)
+uv run uvicorn src.api.main:app --reload --port 8000
+```
+
+Visit [http://localhost:8000/docs](http://localhost:8000/docs) for the Swagger UI.
+
+> **Note:** The API server starts but `/proof/generate` requires runtime state: at least one issued credential, a populated issuer registry, and a built sanctions tree. Run `python scripts/build_sanctions_tree.py --offline` to bootstrap the sanctions tree with hardcoded OFAC addresses.
+
+## Run tests
+
+```bash
+# All Python tests
+uv run pytest tests/ -v
+
+# TypeScript build check
+npm run build
+
+# Hardhat contract tests
+cd packages/contracts && npx hardhat test
+```

@@ -15,10 +15,10 @@
   ],
   "repository": {
     "type": "git",
-    "url": "https://github.com/clearproof/clearproof.git",
+    "url": "https://github.com/repfigit/clearproof.git",
     "directory": "packages/circuits"
   },
-  "homepage": "https://github.com/clearproof/clearproof",
+  "homepage": "https://github.com/repfigit/clearproof",
   "keywords": [
     "zk",
     "zero-knowledge",

@@ -1,0 +1,128 @@
+signals:
+  - index: 0
+    name: is_compliant
+    type: bit
+    description: 1 if all compliance checks pass
+    source: circuits/compliance.circom
+    onChainUsage: Must equal 1 for proof acceptance
+    isOutput: true
+
+  - index: 1
+    name: sar_review_flag
+    type: bit
+    description: 1 if amount_tier >= 3 (triggers human review)
+    source: circuits/amount_tier.circom
+    onChainUsage: Stored in userSARFlags mapping
+    isOutput: true
+
+  - index: 2
+    name: sanctions_tree_root
+    type: field
+    description: Merkle root of sorted OFAC/UN/EU sanctions tree
+    source: circuits/compliance.circom
+    onChainUsage: Checked against SanctionsOracle.root()
+    isOutput: false
+
+  - index: 3
+    name: issuer_tree_root
+    type: field
+    description: Merkle root of the trusted VASP issuer tree
+    source: circuits/compliance.circom
+    onChainUsage: Checked against IssuerRegistry.root()
+    isOutput: false
+
+  - index: 4
+    name: amount_tier
+    type: uint64
+    description: Transfer tier (1=retail, 2=professional, 3=institutional, 4=high-value)
+    source: circuits/amount_tier.circom
+    onChainUsage: Used for tier-based compliance rules
+    isOutput: false
+
+  - index: 5
+    name: transfer_timestamp
+    type: uint64
+    description: Unix timestamp of the transfer
+    source: circuits/compliance.circom
+    onChainUsage: Must be <= block.timestamp
+    isOutput: false
+
+  - index: 6
+    name: jurisdiction_code
+    type: uint16
+    description: ISO 3166-1 alpha-2 country code as integer (e.g., 840 for USA)
+    source: circuits/credential_validity.circom
+    onChainUsage: Used for jurisdiction-specific compliance rules
+    isOutput: false
+
+  - index: 7
+    name: credential_commitment
+    type: field
+    description: Poseidon hash of credential preimage (issuer_did, kyc_tier, sanctions_clear, issued_at, expires_at)
+    source: circuits/credential_validity.circom
+    onChainUsage: Used for credential binding
+    isOutput: false
+
+  - index: 8
+    name: tier2_threshold
+    type: uint64
+    description: Maximum amount in USD cents for tier 2 (jurisdiction-specific)
+    source: circuits/amount_tier.circom
+    onChainUsage: Jurisdiction-configurable threshold
+    isOutput: false
+
+  - index: 9
+    name: tier3_threshold
+    type: uint64
+    description: Maximum amount in USD cents for tier 3 (jurisdiction-specific)
+    source: circuits/amount_tier.circom
+    onChainUsage: Jurisdiction-configurable threshold
+    isOutput: false
+
+  - index: 10
+    name: tier4_threshold
+    type: uint64
+    description: Maximum amount in USD cents for tier 4 (jurisdiction-specific)
+    source: circuits/amount_tier.circom
+    onChainUsage: Jurisdiction-configurable threshold
+    isOutput: false
+
+  - index: 11
+    name: domain_chain_id
+    type: uint256
+    description: Ethereum chain ID (e.g., 1=mainnet, 11155111=Sepolia)
+    source: circuits/compliance.circom
+    onChainUsage: Must equal block.chainid
+    isOutput: false
+
+  - index: 12
+    name: domain_contract_hash
+    type: field
+    description: Truncated keccak256 of ComplianceRegistry address
+    source: circuits/compliance.circom
+    onChainUsage: Must equal keccak256(address(this)) % BN128_R
+    isOutput: false
+
+  - index: 13
+    name: transfer_id_hash
+    type: field
+    description: keccak256 of transferId, binds proof to specific transfer
+    source: circuits/compliance.circom
+    onChainUsage: Unique per transfer, prevents replay
+    isOutput: false
+
+  - index: 14
+    name: credential_nullifier
+    type: field
+    description: Poseidon(credential_commitment, transfer_id_hash) -- one-time-use value stored on-chain
+    source: circuits/credential_validity.circom
+    onChainUsage: Stored in usedNullifiers mapping, checked for uniqueness
+    isOutput: false
+
+  - index: 15
+    name: proof_expires_at
+    type: uint64
+    description: Unix timestamp after which proof is invalid
+    source: circuits/compliance.circom
+    onChainUsage: Must be >= block.timestamp
+    isOutput: false
