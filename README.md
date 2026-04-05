@@ -6,25 +6,21 @@ Generate zero-knowledge proofs that FATF Travel Rule compliance was performed co
 
 ## What It Does
 
-```
-Originator VASP                          Beneficiary VASP
-      │                                        │
-      ├─ Generate ZK proof ◄── Circom/Groth16  │
-      ├─ Encrypt PII ◄──────── AES-256-GCM     │
-      ├─ Build hybrid payload                   │
-      │       │                                 │
-      │       ▼                                 │
-      │  ┌─────────────────────┐                │
-      │  │ Hybrid Payload      │                │
-      │  │ ┌─ ZK Proof ──────┐ │  ──────────►  ├─ Verify proof (<50ms)
-      │  │ │ sanctions clear  │ │               ├─ Decrypt PII if needed
-      │  │ │ credential valid │ │               ├─ Log to audit trail
-      │  │ │ tier correct     │ │               │
-      │  │ └─────────────────┘ │                │
-      │  │ ┌─ Encrypted PII ─┐ │                │
-      │  │ │ AES-256-GCM     │ │                │
-      │  │ └─────────────────┘ │                │
-      │  └─────────────────────┘                │
+```mermaid
+sequenceDiagram
+    participant O as Originator VASP
+    participant B as Beneficiary VASP
+
+    O->>O: Generate ZK proof (Circom/Groth16)
+    O->>O: Encrypt PII (AES-256-GCM)
+    O->>O: Build hybrid payload
+
+    Note over O,B: Hybrid Payload<br/>ZK Proof: sanctions clear, credential valid, tier correct<br/>Encrypted PII: AES-256-GCM
+
+    O->>B: Transmit hybrid payload
+    B->>B: Verify proof (<50ms)
+    B->>B: Decrypt PII if needed
+    B->>B: Log to audit trail
 ```
 
 **The ZK proof attests.** Encrypted PII satisfies the law. Neither requires the other — but together they give VASPs cryptographic compliance evidence with minimal data sprawl.

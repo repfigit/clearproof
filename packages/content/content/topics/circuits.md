@@ -11,12 +11,13 @@ clearproof uses **Circom 2.1.6** with **Groth16** proving. The main circuit comp
 
 ## Circuit hierarchy
 
-```
-ComplianceProof(20, 10)
-+-- SanctionsNonMembership(20)     ~18K constraints
-+-- CredentialValidity(10)          ~8K constraints
-+-- AmountTier()                    ~3K constraints
-+-- Domain binding + expiration     ~2K constraints
+```mermaid
+graph TD
+    CP["ComplianceProof(20, 10)<br/>~31K constraints total"]
+    CP --> SNM["SanctionsNonMembership(20)<br/>~18K constraints"]
+    CP --> CV["CredentialValidity(10)<br/>~8K constraints"]
+    CP --> AT["AmountTier()<br/>~3K constraints"]
+    CP --> DB["Domain binding + expiration<br/>~2K constraints"]
 ```
 
 - **20** = sanctions tree depth (supports ~1M entries)

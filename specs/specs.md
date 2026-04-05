@@ -21,29 +21,25 @@ This document is a complete agentic coding specification for an AI coding agent 
 
 ### High-Level Component Map
 
-```
-┌──────────────────────────────────────────────────────────────┐
-│                    ZK Travel Rule Bridge                     │
-│                                                              │
-│  ┌─────────────┐   ┌──────────────┐   ┌──────────────────┐  │
-│  │  zkKYC      │   │  Compliance  │   │  IVMS101 Proof   │  │
-│  │  Credential │   │  Circuits    │   │  Gateway API     │  │
-│  │  Registry   │   │  (Circom)    │   │  (REST + gRPC)   │  │
-│  └──────┬──────┘   └──────┬───────┘   └────────┬─────────┘  │
-│         │                  │                     │            │
-│  ┌──────▼──────────────────▼─────────────────────▼─────────┐ │
-│  │              Local Proving Layer (SnarkJS)               │ │
-│  │  Circom circuits → Groth16 proofs                       │ │
-│  │  VASP-local proof generation (no external network)      │ │
-│  │  HSM key management for SAR encryption                  │ │
-│  └──────────────────────────────────────────────────────────┘ │
-│                                                              │
-│  ┌──────────────────────────────────────────────────────┐   │
-│  │         External Protocol Bridges                    │   │
-│  │  TRISA ◄──► TRP/OpenVASP ◄──► TRUST ◄──► TAIP-10    │   │
-│  │  (hybrid payload: ZK proof + encrypted PII)          │   │
-│  └──────────────────────────────────────────────────────┘   │
-└──────────────────────────────────────────────────────────────┘
+```mermaid
+graph TB
+    subgraph ZK["ZK Travel Rule Bridge"]
+        subgraph inputs["Input Components"]
+            REG["zkKYC Credential<br/>Registry"]
+            CIR["Compliance<br/>Circuits (Circom)"]
+            API["IVMS101 Proof<br/>Gateway API<br/>(REST + gRPC)"]
+        end
+
+        REG --> PROVE
+        CIR --> PROVE
+        API --> PROVE
+
+        PROVE["Local Proving Layer (SnarkJS)<br/>Circom circuits → Groth16 proofs<br/>VASP-local, no external network<br/>HSM key management for SAR encryption"]
+
+        PROVE --> BRIDGES
+
+        BRIDGES["External Protocol Bridges<br/>TRISA | TRP/OpenVASP | TRUST | TAIP-10<br/>hybrid payload: ZK proof + encrypted PII"]
+    end
 ```
 
 ### Component Responsibilities
