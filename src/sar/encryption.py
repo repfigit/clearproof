@@ -36,7 +36,19 @@ def derive_key(master_key: bytes, context: bytes) -> bytes:
     # Production recommendation: use a unique, random 32-byte salt per deployment
     # and store it alongside the master key in your secrets manager.
     salt_env = os.environ.get("HKDF_SALT")
-    salt = salt_env.encode("utf-8") if salt_env else b"zk-travel-rule-v1"
+    if salt_env:
+        salt = salt_env.encode("utf-8")
+    else:
+        import warnings
+
+        warnings.warn(
+            "HKDF_SALT environment variable is not set. "
+            "Using a hardcoded default salt reduces key separation between deployments. "
+            "Set HKDF_SALT to a unique, stable value before production use.",
+            UserWarning,
+            stacklevel=2,
+        )
+        salt = b"zk-travel-rule-v1"
     hkdf = HKDF(
         algorithm=hashes.SHA256(),
         length=32,

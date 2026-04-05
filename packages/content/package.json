@@ -1,0 +1,40 @@
+{
+  "name": "@clearproof/content",
+  "version": "0.2.0",
+  "description": "Single source of truth for all clearproof developer-facing content",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "license": "Apache-2.0",
+  "files": [
+    "dist",
+    "content"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/repfigit/clearproof.git",
+    "directory": "packages/content"
+  },
+  "homepage": "https://github.com/repfigit/clearproof",
+  "keywords": [
+    "clearproof",
+    "content",
+    "documentation",
+    "zk",
+    "compliance"
+  ],
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "build": "tsc",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "js-yaml": "^4.1.0"
+  },
+  "devDependencies": {
+    "@types/js-yaml": "^4.0.9",
+    "typescript": "^5.4",
+    "vitest": "^1.6"
+  }
+}

@@ -45,18 +45,132 @@ jobs:
         with:
           node-version: 20
       - run: npm install
+      - name: Cache Powers of Tau
+        uses: actions/cache@v4
+        with:
+          path: artifacts/pot18_final.ptau
+          key: ptau-bn128-2pow18-v1
       - name: Install circom
         run: |
           curl -L https://github.com/iden3/circom/releases/download/v2.2.2/circom-linux-amd64 -o /usr/local/bin/circom
           chmod +x /usr/local/bin/circom
       - name: Verify circom checksum
         run: |
-          # TODO: Replace with the actual SHA-256 hash from the circom v2.2.2 release.
-          # Obtain it by running: sha256sum /usr/local/bin/circom
-          # after a verified download, then pin it here.
-          EXPECTED_SHA256="PLACEHOLDER_REPLACE_WITH_ACTUAL_SHA256_OF_CIRCOM_V2_2_2_LINUX_AMD64"
-          echo "${EXPECTED_SHA256}  /usr/local/bin/circom" | sha256sum -c -
-      - name: Compile circuits (syntax check)
+          EXPECTED_SHA256="f3d8d1fdbc123779b80e210c909ee941d7a1e130c70365524646b48b8b0fe9d5"
+          ACTUAL_SHA256=$(sha256sum /usr/local/bin/circom | awk '{print $1}')
+          echo "Expected: ${EXPECTED_SHA256}"
+          echo "Actual:   ${ACTUAL_SHA256}"
+          if [ "${ACTUAL_SHA256}" != "${EXPECTED_SHA256}" ]; then
+            echo "ERROR: circom binary SHA256 mismatch!"
+            exit 1
+          fi
+      - name: Full circuit compilation (WASM + R1CS + zKey + Verifier)
         run: |
-          mkdir -p /tmp/circuit-build
-          circom circuits/compliance.circom --r1cs --sym -l node_modules -o /tmp/circuit-build
+          set -euo pipefail
+          
+          CIRCUITS_DIR="circuits"
+          BUILD_DIR="artifacts"
+          PTAU_POWER=18
+          PTAU_FILE="$BUILD_DIR/pot${PTAU_POWER}_final.ptau"
+          
+          echo "=== Circom version ==="
+          circom --version
+          
+          echo "=== snarkjs version ==="
+          npx snarkjs --version
+          
+          echo "=== Creating build directory ==="
+          mkdir -p "$BUILD_DIR"
+          
+          # Step 1: Powers of Tau ceremony (dev mode - single party)
+          if [ ! -f "$PTAU_FILE" ]; then
+            echo "Running powers of tau ceremony (2^${PTAU_POWER}, dev single-party)..."
+            npx snarkjs powersoftau new bn128 "$PTAU_POWER" \
+                "$BUILD_DIR/pot${PTAU_POWER}_0000.ptau" -v
+            npx snarkjs powersoftau contribute \
+                "$BUILD_DIR/pot${PTAU_POWER}_0000.ptau" \
+                "$BUILD_DIR/pot${PTAU_POWER}_0001.ptau" \
+                --name="CI Dev contribution" \
+                -e="$(head -c 32 /dev/urandom | xxd -p)"
+            npx snarkjs powersoftau prepare phase2 \
+                "$BUILD_DIR/pot${PTAU_POWER}_0001.ptau" \
+                "$PTAU_FILE" -v
+            rm -f "$BUILD_DIR/pot${PTAU_POWER}_0000.ptau" \
+                  "$BUILD_DIR/pot${PTAU_POWER}_0001.ptau"
+            echo "Powers of tau ceremony complete."
+          else
+            echo "Using existing powers of tau: $PTAU_FILE"
+          fi
+          
+          # Step 2: Compile compliance circuit
+          echo ""
+          echo "=== Compiling compliance circuit ==="
+          circom "$CIRCUITS_DIR/compliance.circom" \
+              --r1cs --wasm --sym \
+              -l node_modules \
+              -o "$BUILD_DIR"
+          
+          echo ""
+          echo "=== Circuit info ==="
+          npx snarkjs r1cs info "$BUILD_DIR/compliance.r1cs"
+          
+          # Step 3: Groth16 trusted setup (phase 2)
+          echo ""
+          echo "=== Groth16 trusted setup ==="
+          npx snarkjs groth16 setup \
+              "$BUILD_DIR/compliance.r1cs" \
+              "$PTAU_FILE" \
+              "$BUILD_DIR/compliance_0000.zkey"
+          
+          npx snarkjs zkey contribute \
+              "$BUILD_DIR/compliance_0000.zkey" \
+              "$BUILD_DIR/compliance_final.zkey" \
+              --name="CI Dev contribution" \
+              -e="$(head -c 32 /dev/urandom | xxd -p)"
+          
+          rm -f "$BUILD_DIR/compliance_0000.zkey"
+          
+          # Step 4: Export verification key
+          echo ""
+          echo "=== Exporting verification key ==="
+          npx snarkjs zkey export verificationkey \
+              "$BUILD_DIR/compliance_final.zkey" \
+              "$BUILD_DIR/verification_key.json"
+          
+          # Step 5: Generate Solidity verifier
+          echo ""
+          echo "=== Generating Solidity verifier ==="
+          npx snarkjs zkey export solidityverifier \
+              "$BUILD_DIR/compliance_final.zkey" \
+              packages/contracts/contracts/Groth16Verifier.sol
+          
+          # Step 6: Verify artifacts exist
+          echo ""
+          echo "=== Build artifacts ==="
+          echo "  WASM: $BUILD_DIR/compliance_js/compliance.wasm"
+          echo "  R1CS: $BUILD_DIR/compliance.r1cs"
+          echo "  zKey: $BUILD_DIR/compliance_final.zkey"
+          echo "  VKey: $BUILD_DIR/verification_key.json"
+          echo "  Solidity: packages/contracts/contracts/Groth16Verifier.sol"
+          
+          # Verify all required artifacts exist
+          [ -f "$BUILD_DIR/compliance_js/compliance.wasm" ]
+          [ -f "$BUILD_DIR/compliance.r1cs" ]
+          [ -f "$BUILD_DIR/compliance_final.zkey" ]
+          [ -f "$BUILD_DIR/verification_key.json" ]
+          [ -f "packages/contracts/contracts/Groth16Verifier.sol" ]
+          
+          echo ""
+          echo "=== Compilation successful ==="
+          
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: circuit-artifacts
+          path: |
+            artifacts/compliance_js/compliance.wasm
+            artifacts/compliance.r1cs
+            artifacts/compliance.sym
+            artifacts/compliance_final.zkey
+            artifacts/verification_key.json
+          retention-days: 7

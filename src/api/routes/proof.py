@@ -246,7 +246,7 @@ async def generate_proof(
     # Credential nullifier (H-9): circuit constrains
     # credential_nullifier === Poseidon(credential_commitment, transfer_id_hash).
     # We must compute the correct Poseidon hash here; circuit rejects mismatches.
-    from src.registry.credential_registry import poseidon_hash as _poseidon
+    from src.registry.credential_registry import _poseidon_hash as _poseidon
     commitment_val = _cred_registry.get_commitment(request.credential_id)
     credential_nullifier = int(
         await _poseidon([int(commitment_val), transfer_id_hash])
@@ -388,8 +388,9 @@ async def verify_proof(
     """
     try:
         valid = await _prover.verify(request.groth16_proof, request.public_signals)
-    except Exception as exc:
-        raise HTTPException(status_code=503, detail=f"Proof verification unavailable: {exc}")
+    except Exception:
+        logger.exception("Proof verification failed")
+        raise HTTPException(status_code=503, detail="Proof verification temporarily unavailable")
 
     # Decode public signals (16 total)
     # [0] is_compliant, [1] sar_review_flag, [2] sanctions_root, [3] issuer_root,

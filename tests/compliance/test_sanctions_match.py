@@ -27,22 +27,24 @@ from src.registry.sanctions_list import (
 # Helpers
 # ---------------------------------------------------------------------------
 
-_hash_counter = 0
-
-
 def _mock_poseidon_hash_factory():
     """
-    Create a deterministic mock for _poseidon_hash.
+    Create a deterministic, injective mock for _poseidon_hash.
 
-    Returns the sum of integer inputs as the hash (deterministic, sortable).
-    For single inputs, returns the input value itself.
-    For two inputs (internal nodes), returns sum of inputs.
+    Uses a simple polynomial hash to avoid collisions: for inputs [a, b],
+    returns a * 1000003 + b. Single inputs return the value directly.
+    This is injective (collision-free for reasonable input ranges) unlike
+    the previous sum-based approach where [1,3] and [2,2] both hashed to 4.
     """
     async def _mock_poseidon(inputs: list[int | str]) -> str:
         int_inputs = [int(x) for x in inputs]
         if len(int_inputs) == 1:
             return str(int_inputs[0])
-        return str(sum(int_inputs))
+        # Polynomial hash: injective for inputs < 1000003
+        result = int_inputs[0]
+        for v in int_inputs[1:]:
+            result = result * 1000003 + v
+        return str(result)
 
     return _mock_poseidon
 
@@ -67,7 +69,9 @@ class TestSanctionsTreeBuild:
 
         assert root is not None
         assert tree.root == root
-        assert len(tree.sorted_leaves) == 3
+        # The tree prepends a 0 sentinel and appends _MAX_SENTINEL for gap proofs,
+        # so 3 addresses → 5 leaves: [0, hash1, hash2, hash3, MAX_SENTINEL].
+        assert len(tree.sorted_leaves) == 5
         assert tree.depth >= 1
 
     @pytest.mark.asyncio
@@ -88,9 +92,23 @@ class TestSanctionsTreeBuild:
         assert root1 == root2
 
     @pytest.mark.asyncio
-    async def test_known_sanctioned_addresses_exist(self):
-        """The KNOWN_SANCTIONED_ADDRESSES list is non-empty."""
-        assert len(KNOWN_SANCTIONED_ADDRESSES) > 0
+    async def test_different_addresses_produce_different_roots(self):
+        """Different address sets produce different tree roots."""
+        with patch(
+            "src.registry.sanctions_list._poseidon_hash",
+            side_effect=_mock_poseidon_hash_factory(),
+        ):
+            tree1 = SanctionsMerkleTree()
+            root1 = await tree1.build_from_addresses(
+                KNOWN_SANCTIONED_ADDRESSES[:2]
+            )
+
+            tree2 = SanctionsMerkleTree()
+            root2 = await tree2.build_from_addresses(
+                KNOWN_SANCTIONED_ADDRESSES[:3]
+            )
+
+        assert root1 != root2
 
 
 class TestCleanAddressNonmembership:
@@ -115,6 +133,19 @@ class TestCleanAddressNonmembership:
         # The left and right paths should contain sibling hashes and indices
         assert "siblings" in witness["left_path"]
         assert "indices" in witness["left_path"]
+
+        # Verify the gap proof invariant: left_neighbor < right_neighbor
+        # (the full invariant left < addr_hash < right is verified by the circuit)
+        left_val = int(witness["left_neighbor"])
+        right_val = int(witness["right_neighbor"])
+        assert left_val < right_val, (
+            f"Gap invariant violated: left ({left_val}) must be < right ({right_val})"
+        )
+
+        # Verify path lengths match tree depth
+        assert len(witness["left_path"]["siblings"]) == len(witness["left_path"]["indices"])
+        assert len(witness["right_path"]["siblings"]) == len(witness["right_path"]["indices"])
+        assert len(witness["left_path"]["siblings"]) == len(witness["right_path"]["siblings"])
 
 
 class TestSanctionedAddressMembership:

@@ -14,10 +14,10 @@
   ],
   "repository": {
     "type": "git",
-    "url": "https://github.com/clearproof/clearproof.git",
+    "url": "https://github.com/repfigit/clearproof.git",
     "directory": "packages/cli"
   },
-  "homepage": "https://github.com/clearproof/clearproof",
+  "homepage": "https://github.com/repfigit/clearproof",
   "keywords": [
     "zk",
     "zero-knowledge",
@@ -31,7 +31,9 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "@clearproof/content": "*",
     "@clearproof/proof": "*",
+    "chalk": "^5.3",
     "commander": "^12.1"
   },
   "devDependencies": {

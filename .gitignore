@@ -11,7 +11,7 @@ build/
 venv/
 env/
 
-# ZK artifacts (generated, not committed)
+# ZK artifacts (generated — reproduce via scripts/compile_circuits.sh)
 artifacts/
 *.ptau
 *.zkey
@@ -27,6 +27,9 @@ verification_key.json
 node_modules/
 package-lock.json
 
+# Lock files
+uv.lock
+
 # Environment
 .env
 .env.local
@@ -35,9 +38,17 @@ package-lock.json
 # Certs
 certs/
 
-# Claude Code
+# AI tooling
 .claude/
 .claude-octopus/
+.octo/
+.playwright-mcp/
+
+# Next.js
+.next/
+
+# Hardhat
+packages/contracts/cache/
 
 # IDE
 .idea/

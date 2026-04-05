@@ -33,7 +33,7 @@ Originator VASP                          Beneficiary VASP
 
 ```bash
 # Clone and build (circuit compilation required)
-git clone https://github.com/clearproof/clearproof.git
+git clone https://github.com/repfigit/clearproof.git
 cd clearproof
 npm install && uv sync --all-extras
 bash scripts/compile_circuits.sh    # ~5 min, requires circom
@@ -67,7 +67,7 @@ pip install -e ".[all]"
 | `src/protocol/bridges/` | TRISA (gRPC), TRP/OpenVASP (REST), TAIP-10 (W3C VP) |
 | `src/sar/` | AES-256-GCM encryption, SAR review flags (advisory), audit log |
 | `src/registry/` | Credential, sanctions Merkle tree, trusted issuer registries |
-| `tests/` | 143 tests (119 Python + 24 Hardhat) across unit, integration, compliance, and E2E |
+| `tests/` | ~190 tests (144 Python + 46 Hardhat) across unit, integration, compliance, and E2E |
 
 ## Circuits
 
@@ -111,6 +111,7 @@ Deployed to **Sepolia testnet**:
 | VASPRegistry | `0x89535b85EB5a4F9Fb30a09d4c0Ad9f1614C8f0E7` | VASP registration + issuer root |
 | SanctionsOracle | `0x05446C7A45c7Bd84F4702022B68232242c05Ffd1` | Sanctions Merkle root with staleness checks |
 | ComplianceRegistry | `0x3e4601759064654f28C5368f2B444A749AB26D8f` | Domain-bound proof verification + recording |
+| SanctionsRootRelay | `0x1e808E9739f24b80bEb379B1a88e4152eB41635A` | Multi-chain sanctions root relay |
 
 ### Security Properties
 

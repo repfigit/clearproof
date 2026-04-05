@@ -26,7 +26,7 @@ const navbar = (
         >proof</span></span>
       </span>
     }
-    projectLink="https://github.com/clearproof/clearproof"
+    projectLink="https://github.com/repfigit/clearproof"
   >
     <a href="https://clearproof.world" style={{ fontSize: '0.875rem' }}>
       clearproof.world
@@ -52,7 +52,7 @@ export default async function RootLayout({
         <Layout
           navbar={navbar}
           pageMap={await getPageMap()}
-          docsRepositoryBase="https://github.com/clearproof/clearproof/tree/main/apps/docs"
+          docsRepositoryBase="https://github.com/repfigit/clearproof/tree/main/apps/docs"
           footer={footer}
         >
           {children}
