@@ -199,6 +199,7 @@ Key decisions made via multi-LLM adversarial debate (Codex + Gemini + Sonnet + Q
 | On-chain verification | Domain-bound | Prevents cross-chain and cross-contract replay |
 | Sanctions updates | Operator-confirmed | Human review before on-chain propagation |
 | License | Apache-2.0 | Patent grant for enterprise compliance adoption |
+| Protocol fees | None at the verification layer | Verification is the hot path and happens off-chain via the SDK; any on-chain fee would be trivially routed around and undermines network value |
 
 ## CI
 

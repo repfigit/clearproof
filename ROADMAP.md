@@ -49,16 +49,7 @@ Self-service onboarding for new VASPs — no manual configuration required.
 
 New VASPs publish one file and send one transaction to become discoverable by the entire network.
 
-## Phase 4: Verification Fees
-
-Per-verification fee to cover operating costs.
-
-**Status: Planned (mainnet)**
-
-- [ ] Fee collection in the `ComplianceRegistry` contract
-- [ ] Fee waiver mechanism for early adopters
-
-## Phase 5: Batch Verification
+## Phase 4: Batch Verification
 
 Submit multiple proofs in a single transaction for high-volume VASPs.
 
@@ -68,7 +59,7 @@ Submit multiple proofs in a single transaction for high-volume VASPs.
 - [ ] Per-proof events for success/failure tracking
 - [ ] Batch size cap to stay within block gas limits
 
-## Phase 6: Cross-Chain Messaging
+## Phase 5: Cross-Chain Messaging
 
 Replace the operator relayer with automated cross-chain root propagation.
 
@@ -78,7 +69,7 @@ Replace the operator relayer with automated cross-chain root propagation.
 - [ ] Deploy bridge contracts on canonical chain
 - [ ] Automated root fan-out to all destination chains
 
-## Phase 7: Sanctions Oracle Trust
+## Phase 6: Sanctions Oracle Trust
 
 Multi-party validation of the sanctions Merkle root.
 
@@ -88,7 +79,7 @@ Multi-party validation of the sanctions Merkle root.
 - [ ] Disagreement alerting and halt mechanism
 - [ ] Decentralized oracle network (long-term)
 
-## Phase 8: Non-EVM Chains
+## Phase 7: Non-EVM Chains
 
 Extend to Solana and Stellar for USDC/USDT corridors.
 
