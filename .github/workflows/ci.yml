@@ -52,10 +52,27 @@ jobs:
           node-version: 20
       - run: npm install
       - name: Cache Powers of Tau
+        id: ptau-cache
         uses: actions/cache@v4
         with:
           path: artifacts/pot18_final.ptau
-          key: ptau-bn128-2pow18-v1
+          key: ptau-hez-2pow18-v1
+      - name: Download audited Powers of Tau (Hermez)
+        if: steps.ptau-cache.outputs.cache-hit != 'true'
+        run: |
+          set -euo pipefail
+          mkdir -p artifacts
+          curl -L --fail --max-time 600 \
+            https://storage.googleapis.com/zkevm/ptau/powersOfTau28_hez_final_18.ptau \
+            -o artifacts/pot18_final.ptau
+          EXPECTED="e970efa7774da80101e0ac336d083ef3339855c98112539338d706b2b89ac694"
+          ACTUAL=$(sha256sum artifacts/pot18_final.ptau | awk '{print $1}')
+          echo "Expected: ${EXPECTED}"
+          echo "Actual:   ${ACTUAL}"
+          if [ "${ACTUAL}" != "${EXPECTED}" ]; then
+            echo "ERROR: ptau SHA256 mismatch!"
+            exit 1
+          fi
       - name: Install circom
         run: |
           curl -L https://github.com/iden3/circom/releases/download/v2.2.2/circom-linux-amd64 -o /usr/local/bin/circom
@@ -87,26 +104,14 @@ jobs:
           
           echo "=== Creating build directory ==="
           mkdir -p "$BUILD_DIR"
-          
-          # Step 1: Powers of Tau ceremony (dev mode - single party)
+
+          # Powers of Tau is downloaded in a prior step (audited Hermez 2^18).
+          # Verify it is present before proceeding.
           if [ ! -f "$PTAU_FILE" ]; then
-            echo "Running powers of tau ceremony (2^${PTAU_POWER}, dev single-party)..."
-            npx snarkjs powersoftau new bn128 "$PTAU_POWER" \
-                "$BUILD_DIR/pot${PTAU_POWER}_0000.ptau" -v
-            npx snarkjs powersoftau contribute \
-                "$BUILD_DIR/pot${PTAU_POWER}_0000.ptau" \
-                "$BUILD_DIR/pot${PTAU_POWER}_0001.ptau" \
-                --name="CI Dev contribution" \
-                -e="$(head -c 32 /dev/urandom | xxd -p)"
-            npx snarkjs powersoftau prepare phase2 \
-                "$BUILD_DIR/pot${PTAU_POWER}_0001.ptau" \
-                "$PTAU_FILE" -v
-            rm -f "$BUILD_DIR/pot${PTAU_POWER}_0000.ptau" \
-                  "$BUILD_DIR/pot${PTAU_POWER}_0001.ptau"
-            echo "Powers of tau ceremony complete."
-          else
-            echo "Using existing powers of tau: $PTAU_FILE"
+            echo "ERROR: expected ptau file not found at $PTAU_FILE"
+            exit 1
           fi
+          echo "Using audited Hermez powers of tau: $PTAU_FILE"
           
           # Step 2: Compile compliance circuit
           echo ""
