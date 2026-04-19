@@ -12,11 +12,11 @@ npm install @clearproof/contracts
 
 | Contract | Address |
 |----------|---------|
-| Groth16Verifier | `0xa8DF5a9F02cB6113463327C54F6e03C682D00a7a` |
-| VASPRegistry | `0x89535b85EB5a4F9Fb30a09d4c0Ad9f1614C8f0E7` |
-| SanctionsOracle | `0x05446C7A45c7Bd84F4702022B68232242c05Ffd1` |
-| ComplianceRegistry | `0x3e4601759064654f28C5368f2B444A749AB26D8f` |
-| SanctionsRootRelay | `0x1e808E9739f24b80bEb379B1a88e4152eB41635A` |
+| Groth16Verifier | `0x8ab9F1d446967BdE39bfE81B681E727EdcdF76Da` |
+| VASPRegistry | `0x99FE2813FD9D66Df43d1ce37d39341F5A7a557F0` |
+| SanctionsOracle | `0x2822db7e67E1152a9cC81E44Df2182CA4662c7a2` |
+| ComplianceRegistry | `0xD038f2C6Ea7b414356Dc74C317cAE35Bc1c2b78a` |
+| SanctionsRootRelay | _pending redeploy_ |
 
 ## Development
 

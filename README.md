@@ -105,11 +105,11 @@ Deployed to **Sepolia testnet**:
 
 | Contract | Address | Purpose |
 |----------|---------|---------|
-| Groth16Verifier | `0xa8DF5a9F02cB6113463327C54F6e03C682D00a7a` | Proof verification (snarkjs-generated) |
-| VASPRegistry | `0x89535b85EB5a4F9Fb30a09d4c0Ad9f1614C8f0E7` | VASP registration + issuer root |
-| SanctionsOracle | `0x05446C7A45c7Bd84F4702022B68232242c05Ffd1` | Sanctions Merkle root with staleness checks |
-| ComplianceRegistry | `0x3e4601759064654f28C5368f2B444A749AB26D8f` | Domain-bound proof verification + recording |
-| SanctionsRootRelay | `0x1e808E9739f24b80bEb379B1a88e4152eB41635A` | Multi-chain sanctions root relay |
+| Groth16Verifier | `0x8ab9F1d446967BdE39bfE81B681E727EdcdF76Da` | Proof verification (snarkjs-generated) |
+| VASPRegistry | `0x99FE2813FD9D66Df43d1ce37d39341F5A7a557F0` | VASP registration + issuer root |
+| SanctionsOracle | `0x2822db7e67E1152a9cC81E44Df2182CA4662c7a2` | Sanctions Merkle root with staleness checks |
+| ComplianceRegistry | `0xD038f2C6Ea7b414356Dc74C317cAE35Bc1c2b78a` | Domain-bound proof verification + recording |
+| SanctionsRootRelay | _pending redeploy_ | Multi-chain sanctions root relay |
 
 ### Security Properties
 
