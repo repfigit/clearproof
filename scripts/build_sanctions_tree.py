@@ -57,8 +57,14 @@ TEST_VECTORS_PATH = os.path.join(ARTIFACTS_DIR, "sanctions_test_vectors.json")
 
 OFAC_SDN_XML_URL = "https://www.treasury.gov/ofac/downloads/sdn.xml"
 OFAC_CONS_CSV_URL = "https://www.treasury.gov/ofac/downloads/consolidated/cons_advanced.csv"
-EU_SANCTIONS_URL = (
-    "https://webgate.ec.europa.eu/fsd/fsf/public/files/xmlFullSanctionsList_1_1/content"
+# EU FSF requires a stable, well-known public token. Without it the endpoint
+# returns 403. The token is base64("token-2017") and has been treated as a
+# de-facto public handle by DG FISMA since 2017; OpenSanctions and every
+# mainstream open-source sanctions tool use it. If the EU ever rotates it,
+# override via the EU_SANCTIONS_URL env var.
+EU_SANCTIONS_URL = os.environ.get(
+    "EU_SANCTIONS_URL",
+    "https://webgate.ec.europa.eu/fsd/fsf/public/files/xmlFullSanctionsList_1_1/content?token=dG9rZW4tMjAxNw",
 )
 
 HTTP_TIMEOUT = 60  # seconds
