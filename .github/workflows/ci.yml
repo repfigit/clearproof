@@ -11,6 +11,10 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - run: npm install
       - run: uv sync --all-extras
       - run: uv run pytest tests/ -v
 
@@ -22,6 +26,8 @@ jobs:
         with:
           node-version: 20
       - run: npm install
+      - name: Build @clearproof/content (dependency of cli)
+        run: cd packages/content && npx tsc
       - name: Build @clearproof/proof (dependency of cli)
         run: cd packages/proof && npx tsc
       - run: cd packages/proof && npx tsc --noEmit
@@ -77,7 +83,7 @@ jobs:
           circom --version
           
           echo "=== snarkjs version ==="
-          npx snarkjs --version
+          node -e "console.log(JSON.parse(require('fs').readFileSync('node_modules/snarkjs/package.json')).version)"
           
           echo "=== Creating build directory ==="
           mkdir -p "$BUILD_DIR"
