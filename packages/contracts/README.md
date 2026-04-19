@@ -16,7 +16,7 @@ npm install @clearproof/contracts
 | VASPRegistry | `0x99FE2813FD9D66Df43d1ce37d39341F5A7a557F0` |
 | SanctionsOracle | `0x2822db7e67E1152a9cC81E44Df2182CA4662c7a2` |
 | ComplianceRegistry | `0xD038f2C6Ea7b414356Dc74C317cAE35Bc1c2b78a` |
-| SanctionsRootRelay | _pending redeploy_ |
+| SanctionsRootRelay | `0x911d8244F3b63a40040862dB0CC285A753036F87` |
 
 ## Development
 
