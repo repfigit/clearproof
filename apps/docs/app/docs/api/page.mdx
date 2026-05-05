@@ -10,7 +10,20 @@ Interactive docs: [http://localhost:8000/docs](http://localhost:8000/docs)
 
 ## Authentication
 
-All endpoints except `/health` and `/auth/*` require a JWT bearer token obtained via SIWE (Sign-In With Ethereum).
+All endpoints except `/health` and `/auth/*` require authentication. Local development defaults to API-key mode:
+
+```bash
+export AUTH_MODE="api-key"
+export API_KEY="dev-api-key"
+```
+
+Protected requests then include:
+
+```bash
+-H "X-API-Key: dev-api-key"
+```
+
+Production deployments should use `AUTH_MODE=jwt` or `AUTH_MODE=siwe`.
 
 ### GET `/auth/nonce`
 

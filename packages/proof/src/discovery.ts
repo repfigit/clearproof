@@ -1,18 +1,21 @@
 /**
  * VASP discovery module.
  *
- * Discovers clearproof-compatible VASPs via two mechanisms:
- * 1. Well-known URL: https://<domain>/.well-known/clearproof.json
- * 2. On-chain VASPRegistry (if provider is configured)
+ * Discovers clearproof-compatible VASPs via well-known metadata:
+ * https://<domain>/.well-known/clearproof.json
+ *
+ * The well-known response is self-declared by the counterparty domain. If your
+ * integration requires registry-backed identity assurance, compare the domain
+ * and DID against an on-chain VASPRegistry entry before trusting it.
  *
  * Usage:
- *   import { discoverVASP, discoverAllVASPs } from '@clearproof/proof';
+ *   import { discoverVASP, supportsChain } from '@clearproof/proof';
  *
  *   // Discover a specific counterparty by domain
  *   const info = await discoverVASP('exchange.example');
  *
- *   // Discover all registered VASPs from on-chain registry
- *   const all = await discoverAllVASPs({ registryAddress, provider });
+ *   // Check chain support from the well-known response
+ *   const canUseSepolia = await supportsChain('exchange.example', 11155111);
  */
 
 export interface ClearproofDiscoveryInfo {

@@ -32,7 +32,7 @@ module.exports = {
     dir: srcDir,
   },
   /** Number of public signals in the compliance circuit */
-  PUBLIC_SIGNAL_COUNT: 15,
+  PUBLIC_SIGNAL_COUNT: 16,
   /** Public signal indices */
   signals: {
     IS_COMPLIANT: 0,
@@ -50,5 +50,6 @@ module.exports = {
     DOMAIN_CONTRACT_HASH: 12,
     TRANSFER_ID_HASH: 13,
     CREDENTIAL_NULLIFIER: 14,
+    PROOF_EXPIRES_AT: 15,
   },
 };

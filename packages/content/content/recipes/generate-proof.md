@@ -10,10 +10,19 @@ estimated-time: 2 min
 
 Issue a zkKYC credential and then generate a Groth16 compliance proof against it.
 
+The local API defaults to API-key auth:
+
+```bash:run
+export CLEARPROOF_API_KEY="dev-api-key"
+export AUTH_MODE="api-key"
+export API_KEY="$CLEARPROOF_API_KEY"
+```
+
 ## 1. Issue a credential
 
 ```bash:run
 curl -s -X POST http://localhost:8000/credential/issue \
+  -H "X-API-Key: $CLEARPROOF_API_KEY" \
   -H "Content-Type: application/json" \
   -d '{"issuer_did":"did:web:vasp.example.com","subject_wallet":"0x1234abcd5678ef901234abcd5678ef9012345678","jurisdiction":"US","kyc_tier":"retail"}'
 ```
@@ -24,6 +33,7 @@ Expected: 200 with `credential_id` and `commitment`
 
 ```bash:run
 curl -s -X POST http://localhost:8000/proof/generate \
+  -H "X-API-Key: $CLEARPROOF_API_KEY" \
   -H "Content-Type: application/json" \
   -d '{"credential_id":"CRED_ID_FROM_STEP_1","wallet_address":"0x1234abcd5678ef901234abcd5678ef9012345678","amount_usd":500,"asset":"USDC","destination_wallet":"0xabcd1234abcd1234abcd1234abcd1234abcd1234","jurisdiction":"US","idempotency_key":"recipe-generate-001"}'
 ```

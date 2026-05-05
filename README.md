@@ -45,6 +45,7 @@ npm install @clearproof/circuits
 ```
 
 > **Note:** The CLI currently requires locally compiled circuit artifacts. The `@clearproof/circuits` npm package will bundle pre-compiled artifacts in a future release.
+> Current generated proving artifacts are development artifacts unless they come from a documented multi-party trusted setup ceremony.
 
 For the Python SDK, install locally (PyPI publishing is planned):
 
@@ -65,7 +66,7 @@ pip install -e ".[all]"
 | `src/protocol/bridges/` | TRISA (gRPC), TRP/OpenVASP (REST), TAIP-10 (W3C VP) |
 | `src/sar/` | AES-256-GCM encryption, SAR review flags (advisory), audit log |
 | `src/registry/` | Credential, sanctions Merkle tree, trusted issuer registries |
-| `tests/` | ~190 tests (144 Python + 46 Hardhat) across unit, integration, compliance, and E2E |
+| `tests/` | Python tests across unit, integration, compliance, and E2E paths, plus Hardhat contract tests |
 
 ## Circuits
 
@@ -97,7 +98,7 @@ Six Circom circuits proving compliance without revealing private data:
 | 14 | `credential_nullifier` | One-time use (prevents proof replay) |
 | 15 | `proof_expires_at` | Proof TTL enforced on-chain |
 
-All circuits are audited for soundness: range checks on all comparator inputs, adjacency derived from Merkle path bits, thresholds as public inputs, domain binding for cross-chain replay prevention.
+The circuits include explicit soundness-oriented checks: range checks on comparator inputs, adjacency derived from Merkle path bits, thresholds as public inputs, and domain binding for cross-chain replay prevention. Production use still requires an independent circuit audit and MPC trusted setup.
 
 ## On-Chain Contracts
 
@@ -155,8 +156,8 @@ uv sync --all-extras    # Python
 npm install             # Node (circom, snarkjs, hardhat)
 
 # Run all tests
-uv run pytest tests/ -v                           # 119 Python tests
-cd packages/contracts && npx hardhat test          # 24 Hardhat tests
+uv run pytest tests/ -v
+cd packages/contracts && npx hardhat test
 
 # Compile circuits (requires circom + snarkjs)
 bash scripts/compile_circuits.sh
@@ -182,9 +183,9 @@ Start the API server and visit `http://localhost:8000/docs` for interactive Swag
 | `DEPLOYER_PRIVATE_KEY` | For deploy | Wallet private key for contract deployment |
 | `SEPOLIA_RPC_URL` | For deploy | Sepolia RPC endpoint |
 
-## Documentation Roadmap
+## Documentation
 
-Detailed documentation is planned for the `docs/` directory, including `docs/architecture.md`, `docs/threat-model.md`, and `docs/integration-guide.md`. Contributions welcome.
+Developer documentation lives in `apps/docs/`, reusable content lives in `packages/content/`, and internal protocol/security notes live in `docs/internal/`. Contributions welcome.
 
 ## Architecture Decisions
 
@@ -209,7 +210,7 @@ Four jobs run on every push to `main`:
 |-----|---------------|
 | `python-tests` | 119 pytest tests (unit + integration + compliance) |
 | `typescript-build` | Type-check `@clearproof/proof` and `@clearproof/cli` |
-| `hardhat-tests` | 24 Hardhat tests (contracts + E2E prove-submit-verify) |
+| `hardhat-tests` | Contract tests + E2E prove-submit-verify flow |
 | `circuits` | Circom compilation (syntax + constraint check) |
 
 A daily `sanctions-update` cron job rebuilds the sanctions Merkle tree from live OFAC/EU feeds.
@@ -218,10 +219,10 @@ A daily `sanctions-update` cron job rebuilds the sanctions Merkle tree from live
 
 | Package | Version | Description |
 |---------|---------|-------------|
-| [`@clearproof/circuits`](https://www.npmjs.com/package/@clearproof/circuits) | 0.2.0 | Compiled circuit artifacts (WASM + zkey) |
-| [`@clearproof/proof`](https://www.npmjs.com/package/@clearproof/proof) | 0.2.0 | TypeScript SDK for proof generation/verification |
-| [`@clearproof/cli`](https://www.npmjs.com/package/@clearproof/cli) | 0.2.0 | CLI tool with demo command |
-| [`@clearproof/contracts`](https://www.npmjs.com/package/@clearproof/contracts) | 0.2.0 | Solidity contracts + ABIs |
+| [`@clearproof/circuits`](https://www.npmjs.com/package/@clearproof/circuits) | 0.3.0 | Compiled circuit artifacts (WASM + zkey) |
+| [`@clearproof/proof`](https://www.npmjs.com/package/@clearproof/proof) | 0.3.0 | TypeScript SDK for proof generation/verification |
+| [`@clearproof/cli`](https://www.npmjs.com/package/@clearproof/cli) | 0.3.0 | CLI tool with demo command |
+| [`@clearproof/contracts`](https://www.npmjs.com/package/@clearproof/contracts) | 0.3.0 | Solidity contracts + ABIs |
 
 ## License
 

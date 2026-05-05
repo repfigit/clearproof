@@ -10,10 +10,17 @@ estimated-time: 1 min
 
 Take an existing compliance proof and verify it locally using the API server. This does not interact with any blockchain.
 
+The local API defaults to API-key auth:
+
+```bash:run
+export CLEARPROOF_API_KEY="dev-api-key"
+```
+
 ## 1. Verify the proof
 
 ```bash:run
 curl -s -X POST http://localhost:8000/proof/verify \
+  -H "X-API-Key: $CLEARPROOF_API_KEY" \
   -H "Content-Type: application/json" \
   -d '{"proof_id":"PROOF_ID_FROM_GENERATE","groth16_proof":{"pi_a":["..."],"pi_b":["..."],"pi_c":["..."]},"public_signals":["1","0","..."],"expected_amount_tier":2,"originator_vasp_did":"did:web:vasp.example.com","transfer_timestamp":1711929600}'
 ```

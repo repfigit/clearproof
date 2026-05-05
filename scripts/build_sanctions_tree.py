@@ -39,7 +39,7 @@ import httpx
 # Build script version — increment on any change to normalization or tree logic
 # ---------------------------------------------------------------------------
 
-BUILD_SCRIPT_VERSION = "1.0.0"
+BUILD_SCRIPT_VERSION = "1.1.0"
 
 # ---------------------------------------------------------------------------
 # Project root / Poseidon helper
@@ -71,6 +71,7 @@ HTTP_TIMEOUT = 60  # seconds
 
 # Domain tag for sanctions tree leaves (must match circuits)
 SANCTIONS_DOMAIN_TAG = 1
+MAX_SENTINEL = (2 ** 252) - 1
 
 # ---------------------------------------------------------------------------
 # Known OFAC-sanctioned crypto addresses (hardcoded fallback)
@@ -321,8 +322,9 @@ async def build_merkle_tree(addresses: list[str]) -> dict[str, Any]:
     1. Addresses normalized via normalize_address() before dedup
     2. Leaves sorted by Poseidon hash value (integer comparison)
     3. Poseidon hashing uses domain tag 1 for leaf hashing
-    4. Zero-padding uses 0 for empty leaves
-    5. Tree always padded to next power of 2
+    4. Boundary sentinel leaves are inserted for gap proofs
+    5. Zero-padding uses 0 for empty leaves
+    6. Tree always padded to next power of 2
     """
     seen: set[str] = set()
     unique: list[str] = []
@@ -344,18 +346,8 @@ async def build_merkle_tree(addresses: list[str]) -> dict[str, Any]:
             print(f"  Hashed {i + 1}/{len(unique)} addresses")
 
     hashed.sort(key=lambda x: x[0])
-    sorted_hashes = [h for h, _ in hashed]
+    sorted_hashes = [0] + [h for h, _ in hashed] + [MAX_SENTINEL]
     sorted_addresses = [a for _, a in hashed]
-
-    if not sorted_hashes:
-        return {
-            "root": "0",
-            "sorted_leaves": [],
-            "sorted_addresses": [],
-            "depth": 0,
-            "leaf_count": 0,
-            "padded_size": 0,
-        }
 
     n = len(sorted_hashes)
     depth = max(1, math.ceil(math.log2(n))) if n > 1 else 1
@@ -364,12 +356,14 @@ async def build_merkle_tree(addresses: list[str]) -> dict[str, Any]:
     leaf_strs = [str(h) for h in sorted_hashes] + ["0"] * (padded_size - n)
 
     current = leaf_strs
+    tree_layers: list[list[str]] = [leaf_strs]
     for level in range(depth):
         next_level: list[str] = []
         for i in range(0, len(current), 2):
             h = await poseidon_hash([int(current[i]), int(current[i + 1])])
             next_level.append(h)
         current = next_level
+        tree_layers.append(current)
         print(f"  Built tree level {level + 1}/{depth}")
 
     root = current[0]
@@ -380,8 +374,10 @@ async def build_merkle_tree(addresses: list[str]) -> dict[str, Any]:
         "sorted_leaves": [str(h) for h in sorted_hashes],
         "sorted_addresses": sorted_addresses,
         "depth": depth,
-        "leaf_count": n,
+        "leaf_count": len(unique),
+        "sentinel_count": 2,
         "padded_size": padded_size,
+        "tree_layers": tree_layers,
     }
 
 
@@ -514,6 +510,7 @@ async def main(offline: bool = False, verify: bool = False) -> None:
         "normalization_spec": {
             "method": "lowercase_hex_0x_prefix_40chars",
             "domain_tag": SANCTIONS_DOMAIN_TAG,
+            "boundary_sentinels": ["0", str(MAX_SENTINEL)],
             "ens_resolution": "never",
             "sort_order": "lexicographic_on_normalized_hex_then_poseidon_hash_int",
             "dedup": "case_insensitive_after_normalization",
@@ -530,7 +527,9 @@ async def main(offline: bool = False, verify: bool = False) -> None:
         "sorted_addresses": tree_data["sorted_addresses"],
         "depth": tree_data["depth"],
         "leaf_count": tree_data["leaf_count"],
+        "sentinel_count": tree_data["sentinel_count"],
         "padded_size": tree_data["padded_size"],
+        "tree_layers": tree_data["tree_layers"],
         "source_manifest": source_manifest,
     }
 

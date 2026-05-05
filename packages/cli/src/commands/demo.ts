@@ -1,7 +1,36 @@
 import { Command } from 'commander';
+import fs from 'fs';
 import path from 'path';
 import { generateProof, verifyProof } from '@clearproof/proof';
 import type { ComplianceInput } from '@clearproof/proof';
+
+export function defaultArtifactsDir(): string {
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const circuits = require('@clearproof/circuits') as { artifacts?: { dir?: string } };
+    if (circuits.artifacts?.dir && fs.existsSync(circuits.artifacts.dir)) {
+      return circuits.artifacts.dir;
+    }
+  } catch {
+    // Fall back to monorepo artifacts for local development.
+  }
+  return path.resolve(__dirname, '../../../../artifacts');
+}
+
+export function resolveArtifactPaths(artifactsDir: string): {
+  wasmPath: string;
+  zkeyPath: string;
+  vkeyPath: string;
+} {
+  const resolvedArtifactsDir = path.resolve(artifactsDir);
+  const packagedWasmPath = path.join(resolvedArtifactsDir, 'compliance.wasm');
+  const compiledWasmPath = path.join(resolvedArtifactsDir, 'compliance_js', 'compliance.wasm');
+  return {
+    wasmPath: fs.existsSync(packagedWasmPath) ? packagedWasmPath : compiledWasmPath,
+    zkeyPath: path.join(resolvedArtifactsDir, 'compliance_final.zkey'),
+    vkeyPath: path.join(resolvedArtifactsDir, 'verification_key.json'),
+  };
+}
 
 /**
  * Hardcoded test input that matches the verified proof (snarkjs OK).
@@ -71,13 +100,11 @@ export const demoCommand = new Command('demo')
   .option(
     '--artifacts <dir>',
     'Path to circuit artifacts directory',
-    path.resolve(__dirname, '../../../../artifacts'),
+    defaultArtifactsDir(),
   )
   .action(async (opts: { artifacts: string }) => {
     const artifactsDir = path.resolve(opts.artifacts);
-    const wasmPath = path.join(artifactsDir, 'compliance_js', 'compliance.wasm');
-    const zkeyPath = path.join(artifactsDir, 'compliance_final.zkey');
-    const vkeyPath = path.join(artifactsDir, 'verification_key.json');
+    const { wasmPath, zkeyPath, vkeyPath } = resolveArtifactPaths(artifactsDir);
 
     console.log('=== ClearProof ZK Compliance Demo ===\n');
     console.log(`Artifacts: ${artifactsDir}`);

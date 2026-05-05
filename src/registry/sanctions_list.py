@@ -151,9 +151,9 @@ class SanctionsMerkleTree:
         tree.sorted_leaves = [int(leaf) for leaf in data["sorted_leaves"]]
         tree.sorted_addresses = data.get("sorted_addresses", [])
         tree.depth = data["depth"]
-        # We don't reconstruct internal _tree layers from JSON — only root,
-        # leaves, and depth are needed for membership checks. Full Merkle
-        # path generation requires a rebuild via build_from_addresses.
+        layers = data.get("tree_layers")
+        if layers:
+            tree._tree = [[str(value) for value in layer] for layer in layers]
         return tree
 
     # Maximum 252-bit sentinel value for boundary gap proofs (H-6)
@@ -234,6 +234,11 @@ class SanctionsMerkleTree:
                 "Address IS in the sanctions list — cannot generate "
                 "non-membership proof"
             )
+        if not self._tree:
+            raise RuntimeError(
+                "Sanctions tree artifact does not include tree_layers. "
+                "Rebuild it with `python scripts/build_sanctions_tree.py`."
+            )
 
         # Find the gap: left_neighbor < addr_hash < right_neighbor
         left_idx = -1
@@ -246,11 +251,6 @@ class SanctionsMerkleTree:
         if left_idx == -1:
             # addr_hash is smaller than all leaves — boundary gap proof
             # using minimum sentinel (0) at position 0 as left neighbor.
-            if not self._tree:
-                raise RuntimeError(
-                    "Cannot generate boundary gap proof: tree was loaded from "
-                    "file without internal layers. Rebuild via build_from_addresses()."
-                )
             return {
                 "left_neighbor": self.sorted_leaves[0],  # sentinel: 0
                 "right_neighbor": self.sorted_leaves[1],
@@ -261,11 +261,6 @@ class SanctionsMerkleTree:
         if left_idx >= len(self.sorted_leaves) - 1:
             # addr_hash is larger than all leaves — boundary gap proof
             # using maximum sentinel (2^252 - 1) at last position as right neighbor.
-            if not self._tree:
-                raise RuntimeError(
-                    "Cannot generate boundary gap proof: tree was loaded from "
-                    "file without internal layers. Rebuild via build_from_addresses()."
-                )
             last = len(self.sorted_leaves) - 1
             return {
                 "left_neighbor": self.sorted_leaves[last - 1],

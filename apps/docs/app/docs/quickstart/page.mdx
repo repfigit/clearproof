@@ -6,7 +6,7 @@ Get clearproof running locally in under 10 minutes.
 
 - **Python 3.11+** with [uv](https://docs.astral.sh/uv/)
 - **Node.js 20+** with npm
-- **circom 2.2.2+** ([install guide](https://docs.circom.io/getting-started/installation/))
+- **circom 2.2.2+** only if you want to recompile circuits from source
 
 ## Installation
 
@@ -21,39 +21,41 @@ uv sync --all-extras
 npm install
 ```
 
-## Compile circuits
-
-Circuit compilation generates the WASM prover, verification key, and zkey. Takes ~5 minutes on first run.
-
-```bash
-bash scripts/compile_circuits.sh
-```
-
-This produces artifacts in `artifacts/`:
-- `compliance_js/compliance.wasm` — WASM prover
-- `compliance_final.zkey` — proving key (phase 2 trusted setup)
-- `verification_key.json` — verification key
-
-> **Note:** The trusted setup uses a dev-only ceremony. Production deployments require a proper multi-party ceremony.
-
 ## Run the demo
 
-The CLI demo generates a proof, verifies it locally, and prints the 16 public signals:
+The CLI demo uses prebuilt artifacts from `@clearproof/circuits`, generates a proof, verifies it locally, and prints the 16 public signals:
 
 ```bash
 npx @clearproof/cli demo
 ```
 
+If you are working from a repo checkout and want to regenerate artifacts, run:
+
+```bash
+bash scripts/compile_circuits.sh
+npx @clearproof/cli demo --artifacts ./artifacts
+```
+
+This produces artifacts in `artifacts/`:
+- `compliance_js/compliance.wasm` — WASM prover
+- `compliance_final.zkey` — proving key
+- `verification_key.json` — verification key
+
+> **Note:** The bundled and locally compiled artifacts use a dev-only trusted setup. Production deployments require a proper multi-party ceremony.
+
+
 ## Start the API server
 
 ```bash
+export AUTH_MODE=api-key
+export API_KEY=dev-api-key
 export PII_MASTER_KEY=$(openssl rand -hex 32)
 uv run uvicorn src.api.main:app --reload --port 8000
 ```
 
 Visit [http://localhost:8000/docs](http://localhost:8000/docs) for the Swagger UI.
 
-> **Note:** The API server starts but `/proof/generate` requires runtime state: at least one issued credential, a populated issuer registry, and a built sanctions tree. Run `python scripts/build_sanctions_tree.py --offline` to bootstrap the sanctions tree with hardcoded OFAC addresses.
+> **Note:** Protected API requests must include `X-API-Key: dev-api-key`. The API server starts, but `/proof/generate` requires runtime state: at least one issued credential, a populated issuer registry, and a built sanctions tree. Run `python scripts/build_sanctions_tree.py --offline` to bootstrap the sanctions tree with hardcoded OFAC addresses.
 
 ## Run tests
 

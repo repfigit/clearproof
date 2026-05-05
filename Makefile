@@ -15,16 +15,16 @@ format:
 	ruff check --fix src/ tests/
 
 test:
-	uv run pytest tests/ -v
+	uv run python -m pytest tests/ -v
 
 test-unit:
-	uv run pytest tests/unit/ -v
+	uv run python -m pytest tests/unit/ -v
 
 test-integration:
-	uv run pytest tests/integration/ -v
+	uv run python -m pytest tests/integration/ -v
 
 test-compliance:
-	uv run pytest tests/compliance/ -v
+	uv run python -m pytest tests/compliance/ -v
 
 build-sanctions-tree:
 	python scripts/build_sanctions_tree.py

@@ -15,8 +15,11 @@ Submit a compliance proof to the ComplianceRegistry contract on Sepolia testnet.
 
 ```bash:run
 export SEPOLIA_RPC_URL="https://rpc.sepolia.org"
-export PRIVATE_KEY="YOUR_DEPLOYER_PRIVATE_KEY"
-export COMPLIANCE_REGISTRY="YOUR_COMPLIANCE_REGISTRY_ADDRESS"
+export DEPLOYER_PRIVATE_KEY="YOUR_VASP_WALLET_PRIVATE_KEY"
+export COMPLIANCE_REGISTRY="YOUR_COMPLIANCE_REGISTRY_ADDRESS" # optional if deployments/sepolia.json exists
+export PROOF_PATH="$PWD/../../artifacts/latest_proof.json"
+export TRANSFER_ID="recipe-transfer-001"
+export VASP_DID="did:web:vasp.example.com"
 ```
 
 Expected: No output (variables set)

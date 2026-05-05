@@ -32,10 +32,10 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "snarkjs": "^0.7.5"
+    "snarkjs": "^0.7.6"
   },
   "devDependencies": {
     "typescript": "^5.4",
-    "vitest": "^1.6"
+    "vitest": "^4.1.5"
   }
 }

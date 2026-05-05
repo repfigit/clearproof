@@ -11,25 +11,26 @@ npm install @clearproof/proof
 ## Usage
 
 ```typescript
-import { generateComplianceProof, verifyComplianceProof } from "@clearproof/proof";
+import { generateProof, verifyProof } from "@clearproof/proof";
+import { artifacts } from "@clearproof/circuits";
 
 // Generate a proof
-const { proof, publicSignals } = await generateComplianceProof({
-  wasmPath: "./artifacts/compliance.wasm",
-  zkeyPath: "./artifacts/compliance_final.zkey",
-  input: {
+const { proof, publicSignals } = await generateProof(
+  {
     // ... circuit inputs (sanctions path, credential, amount, etc.)
   },
-});
+  artifacts.wasmPath,
+  artifacts.zkeyPath,
+);
 
 // Verify a proof
-const valid = await verifyComplianceProof({
-  vkeyPath: "./artifacts/verification_key.json",
+const result = await verifyProof(
   proof,
   publicSignals,
-});
+  artifacts.vkeyPath,
+);
 
-console.log("Proof valid:", valid);
+console.log("Proof valid:", result.valid);
 ```
 
 ## Requirements

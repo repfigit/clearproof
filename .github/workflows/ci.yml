@@ -16,7 +16,7 @@ jobs:
           node-version: 20
       - run: npm install
       - run: uv sync --all-extras
-      - run: uv run pytest tests/ -v
+      - run: uv run python -m pytest tests/ -v
 
   typescript-build:
     runs-on: ubuntu-latest

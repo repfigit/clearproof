@@ -12,6 +12,14 @@ estimated-time: 10 min
 
 Complete compliance flow: issue a credential, generate a proof, verify off-chain, and record on-chain.
 
+The local API defaults to API-key auth:
+
+```bash:run
+export CLEARPROOF_API_KEY="dev-api-key"
+export AUTH_MODE="api-key"
+export API_KEY="$CLEARPROOF_API_KEY"
+```
+
 ## 1. Build the sanctions tree
 
 ```bash:run
@@ -24,6 +32,7 @@ Expected: Sanctions tree built with root hash and leaf count displayed
 
 ```bash:run
 curl -s -X POST http://localhost:8000/credential/issue \
+  -H "X-API-Key: $CLEARPROOF_API_KEY" \
   -H "Content-Type: application/json" \
   -d '{"issuer_did":"did:web:vasp.example.com","subject_wallet":"0x1234abcd5678ef901234abcd5678ef9012345678","jurisdiction":"US","kyc_tier":"retail"}'
 ```
@@ -34,6 +43,7 @@ Expected: 200 with `credential_id` and `commitment`
 
 ```bash:run
 curl -s -X POST http://localhost:8000/proof/generate \
+  -H "X-API-Key: $CLEARPROOF_API_KEY" \
   -H "Content-Type: application/json" \
   -d '{"credential_id":"CRED_ID_FROM_STEP_2","wallet_address":"0x1234abcd5678ef901234abcd5678ef9012345678","amount_usd":500,"asset":"USDC","destination_wallet":"0xabcd1234abcd1234abcd1234abcd1234abcd1234","jurisdiction":"US","idempotency_key":"recipe-full-001"}'
 ```
@@ -44,6 +54,7 @@ Expected: 200 with `compliance_proof` (Groth16 proof + 16 public signals) and `e
 
 ```bash:run
 curl -s -X POST http://localhost:8000/proof/verify \
+  -H "X-API-Key: $CLEARPROOF_API_KEY" \
   -H "Content-Type: application/json" \
   -d '{"proof_id":"PROOF_ID_FROM_STEP_3","groth16_proof":{"pi_a":["..."],"pi_b":["..."],"pi_c":["..."]},"public_signals":["1","0","..."],"expected_amount_tier":1,"originator_vasp_did":"did:web:vasp.example.com","transfer_timestamp":1711929600}'
 ```
@@ -53,6 +64,9 @@ Expected: 200 with `valid: true` and `is_compliant: true`
 ## 5. Record the proof on-chain
 
 ```bash:run
+export PROOF_PATH="$PWD/artifacts/latest_proof.json"
+export TRANSFER_ID="recipe-transfer-001"
+export VASP_DID="did:web:vasp.example.com"
 cd packages/contracts && npx hardhat run scripts/verify-onchain.ts --network sepolia
 ```
 
@@ -61,6 +75,7 @@ Expected: Transaction hash and `ProofVerified` event emitted on ComplianceRegist
 ## 6. Confirm on-chain recording
 
 ```bash:run
+export TRANSFER_ID="recipe-transfer-001"
 cd packages/contracts && npx hardhat run scripts/check-transfer.ts --network sepolia
 ```
 

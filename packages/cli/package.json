@@ -31,6 +31,7 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "@clearproof/circuits": "*",
     "@clearproof/content": "*",
     "@clearproof/proof": "*",
     "chalk": "^5.3",
@@ -38,6 +39,6 @@
   },
   "devDependencies": {
     "typescript": "^5.4",
-    "vitest": "^1.6"
+    "vitest": "^4.1.5"
   }
 }

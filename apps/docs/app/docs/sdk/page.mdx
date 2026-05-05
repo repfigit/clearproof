@@ -100,11 +100,11 @@ if (info) {
 const ok = await supportsChain('exchange.example', 1);
 ```
 
-Discovery fetches `https://<domain>/.well-known/clearproof.json` and caches results for 1 hour.
+Discovery fetches `https://<domain>/.well-known/clearproof.json` and caches results for 1 hour. The response is self-declared by the counterparty domain; integrations that need registry-backed assurance should verify the returned DID and discovery endpoint against `VASPRegistry` before trusting it.
 
 ## Validation rules
 
-As of v0.2.0, these fields are validated at runtime:
+As of v0.3.0, these fields are validated at runtime:
 
 - `proofExpiresAt` — must be greater than `transferTimestamp` (not just "in the future")
 - `credentialNullifier` — must be non-zero and non-empty

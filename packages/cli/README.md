@@ -11,18 +11,18 @@ npm install -g @clearproof/cli
 ## Usage
 
 ```bash
-# Run the demo proof generation flow
+# Run the demo proof generation flow using bundled circuit artifacts
 npx @clearproof/cli demo
 ```
 
-> **Note:** The CLI requires locally compiled circuit artifacts (WASM + zkey). You must compile circuits before running the demo:
+To use locally compiled artifacts from a repo checkout:
 >
 > ```bash
 > git clone https://github.com/repfigit/clearproof.git
 > cd clearproof
 > npm install
 > bash scripts/compile_circuits.sh    # ~5 min, requires circom
-> npx @clearproof/cli demo
+> npx @clearproof/cli demo --artifacts ./artifacts
 > ```
 
 ## Links
