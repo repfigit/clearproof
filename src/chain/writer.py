@@ -67,11 +67,13 @@ class ChainWriter:
         nonce = await self._w3.eth.get_transaction_count(self._account.address)
         chain_id = await self._w3.eth.chain_id
 
-        tx = await tx_func.build_transaction({
-            "from": self._account.address,
-            "nonce": nonce,
-            "chainId": chain_id,
-        })
+        tx = await tx_func.build_transaction(
+            {
+                "from": self._account.address,
+                "nonce": nonce,
+                "chainId": chain_id,
+            }
+        )
 
         signed = self._w3.eth.account.sign_transaction(tx, self._private_key)
         tx_hash = await self._w3.eth.send_raw_transaction(signed.raw_transaction)

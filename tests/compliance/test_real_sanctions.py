@@ -18,10 +18,10 @@ from src.registry.sanctions_list import (
     _address_to_int,
 )
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
 
 def _mock_poseidon_hash_factory():
     """
@@ -142,8 +142,7 @@ class TestTreeMinimumEntries:
 
     def test_tree_has_minimum_entries(self):
         assert len(KNOWN_SANCTIONED_ADDRESSES) >= 15, (
-            f"Expected at least 15 known sanctioned addresses, "
-            f"got {len(KNOWN_SANCTIONED_ADDRESSES)}"
+            f"Expected at least 15 known sanctioned addresses, got {len(KNOWN_SANCTIONED_ADDRESSES)}"
         )
 
     def test_addresses_are_valid_hex(self):

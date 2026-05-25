@@ -29,7 +29,8 @@ _POSEIDON_SCRIPT = os.environ.get(
 
 async def _poseidon_hash(inputs: list[int | str]) -> str:
     proc = await asyncio.create_subprocess_exec(
-        "node", _POSEIDON_SCRIPT,
+        "node",
+        _POSEIDON_SCRIPT,
         stdin=asyncio.subprocess.PIPE,
         stdout=asyncio.subprocess.PIPE,
         stderr=asyncio.subprocess.PIPE,
@@ -48,12 +49,14 @@ def _did_to_int(did: str) -> int:
     raw UTF-8 bytes (M-3 fix).
     """
     import hashlib
+
     return int.from_bytes(hashlib.sha256(did.encode()).digest()[:16], "big")
 
 
 # ---------------------------------------------------------------------------
 # Registry
 # ---------------------------------------------------------------------------
+
 
 class IssuerRegistry:
     """
@@ -153,7 +156,7 @@ class IssuerRegistry:
 
         n = len(self._leaf_hashes)
         self.depth = max(1, math.ceil(math.log2(n))) if n > 1 else 1
-        padded_size = 2 ** self.depth
+        padded_size = 2**self.depth
 
         # Pad with zeros
         leaves = list(self._leaf_hashes) + ["0"] * (padded_size - n)
@@ -185,8 +188,6 @@ class IssuerRegistry:
                 sibling_idx = idx - 1
                 indices.append(1)
             layer = self._tree[level]
-            siblings.append(
-                layer[sibling_idx] if sibling_idx < len(layer) else "0"
-            )
+            siblings.append(layer[sibling_idx] if sibling_idx < len(layer) else "0")
             idx //= 2
         return {"siblings": siblings, "indices": indices}

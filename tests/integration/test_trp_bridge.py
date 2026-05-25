@@ -9,11 +9,9 @@ from __future__ import annotations
 
 import base64
 
-import pytest
-
+from src.protocol.bridges.trp_bridge import TRPBridge
 from src.protocol.compliance_proof import ComplianceProof
 from src.protocol.hybrid_payload import HybridPayload
-from src.protocol.bridges.trp_bridge import TRPBridge
 
 
 class TestTRPBridge:

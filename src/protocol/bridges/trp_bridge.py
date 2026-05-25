@@ -30,7 +30,7 @@ __all__ = ["TRPBridge"]
 _SLIP44_MAP: dict[str, int] = {
     "BTC": 0,
     "ETH": 60,
-    "USDC": 60,   # ERC-20 on Ethereum
+    "USDC": 60,  # ERC-20 on Ethereum
     "USDT": 195,  # Tron-native default; Ethereum variant also acceptable
 }
 
@@ -86,9 +86,7 @@ class TRPBridge:
                 "accountNumber": [compliance_proof.transfer_id],
             },
             # Encrypted PII alongside the message for regulatory record-keeping
-            "ivms101_encrypted": base64.b64encode(
-                hybrid_payload.encrypted_pii
-            ).decode("ascii"),
+            "ivms101_encrypted": base64.b64encode(hybrid_payload.encrypted_pii).decode("ascii"),
             "ivms101_encryption_algorithm": hybrid_payload.encryption_algorithm,
             # Extension field — non-breaking for legacy parsers
             "extensions": {
@@ -106,9 +104,7 @@ class TRPBridge:
                     "proof_expires_at": compliance_proof.proof_expires_at,
                     # sar_review_flag excluded — internal advisory only (BSA anti-tipping-off)
                     # Encrypted PII nonce + AAD for envelope binding
-                    "pii_nonce": base64.b64encode(
-                        hybrid_payload.pii_nonce
-                    ).decode("ascii"),
+                    "pii_nonce": base64.b64encode(hybrid_payload.pii_nonce).decode("ascii"),
                     "pii_associated_data": hybrid_payload.pii_associated_data,
                 },
             },

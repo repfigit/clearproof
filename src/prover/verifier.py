@@ -43,12 +43,8 @@ async def verify_proof(
     # Strip any metadata we may have injected
     proof_clean = {k: v for k, v in proof_json.items() if not k.startswith("_")}
 
-    proof_fd = tempfile.NamedTemporaryFile(
-        mode="w", suffix="_proof.json", delete=False
-    )
-    public_fd = tempfile.NamedTemporaryFile(
-        mode="w", suffix="_public.json", delete=False
-    )
+    proof_fd = tempfile.NamedTemporaryFile(mode="w", suffix="_proof.json", delete=False)
+    public_fd = tempfile.NamedTemporaryFile(mode="w", suffix="_public.json", delete=False)
     proof_path = Path(proof_fd.name)
     public_path = Path(public_fd.name)
 
@@ -60,16 +56,17 @@ async def verify_proof(
 
         # Uses create_subprocess_exec (argument-list, no shell injection)
         proc = await asyncio.create_subprocess_exec(
-            "npx", "snarkjs", "groth16", "verify",
+            "npx",
+            "snarkjs",
+            "groth16",
+            "verify",
             str(vk),
             str(public_path),
             str(proof_path),
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
         )
-        stdout, stderr = await asyncio.wait_for(
-            proc.communicate(), timeout=timeout
-        )
+        stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=timeout)
         return "OK" in stdout.decode()
 
     except asyncio.TimeoutError:

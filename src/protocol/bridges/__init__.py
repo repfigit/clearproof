@@ -19,16 +19,18 @@ from .trisa_bridge import TRISABridge
 from .trp_bridge import TRPBridge
 
 
+# ruff: noqa: I001  # intentional lazy import ordering for gRPC bridge
 def __getattr__(name: str):
     """Lazy-import gRPC bridge components to avoid hard grpcio dependency."""
     _grpc_exports = {"TRISAClient", "TRISAServer", "SecureEnvelopeBuilder", "TRISAError"}
     if name in _grpc_exports:
         from .grpc_trisa_bridge import (
-            TRISAClient,
-            TRISAServer,
-            SecureEnvelopeBuilder,
-            TRISAError,
+            SecureEnvelopeBuilder,  # noqa: F401
+            TRISAClient,  # noqa: F401
+            TRISAError,  # noqa: F401
+            TRISAServer,  # noqa: F401
         )
+
         # Cache in module globals so __getattr__ is not called again
         _resolved = locals()
         for _n in _grpc_exports:

@@ -10,7 +10,7 @@ import logging
 import time
 from typing import Optional
 
-from fastapi import APIRouter, HTTPException, Depends
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 
 from src.api.middleware.auth import JWTAuthDependency
@@ -27,6 +27,7 @@ _registry = CredentialRegistry()
 # ---------------------------------------------------------------------------
 # Request / Response models
 # ---------------------------------------------------------------------------
+
 
 class CredentialIssueRequest(BaseModel):
     """Request body for POST /credential/issue."""
@@ -90,6 +91,7 @@ class CredentialStatusResponse(BaseModel):
 # ---------------------------------------------------------------------------
 # Endpoints
 # ---------------------------------------------------------------------------
+
 
 @router.post("/issue", response_model=CredentialIssueResponse, summary="Issue zkKYC credential")
 async def issue_credential(

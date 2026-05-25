@@ -19,7 +19,6 @@ from typing import Literal
 
 from pydantic import BaseModel, Field
 
-
 # ---------------------------------------------------------------------------
 # Poseidon hash helper (delegates to circomlibjs via Node.js)
 # ---------------------------------------------------------------------------
@@ -39,7 +38,8 @@ async def _poseidon_hash(inputs: list[int | str]) -> str:
     (create_subprocess_exec — no shell).
     """
     proc = await asyncio.create_subprocess_exec(
-        "node", _POSEIDON_SCRIPT,
+        "node",
+        _POSEIDON_SCRIPT,
         stdin=asyncio.subprocess.PIPE,
         stdout=asyncio.subprocess.PIPE,
         stderr=asyncio.subprocess.PIPE,
@@ -54,6 +54,7 @@ async def _poseidon_hash(inputs: list[int | str]) -> str:
 # ---------------------------------------------------------------------------
 # Credential model
 # ---------------------------------------------------------------------------
+
 
 class zkKYCCredential(BaseModel):
     """
@@ -91,6 +92,7 @@ class zkKYCCredential(BaseModel):
           Poseidon(issuer_did, kyc_tier, sanctions_clear, issued_at, expires_at)
         """
         import hashlib as _hashlib
+
         return [
             int.from_bytes(_hashlib.sha256(self.issuer_did.encode()).digest()[:16], "big"),
             self._KYC_TIER_MAP[self.kyc_tier],
@@ -103,6 +105,7 @@ class zkKYCCredential(BaseModel):
 # ---------------------------------------------------------------------------
 # Registry (in-memory MVP)
 # ---------------------------------------------------------------------------
+
 
 class CredentialRegistry:
     """

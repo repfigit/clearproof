@@ -1,8 +1,8 @@
 """ZK Travel Rule — Local proving infrastructure."""
 
 from .snarkjs_prover import SnarkJSProver
-from .verifier import verify_proof
 from .tier_mapping import JURISDICTION_TIERS, compute_tier
+from .verifier import verify_proof
 
 __all__ = [
     "SnarkJSProver",

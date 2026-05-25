@@ -41,9 +41,7 @@ def compute_tier(amount_usd: float, jurisdiction: str) -> int:
     Returns:
         Integer tier from 1 (smallest / most private) to 4 (largest / SAR flag).
     """
-    thresholds = JURISDICTION_TIERS.get(
-        jurisdiction.upper(), JURISDICTION_TIERS["DEFAULT"]
-    )
+    thresholds = JURISDICTION_TIERS.get(jurisdiction.upper(), JURISDICTION_TIERS["DEFAULT"])
     if amount_usd < thresholds["tier2"]:
         return 1
     elif amount_usd < thresholds["tier3"]:

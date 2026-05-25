@@ -12,9 +12,9 @@ from __future__ import annotations
 
 import os
 
+from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 from cryptography.hazmat.primitives.kdf.hkdf import HKDF
-from cryptography.hazmat.primitives import hashes
 
 __all__ = ["derive_key", "encrypt_pii", "decrypt_pii"]
 

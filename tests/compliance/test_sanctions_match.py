@@ -11,21 +11,20 @@ Node.js. The mock returns deterministic hashes based on input values.
 
 from __future__ import annotations
 
-import asyncio
-from unittest.mock import AsyncMock, patch, MagicMock
+from unittest.mock import patch
 
 import pytest
 
 from src.registry.sanctions_list import (
-    SanctionsMerkleTree,
     KNOWN_SANCTIONED_ADDRESSES,
+    SanctionsMerkleTree,
     _address_to_int,
 )
-
 
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
 
 def _mock_poseidon_hash_factory():
     """
@@ -36,6 +35,7 @@ def _mock_poseidon_hash_factory():
     This is injective (collision-free for reasonable input ranges) unlike
     the previous sum-based approach where [1,3] and [2,2] both hashed to 4.
     """
+
     async def _mock_poseidon(inputs: list[int | str]) -> str:
         int_inputs = [int(x) for x in inputs]
         if len(int_inputs) == 1:
@@ -53,6 +53,7 @@ def _mock_poseidon_hash_factory():
 # Tests
 # ---------------------------------------------------------------------------
 
+
 class TestSanctionsTreeBuild:
     @pytest.mark.asyncio
     async def test_build_from_addresses(self):
@@ -63,9 +64,7 @@ class TestSanctionsTreeBuild:
             "src.registry.sanctions_list._poseidon_hash",
             side_effect=_mock_poseidon_hash_factory(),
         ):
-            root = await tree.build_from_addresses(
-                KNOWN_SANCTIONED_ADDRESSES[:3]
-            )
+            root = await tree.build_from_addresses(KNOWN_SANCTIONED_ADDRESSES[:3])
 
         assert root is not None
         assert tree.root == root
@@ -99,14 +98,10 @@ class TestSanctionsTreeBuild:
             side_effect=_mock_poseidon_hash_factory(),
         ):
             tree1 = SanctionsMerkleTree()
-            root1 = await tree1.build_from_addresses(
-                KNOWN_SANCTIONED_ADDRESSES[:2]
-            )
+            root1 = await tree1.build_from_addresses(KNOWN_SANCTIONED_ADDRESSES[:2])
 
             tree2 = SanctionsMerkleTree()
-            root2 = await tree2.build_from_addresses(
-                KNOWN_SANCTIONED_ADDRESSES[:3]
-            )
+            root2 = await tree2.build_from_addresses(KNOWN_SANCTIONED_ADDRESSES[:3])
 
         assert root1 != root2
 
@@ -138,9 +133,7 @@ class TestCleanAddressNonmembership:
         # (the full invariant left < addr_hash < right is verified by the circuit)
         left_val = int(witness["left_neighbor"])
         right_val = int(witness["right_neighbor"])
-        assert left_val < right_val, (
-            f"Gap invariant violated: left ({left_val}) must be < right ({right_val})"
-        )
+        assert left_val < right_val, f"Gap invariant violated: left ({left_val}) must be < right ({right_val})"
 
         # Verify path lengths match tree depth
         assert len(witness["left_path"]["siblings"]) == len(witness["left_path"]["indices"])

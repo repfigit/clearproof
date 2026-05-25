@@ -12,10 +12,11 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from src.api.routes.proof import router as proof_router
+from src.api.routes.auth import router as auth_router
 from src.api.routes.credential import router as credential_router
 from src.api.routes.health import router as health_router
-from src.api.routes.auth import router as auth_router
+from src.api.routes.proof import router as proof_router
+from src.storage.database import Database
 
 logger = logging.getLogger(__name__)
 
@@ -29,14 +30,11 @@ async def lifespan(app: FastAPI):
     )
     logger.info("Circuit artifacts dir: %s", os.getenv("CIRCUIT_ARTIFACTS_DIR", "./artifacts"))
 
-    # Fail fast: PII encryption key must be configured with sufficient entropy (C-4)
     pii_key = os.getenv("PII_MASTER_KEY", "")
     if not pii_key:
         raise RuntimeError(
-            "PII_MASTER_KEY environment variable is required. "
-            "Set a stable 32+ byte key for PII encryption."
+            "PII_MASTER_KEY environment variable is required. Set a stable 32+ byte key for PII encryption."
         )
-    # Validate entropy: accept either 64 hex chars (32 bytes) or >= 32 UTF-8 bytes
     is_valid_hex = len(pii_key) == 64
     if is_valid_hex:
         try:
@@ -51,7 +49,23 @@ async def lifespan(app: FastAPI):
             "or a value that is at least 32 bytes when UTF-8 encoded."
         )
 
+    db_url = os.getenv("DATABASE_URL")
+    if db_url:
+        pool_min = int(os.getenv("DB_POOL_MIN", "2"))
+        pool_max = int(os.getenv("DB_POOL_MAX", "10"))
+        db = Database(pool_min=pool_min, pool_max=pool_max)
+        await db.connect()
+        app.state.db = db
+        logger.info("Database connected")
+    else:
+        app.state.db = None
+        logger.warning("DATABASE_URL not set — running in in-memory mode")
+
     yield
+
+    db = getattr(app.state, "db", None)
+    if db is not None:
+        await db.close()
     logger.info("ZK Travel Rule Compliance Bridge shutting down.")
 
 
@@ -67,9 +81,7 @@ def create_app() -> FastAPI:
         lifespan=lifespan,
     )
 
-    # --- CORS -----------------------------------------------------------
     allowed_origins = os.getenv("CORS_ALLOWED_ORIGINS", "http://localhost:3000").split(",")
-    # M-8: Reject wildcard origin when credentials are enabled
     if "*" in allowed_origins:
         logger.warning(
             "CORS_ALLOWED_ORIGINS contains '*' with allow_credentials=True. "
@@ -86,7 +98,6 @@ def create_app() -> FastAPI:
         allow_headers=["Authorization", "Content-Type", "X-Idempotency-Key", "X-API-Key"],
     )
 
-    # --- Routers --------------------------------------------------------
     app.include_router(proof_router)
     app.include_router(credential_router)
     app.include_router(health_router)
@@ -95,5 +106,4 @@ def create_app() -> FastAPI:
     return app
 
 
-# Default application instance for `uvicorn src.api.main:app`
 app = create_app()

@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import pytest
 
-from src.prover.tier_mapping import compute_tier, JURISDICTION_TIERS
+from src.prover.tier_mapping import JURISDICTION_TIERS, compute_tier
 
 
 class TestComplianceThresholdTiers:

@@ -82,13 +82,9 @@ class TRISABridge:
         payload_json: bytes = json.dumps(
             {
                 "zk_compliance_proof": compliance_proof.model_dump(),
-                "encrypted_pii": base64.b64encode(
-                    hybrid_payload.encrypted_pii
-                ).decode("ascii"),
+                "encrypted_pii": base64.b64encode(hybrid_payload.encrypted_pii).decode("ascii"),
                 "encryption_algorithm": hybrid_payload.encryption_algorithm,
-                "pii_nonce": base64.b64encode(
-                    hybrid_payload.pii_nonce
-                ).decode("ascii"),
+                "pii_nonce": base64.b64encode(hybrid_payload.pii_nonce).decode("ascii"),
                 "pii_associated_data": hybrid_payload.pii_associated_data,
                 "ivms101_version": "101.2023",
                 "payload_version": "1.0",

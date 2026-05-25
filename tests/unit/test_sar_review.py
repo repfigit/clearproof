@@ -1,6 +1,6 @@
 """Tests for SAR review flag logic."""
 
-from src.sar.sar_review import evaluate_sar_flags, HIGH_RISK_JURISDICTIONS
+from src.sar.sar_review import HIGH_RISK_JURISDICTIONS, evaluate_sar_flags
 
 
 class TestSARReviewFlags:
@@ -37,7 +37,8 @@ class TestSARReviewFlags:
 
     def test_rapid_succession_flag(self):
         result = evaluate_sar_flags(
-            amount_tier=1, jurisdiction="US",
+            amount_tier=1,
+            jurisdiction="US",
             additional_signals={"rapid_succession": True},
         )
         assert result.review_flagged is True
@@ -45,7 +46,8 @@ class TestSARReviewFlags:
 
     def test_high_velocity_flag(self):
         result = evaluate_sar_flags(
-            amount_tier=1, jurisdiction="US",
+            amount_tier=1,
+            jurisdiction="US",
             additional_signals={"transfers_last_24h": 15},
         )
         assert result.review_flagged is True
@@ -53,7 +55,8 @@ class TestSARReviewFlags:
 
     def test_manual_flag(self):
         result = evaluate_sar_flags(
-            amount_tier=1, jurisdiction="US",
+            amount_tier=1,
+            jurisdiction="US",
             additional_signals={"manual_flag": True},
         )
         assert result.review_flagged is True
@@ -61,7 +64,8 @@ class TestSARReviewFlags:
 
     def test_multiple_reasons_accumulate(self):
         result = evaluate_sar_flags(
-            amount_tier=3, jurisdiction="IR",
+            amount_tier=3,
+            jurisdiction="IR",
             additional_signals={"rapid_succession": True},
         )
         assert result.review_flagged is True

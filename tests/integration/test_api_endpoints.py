@@ -338,10 +338,18 @@ async def test_proof_generate_happy_path(client: AsyncClient):
     with (
         patch("src.api.routes.proof._cred_registry.get", return_value=mock_credential),
         patch("src.api.routes.proof._cred_registry.get_commitment", return_value="12345"),
-        patch("src.api.routes.proof._issuer_registry.generate_membership_witness", new_callable=AsyncMock, return_value=mock_issuer_witness),
+        patch(
+            "src.api.routes.proof._issuer_registry.generate_membership_witness",
+            new_callable=AsyncMock,
+            return_value=mock_issuer_witness,
+        ),
         patch("src.api.routes.proof._issuer_registry.get_root", return_value="99999"),
         patch("src.api.routes.proof.SanctionsMerkleTree.load") as mock_tree_load,
-        patch("src.api.routes.proof._prover.fullprove", new_callable=AsyncMock, return_value=(mock_proof_json, mock_public_signals)) as mock_fullprove,
+        patch(
+            "src.api.routes.proof._prover.fullprove",
+            new_callable=AsyncMock,
+            return_value=(mock_proof_json, mock_public_signals),
+        ) as mock_fullprove,
         patch("src.api.routes.proof._load_vk", return_value={"vk_alpha_1": []}),
         patch("src.api.routes.proof._audit_log.append"),
         patch("src.registry.credential_registry._poseidon_hash", new_callable=AsyncMock, return_value="42"),
@@ -388,6 +396,7 @@ async def test_rate_limiter_unit_returns_429():
     is injected via Depends() in the route definitions.
     """
     from fastapi import HTTPException
+
     from src.api.middleware.rate_limit import RateLimiter
 
     limiter = RateLimiter(max_requests=2, window_seconds=60)

@@ -30,9 +30,7 @@ class ZKIvms101Originator(BaseModel):
 
     # ZK proof reference
     zk_proof_ref: str = Field(..., description="proof_id linking to ComplianceProof")
-    zk_verification_endpoint: str = Field(
-        ..., description="URL where beneficiary can fetch and verify proof"
-    )
+    zk_verification_endpoint: str = Field(..., description="URL where beneficiary can fetch and verify proof")
 
     # Encrypted PII (always present in hybrid model)
     encrypted_natural_person: Optional[str] = Field(

@@ -18,13 +18,13 @@ import pytest
 
 from src.protocol.compliance_proof import ComplianceProof
 from src.protocol.hybrid_payload import HybridPayload
-from src.registry.credential_registry import zkKYCCredential, CredentialRegistry
+from src.registry.credential_registry import CredentialRegistry, zkKYCCredential
 from src.sar.encryption import derive_key
-
 
 # ---------------------------------------------------------------------------
 # Encryption fixtures
 # ---------------------------------------------------------------------------
+
 
 @pytest.fixture
 def sample_master_key() -> bytes:
@@ -41,6 +41,7 @@ def sample_derived_key(sample_master_key: bytes) -> bytes:
 # ---------------------------------------------------------------------------
 # Credential fixtures
 # ---------------------------------------------------------------------------
+
 
 @pytest.fixture
 def sample_credential() -> dict:
@@ -103,6 +104,7 @@ def expired_credential() -> zkKYCCredential:
 # Compliance proof fixtures
 # ---------------------------------------------------------------------------
 
+
 @pytest.fixture
 def sample_compliance_proof() -> ComplianceProof:
     """A valid ComplianceProof instance for testing."""
@@ -111,7 +113,24 @@ def sample_compliance_proof() -> ComplianceProof:
         proof_id=str(uuid.uuid4()),
         transfer_id=str(uuid.uuid4()),
         groth16_proof=base64.b64encode(b'{"pi_a":[],"pi_b":[],"pi_c":[]}').decode(),
-        public_signals=["1", "0", "0", "0", "2", str(now), "21843", "0", "25000", "300000", "1000000", "0", "0", "0", "0", str(now + 300)],
+        public_signals=[
+            "1",
+            "0",
+            "0",
+            "0",
+            "2",
+            str(now),
+            "21843",
+            "0",
+            "25000",
+            "300000",
+            "1000000",
+            "0",
+            "0",
+            "0",
+            "0",
+            str(now + 300),
+        ],
         verification_key=base64.b64encode(b'{"vk_alpha_1":[]}').decode(),
         originator_vasp_did="did:web:originator.example.com",
         beneficiary_vasp_did="did:web:beneficiary.example.com",
@@ -131,10 +150,12 @@ def sample_hybrid_payload(
     """A valid HybridPayload with encrypted PII for testing."""
     from src.sar.encryption import encrypt_pii
 
-    pii_data = json.dumps({
-        "originator_name": "Test User",
-        "originator_address": "123 Main St",
-    }).encode()
+    pii_data = json.dumps(
+        {
+            "originator_name": "Test User",
+            "originator_address": "123 Main St",
+        }
+    ).encode()
 
     envelope_id = sample_compliance_proof.transfer_id
     nonce, ciphertext = encrypt_pii(pii_data, sample_derived_key, envelope_id)
@@ -151,6 +172,7 @@ def sample_hybrid_payload(
 # ---------------------------------------------------------------------------
 # Mock prover fixture
 # ---------------------------------------------------------------------------
+
 
 @pytest.fixture
 def mock_prover():
@@ -171,7 +193,24 @@ def mock_prover():
         "curve": "bn128",
         "_meta": {"proving_time_ms": 1500},
     }
-    mock_public_signals = ["1", "0", "0", "0", "2", "1711670400", "21843", "0", "25000", "300000", "1000000", "0", "0", "0", "0", "1711670700"]
+    mock_public_signals = [
+        "1",
+        "0",
+        "0",
+        "0",
+        "2",
+        "1711670400",
+        "21843",
+        "0",
+        "25000",
+        "300000",
+        "1000000",
+        "0",
+        "0",
+        "0",
+        "0",
+        "1711670700",
+    ]
 
     prover.fullprove = AsyncMock(return_value=(mock_proof, mock_public_signals))
     prover.verify = AsyncMock(return_value=True)
@@ -187,6 +226,7 @@ def mock_prover():
 # Registry fixtures
 # ---------------------------------------------------------------------------
 
+
 @pytest.fixture
 def credential_registry() -> CredentialRegistry:
     """A fresh in-memory credential registry."""
@@ -197,13 +237,17 @@ def credential_registry() -> CredentialRegistry:
 # Environment helpers
 # ---------------------------------------------------------------------------
 
+
 @pytest.fixture(autouse=True)
 def _set_test_env(tmp_path):
     """Set environment variables for test isolation."""
     artifacts_dir = str(tmp_path / "artifacts")
     os.makedirs(artifacts_dir, exist_ok=True)
-    with patch.dict(os.environ, {
-        "ZK_ARTIFACTS_DIR": artifacts_dir,
-        "VASP_DID": "did:web:test-vasp.example.com",
-    }):
+    with patch.dict(
+        os.environ,
+        {
+            "ZK_ARTIFACTS_DIR": artifacts_dir,
+            "VASP_DID": "did:web:test-vasp.example.com",
+        },
+    ):
         yield

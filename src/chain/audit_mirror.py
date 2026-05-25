@@ -26,9 +26,7 @@ class AuditMirror:
     """Append-only audit mirror with hash-chain integrity."""
 
     def __init__(self, path: str | None = None) -> None:
-        self._path = Path(
-            path or os.environ.get("AUDIT_MIRROR_PATH", "./audit/mirror.jsonl")
-        )
+        self._path = Path(path or os.environ.get("AUDIT_MIRROR_PATH", "./audit/mirror.jsonl"))
         self._path.parent.mkdir(parents=True, exist_ok=True)
         self._prev_hash: str = self._compute_tail_hash()
 
@@ -117,8 +115,7 @@ class AuditMirror:
 
                     if record.get("prev_hash") != prev_hash:
                         logger.error(
-                            "Audit mirror integrity: hash mismatch at line %d "
-                            "(expected %s, got %s)",
+                            "Audit mirror integrity: hash mismatch at line %d (expected %s, got %s)",
                             lineno,
                             prev_hash[:12],
                             record.get("prev_hash", "")[:12],

@@ -43,19 +43,12 @@ class SnarkJSProver:
         prove_timeout: int = 60,
         witness_timeout: int = 30,
     ) -> None:
-        base = Path(
-            artifacts_dir
-            or os.environ.get("ZK_ARTIFACTS_DIR", "./artifacts")
+        base = Path(artifacts_dir or os.environ.get("ZK_ARTIFACTS_DIR", "./artifacts"))
+        self.wasm_path = Path(
+            wasm_path or os.environ.get("ZK_WASM_PATH", str(base / "compliance_js" / "compliance.wasm"))
         )
-        self.wasm_path = Path(wasm_path or os.environ.get(
-            "ZK_WASM_PATH", str(base / "compliance_js" / "compliance.wasm")
-        ))
-        self.zkey_path = Path(zkey_path or os.environ.get(
-            "ZK_ZKEY_PATH", str(base / "compliance_final.zkey")
-        ))
-        self.vkey_path = Path(vkey_path or os.environ.get(
-            "ZK_VKEY_PATH", str(base / "verification_key.json")
-        ))
+        self.zkey_path = Path(zkey_path or os.environ.get("ZK_ZKEY_PATH", str(base / "compliance_final.zkey")))
+        self.vkey_path = Path(vkey_path or os.environ.get("ZK_VKEY_PATH", str(base / "verification_key.json")))
         self.witness_js = self.wasm_path.parent / "generate_witness.js"
         self.prove_timeout = prove_timeout
         self.witness_timeout = witness_timeout
@@ -84,15 +77,9 @@ class SnarkJSProver:
         self._check_artifacts()
         start = time.monotonic()
 
-        input_file = tempfile.NamedTemporaryFile(
-            mode="w", suffix=".json", delete=False
-        )
-        proof_file = tempfile.NamedTemporaryFile(
-            suffix="_proof.json", delete=False
-        )
-        public_file = tempfile.NamedTemporaryFile(
-            suffix="_public.json", delete=False
-        )
+        input_file = tempfile.NamedTemporaryFile(mode="w", suffix=".json", delete=False)
+        proof_file = tempfile.NamedTemporaryFile(suffix="_proof.json", delete=False)
+        public_file = tempfile.NamedTemporaryFile(suffix="_public.json", delete=False)
         input_path = Path(input_file.name)
         proof_path = Path(proof_file.name)
         public_path = Path(public_file.name)
@@ -114,18 +101,16 @@ class SnarkJSProver:
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE,
             )
-            stdout, stderr = await asyncio.wait_for(
-                proc.communicate(), timeout=self.witness_timeout
-            )
+            stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=self.witness_timeout)
             if proc.returncode != 0:
-                raise ProverError(
-                    f"Witness generation failed (rc={proc.returncode}): "
-                    f"{stderr.decode().strip()}"
-                )
+                raise ProverError(f"Witness generation failed (rc={proc.returncode}): {stderr.decode().strip()}")
 
             # --- groth16 prove (uses create_subprocess_exec, no shell) ---
             proc = await asyncio.create_subprocess_exec(
-                "npx", "snarkjs", "groth16", "prove",
+                "npx",
+                "snarkjs",
+                "groth16",
+                "prove",
                 str(self.zkey_path),
                 str(witness_path),
                 str(proof_path),
@@ -133,14 +118,9 @@ class SnarkJSProver:
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE,
             )
-            stdout, stderr = await asyncio.wait_for(
-                proc.communicate(), timeout=self.prove_timeout
-            )
+            stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=self.prove_timeout)
             if proc.returncode != 0:
-                raise ProverError(
-                    f"Proof generation failed (rc={proc.returncode}): "
-                    f"{stderr.decode().strip()}"
-                )
+                raise ProverError(f"Proof generation failed (rc={proc.returncode}): {stderr.decode().strip()}")
 
             with open(proof_path) as f:
                 proof = json.load(f)
@@ -170,12 +150,8 @@ class SnarkJSProver:
 
         proof_clean = {k: v for k, v in proof.items() if k != "_meta"}
 
-        proof_fd = tempfile.NamedTemporaryFile(
-            mode="w", suffix="_proof.json", delete=False
-        )
-        public_fd = tempfile.NamedTemporaryFile(
-            mode="w", suffix="_public.json", delete=False
-        )
+        proof_fd = tempfile.NamedTemporaryFile(mode="w", suffix="_proof.json", delete=False)
+        public_fd = tempfile.NamedTemporaryFile(mode="w", suffix="_public.json", delete=False)
         proof_path = Path(proof_fd.name)
         public_path = Path(public_fd.name)
 
@@ -187,16 +163,17 @@ class SnarkJSProver:
 
             # Uses create_subprocess_exec (argument-list, no shell injection)
             proc = await asyncio.create_subprocess_exec(
-                "npx", "snarkjs", "groth16", "verify",
+                "npx",
+                "snarkjs",
+                "groth16",
+                "verify",
                 str(self.vkey_path),
                 str(public_path),
                 str(proof_path),
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE,
             )
-            stdout, stderr = await asyncio.wait_for(
-                proc.communicate(), timeout=10
-            )
+            stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=10)
             return "OK" in stdout.decode()
 
         except asyncio.TimeoutError:

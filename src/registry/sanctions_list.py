@@ -30,7 +30,8 @@ _POSEIDON_SCRIPT = os.environ.get(
 
 async def _poseidon_hash(inputs: list[int | str]) -> str:
     proc = await asyncio.create_subprocess_exec(
-        "node", _POSEIDON_SCRIPT,
+        "node",
+        _POSEIDON_SCRIPT,
         stdin=asyncio.subprocess.PIPE,
         stdout=asyncio.subprocess.PIPE,
         stderr=asyncio.subprocess.PIPE,
@@ -81,6 +82,7 @@ KNOWN_SANCTIONED_ADDRESSES: list[str] = [
 # ---------------------------------------------------------------------------
 # Merkle tree
 # ---------------------------------------------------------------------------
+
 
 class SanctionsMerkleTree:
     """
@@ -157,7 +159,7 @@ class SanctionsMerkleTree:
         return tree
 
     # Maximum 252-bit sentinel value for boundary gap proofs (H-6)
-    _MAX_SENTINEL = (2 ** 252) - 1
+    _MAX_SENTINEL = (2**252) - 1
 
     async def build_from_addresses(self, addresses: list[str]) -> str:
         """
@@ -184,7 +186,7 @@ class SanctionsMerkleTree:
         # Determine depth (next power of 2)
         n = len(hashed)
         self.depth = max(1, math.ceil(math.log2(n))) if n > 1 else 1
-        padded_size = 2 ** self.depth
+        padded_size = 2**self.depth
 
         # Pad with zeros to fill the tree
         leaf_strs = [str(h) for h in hashed] + ["0"] * (padded_size - n)
@@ -209,9 +211,7 @@ class SanctionsMerkleTree:
             raise RuntimeError("Tree not built yet — call build_from_addresses first")
         return self.root
 
-    async def generate_nonmembership_witness(
-        self, wallet_address: str
-    ) -> dict[str, Any]:
+    async def generate_nonmembership_witness(self, wallet_address: str) -> dict[str, Any]:
         """
         Generate a gap proof (non-membership witness) for a wallet address.
 
@@ -230,10 +230,7 @@ class SanctionsMerkleTree:
 
         # Verify the address is NOT in the tree (otherwise it IS sanctioned)
         if addr_hash in self.sorted_leaves:
-            raise ValueError(
-                "Address IS in the sanctions list — cannot generate "
-                "non-membership proof"
-            )
+            raise ValueError("Address IS in the sanctions list — cannot generate non-membership proof")
         if not self._tree:
             raise RuntimeError(
                 "Sanctions tree artifact does not include tree_layers. "
@@ -294,8 +291,6 @@ class SanctionsMerkleTree:
                 sibling_idx = idx - 1
                 indices.append(1)
             layer = self._tree[level]
-            siblings.append(
-                layer[sibling_idx] if sibling_idx < len(layer) else "0"
-            )
+            siblings.append(layer[sibling_idx] if sibling_idx < len(layer) else "0")
             idx //= 2
         return {"siblings": siblings, "indices": indices}

@@ -7,9 +7,7 @@ CredentialRegistry, preventing them from being used for proof generation.
 
 from __future__ import annotations
 
-import time
-import uuid
-from unittest.mock import AsyncMock, patch
+from unittest.mock import patch
 
 import pytest
 
@@ -19,6 +17,7 @@ from src.registry.credential_registry import CredentialRegistry, zkKYCCredential
 @pytest.fixture
 def _mock_poseidon():
     """Patch Poseidon hash to avoid requiring Node.js."""
+
     async def fake_poseidon(inputs):
         return str(sum(int(x) for x in inputs))
 
@@ -31,9 +30,7 @@ def _mock_poseidon():
 
 class TestCredentialRevocation:
     @pytest.mark.asyncio
-    async def test_revoked_credential_is_blocked(
-        self, _mock_poseidon, sample_credential: dict
-    ):
+    async def test_revoked_credential_is_blocked(self, _mock_poseidon, sample_credential: dict):
         """A revoked credential is marked as revoked in the registry."""
         registry = CredentialRegistry()
         credential = zkKYCCredential(**sample_credential)
@@ -63,9 +60,7 @@ class TestCredentialRevocation:
             registry.revoke("nonexistent-id")
 
     @pytest.mark.asyncio
-    async def test_commitment_survives_revocation(
-        self, _mock_poseidon, sample_credential: dict
-    ):
+    async def test_commitment_survives_revocation(self, _mock_poseidon, sample_credential: dict):
         """The Poseidon commitment remains accessible after revocation."""
         registry = CredentialRegistry()
         credential = zkKYCCredential(**sample_credential)

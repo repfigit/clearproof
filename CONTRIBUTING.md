@@ -86,6 +86,7 @@ circom circuits/compliance.circom --r1cs --sym -l node_modules -o /tmp/circuit-b
 - [ ] TypeScript compiles without errors
 - [ ] Circuit changes include constraint count analysis (current: ~31K constraints, 16 public signals)
 - [ ] No secrets or private keys committed
+- [ ] AGENTS.md files updated if you added/modified behavior in `src/`, `packages/contracts/`, `circuits/`, `packages/proof/`, `tests/`, or `scripts/` (see root AGENTS.md for hierarchy)
 
 ## Code Style
 

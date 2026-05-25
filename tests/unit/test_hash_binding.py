@@ -11,7 +11,6 @@ Specifically:
 - credential_nullifier (signal 14): Poseidon(credential_commitment, transfer_id_hash)
 """
 
-import pytest
 from web3 import Web3
 
 # BN128 scalar field order (same constant used in ComplianceRegistry.sol)

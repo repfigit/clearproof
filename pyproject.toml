@@ -13,6 +13,8 @@ dependencies = [
     "PyJWT[crypto]>=2.8",
     "web3>=7.0",
     "siwe>=4.0",
+    "psycopg[binary]>=3.2",
+    "asyncpg>=0.30",
 ]
 
 [project.optional-dependencies]
@@ -27,6 +29,7 @@ dev = [
     "ruff>=0.4",
     "httpx>=0.27",
     "grpcio>=1.62",
+    "aiosqlite>=0.20",
 ]
 all = ["clearproof[zk,dev]"]
 
@@ -41,6 +44,12 @@ testpaths = ["tests"]
 [tool.ruff]
 target-version = "py311"
 line-length = 120
+
+# Generated protobuf files must never be edited (see root AGENTS.md)
+extend-exclude = [
+    "src/protocol/bridges/*_pb2.py",
+    "src/protocol/bridges/*_pb2_grpc.py",
+]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "W"]

@@ -7,15 +7,13 @@ jurisdiction's thresholds as defined in JURISDICTION_TIERS.
 
 from __future__ import annotations
 
-import pytest
-
-from src.prover.tier_mapping import compute_tier, JURISDICTION_TIERS
-
+from src.prover.tier_mapping import JURISDICTION_TIERS, compute_tier
 
 # ---------------------------------------------------------------------------
 # US tiers (FinCEN BSA / GENIUS Act)
 #   tier2=250, tier3=3_000, tier4=10_000
 # ---------------------------------------------------------------------------
+
 
 class TestUSTiers:
     def test_tier1_below_250(self):
@@ -48,6 +46,7 @@ class TestUSTiers:
 #   tier2=250, tier3=1_000, tier4=10_000
 # ---------------------------------------------------------------------------
 
+
 class TestEUTiers:
     def test_tier1_below_250(self):
         assert compute_tier(249, "EU") == 1
@@ -76,6 +75,7 @@ class TestEUTiers:
 #   tier2=250, tier3=1_500, tier4=10_000
 # ---------------------------------------------------------------------------
 
+
 class TestSGTiers:
     def test_tier1_below_250(self):
         assert compute_tier(249, "SG") == 1
@@ -98,6 +98,7 @@ class TestSGTiers:
 #   tier2=250, tier3=1_000, tier4=10_000
 # ---------------------------------------------------------------------------
 
+
 class TestAETiers:
     def test_tier1_below_250(self):
         assert compute_tier(249, "AE") == 1
@@ -115,6 +116,7 @@ class TestAETiers:
 # ---------------------------------------------------------------------------
 # Unknown jurisdiction falls back to DEFAULT
 # ---------------------------------------------------------------------------
+
 
 class TestDefaultFallback:
     def test_unknown_jurisdiction_uses_default(self):

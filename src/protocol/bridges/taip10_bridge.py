@@ -28,12 +28,10 @@ Wire format (JSON-LD, W3C VC Data Model v1):
 
 from __future__ import annotations
 
-import base64
 from datetime import datetime, timezone
 from typing import Any
 
 from src.protocol.compliance_proof import ComplianceProof
-from src.protocol.hybrid_payload import HybridPayload
 
 __all__ = ["TAIP10Bridge"]
 
@@ -68,13 +66,9 @@ class TAIP10Bridge:
         dict
             A W3C-conformant Verifiable Presentation (JSON-LD).
         """
-        issuance_date: str = datetime.fromtimestamp(
-            compliance_proof.proof_generated_at, tz=timezone.utc
-        ).isoformat()
+        issuance_date: str = datetime.fromtimestamp(compliance_proof.proof_generated_at, tz=timezone.utc).isoformat()
 
-        expiration_date: str = datetime.fromtimestamp(
-            compliance_proof.proof_expires_at, tz=timezone.utc
-        ).isoformat()
+        expiration_date: str = datetime.fromtimestamp(compliance_proof.proof_expires_at, tz=timezone.utc).isoformat()
 
         verifiable_credential: dict[str, Any] = {
             "@context": [

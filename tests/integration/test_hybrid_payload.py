@@ -8,12 +8,11 @@ with envelope binding via associated data.
 from __future__ import annotations
 
 import json
-import os
 
 import pytest
 from cryptography.exceptions import InvalidTag
 
-from src.sar.encryption import derive_key, encrypt_pii, decrypt_pii
+from src.sar.encryption import decrypt_pii, derive_key, encrypt_pii
 
 
 class TestEncryptionRoundtrip:
@@ -24,11 +23,13 @@ class TestEncryptionRoundtrip:
         key = derive_key(sample_master_key, context=b"roundtrip-test")
         envelope_id = "envelope-001"
 
-        plaintext = json.dumps({
-            "originator_name": "Alice Nakamoto",
-            "originator_address": "123 Blockchain Ave",
-            "date_of_birth": "1990-01-01",
-        }).encode()
+        plaintext = json.dumps(
+            {
+                "originator_name": "Alice Nakamoto",
+                "originator_address": "123 Blockchain Ave",
+                "date_of_birth": "1990-01-01",
+            }
+        ).encode()
 
         nonce, ciphertext = encrypt_pii(plaintext, key, envelope_id)
 
@@ -86,9 +87,7 @@ class TestEncryptionRoundtrip:
         nonce, _ = encrypt_pii(b"test", key, "envelope-005")
         assert len(nonce) == 12
 
-    def test_different_encryptions_produce_different_ciphertexts(
-        self, sample_master_key: bytes
-    ):
+    def test_different_encryptions_produce_different_ciphertexts(self, sample_master_key: bytes):
         """Two encryptions of the same plaintext produce different ciphertexts (random nonce)."""
         key = derive_key(sample_master_key, context=b"uniqueness-test")
         plaintext = b"same plaintext"

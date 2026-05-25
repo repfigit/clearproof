@@ -11,8 +11,8 @@ import os
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 
-from src.auth.siwe_auth import SIWEAuth
 from src.api.middleware.rate_limit import RateLimiter
+from src.auth.siwe_auth import SIWEAuth
 
 logger = logging.getLogger(__name__)
 

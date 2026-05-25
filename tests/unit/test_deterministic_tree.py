@@ -16,8 +16,10 @@ from src.registry.sanctions_list import SanctionsMerkleTree
 
 class TestAddressNormalization:
     def test_lowercase(self):
-        assert normalize_address("0xABCDEF1234567890abcdef1234567890ABCDEF12") == \
-            "0xabcdef1234567890abcdef1234567890abcdef12"
+        assert (
+            normalize_address("0xABCDEF1234567890abcdef1234567890ABCDEF12")
+            == "0xabcdef1234567890abcdef1234567890abcdef12"
+        )
 
     def test_adds_0x_prefix(self):
         assert normalize_address("abcdef1234567890abcdef1234567890abcdef12").startswith("0x")
@@ -65,6 +67,7 @@ class TestSanctionsArtifact:
     @pytest.mark.asyncio
     async def test_artifact_load_can_generate_nonmembership_witness(self, tmp_path, monkeypatch):
         """A persisted tree artifact has enough data to generate Merkle paths."""
+
         async def fake_poseidon(inputs):
             values = [int(v) for v in inputs]
             result = values[0]
@@ -75,17 +78,17 @@ class TestSanctionsArtifact:
         monkeypatch.setattr("scripts.build_sanctions_tree.poseidon_hash", fake_poseidon)
         monkeypatch.setattr("src.registry.sanctions_list._poseidon_hash", fake_poseidon)
 
-        tree_data = await build_merkle_tree([
-            "0x0000000000000000000000000000000000000002",
-            "0x0000000000000000000000000000000000000004",
-        ])
+        tree_data = await build_merkle_tree(
+            [
+                "0x0000000000000000000000000000000000000002",
+                "0x0000000000000000000000000000000000000004",
+            ]
+        )
         artifact = tmp_path / "sanctions_tree.json"
         artifact.write_text(json.dumps(tree_data), encoding="utf-8")
 
         loaded = SanctionsMerkleTree.build_from_file(str(artifact))
-        witness = await loaded.generate_nonmembership_witness(
-            "0x0000000000000000000000000000000000000003"
-        )
+        witness = await loaded.generate_nonmembership_witness("0x0000000000000000000000000000000000000003")
 
         assert loaded.sorted_leaves[0] == 0
         assert loaded.sorted_leaves[-1] == MAX_SENTINEL

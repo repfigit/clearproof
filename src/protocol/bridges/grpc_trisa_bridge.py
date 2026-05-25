@@ -17,7 +17,6 @@ import hmac as hmac_module
 import json
 import logging
 import os
-import time
 from datetime import datetime, timezone
 from typing import Any, AsyncIterator, Optional
 
@@ -27,11 +26,12 @@ from cryptography.hazmat.primitives.asymmetric import padding, rsa
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 from cryptography.hazmat.primitives.hmac import HMAC
 
+from src.protocol.compliance_proof import ComplianceProof
+from src.protocol.hybrid_payload import HybridPayload
+
 from . import trisa_api_pb2 as pb2
 from . import trisa_api_pb2_grpc as pb2_grpc
 from . import trisa_errors_pb2 as errors_pb2
-from src.protocol.compliance_proof import ComplianceProof
-from src.protocol.hybrid_payload import HybridPayload
 
 __all__ = ["TRISAClient", "TRISAServer", "SecureEnvelopeBuilder", "TRISAError"]
 
@@ -168,7 +168,7 @@ class SecureEnvelopeBuilder:
         encrypted_payload = aesgcm.encrypt(nonce, inner_payload, transfer_id.encode("utf-8"))
 
         # Generate HMAC secret
-        hmac_secret=os.urandom(32)
+        hmac_secret = os.urandom(32)
         # HMAC over nonce || ciphertext (the full encrypted blob, matching TRISA spec)
         hmac_signature = self.compute_hmac(nonce + encrypted_payload, hmac_secret)
 
@@ -584,9 +584,7 @@ async def create_trisa_server(
             require_client_auth=True,
         )
     else:
-        _logger.warning(
-            "Starting TRISA server WITHOUT mTLS — only use for local testing"
-        )
+        _logger.warning("Starting TRISA server WITHOUT mTLS — only use for local testing")
         server_credentials = grpc.ssl_server_credentials(
             [(private_key_pem, cert_data)],
         )

@@ -7,21 +7,19 @@ ZKIvms101Message creation, serialization, and validation logic.
 
 from __future__ import annotations
 
-import base64
 import time
-import uuid
 
 import pytest
 from pydantic import ValidationError
 
 from src.protocol.compliance_proof import ComplianceProof
 from src.protocol.hybrid_payload import HybridPayload
-from src.protocol.ivms101 import ZKIvms101Originator, ZKIvms101Message
-
+from src.protocol.ivms101 import ZKIvms101Message, ZKIvms101Originator
 
 # ---------------------------------------------------------------------------
 # ComplianceProof tests
 # ---------------------------------------------------------------------------
+
 
 class TestComplianceProof:
     def test_creation(self, sample_compliance_proof: ComplianceProof):
@@ -118,6 +116,7 @@ class TestComplianceProof:
 # HybridPayload tests
 # ---------------------------------------------------------------------------
 
+
 class TestHybridPayload:
     def test_creation(self, sample_hybrid_payload: HybridPayload):
         """HybridPayload can be created with valid fields."""
@@ -158,6 +157,7 @@ class TestHybridPayload:
 # ZKIvms101Originator tests
 # ---------------------------------------------------------------------------
 
+
 class TestZKIvms101Originator:
     def test_creation(self):
         """ZKIvms101Originator can be created with required fields."""
@@ -184,6 +184,7 @@ class TestZKIvms101Originator:
 # ---------------------------------------------------------------------------
 # ZKIvms101Message tests
 # ---------------------------------------------------------------------------
+
 
 class TestZKIvms101Message:
     def test_creation(self, sample_compliance_proof: ComplianceProof):

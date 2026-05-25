@@ -24,13 +24,15 @@ from pydantic import BaseModel, Field
 __all__ = ["SARReviewResult", "evaluate_sar_flags"]
 
 # High-risk jurisdictions per FATF/OFAC guidance
-HIGH_RISK_JURISDICTIONS: frozenset[str] = frozenset({
-    "IR",  # Iran
-    "KP",  # North Korea
-    "SY",  # Syria
-    "CU",  # Cuba
-    "VE",  # Venezuela
-})
+HIGH_RISK_JURISDICTIONS: frozenset[str] = frozenset(
+    {
+        "IR",  # Iran
+        "KP",  # North Korea
+        "SY",  # Syria
+        "CU",  # Cuba
+        "VE",  # Venezuela
+    }
+)
 
 
 class SARReviewResult(BaseModel):
@@ -41,16 +43,12 @@ class SARReviewResult(BaseModel):
     review. It does NOT automatically file a SAR.
     """
 
-    review_flagged: bool = Field(
-        ..., description="True if the transfer warrants human review"
-    )
+    review_flagged: bool = Field(..., description="True if the transfer warrants human review")
     flag_reasons: list[str] = Field(
         default_factory=list,
         description="Human-readable reasons the transfer was flagged",
     )
-    requires_human_review: bool = Field(
-        ..., description="True if a human compliance officer must review"
-    )
+    requires_human_review: bool = Field(..., description="True if a human compliance officer must review")
 
 
 def evaluate_sar_flags(
@@ -82,13 +80,9 @@ def evaluate_sar_flags(
 
     # Tier-based flag (not automatic SAR -- just a review trigger)
     if amount_tier >= 4:
-        reasons.append(
-            f"high_value_tier: tier {amount_tier} exceeds $10,000 threshold"
-        )
+        reasons.append(f"high_value_tier: tier {amount_tier} exceeds $10,000 threshold")
     elif amount_tier >= 3:
-        reasons.append(
-            f"high_value_tier: tier {amount_tier} exceeds Travel Rule threshold"
-        )
+        reasons.append(f"high_value_tier: tier {amount_tier} exceeds Travel Rule threshold")
 
     # Rapid succession flag
     if additional_signals.get("rapid_succession", False):
@@ -96,9 +90,7 @@ def evaluate_sar_flags(
 
     velocity = additional_signals.get("transfers_last_24h", 0)
     if velocity > 10:
-        reasons.append(
-            f"rapid_succession: {velocity} transfers in last 24h"
-        )
+        reasons.append(f"rapid_succession: {velocity} transfers in last 24h")
 
     # Jurisdiction risk flag
     if jurisdiction.upper() in HIGH_RISK_JURISDICTIONS:

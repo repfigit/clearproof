@@ -15,18 +15,15 @@ import uuid
 import pytest
 from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import padding, rsa
-from cryptography.hazmat.primitives.ciphers.aead import AESGCM
-from cryptography.hazmat.primitives.hmac import HMAC
 
-from src.protocol.compliance_proof import ComplianceProof
-from src.protocol.hybrid_payload import HybridPayload
+from src.protocol.bridges import trisa_api_pb2 as pb2
+from src.protocol.bridges import trisa_errors_pb2 as errors_pb2
 from src.protocol.bridges.grpc_trisa_bridge import (
     SecureEnvelopeBuilder,
     TRISAError,
-    TRISAServer,
 )
-from src.protocol.bridges import trisa_api_pb2 as pb2
-from src.protocol.bridges import trisa_errors_pb2 as errors_pb2
+from src.protocol.compliance_proof import ComplianceProof
+from src.protocol.hybrid_payload import HybridPayload
 
 
 @pytest.fixture
@@ -334,7 +331,24 @@ class TestEnvelopeBuilderDirectUsage:
             proof_id=str(uuid.uuid4()),
             transfer_id=str(uuid.uuid4()),
             groth16_proof=base64.b64encode(b'{"pi_a":[],"pi_b":[],"pi_c":[]}').decode(),
-            public_signals=["1", "0", "0", "0", "2", str(int(time.time())), "21843", "0", "25000", "300000", "1000000", "0", "0", "0", "0", str(int(time.time()) + 300)],
+            public_signals=[
+                "1",
+                "0",
+                "0",
+                "0",
+                "2",
+                str(int(time.time())),
+                "21843",
+                "0",
+                "25000",
+                "300000",
+                "1000000",
+                "0",
+                "0",
+                "0",
+                "0",
+                str(int(time.time()) + 300),
+            ],
             verification_key=base64.b64encode(b'{"vk_alpha_1":[]}').decode(),
             originator_vasp_did="did:web:test.example.com",
             beneficiary_vasp_did="did:web:beneficiary.example.com",

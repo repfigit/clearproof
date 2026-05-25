@@ -106,9 +106,7 @@ class SIWEAuth:
 
         # Domain check
         if siwe_msg.domain != self.domain:
-            raise ValueError(
-                f"Domain mismatch: expected {self.domain}, got {siwe_msg.domain}"
-            )
+            raise ValueError(f"Domain mismatch: expected {self.domain}, got {siwe_msg.domain}")
 
         # Nonce check (consume before verification so replayed messages fail)
         if not await self._consume_nonce(siwe_msg.nonce):

@@ -19,6 +19,7 @@ router = APIRouter(tags=["health"])
 # In-memory metrics accumulator (replaced by Prometheus/OTEL in production)
 # ---------------------------------------------------------------------------
 
+
 class _MetricsStore:
     """Simple in-memory metrics for the MVP."""
 
@@ -56,6 +57,7 @@ metrics = _MetricsStore()
 # Response models
 # ---------------------------------------------------------------------------
 
+
 class HealthResponse(BaseModel):
     status: str
     version: str
@@ -75,6 +77,7 @@ class MetricsResponse(BaseModel):
 # ---------------------------------------------------------------------------
 # Endpoints
 # ---------------------------------------------------------------------------
+
 
 @router.get("/health", response_model=HealthResponse, summary="Health check")
 async def health():

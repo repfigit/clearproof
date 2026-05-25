@@ -112,9 +112,7 @@ class AuditLog:
             if entry.prev_entry_hash != expected_prev:
                 return False
 
-            expected_hash = AuditEntry.compute_hash(
-                entry.data_hash, entry.prev_entry_hash, entry.sequence_number
-            )
+            expected_hash = AuditEntry.compute_hash(entry.data_hash, entry.prev_entry_hash, entry.sequence_number)
             if entry.entry_hash != expected_hash:
                 return False
 

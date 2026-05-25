@@ -14,9 +14,9 @@ from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import padding, rsa
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 
+from src.protocol.bridges.trisa_bridge import TRISABridge
 from src.protocol.compliance_proof import ComplianceProof
 from src.protocol.hybrid_payload import HybridPayload
-from src.protocol.bridges.trisa_bridge import TRISABridge
 
 
 @pytest.fixture

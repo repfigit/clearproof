@@ -9,7 +9,6 @@ AUTH_MODE env var controls the active scheme:
 JWTAuthDependency is a FastAPI dependency injected into protected routes.
 """
 
-import hashlib
 import hmac
 import logging
 import os
@@ -37,6 +36,7 @@ _bearer_scheme = HTTPBearer(auto_error=False)
 # ---------------------------------------------------------------------------
 # JWT verification
 # ---------------------------------------------------------------------------
+
 
 def verify_jwt_token(token: str) -> dict:
     """
@@ -87,6 +87,7 @@ def verify_jwt_token(token: str) -> dict:
 # SIWE session verification
 # ---------------------------------------------------------------------------
 
+
 async def _verify_siwe_session(token: str) -> dict:
     """
     Validate a SIWE session token and return its session data as claims.
@@ -114,6 +115,7 @@ async def _verify_siwe_session(token: str) -> dict:
 # API-key verification
 # ---------------------------------------------------------------------------
 
+
 def _verify_api_key(provided: str) -> dict:
     """
     Constant-time comparison of the provided key against the stored key.
@@ -135,6 +137,7 @@ def _verify_api_key(provided: str) -> dict:
 # ---------------------------------------------------------------------------
 # FastAPI dependency
 # ---------------------------------------------------------------------------
+
 
 async def JWTAuthDependency(request: Request) -> dict:  # noqa: N802 — uppercase to match task spec naming
     """
