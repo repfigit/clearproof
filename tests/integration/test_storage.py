@@ -9,7 +9,13 @@ import uuid
 
 import pytest
 
-pytestmark = pytest.mark.integration
+pytestmark = [
+    pytest.mark.integration,
+    pytest.mark.skipif(
+        not os.environ.get("DATABASE_URL"),
+        reason="requires DATABASE_URL pointing at a running PostgreSQL",
+    ),
+]
 
 DB_URL = os.environ.get("DATABASE_URL", "postgresql://postgres:postgres@localhost:5432/clearproof_test")
 
