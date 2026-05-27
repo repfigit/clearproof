@@ -6,6 +6,7 @@ from contextlib import asynccontextmanager
 from typing import AsyncIterator
 
 import psycopg
+from psycopg_pool import AsyncConnectionPool
 
 logger = logging.getLogger(__name__)
 
@@ -71,8 +72,7 @@ _SCHEMA_MIGRATIONS = [
     );
 
     CREATE INDEX IF NOT EXISTS idx_idem_expires
-        ON idempotency_keys (expires_at)
-        WHERE expires_at > EXTRACT(EPOCH FROM now());
+        ON idempotency_keys (expires_at);
     """,
     """
     CREATE TABLE IF NOT EXISTS sanctions_roots (
@@ -111,7 +111,7 @@ class Database:
     def __init__(self, pool_min: int = 2, pool_max: int = 10) -> None:
         self._pool_min = pool_min
         self._pool_max = pool_max
-        self._pool: psycopg.Pool | None = None
+        self._pool: AsyncConnectionPool | None = None
 
     @property
     def is_ready(self) -> bool:
@@ -125,30 +125,29 @@ class Database:
         if not url:
             raise RuntimeError("DATABASE_URL environment variable is required")
 
-        self._pool = psycopg.Pool(
+        self._pool = AsyncConnectionPool(
             conninfo=url,
             min_size=self._pool_min,
             max_size=self._pool_max,
+            open=False,
         )
+        await self._pool.open()
 
         await self._migrate()
         logger.info("Database connected, schema up to date")
 
     async def close(self) -> None:
         if self._pool is not None:
-            self._pool.close()
+            await self._pool.close()
             self._pool = None
             logger.info("Database connection pool closed")
 
     @asynccontextmanager
-    async def connection(self) -> AsyncIterator[psycopg.Connection]:
+    async def connection(self) -> AsyncIterator[psycopg.AsyncConnection]:
         if self._pool is None:
             raise RuntimeError("Database not connected")
-        conn = self._pool.connection()
-        try:
+        async with self._pool.connection() as conn:
             yield conn
-        finally:
-            conn.close()
 
     async def _migrate(self) -> None:
         async with self.connection() as conn:
@@ -160,8 +159,9 @@ class Database:
                     )
                 """)
 
-                result = await cur.execute("SELECT MAX(version) FROM schema_migrations")
-                current_version = result.fetchone()[0] or 0
+                await cur.execute("SELECT MAX(version) FROM schema_migrations")
+                row = await cur.fetchone()
+                current_version = (row[0] if row and row[0] is not None else 0)
 
                 for i, migration in enumerate(_SCHEMA_MIGRATIONS, start=current_version + 1):
                     if i <= current_version:

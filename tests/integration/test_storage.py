@@ -28,56 +28,15 @@ def event_loop():
 
 
 @pytest.fixture(scope="module")
-async def db_pool():
-    from psycopg import Pool
+async def db():
+    """Exercise the real Database class against a live PostgreSQL."""
+    from src.storage.database import Database
 
-    pool = Pool(conninfo=DB_URL, min_size=1, max_size=1)
-    yield pool
-    pool.close()
-
-
-@pytest.fixture
-async def db(db_pool):
-
-    class FakeDB:
-        def __init__(self, pool):
-            self._pool = pool
-
-        @property
-        def is_ready(self):
-            return True
-
-        async def connection(self):
-            conn = self._pool.connection()
-            try:
-                yield conn
-            finally:
-                conn.close()
-
-        async def _migrate(self):
-            async with self.connection() as conn:
-                async with conn.cursor() as cur:
-                    await cur.execute("""
-                        CREATE TABLE IF NOT EXISTS schema_migrations (
-                            version INTEGER PRIMARY KEY,
-                            applied_at TIMESTAMPTZ NOT NULL DEFAULT now()
-                        )
-                    """)
-                    result = await cur.execute("SELECT MAX(version) FROM schema_migrations")
-                    current_version = result.fetchone()[0] or 0
-                    from src.storage.database import _SCHEMA_MIGRATIONS
-
-                    for i, migration in enumerate(_SCHEMA_MIGRATIONS, start=current_version + 1):
-                        if i <= current_version:
-                            continue
-                        await cur.execute(migration)
-                        await conn.commit()
-                        await cur.execute("INSERT INTO schema_migrations (version) VALUES (%s)", (i,))
-                        await conn.commit()
-
-    db = FakeDB(db_pool)
-    await db._migrate()
-    yield db
+    os.environ["DATABASE_URL"] = DB_URL
+    database = Database(pool_min=1, pool_max=1)
+    await database.connect()
+    yield database
+    await database.close()
 
 
 @pytest.fixture

@@ -13,7 +13,7 @@ dependencies = [
     "PyJWT[crypto]>=2.8",
     "web3>=7.0",
     "siwe>=4.0",
-    "psycopg[binary]>=3.2",
+    "psycopg[binary,pool]>=3.2",
     "asyncpg>=0.30",
 ]
 
