@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 from typing import Optional
 
 from pydantic import BaseModel
@@ -58,6 +59,12 @@ class StoredAuditEntry(BaseModel):
     data_hash: str
     prev_entry_hash: str
     entry_hash: str
+
+    @staticmethod
+    def compute_hash(data_hash: str, prev_entry_hash: str, sequence_number: int) -> str:
+        """Deterministic hash linking this entry to the previous one (hash chain)."""
+        payload = f"{prev_entry_hash}:{data_hash}:{sequence_number}".encode()
+        return hashlib.sha256(payload).hexdigest()
 
 
 class StoredIdempotencyKey(BaseModel):
