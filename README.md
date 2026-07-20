@@ -236,10 +236,10 @@ A daily `sanctions-update` cron job rebuilds the sanctions Merkle tree from live
 
 | Package | Version | Description |
 |---------|---------|-------------|
-| [`@clearproof/circuits`](https://www.npmjs.com/package/@clearproof/circuits) | 0.3.0 | Compiled circuit artifacts (WASM + zkey) |
-| [`@clearproof/proof`](https://www.npmjs.com/package/@clearproof/proof) | 0.3.0 | TypeScript SDK for proof generation/verification |
-| [`@clearproof/cli`](https://www.npmjs.com/package/@clearproof/cli) | 0.3.0 | CLI tool with demo command |
-| [`@clearproof/contracts`](https://www.npmjs.com/package/@clearproof/contracts) | 0.3.0 | Solidity contracts + ABIs |
+| [`@clearproof/circuits`](https://www.npmjs.com/package/@clearproof/circuits) | 0.4.0 | Compiled circuit artifacts (WASM + zkey) |
+| [`@clearproof/proof`](https://www.npmjs.com/package/@clearproof/proof) | 0.4.0 | TypeScript SDK for proof generation/verification |
+| [`@clearproof/cli`](https://www.npmjs.com/package/@clearproof/cli) | 0.4.0 | CLI tool with demo command |
+| [`@clearproof/contracts`](https://www.npmjs.com/package/@clearproof/contracts) | 0.4.0 | Solidity contracts + ABIs |
 
 ## License
 
