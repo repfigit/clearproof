@@ -70,6 +70,29 @@ mkdir -p /tmp/circuit-build
 circom circuits/compliance.circom --r1cs --sym -l node_modules -o /tmp/circuit-build
 ```
 
+## Regenerating gRPC / Protobuf Stubs
+
+The files `src/protocol/bridges/*_pb2.py` and `*_pb2_grpc.py` are generated from `protos/` and **must never be hand-edited**. Regenerate them with:
+
+```bash
+make regen-protobufs    # regenerate in place (pinned grpcio-tools)
+make check-protobufs    # verify committed stubs match protos/ (runs in CI)
+```
+
+`scripts/regen_protobufs.sh` pins the generator version and applies the documented post-processing (package-relative imports, warn-only grpcio version guard). If `protos/*.proto` changes, commit the regenerated stubs in the same PR — CI fails on drift.
+
+## Developer Certificate of Origin (DCO)
+
+All contributions must be signed off with the [Developer Certificate of Origin](https://developercertificate.org/). This certifies that you wrote or have the right to submit the contribution under the project's Apache-2.0 license. Because this repository contains cryptographic compliance code, contribution provenance matters to downstream regulated users.
+
+Sign off every commit:
+
+```bash
+git commit -s -m "feat: your change"
+```
+
+This adds a `Signed-off-by: Your Name <you@example.com>` trailer. Use your real name and a reachable email. PRs without sign-offs on all commits will be asked to amend (`git rebase --signoff` + force-push).
+
 ## Pull Request Process
 
 1. **Fork** the repository and create a feature branch from `main`.
@@ -86,6 +109,9 @@ circom circuits/compliance.circom --r1cs --sym -l node_modules -o /tmp/circuit-b
 - [ ] TypeScript compiles without errors
 - [ ] Circuit changes include constraint count analysis (current: ~31K constraints, 16 public signals)
 - [ ] No secrets or private keys committed
+- [ ] `CHANGELOG.md` updated under `[Unreleased]` for user-visible changes
+- [ ] All commits signed off (`git commit -s`) per the DCO section above
+- [ ] `make check-protobufs` passes if `protos/` or `src/protocol/bridges/` changed
 - [ ] AGENTS.md files updated if you added/modified behavior in `src/`, `packages/contracts/`, `circuits/`, `packages/proof/`, `tests/`, or `scripts/` (see root AGENTS.md for hierarchy)
 
 ## Code Style
