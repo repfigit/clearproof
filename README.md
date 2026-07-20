@@ -33,12 +33,12 @@ clearproof is **pre-production, pilot-stage software**. Current assurance postur
 
 | Area | Status |
 |------|--------|
-| Trusted setup | Development-only. Production proving keys require a documented multi-party ceremony (planned). |
+| Trusted setup | Development-only single-party setup. Production keys require the MPC ceremony — runbook at `docs/internal/CEREMONY_RUNBOOK.md`. |
 | Circuit audit | Not yet performed. Do not rely on circuits for production fund movement. |
 | Contract audit | Not yet performed. Deployments below are Sepolia testnet pilots. |
 | Bridges (TRP / TRISA / TAIP-10) | Prototype-level data models and tests; bilateral interop runs are in progress. |
 | Sanctions data | Rebuilt from live OFAC/EU feeds; on-chain staleness checks fail closed. |
-| Verifier parity | Off-chain ≡ on-chain verification equivalence is in progress (see ROADMAP). |
+| Verifier parity | Committed parity vector (`tests/vectors/`) verified off-chain (snarkjs) and on-chain (Hardhat) in CI. Domain-bound registry parity remains open. |
 
 We publish audits, ceremony attestations, and interop results in this section as they land. See [ROADMAP.md](ROADMAP.md) for the production-readiness definition and [SECURITY.md](SECURITY.md) for vulnerability reporting.
 

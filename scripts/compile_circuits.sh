@@ -18,6 +18,23 @@ PTAU_POWER=18  # 2^18 constraints (dev; increase for production)
 PTAU_FILE="$BUILD_DIR/pot${PTAU_POWER}_final.ptau"
 CONTRACTS_DIR="packages/contracts/contracts"
 
+# ---------------------------------------------------------------------------
+# Dev key entropy
+# ---------------------------------------------------------------------------
+# zkey contributions use fresh randomness by default. NOTE: snarkjs mixes OS
+# randomness into every contribution even when -e is given, so dev builds are
+# NEVER byte-reproducible — the zkey, verification key, Solidity verifier,
+# and tests/vectors/ must always be regenerated and committed TOGETHER.
+# These keys are DEV-ONLY and insecure by construction; production keys must
+# come from the documented MPC ceremony (docs/internal/CEREMONY_RUNBOOK.md).
+DEV_ENTROPY="${CLEARPROOF_DEV_ENTROPY:-$(head -c 32 /dev/urandom | xxd -p)}"
+
+# Powers of Tau: reuse the audited Hermez 2^18 ptau (same as CI; itself an
+# MPC artifact with hundreds of independent contributions). Set
+# CLEARPROOF_GENERATE_PTAU=1 to run a local single-party ceremony instead.
+PTAU_URL="https://storage.googleapis.com/zkevm/ptau/powersOfTau28_hez_final_18.ptau"
+PTAU_SHA256="e970efa7774da80101e0ac336d083ef3339855c98112539338d706b2b89ac694"
+
 echo "=== ZK Travel Rule Circuit Compilation ==="
 echo ""
 
@@ -56,31 +73,46 @@ mkdir -p "$BUILD_DIR"
 # See: https://github.com/iden3/perpetual-powers-of-tau
 
 if [ ! -f "$PTAU_FILE" ]; then
-    echo "Running powers of tau ceremony (2^${PTAU_POWER}, dev single-party)..."
+    if [ "${CLEARPROOF_GENERATE_PTAU:-0}" = "1" ]; then
+        echo "Running powers of tau ceremony (2^${PTAU_POWER}, dev single-party)..."
+        echo "WARNING: locally generated ptau produces keys that differ from CI/committed artifacts."
 
-    # Start a new ceremony
-    npx snarkjs powersoftau new bn128 "$PTAU_POWER" \
-        "$BUILD_DIR/pot${PTAU_POWER}_0000.ptau" \
-        -v
+        # Start a new ceremony
+        npx snarkjs powersoftau new bn128 "$PTAU_POWER" \
+            "$BUILD_DIR/pot${PTAU_POWER}_0000.ptau" \
+            -v
 
-    # Single contribution (dev only — use MPC ceremony for production)
-    npx snarkjs powersoftau contribute \
-        "$BUILD_DIR/pot${PTAU_POWER}_0000.ptau" \
-        "$BUILD_DIR/pot${PTAU_POWER}_0001.ptau" \
-        --name="Dev contribution" \
-        -e="$(head -c 32 /dev/urandom | xxd -p)"
+        # Single contribution (dev only — use MPC ceremony for production)
+        npx snarkjs powersoftau contribute \
+            "$BUILD_DIR/pot${PTAU_POWER}_0000.ptau" \
+            "$BUILD_DIR/pot${PTAU_POWER}_0001.ptau" \
+            --name="Dev contribution" \
+            -e="$DEV_ENTROPY"
 
-    # Prepare phase 2
-    npx snarkjs powersoftau prepare phase2 \
-        "$BUILD_DIR/pot${PTAU_POWER}_0001.ptau" \
-        "$PTAU_FILE" \
-        -v
+        # Prepare phase 2
+        npx snarkjs powersoftau prepare phase2 \
+            "$BUILD_DIR/pot${PTAU_POWER}_0001.ptau" \
+            "$PTAU_FILE" \
+            -v
 
-    # Clean up intermediate files
-    rm -f "$BUILD_DIR/pot${PTAU_POWER}_0000.ptau" \
-          "$BUILD_DIR/pot${PTAU_POWER}_0001.ptau"
+        # Clean up intermediate files
+        rm -f "$BUILD_DIR/pot${PTAU_POWER}_0000.ptau" \
+              "$BUILD_DIR/pot${PTAU_POWER}_0001.ptau"
 
-    echo "Powers of tau ceremony complete."
+        echo "Powers of tau ceremony complete."
+    else
+        echo "Downloading audited Hermez powers of tau (2^${PTAU_POWER})..."
+        curl -L --fail --max-time 600 "$PTAU_URL" -o "$PTAU_FILE"
+        ACTUAL_SHA256=$(sha256sum "$PTAU_FILE" | awk '{print $1}')
+        if [ "$ACTUAL_SHA256" != "$PTAU_SHA256" ]; then
+            echo "ERROR: ptau SHA256 mismatch!"
+            echo "  Expected: $PTAU_SHA256"
+            echo "  Actual:   $ACTUAL_SHA256"
+            rm -f "$PTAU_FILE"
+            exit 1
+        fi
+        echo "ptau checksum verified."
+    fi
 else
     echo "Using existing powers of tau: $PTAU_FILE"
 fi
@@ -117,12 +149,12 @@ npx snarkjs groth16 setup \
     "$PTAU_FILE" \
     "$BUILD_DIR/compliance_0000.zkey"
 
-# Single contribution (dev only — use MPC ceremony for production)
+# Single contribution (dev only — use the documented MPC ceremony for production)
 npx snarkjs zkey contribute \
     "$BUILD_DIR/compliance_0000.zkey" \
     "$BUILD_DIR/compliance_final.zkey" \
     --name="Dev contribution" \
-    -e="$(head -c 32 /dev/urandom | xxd -p)"
+    -e="$DEV_ENTROPY"
 
 # Clean up intermediate zkey
 rm -f "$BUILD_DIR/compliance_0000.zkey"

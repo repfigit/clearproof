@@ -32,6 +32,8 @@ jobs:
         run: cd packages/proof && npx tsc
       - run: cd packages/proof && npx tsc --noEmit
       - run: cd packages/cli && npx tsc --noEmit
+      - name: Off-chain parity tests (committed vector)
+        run: cd packages/proof && npx vitest run
 
   hardhat-tests:
     runs-on: ubuntu-latest
@@ -174,6 +176,16 @@ jobs:
           echo ""
           echo "=== Compilation successful ==="
           
+      - name: Smoke test — fresh artifacts produce a valid proof
+        run: |
+          # Proves the full pipeline (compile → setup → prove → verify) still
+          # works after any circuit/toolchain change. Consistency of the
+          # committed key set is enforced by hardhat-tests (on-chain) and the
+          # TypeScript parity tests (off-chain) against tests/vectors/.
+          set -euo pipefail
+          cd packages/content && npx tsc && cd ../proof && npx tsc && cd ../cli && npx tsc && cd ../..
+          node packages/cli/dist/index.js demo --artifacts artifacts
+
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:

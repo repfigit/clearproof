@@ -1,0 +1,18 @@
+{
+  "description": "clearproof compliance-circuit parity test vector (off-chain + on-chain verification)",
+  "circuit": "compliance",
+  "proofSystem": "groth16",
+  "curve": "bn128",
+  "devKeysOnly": true,
+  "warning": "Generated from a single-party dev trusted setup. NOT valid for production.",
+  "artifacts": {
+    "wasm_sha256": "7fc4f817bb99077ac9826199d2698fd621323b9dfd7191531b67052f950f73d6",
+    "zkey_sha256": "5e5daa16c49ef889fa08b527ee4751b1e54d40686aa6d1c7d59e31455773e713",
+    "vkey_sha256": "ea86c1d6cc973745d4ff691f277abb0f39ba8ed34e69ac3331189179f736c7d6"
+  },
+  "toolchain": {
+    "circom": "2.2.2",
+    "snarkjs": "0.7.6",
+    "ptau": "powersOfTau28_hez_final_18 (sha256-verified Hermez)"
+  }
+}
