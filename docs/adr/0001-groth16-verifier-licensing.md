@@ -1,7 +1,7 @@
 # ADR 0001: Groth16 Verifier Contract Licensing (GPL-3.0)
 
-- **Status:** Accepted (interim), revisit before mainnet deployment
-- **Date:** 2026-05-21
+- **Status:** Accepted (interim), revisit before mainnet deployment. Option D (upstream clarification) completed 2026-07-20 — see below.
+- **Date:** 2026-05-21 (updated 2026-07-20)
 - **Deciders:** clearproof maintainers
 - **Related:** ROADMAP "Security assurance" track, `REUSE.toml`, ceremony runbook
 
@@ -59,10 +59,23 @@ implementing the same alt_bn128 pairing checks. snarkjs supports custom
 templates; the math is standardized (Groth16 over BN254 with EIP-196/197
 precompiles).
 
+**Amendment (2026-07-20) — concrete starting point identified.** The snarkjs
+template descends from Christian Reitwiessner's MIT-licensed verifier (2017);
+the MIT notice was still present in snarkjs at commit
+[`577b3f3580`](https://github.com/iden3/snarkjs/commit/577b3f3580) alongside
+the GPL SPDX. MIT code remains MIT — iden3's later relicensing cannot apply
+retroactively to the ancestor. A permissive template can legitimately fork
+the pre-GPL MIT ancestor instead of starting clean-room. Caveat: iden3's
+post-GPL security fixes — notably the public-signals count check
+([#518](https://github.com/iden3/snarkjs/pull/518)) and the scalar-field
+size check (2024) — are GPL and must be independently re-implemented.
+
 - ✅ Removes the diligence friction entirely; uniform Apache-2.0 repo
 - ✅ Template is reusable across future circuits and ceremonies
+- ✅ MIT ancestor (≤ `577b3f3580`) provides a proven skeleton — not a from-scratch build
 - ❌ Real engineering + audit cost; a hand-rolled pairing verifier is
   security-critical code
+- ❌ iden3's post-GPL fixes must be re-implemented independently
 - ❌ Must be re-validated against snarkjs proofs (parity vectors make this
   testable — see `tests/vectors/`)
 
@@ -80,6 +93,22 @@ whether they would dual-license the template. Cheap, non-committal.
 - ✅ Lowest effort; a clear statement resolves diligence questions cheaply
 - ❌ No timeline guarantee; answer may be "no"
 
+**Outcome (2026-07-20): COMPLETE — answer is "GPL-3, deliberately," no filing
+needed.** Upstream had already litigated this exact question:
+
+- [iden3/snarkjs#138](https://github.com/iden3/snarkjs/issues/138) reported
+  that the verifier template contained both an MIT permission grant and a
+  GPL-3.0 SPDX identifier.
+- [iden3/snarkjs#139](https://github.com/iden3/snarkjs/issues/139) (PR to
+  change the SPDX to MIT) was **rejected by iden3**: "The contract was
+  modified by Iden3 and updated to be licensed as GPL-3 (which is allowed to
+  contain code that was MIT originally)."
+- Relicensing requests for snarkjs itself
+  ([#199](https://github.com/iden3/snarkjs/issues/199),
+  [#261](https://github.com/iden3/snarkjs/issues/261)) were closed unadopted.
+
+Filing a new issue would duplicate closed, answered questions.
+
 ## Decision
 
 **Interim: Option A, with Options B and D as pre-mainnet work items.**
@@ -87,9 +116,10 @@ whether they would dual-license the template. Cheap, non-committal.
 1. **Now (done):** GPL-3.0 status documented in `README.md` (License section),
    `REUSE.toml` (dedicated annotation + `LICENSES/GPL-3.0-only.txt`), and this
    ADR. The header is preserved verbatim; we never relicense the file.
-2. **Next 30 days:** File an upstream issue with iden3/snarkjs asking for
-   clarification or dual-licensing of the verifier template (Option D).
-   Track: <issue link to be added when filed>.
+2. ~~Next 30 days: File an upstream issue~~ **Done 2026-07-20 (Option D):**
+   no filing required — upstream's position is documented in
+   iden3/snarkjs#138/#139 (GPL-3 intentional) and #199/#261 (relicensing
+   declined). See Option D outcome above.
 3. **Before production ceremony (gate):** If diligence feedback from pilot
    VASPs shows GPL is a blocker, fund Option B. The committed parity test
    vector (`tests/vectors/compliance/`) already provides the conformance
