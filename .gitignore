@@ -23,6 +23,10 @@ proof.json
 public.json
 verification_key.json
 
+# Exception: the committed verifier parity vector is intentional, reviewed
+# test data (see tests/vectors/README.md), not a local build artifact.
+!tests/vectors/
+
 # Node
 node_modules/
 package-lock.json
