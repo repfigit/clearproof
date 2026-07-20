@@ -1,6 +1,6 @@
 # ADR 0001: Groth16 Verifier Contract Licensing (GPL-3.0)
 
-- **Status:** Accepted (interim), revisit before mainnet deployment. Option D (upstream clarification) completed 2026-07-20 — see below.
+- **Status:** RESOLVED 2026-07-20 — Option B implemented. The repository now ships a clearproof-owned Apache-2.0 verifier (`scripts/generate_verifier.mjs` + `packages/contracts/contracts/Pairing.sol`, MIT-licensed pairing library by Christian Reitwiessner with attribution in `NOTICE`). No GPL-licensed code remains in the repository.
 - **Date:** 2026-05-21 (updated 2026-07-20)
 - **Deciders:** clearproof maintainers
 - **Related:** ROADMAP "Security assurance" track, `REUSE.toml`, ceremony runbook
@@ -129,10 +129,37 @@ Filing a new issue would duplicate closed, answered questions.
    regenerated from the production zkey; the licensing decision must be
    recorded here before that regeneration ships.
 
-## Consequences
+## Resolution (2026-07-20): Option B implemented
+
+- `scripts/generate_verifier.mjs` renders `Groth16Verifier.sol` from any
+  snarkjs `verification_key.json`; it replaces `snarkjs zkey export
+  solidityverifier` in `scripts/compile_circuits.sh` and CI.
+- The verifier is an independent implementation from the Groth16
+  specification (pairing equation `e(-A,B)·e(α,β)·e(vk_x,γ)·e(C,δ) == 1`)
+  on the MIT-licensed Pairing library — **not** a fork of the snarkjs
+  template. (The MIT-ancestor fork option was superseded: an independent
+  implementation on the MIT pairing library is cleaner provenance than
+  untangling which template lines are Reitwiessner's vs. 0KIMS's 2019 port.)
+- Security checks implemented independently of iden3's GPL fixes:
+  - Public-signal count: enforced at the ABI level via the fixed-size
+    `uint256[16]` parameter (stronger than a runtime length check).
+  - Canonical scalar-field check: every public signal `< r`, else revert
+    (covered by `Verifier.test.ts`).
+- Validated against the committed parity vector (`tests/vectors/`): the same
+  proof verifies off-chain (snarkjs) and on-chain (this contract), plus
+  tamper-rejection cases. 38 Hardhat tests passing.
+- `REUSE.toml`, `LICENSES/`, `NOTICE`, and README License section updated;
+  GPL-3.0 license text removed (no GPL code remains).
+
+## Consequences (superseded — retained for history)
 
 - Testnet/pilot deployments proceed with the GPL verifier; pilots must be
   told explicitly (pilot limitations document, per ROADMAP).
 - The README License section is the single source of truth for integrators.
 - This ADR must be revisited (status → "Superseded") when the production
   verifier is generated.
+
+  **Update 2026-07-20:** none of these consequences remain in effect; the
+  GPL verifier has been replaced (see Resolution above). At the production
+  ceremony, the verifier is regenerated from the production vkey with
+  `scripts/generate_verifier.mjs` — no licensing decision is required anymore.
