@@ -16,12 +16,26 @@ jobs:
           node-version: 20
           registry-url: https://registry.npmjs.org
       - run: npm install
-      - run: cd packages/proof && npx tsc && npm publish --access public
+      # --provenance publishes Sigstore build attestations (requires id-token: write above).
+      - run: cd packages/proof && npx tsc && npm publish --access public --provenance
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
-      - run: cd packages/cli && npx tsc && npm publish --access public
+      - run: cd packages/cli && npx tsc && npm publish --access public --provenance
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
-      - run: cd packages/contracts && npm publish --access public
+      - run: cd packages/contracts && npm publish --access public --provenance
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+  publish-pypi:
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write # PyPI trusted publisher (OIDC) — no long-lived token
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v4
+      - run: uv build
+      - name: Publish to PyPI
+        uses: pypa/gh-action-pypi-publish@release/v1
+        # Requires a trusted publisher configured on PyPI for repo
+        # repfigit/clearproof, workflow release.yml, environment optional.

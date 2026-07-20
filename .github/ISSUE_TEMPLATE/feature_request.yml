@@ -1,0 +1,42 @@
+name: Feature Request
+description: Propose new capability or interoperability work
+title: "[Feature]: "
+labels: ["enhancement"]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+      description: What compliance, interoperability, or developer-experience problem does this solve? Who is affected (VASP integrator, regulator-facing team, protocol bridge, auditor)?
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposal
+      description: What should change? If this touches circuits, protocol bridges, or the hybrid payload format, describe the compatibility impact.
+    validations:
+      required: true
+  - type: dropdown
+    id: standards-impact
+    attributes:
+      label: Does this affect a public spec or protocol?
+      description: Changes here need broader review and possibly a spec version bump.
+      options:
+        - "No — internal implementation only"
+        - "Yes — hybrid payload format"
+        - "Yes — TRP / OpenVASP interop"
+        - "Yes — TRISA interop"
+        - "Yes — TAIP-10 / W3C VP interop"
+        - "Yes — on-chain registry / oracle interface"
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Guardrails
+      options:
+        - label: This does not require logging or storing raw PII outside the encrypted envelope
+        - label: This does not resolve ENS names for sanctions screening (raw hex addresses only)

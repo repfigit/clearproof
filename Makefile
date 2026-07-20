@@ -1,4 +1,4 @@
-.PHONY: install dev lint format test test-unit test-integration test-compliance build-sanctions-tree update-sanctions-oracle benchmark deploy relay-sanctions
+.PHONY: install dev lint format test test-unit test-integration test-compliance build-sanctions-tree update-sanctions-oracle benchmark deploy relay-sanctions regen-protobufs check-protobufs
 
 install:
 	uv sync --all-extras
@@ -28,6 +28,14 @@ test-compliance:
 
 build-sanctions-tree:
 	python scripts/build_sanctions_tree.py
+
+# Regenerate gRPC stubs from protos/ (pinned grpcio-tools, documented post-processing)
+regen-protobufs:
+	bash scripts/regen_protobufs.sh
+
+# Verify committed gRPC stubs match protos/ (runs in CI)
+check-protobufs:
+	bash scripts/regen_protobufs.sh --check
 
 update-sanctions-oracle:
 	@echo "Step 1: Rebuild sanctions tree from live feeds..."

@@ -1,0 +1,56 @@
+name: Bug Report
+description: Report a defect in clearproof
+title: "[Bug]: "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting a bug. **Do not report security vulnerabilities here** — see [SECURITY.md](../../SECURITY.md) and email security@clearproof.dev instead.
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened?
+      description: A clear description of the bug and what you expected instead.
+    validations:
+      required: true
+  - type: dropdown
+    id: component
+    attributes:
+      label: Component
+      options:
+        - Circuits (circom)
+        - Contracts (Solidity)
+        - Proof SDK (TypeScript)
+        - Python SDK / API (FastAPI)
+        - Bridges (TRISA / TRP / TAIP-10)
+        - Sanctions tree / oracle relay
+        - CLI
+        - Docs
+    validations:
+      required: true
+  - type: textarea
+    id: repro
+    attributes:
+      label: Steps to reproduce
+      description: Minimal commands or code. Never include real PII, private keys, mnemonics, or production credentials.
+      placeholder: |
+        1. uv sync --all-extras
+        2. ...
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Relevant log output
+      render: shell
+  - type: input
+    id: version
+    attributes:
+      label: Version / commit
+      placeholder: "0.3.0 or commit SHA"
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      placeholder: "OS, Python 3.11/3.12, Node 20, circom 2.2.2, chain/network"

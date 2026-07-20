@@ -185,3 +185,19 @@ jobs:
             artifacts/compliance_final.zkey
             artifacts/verification_key.json
           retention-days: 7
+
+  protobuf-freshness:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v4
+      - name: Verify committed gRPC stubs match protos/
+        run: bash scripts/regen_protobufs.sh --check
+
+  license-compliance:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v4
+      - name: REUSE compliance (SPDX license metadata)
+        run: uvx reuse lint
