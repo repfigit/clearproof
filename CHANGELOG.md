@@ -11,6 +11,8 @@ maintains its own version line in this file.
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-07-20
+
 ### Added
 
 - **Apache-2.0 Groth16 verifier (ADR 0001 Option B, resolved)**: `scripts/generate_verifier.mjs` renders `Groth16Verifier.sol` from any snarkjs verification key — an independent implementation on the MIT-licensed Pairing library (`packages/contracts/contracts/Pairing.sol`, Copyright 2017 Christian Reitwiessner, attribution in `NOTICE`). Replaces the GPL-3.0 snarkjs-generated verifier; **no GPL code remains in the repository**. Security checks implemented independently: ABI-level fixed-size public-signal array (count mismatches inexpressible) and canonical scalar-field range checks (revert on `>= r`). New Hardhat tests cover out-of-field revert and in-field tamper rejection.
@@ -51,5 +53,6 @@ maintains its own version line in this file.
 
 - Storage tests skip cleanly when `DATABASE_URL` is unset.
 
-[Unreleased]: https://github.com/repfigit/clearproof/compare/v0.3.0...HEAD
+[Unreleased]: https://github.com/repfigit/clearproof/compare/v0.4.0...HEAD
+[0.4.0]: https://github.com/repfigit/clearproof/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/repfigit/clearproof/releases/tag/v0.3.0

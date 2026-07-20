@@ -1,6 +1,6 @@
 {
   "name": "@clearproof/contracts",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "description": "On-chain Groth16 verifier for clearproof compliance proofs",
   "license": "Apache-2.0",
   "files": [
