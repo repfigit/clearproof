@@ -1,5 +1,16 @@
 # Well-Known clearproof Discovery Spec
 
+> - **Spec version:** 0.2.0
+> - **Status:** draft (see [specs/README.md](README.md) for lifecycle)
+> - **Last updated:** 2026-05-21
+>
+> ## Changelog
+>
+> | Version | Date | Change |
+> |---------|------|--------|
+> | 0.2.0 | 2026-05-21 | Formalized spec front matter and lifecycle governance |
+> | 0.2.0 | 2026-05 | Initial draft (versioned inline in schema) |
+
 ## Overview
 
 Any VASP that supports clearproof publishes a JSON document at:

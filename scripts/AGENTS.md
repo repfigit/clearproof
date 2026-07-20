@@ -6,8 +6,9 @@
 Three small scripts that support reproducible builds and sanctions data:
 
 - `build_sanctions_tree.py` (563 LOC) — fetches OFAC + EU lists, normalizes crypto addresses, builds deterministic Poseidon Merkle tree, writes `artifacts/sanctions_tree.json` + test vectors.
-- `compile_circuits.sh` — circom + snarkjs trusted setup pipeline (dev ptau18).
+- `compile_circuits.sh` — circom + snarkjs trusted setup pipeline. Downloads the audited Hermez ptau18 (sha256-pinned) by default; `CLEARPROOF_GENERATE_PTAU=1` opts into a local single-party ceremony. Dev zkeys are never byte-reproducible (snarkjs mixes OS randomness into every contribution).
 - `poseidon_hash.js` — thin Node.js wrapper used by the Python tree builder.
+- `regen_protobufs.sh` — regenerates gRPC stubs from `protos/` with pinned grpcio-tools + documented post-processing; `--check` mode runs in CI.
 
 ## KEY RULES (ALSO IN ROOT)
 
@@ -15,6 +16,7 @@ Three small scripts that support reproducible builds and sanctions data:
 - **Build script version** (`BUILD_SCRIPT_VERSION`) must be bumped on any normalization or tree logic change.
 - **After running `build_sanctions_tree.py`** you **must** run the oracle relay (`make relay-sanctions` or equivalent) on all deployed chains. Skipping this is a critical anti-pattern (see root AGENTS.md).
 - Circuit compilation is a prerequisite for local proving; CI caches the Hermez ptau18 file.
+- After `compile_circuits.sh`, the regenerated `Groth16Verifier.sol` and `tests/vectors/compliance/` (via `node packages/cli/dist/index.js demo --export tests/vectors/compliance`) must be committed together — they are one key set.
 
 ## WHERE TO LOOK
 
