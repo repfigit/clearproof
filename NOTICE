@@ -1,0 +1,14 @@
+clearproof
+Copyright 2026 clearproof contributors
+
+This product is licensed under the Apache License, Version 2.0
+(http://www.apache.org/licenses/LICENSE-2.0).
+
+---
+
+Third-party components:
+
+* alt_bn128 pairing library (packages/contracts/contracts/Pairing.sol)
+  Copyright 2017 Christian Reitwiessner, licensed under the MIT License.
+  Ported to Solidity ^0.8.24 by clearproof contributors. The full MIT
+  permission notice is retained in the file header and in LICENSES/MIT.txt.

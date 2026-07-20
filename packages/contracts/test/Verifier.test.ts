@@ -59,7 +59,7 @@ describe("Groth16Verifier", function () {
     const pC: [bigint, bigint] = [BigInt(1), BigInt(2)];
     const pubSignals = Array(16).fill(BigInt(0));
 
-    // Invalid proof should return false (the snarkjs verifier reverts on
+    // Invalid proof should return false (the verifier reverts on
     // invalid curve points, so we accept either false or a revert)
     try {
       const result = await verifier.verifyProof(pA, pB, pC, pubSignals);
@@ -67,6 +67,72 @@ describe("Groth16Verifier", function () {
     } catch {
       // Revert is also acceptable for invalid proofs
     }
+  });
+
+  it("should reject a public signal outside the scalar field", async function () {
+    const vectorDir = path.resolve(__dirname, "../../../tests/vectors/compliance");
+    const proofPath = path.join(vectorDir, "proof.json");
+    const publicPath = path.join(vectorDir, "public.json");
+    if (!fs.existsSync(proofPath) || !fs.existsSync(publicPath)) {
+      this.skip();
+      return;
+    }
+
+    const proof = JSON.parse(fs.readFileSync(proofPath, "utf-8"));
+    const publicSignals = JSON.parse(fs.readFileSync(publicPath, "utf-8"));
+
+    const Verifier = await ethers.getContractFactory("Groth16Verifier");
+    const verifier = await Verifier.deploy();
+    await verifier.waitForDeployment();
+
+    const pA: [bigint, bigint] = [BigInt(proof.pi_a[0]), BigInt(proof.pi_a[1])];
+    const pB: [[bigint, bigint], [bigint, bigint]] = [
+      [BigInt(proof.pi_b[0][1]), BigInt(proof.pi_b[0][0])],
+      [BigInt(proof.pi_b[1][1]), BigInt(proof.pi_b[1][0])],
+    ];
+    const pC: [bigint, bigint] = [BigInt(proof.pi_c[0]), BigInt(proof.pi_c[1])];
+
+    // Replace one signal with the scalar field order r itself — must revert.
+    const SNARK_SCALAR_FIELD = BigInt(
+      "21888242871839275222246405745257275088548364400416034343698204186575808495617",
+    );
+    const tampered = publicSignals.map((s: string) => BigInt(s));
+    tampered[4] = SNARK_SCALAR_FIELD;
+
+    await expect(
+      verifier.verifyProof(pA, pB, pC, tampered),
+    ).to.be.revertedWith("public signal >= scalar field");
+  });
+
+  it("should reject a tampered-but-in-field public signal with false", async function () {
+    const vectorDir = path.resolve(__dirname, "../../../tests/vectors/compliance");
+    const proofPath = path.join(vectorDir, "proof.json");
+    const publicPath = path.join(vectorDir, "public.json");
+    if (!fs.existsSync(proofPath) || !fs.existsSync(publicPath)) {
+      this.skip();
+      return;
+    }
+
+    const proof = JSON.parse(fs.readFileSync(proofPath, "utf-8"));
+    const publicSignals = JSON.parse(fs.readFileSync(publicPath, "utf-8"));
+
+    const Verifier = await ethers.getContractFactory("Groth16Verifier");
+    const verifier = await Verifier.deploy();
+    await verifier.waitForDeployment();
+
+    const pA: [bigint, bigint] = [BigInt(proof.pi_a[0]), BigInt(proof.pi_a[1])];
+    const pB: [[bigint, bigint], [bigint, bigint]] = [
+      [BigInt(proof.pi_b[0][1]), BigInt(proof.pi_b[0][0])],
+      [BigInt(proof.pi_b[1][1]), BigInt(proof.pi_b[1][0])],
+    ];
+    const pC: [bigint, bigint] = [BigInt(proof.pi_c[0]), BigInt(proof.pi_c[1])];
+
+    // Flip amount_tier 2 -> 3: in-field, but wrong for this proof.
+    const tampered = publicSignals.map((s: string) => BigInt(s));
+    tampered[4] = BigInt(3);
+
+    const result = await verifier.verifyProof(pA, pB, pC, tampered);
+    expect(result).to.equal(false);
   });
 });
 

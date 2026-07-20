@@ -171,8 +171,10 @@ npx snarkjs zkey export verificationkey \
 echo ""
 echo "Generating Solidity verifier..."
 
-npx snarkjs zkey export solidityverifier \
-    "$BUILD_DIR/compliance_final.zkey" \
+# clearproof's own Apache-2.0 generator (the snarkjs exporter emits a
+# GPL-3.0-licensed template — see docs/adr/0001-groth16-verifier-licensing.md)
+node scripts/generate_verifier.mjs \
+    "$BUILD_DIR/verification_key.json" \
     "$CONTRACTS_DIR/Groth16Verifier.sol"
 
 echo "Solidity verifier written to: $CONTRACTS_DIR/Groth16Verifier.sol"

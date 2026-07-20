@@ -9,6 +9,7 @@ Three small scripts that support reproducible builds and sanctions data:
 - `compile_circuits.sh` — circom + snarkjs trusted setup pipeline. Downloads the audited Hermez ptau18 (sha256-pinned) by default; `CLEARPROOF_GENERATE_PTAU=1` opts into a local single-party ceremony. Dev zkeys are never byte-reproducible (snarkjs mixes OS randomness into every contribution).
 - `poseidon_hash.js` — thin Node.js wrapper used by the Python tree builder.
 - `regen_protobufs.sh` — regenerates gRPC stubs from `protos/` with pinned grpcio-tools + documented post-processing; `--check` mode runs in CI.
+- `generate_verifier.mjs` — renders the Apache-2.0 `Groth16Verifier.sol` from a snarkjs verification key (replaces the GPL-3.0 snarkjs exporter; see docs/adr/0001). Never reintroduce `snarkjs zkey export solidityverifier`.
 
 ## KEY RULES (ALSO IN ROOT)
 
