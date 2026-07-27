@@ -54,3 +54,7 @@ A formal bug bounty program is **coming soon**. In the meantime, we will credit 
 - We follow coordinated disclosure. Please give us reasonable time to address vulnerabilities before public disclosure.
 - We will credit reporters in our security advisories unless anonymity is requested.
 - We will not take legal action against researchers who follow this policy.
+
+## Post-Quantum Exposure
+
+clearproof's cryptographic dependencies and their exposure under a quantum threat model are documented in [`docs/internal/PQ_EXPOSURE.md`](docs/internal/PQ_EXPOSURE.md). This covers proof-system exposure (Groth16 over pairing curves), PII envelope exposure (X25519 HPKE store-now-decrypt-later), symmetric exposure (AES-256-GCM under Grover), and trust-store exposure (MPC ceremony artifacts). Migration triggers and timelines are recorded there.
