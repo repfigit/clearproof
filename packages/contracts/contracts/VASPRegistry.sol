@@ -7,6 +7,13 @@ import "@openzeppelin/contracts/access/AccessControl.sol";
 import "@openzeppelin/contracts/utils/Pausable.sol";
 
 contract VASPRegistry is AccessControl, Pausable {
+    // Custom errors
+    error ZeroAdmin();
+    error AlreadyRegistered();
+    error NotActive();
+    error NotRegistered();
+    error AlreadyActive();
+
     bytes32 public constant REGISTRAR_ROLE = keccak256("REGISTRAR_ROLE");
 
     struct VASP {
@@ -31,7 +38,7 @@ contract VASPRegistry is AccessControl, Pausable {
 
     constructor(address admin) {
         // M-7: Zero-address validation
-        require(admin != address(0), "Zero admin");
+        if (admin == address(0)) revert ZeroAdmin();
         _grantRole(DEFAULT_ADMIN_ROLE, admin);
         _grantRole(REGISTRAR_ROLE, admin);
     }
@@ -42,7 +49,7 @@ contract VASPRegistry is AccessControl, Pausable {
         string calldata jurisdiction,
         string calldata discoveryEndpoint
     ) external onlyRole(REGISTRAR_ROLE) whenNotPaused {
-        require(vasps[didHash].registeredAt == 0, "Already registered");
+        if (vasps[didHash].registeredAt != 0) revert AlreadyRegistered();
         vasps[didHash] = VASP(wallet, jurisdiction, discoveryEndpoint, true, uint64(block.timestamp));
         vaspIds.push(didHash);
         activeVaspCount++;  // M-6
@@ -53,7 +60,7 @@ contract VASPRegistry is AccessControl, Pausable {
         bytes32 didHash,
         string calldata newEndpoint
     ) external onlyRole(REGISTRAR_ROLE) whenNotPaused {
-        require(vasps[didHash].active, "Not active");
+        if (!vasps[didHash].active) revert NotActive();
         vasps[didHash].discoveryEndpoint = newEndpoint;
         emit DiscoveryEndpointUpdated(didHash, newEndpoint);
     }
@@ -64,7 +71,7 @@ contract VASPRegistry is AccessControl, Pausable {
 
     // M-8: Added whenNotPaused — revocation requires explicit unpause for safety
     function revokeVASP(bytes32 didHash) external onlyRole(REGISTRAR_ROLE) whenNotPaused {
-        require(vasps[didHash].active, "Not active");
+        if (!vasps[didHash].active) revert NotActive();
         vasps[didHash].active = false;
         activeVaspCount--;  // M-6
         emit VASPRevoked(didHash);
@@ -72,8 +79,8 @@ contract VASPRegistry is AccessControl, Pausable {
 
     // H-5: Reactivate a previously revoked VASP with a new wallet
     function reactivateVASP(bytes32 didHash, address newWallet) external onlyRole(REGISTRAR_ROLE) whenNotPaused {
-        require(vasps[didHash].registeredAt != 0, "Not registered");
-        require(!vasps[didHash].active, "Already active");
+        if (vasps[didHash].registeredAt == 0) revert NotRegistered();
+        if (vasps[didHash].active) revert AlreadyActive();
         vasps[didHash].active = true;
         vasps[didHash].wallet = newWallet;
         activeVaspCount++;  // M-6

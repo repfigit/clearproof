@@ -1,0 +1,6 @@
+[package]
+name = "compliance_spike"
+type = "bin"
+authors = [""]
+
+[dependencies]

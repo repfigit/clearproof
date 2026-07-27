@@ -18,6 +18,10 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+# zk extra: ezkl-based zkML advisory scoring for SAR risk classification.
+# Intended use: run a trained ezkl model on transaction metadata to produce
+# a risk score (0-100) that feeds the SAR advisory workflow. Not required
+# for core ZK compliance proofs (those use the Circom/snarkjs path).
 zk = [
     "ezkl>=15.0",
     "torch>=2.2",

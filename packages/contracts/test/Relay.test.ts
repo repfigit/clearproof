@@ -53,23 +53,23 @@ describe("SanctionsRootRelay", function () {
   });
 
   it("receiveRoot propagates oracle errors (zero root)", async function () {
-    const { relay, relayer } = await deployRelay();
+    const { oracle, relay, relayer } = await deployRelay();
 
     await time.increase(3601);
 
     await expect(
       relay.connect(relayer).receiveRoot(ethers.ZeroHash, 0)
-    ).to.be.revertedWith("Zero root");
+    ).to.be.revertedWithCustomError(oracle, "ZeroRoot");
   });
 
   it("receiveRoot propagates oracle errors (cooldown)", async function () {
-    const { relay, relayer } = await deployRelay();
+    const { oracle, relay, relayer } = await deployRelay();
     const newRoot = ethers.keccak256(ethers.toUtf8Bytes("too-fast-root"));
 
     // Do NOT advance time — oracle cooldown should reject
     await expect(
       relay.connect(relayer).receiveRoot(newRoot, 100)
-    ).to.be.revertedWith("Cooldown active");
+    ).to.be.revertedWithCustomError(oracle, "CooldownActive");
   });
 
   it("RootRelayed event emitted with correct args", async function () {

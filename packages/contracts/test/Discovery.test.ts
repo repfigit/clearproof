@@ -58,7 +58,7 @@ describe("VASPRegistry Discovery", function () {
 
     await expect(
       registry.updateDiscoveryEndpoint(didHash, "https://new.revoked.example/.well-known/clearproof")
-    ).to.be.revertedWith("Not active");
+    ).to.be.revertedWithCustomError(registry, "NotActive");
   });
 
   it("Can enumerate vaspIds and fetch each endpoint", async function () {

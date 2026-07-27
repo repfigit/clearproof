@@ -31,8 +31,8 @@ describe("VASPRegistry", function () {
     const wallet = ethers.Wallet.createRandom().address;
 
     await registry.registerVASP(didHash, wallet, "US", "https://vasp1.example/.well-known/clearproof");
-    await expect(registry.registerVASP(didHash, wallet, "US", "https://vasp1.example/.well-known/clearproof")).to.be.revertedWith(
-      "Already registered"
+    await expect(registry.registerVASP(didHash, wallet, "US", "https://vasp1.example/.well-known/clearproof")).to.be.revertedWithCustomError(
+      registry, "AlreadyRegistered"
     );
   });
 
@@ -52,7 +52,7 @@ describe("VASPRegistry", function () {
   it("should reject revoking inactive VASP", async function () {
     const { registry } = await deployVASPRegistry();
     const didHash = ethers.keccak256(ethers.toUtf8Bytes("did:web:vasp3.example"));
-    await expect(registry.revokeVASP(didHash)).to.be.revertedWith("Not active");
+    await expect(registry.revokeVASP(didHash)).to.be.revertedWithCustomError(registry, "NotActive");
   });
 
   it("should update issuer merkle root", async function () {
@@ -155,16 +155,16 @@ describe("SanctionsOracle", function () {
     const newRoot = ethers.keccak256(ethers.toUtf8Bytes("sanctions-root-too-fast"));
 
     // Don't advance time — should fail
-    await expect(oracleContract.updateRoot(newRoot, 100)).to.be.revertedWith(
-      "Cooldown active"
+    await expect(oracleContract.updateRoot(newRoot, 100)).to.be.revertedWithCustomError(
+      oracleContract, "CooldownActive"
     );
   });
 
   it("should reject zero root", async function () {
     const { oracleContract } = await deploySanctionsOracle();
     await time.increase(3601);
-    await expect(oracleContract.updateRoot(ethers.ZeroHash, 0)).to.be.revertedWith(
-      "Zero root"
+    await expect(oracleContract.updateRoot(ethers.ZeroHash, 0)).to.be.revertedWithCustomError(
+      oracleContract, "ZeroRoot"
     );
   });
 
@@ -252,8 +252,8 @@ describe("ComplianceRegistry (extended)", function () {
     const commitment = ethers.keccak256(ethers.toUtf8Bytes("credential-002"));
 
     await registry.revokeCredential(commitment);
-    await expect(registry.revokeCredential(commitment)).to.be.revertedWith(
-      "Already revoked"
+    await expect(registry.revokeCredential(commitment)).to.be.revertedWithCustomError(
+      registry, "AlreadyRevoked"
     );
   });
 
@@ -280,7 +280,7 @@ describe("ComplianceRegistry (extended)", function () {
         dummyProof.pubSignals,
         didHash
       )
-    ).to.be.revertedWith("Sanctions oracle stale");
+    ).to.be.revertedWithCustomError(registry, "SanctionsOracleStale");
   });
 
   it("should reject inactive VASP", async function () {
@@ -299,7 +299,7 @@ describe("ComplianceRegistry (extended)", function () {
         dummyProof.pubSignals,
         didHash
       )
-    ).to.be.revertedWith("VASP not active");
+    ).to.be.revertedWithCustomError(registry, "VASPNotActive");
   });
 
   it("should reject unauthorized revocation", async function () {
@@ -364,7 +364,7 @@ describe("Integration: Full Flow", function () {
         dummyProof.pubSignals,
         vaspDid
       )
-    ).to.be.revertedWith("Wrong chain");
+    ).to.be.revertedWithCustomError(registry, "WrongChain");
 
     // 4. Verify no proof was recorded (contract reverted)
     expect(await registry.isVerified(transferId)).to.equal(false);
