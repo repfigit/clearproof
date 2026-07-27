@@ -73,6 +73,7 @@ class zkKYCCredential(BaseModel):
     issued_at: int  # Unix timestamp
     expires_at: int  # Unix timestamp
     revoked: bool = False
+    wallet_ownership_verified: bool = False  # EU TFR: wallet ownership attested
 
     # ------------------------------------------------------------------
     # Encode fields as integers for Poseidon hashing inside the circuit.
@@ -87,9 +88,9 @@ class zkKYCCredential(BaseModel):
     def _field_ints(self) -> list[int]:
         """Return an ordered list of integer-encoded credential fields.
 
-        MUST match the circuit's Poseidon(5) input ordering in
+        MUST match the circuit's Poseidon(6) input ordering in
         credential_validity.circom:
-          Poseidon(issuer_did, kyc_tier, sanctions_clear, issued_at, expires_at)
+          Poseidon(issuer_did, kyc_tier, sanctions_clear, issued_at, expires_at, wallet_ownership_verified)
         """
         import hashlib as _hashlib
 
@@ -99,6 +100,7 @@ class zkKYCCredential(BaseModel):
             1 if self.sanctions_clear else 0,
             self.issued_at,
             self.expires_at,
+            1 if self.wallet_ownership_verified else 0,
         ]
 
 
