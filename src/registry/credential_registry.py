@@ -5,50 +5,30 @@ Credentials are issued off-chain by trusted KYC providers.  Only the
 Poseidon commitment is ever stored on-chain.  The full record is held
 by the user's wallet.
 
-NOTE: All subprocess calls use asyncio.create_subprocess_exec (argument-list
-form, no shell) to prevent command injection.
+Uses Poseidon hash (circuit-compatible) via the native Python implementation
+in ``src/registry/poseidon.py`` (parity-tested against circomlibjs).
 """
 
 from __future__ import annotations
 
-import asyncio
-import json
-import os
 import uuid
 from typing import Literal
 
 from pydantic import BaseModel, Field
 
-# ---------------------------------------------------------------------------
-# Poseidon hash helper (delegates to circomlibjs via Node.js)
-# ---------------------------------------------------------------------------
+from src.registry.poseidon import poseidon_hash
 
-_POSEIDON_SCRIPT = os.environ.get(
-    "POSEIDON_HASH_SCRIPT",
-    os.path.join(os.path.dirname(__file__), "..", "..", "scripts", "poseidon_hash.js"),
-)
+# ---------------------------------------------------------------------------
+# Poseidon hash helper
+# ---------------------------------------------------------------------------
 
 
 async def _poseidon_hash(inputs: list[int | str]) -> str:
     """
     Compute a Poseidon hash that is compatible with circomlib's
-    in-circuit implementation.
-
-    Delegates to ``scripts/poseidon_hash.js`` via subprocess
-    (create_subprocess_exec — no shell).
+    in-circuit implementation (native Python, decimal string out).
     """
-    proc = await asyncio.create_subprocess_exec(
-        "node",
-        _POSEIDON_SCRIPT,
-        stdin=asyncio.subprocess.PIPE,
-        stdout=asyncio.subprocess.PIPE,
-        stderr=asyncio.subprocess.PIPE,
-    )
-    payload = json.dumps([str(v) for v in inputs]).encode()
-    stdout, stderr = await asyncio.wait_for(proc.communicate(input=payload), timeout=10)
-    if proc.returncode != 0:
-        raise RuntimeError(f"Poseidon hash failed: {stderr.decode().strip()}")
-    return stdout.decode().strip()
+    return str(poseidon_hash(inputs))
 
 
 # ---------------------------------------------------------------------------
