@@ -1,13 +1,14 @@
 # Well-Known clearproof Discovery Spec
 
-> - **Spec version:** 0.2.0
+> - **Spec version:** 0.3.0
 > - **Status:** draft (see [specs/README.md](README.md) for lifecycle)
-> - **Last updated:** 2026-05-21
+> - **Last updated:** 2026-07-23
 >
 > ## Changelog
 >
 > | Version | Date | Change |
 > |---------|------|--------|
+> | 0.3.0 | 2026-07-23 | Added HPKE v2 envelope fields (`hpkePublicKey`, `hpkeKeyId`, `hpkeSuites`) for RFC 9180 PII encryption |
 > | 0.2.0 | 2026-05-21 | Formalized spec front matter and lifecycle governance |
 > | 0.2.0 | 2026-05 | Initial draft (versioned inline in schema) |
 
@@ -34,8 +35,11 @@ This enables plug-and-play discovery. A new VASP publishes one file and register
   "clearproof": {
     "endpoint": "https://exchange.example/clearproof/v1",
     "publicKey": "age1...",
+    "hpkePublicKey": "uJ7K3vHk9...base64url-X25519",
+    "hpkeKeyId": "Y2xpZW50LWtleS0wMQ",
+    "hpkeSuites": ["DHKEM_X25519_HKDF_SHA256/HKDF_SHA256/AES_256_GCM"],
     "supportedChains": [1, 42161, 8453, 137, 10],
-    "supportedVersions": ["0.2.0"],
+    "supportedVersions": ["0.3.0"],
     "proofFormat": "groth16"
   },
   "contact": {
@@ -56,6 +60,19 @@ This enables plug-and-play discovery. A new VASP publishes one file and register
 | `clearproof.endpoint` | string | HTTPS URL for proof exchange API |
 | `clearproof.publicKey` | string | Public key for PII encryption (age or X25519) |
 | `clearproof.supportedChains` | number[] | EVM chain IDs where this VASP accepts proofs |
+
+### HPKE v2 envelope fields (0.3.0+)
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `clearproof.hpkePublicKey` | string | X25519 public key (base64url, 32 bytes) for HPKE v2 PII envelopes (RFC 9180, base mode). Originating VASPs SHOULD prefer this over legacy `publicKey` when present |
+| `clearproof.hpkeKeyId` | string | Key fingerprint matching the envelope `kid` header (first 16 bytes of SHA-256 over the raw public key, base64url) — supports rotation and decrypt audit |
+| `clearproof.hpkeSuites` | string[] | Supported HPKE suites as `KEM/KDF/AEAD` identifiers; currently `DHKEM_X25519_HKDF_SHA256/HKDF_SHA256/AES_256_GCM`. PQ-hybrid suites (draft-ietf-hpke-pq) may be added as a v3 envelope without a document format break |
+
+Key rotation: publish the new key before retiring the old one; counterparties
+cache discovery documents for up to 1 hour. Envelopes carry the `kid`, so
+overlap windows are safe as long as the retiring private key remains available
+for in-flight envelopes.
 
 ### Optional fields
 
