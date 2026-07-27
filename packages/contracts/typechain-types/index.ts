@@ -16,6 +16,8 @@ export type { IERC165 } from "./@openzeppelin/contracts/utils/introspection/IERC
 export { IERC165__factory } from "./factories/@openzeppelin/contracts/utils/introspection/IERC165__factory";
 export type { Pausable } from "./@openzeppelin/contracts/utils/Pausable";
 export { Pausable__factory } from "./factories/@openzeppelin/contracts/utils/Pausable__factory";
+export type { Groth16VerifierBLS } from "./contracts/bench/Groth16VerifierBLS";
+export { Groth16VerifierBLS__factory } from "./factories/contracts/bench/Groth16VerifierBLS__factory";
 export type { ComplianceRegistry } from "./contracts/ComplianceRegistry.sol/ComplianceRegistry";
 export { ComplianceRegistry__factory } from "./factories/contracts/ComplianceRegistry.sol/ComplianceRegistry__factory";
 export type { IGroth16Verifier } from "./contracts/ComplianceRegistry.sol/IGroth16Verifier";
