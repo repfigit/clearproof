@@ -102,6 +102,15 @@ This adds a `Signed-off-by: Your Name <you@example.com>` trailer. Use your real 
 5. **Open a Pull Request** against `main` with a clear description of what changed and why.
 6. **Address review feedback** -- maintainers may request changes before merging.
 
+### Agent-assisted development (repfigit-loop)
+
+This repository uses the [repfigit-loop](https://github.com/repfigit/repfigit-loop) process for agent-assisted work:
+
+- Work items live as Linear issues (AI Factory team) with explicit acceptance criteria (`AC-N`) and non-goals (`NG-N`). If it is not in the issue, it does not exist.
+- Human applies the `agent-ready` label in Linear to release an issue to the builder.
+- Builder opens PRs (one issue per PR). Automated review posts a verdict label: `loop-approved`, `loop-changes-requested`, or `needs-human-review`.
+- **Only humans merge.** `loop-approved` is evidence for a human, not authorization. Agents never merge or enable auto-merge.
+
 ### PR Checklist
 
 - [ ] All existing tests pass
