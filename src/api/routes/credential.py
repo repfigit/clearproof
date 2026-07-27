@@ -14,6 +14,7 @@ from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
+from web3 import Web3
 
 from src.api.middleware.auth import JWTAuthDependency
 from src.api.wallet_ownership import _verifier
@@ -47,6 +48,10 @@ class CredentialIssueRequest(BaseModel):
         default=31536000,
         gt=0,
         description="Credential TTL in seconds (default: 1 year)",
+    )
+    attestation_id: str = Field(
+        ...,
+        description="Wallet ownership attestation ID from POST /credential/wallet/verify",
     )
 
 
@@ -148,15 +153,27 @@ async def issue_credential(
     The returned commitment is a Poseidon hash of the credential fields,
     suitable for inclusion in Merkle trees and ZK circuit inputs.
     """
+    if not _verifier.is_attestation_valid(request.attestation_id):
+        raise HTTPException(status_code=400, detail="Invalid or expired wallet ownership attestation")
+
+    attestation = _verifier.get_attestation(request.attestation_id)
+    if attestation is None:
+        raise HTTPException(status_code=400, detail="Invalid or expired wallet ownership attestation")
+
+    subject_wallet = Web3.to_checksum_address(request.subject_wallet)
+    if Web3.to_checksum_address(attestation.wallet_address) != subject_wallet:
+        raise HTTPException(status_code=400, detail="Attestation wallet does not match subject wallet")
+
     now = int(time.time())
     expires_at = now + request.expires_in_seconds
 
     credential = zkKYCCredential(
         issuer_did=request.issuer_did,
-        subject_wallet=request.subject_wallet,
+        subject_wallet=subject_wallet,
         jurisdiction=request.jurisdiction,
         kyc_tier=request.kyc_tier,
         sanctions_clear=True,
+        wallet_ownership_verified=True,
         issued_at=now,
         expires_at=expires_at,
     )
