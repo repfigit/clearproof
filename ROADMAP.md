@@ -19,6 +19,8 @@ clearproof is production quality when a regulated VASP can run real or shadow-mo
 ## Regulatory And Ecosystem Anchors
 
 - FATF Travel Rule implementation continues expanding globally, but interoperability and enforcement remain uneven: https://www.fatf-gafi.org/en/publications/Fatfrecommendations/targeted-update-virtual-assets-vasps-2025.html
+- **FATF R.16 2025 revisions** expanded scope from "virtual asset transfers" to "payments or value transfers and related messages," broadening coverage to include messaging around transfers and emphasizing supervision/enforcement (93% of jurisdictions now have Travel Rule laws): https://www.fatf-gafi.org/en/publications/Fatfrecommendations/targeted-update-virtual-assets-vasps-2025.html
+- **FATF Best Practices on Travel Rule Supervision (2025)** provides guidance on what supervisors expect in examinations: evidence of originator/beneficiary information transmission, sanctions screening, record retrieval, and revocation handling
 - EU Travel Rule guidance for funds and crypto-asset transfers applies from 30 December 2024: https://www.eba.europa.eu/publications-and-media/press-releases/eba-issues-travel-rule-guidance-tackle-money-laundering-and-terrorist-financing-transfers-funds-and
 - U.S. funds travel rule and recordkeeping concepts remain anchored in FinCEN guidance: https://www.fincen.gov/index.php/resources/statutes-regulations/guidance/funds-travel-regulations-questions-answers
 - TRP is a mature open Travel Rule protocol with VASP implementations: https://www.openvasp.org/trp
