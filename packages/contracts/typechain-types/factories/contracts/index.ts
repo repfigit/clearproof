@@ -2,6 +2,7 @@
 /* tslint:disable */
 /* eslint-disable */
 export * as complianceRegistrySol from "./ComplianceRegistry.sol";
+export * as bench from "./bench";
 export { Groth16Verifier__factory } from "./Groth16Verifier__factory";
 export { ISanctionsRootReceiver__factory } from "./ISanctionsRootReceiver__factory";
 export { SanctionsOracle__factory } from "./SanctionsOracle__factory";

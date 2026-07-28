@@ -16,8 +16,9 @@ Deterministic guarantee:
     same Merkle root. The output includes a source manifest for independent
     verification.
 
-NOTE: All subprocess calls use asyncio.create_subprocess_exec (argument-list
-form, no shell) to prevent command injection.
+Poseidon hashing uses the native Python implementation in
+``src/registry/poseidon.py`` (parity-tested against circomlibjs) — no Node.js
+runtime required.
 """
 
 from __future__ import annotations
@@ -35,6 +36,12 @@ from typing import Any
 
 import httpx
 
+# Make the project root importable so `src.registry.poseidon` resolves when
+# this script is run directly (`python scripts/build_sanctions_tree.py`).
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
+
+from src.registry.poseidon import poseidon_hash as _native_poseidon_hash  # noqa: E402
+
 # ---------------------------------------------------------------------------
 # Build script version — increment on any change to normalization or tree logic
 # ---------------------------------------------------------------------------
@@ -46,7 +53,6 @@ BUILD_SCRIPT_VERSION = "1.1.0"
 # ---------------------------------------------------------------------------
 
 PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
-POSEIDON_SCRIPT = os.path.join(PROJECT_ROOT, "scripts", "poseidon_hash.js")
 ARTIFACTS_DIR = os.path.join(PROJECT_ROOT, "artifacts")
 OUTPUT_PATH = os.path.join(ARTIFACTS_DIR, "sanctions_tree.json")
 TEST_VECTORS_PATH = os.path.join(ARTIFACTS_DIR, "sanctions_test_vectors.json")
@@ -141,18 +147,8 @@ def normalize_address(addr: str) -> str:
 # ---------------------------------------------------------------------------
 
 async def poseidon_hash(inputs: list[int | str]) -> str:
-    """Call the Node.js Poseidon helper and return the hash as a decimal string."""
-    proc = await asyncio.create_subprocess_exec(
-        "node", POSEIDON_SCRIPT,
-        stdin=asyncio.subprocess.PIPE,
-        stdout=asyncio.subprocess.PIPE,
-        stderr=asyncio.subprocess.PIPE,
-    )
-    payload = json.dumps([str(v) for v in inputs]).encode()
-    stdout, stderr = await asyncio.wait_for(proc.communicate(input=payload), timeout=30)
-    if proc.returncode != 0:
-        raise RuntimeError(f"Poseidon hash failed: {stderr.decode().strip()}")
-    return stdout.decode().strip()
+    """Circuit-compatible Poseidon hash (native Python, decimal string out)."""
+    return str(_native_poseidon_hash(inputs))
 
 
 def address_to_int(address: str) -> int:

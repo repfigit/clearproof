@@ -80,7 +80,7 @@ circuits/
 
 **merkle_tree.circom**
 - `MerkleProof(depth)` — generic Poseidon membership proof (used by both credential and sanctions)
-- `MerkleNonMembership` helper for gap proofs
+- Non-membership lives in `sanctions_nonmembership.circom` (`SanctionsNonMembership`); the legacy `MerkleNonMembership` template was removed in v0.4.x (deprecated since v0.3.0 — free-input adjacency, no range checks)
 - Path indices are constrained to binary; ordering uses `MultiMux1`
 
 **poseidon_hasher.circom**
