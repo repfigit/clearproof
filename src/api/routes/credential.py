@@ -6,6 +6,7 @@ POST /credential/revoke             — Revoke an existing credential.
 GET  /credential/{credential_id}    — Retrieve credential status (not full data).
 POST /credential/wallet/challenge   — Issue wallet ownership challenge (EU TFR).
 POST /credential/wallet/verify      — Verify wallet ownership signature (EU TFR).
+POST /credential/wallet/revoke      — Revoke wallet ownership attestation (EU TFR).
 """
 
 import logging
@@ -130,6 +131,20 @@ class WalletVerifyResponse(BaseModel):
     timestamp: int
     expires_at: int
     wallet_ownership_verified: bool = True
+
+
+class WalletAttestationRevokeRequest(BaseModel):
+    """Request body for POST /credential/wallet/revoke."""
+
+    attestation_id: str = Field(..., description="Attestation ID to revoke")
+
+
+class WalletAttestationRevokeResponse(BaseModel):
+    """Response body for POST /credential/wallet/revoke."""
+
+    revoked: bool
+    attestation_id: str
+    revoked_at: int
 
 
 # ---------------------------------------------------------------------------
@@ -344,4 +359,40 @@ async def verify_wallet_ownership(
         timestamp=attestation.timestamp,
         expires_at=attestation.expires_at,
         wallet_ownership_verified=True,
+    )
+
+
+@router.post(
+    "/wallet/revoke",
+    response_model=WalletAttestationRevokeResponse,
+    summary="Revoke wallet ownership attestation (EU TFR)",
+)
+async def revoke_wallet_attestation(
+    request: WalletAttestationRevokeRequest,
+    _auth: dict = Depends(JWTAuthDependency),
+):
+    """
+    Revoke a wallet ownership attestation.
+
+    Revoked attestations are rejected for subsequent proof generation.
+    """
+    attestation = _verifier.get_attestation(request.attestation_id)
+    if attestation is None:
+        raise HTTPException(status_code=404, detail="Attestation not found")
+
+    if attestation.revoked:
+        raise HTTPException(status_code=400, detail="Attestation already revoked")
+
+    _verifier.revoke_attestation(request.attestation_id)
+
+    logger.info(
+        "Wallet ownership attestation revoked: attestation=%s wallet=%s",
+        request.attestation_id,
+        attestation.wallet_address,
+    )
+
+    return WalletAttestationRevokeResponse(
+        revoked=True,
+        attestation_id=request.attestation_id,
+        revoked_at=int(time.time()),
     )
