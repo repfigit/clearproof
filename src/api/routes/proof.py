@@ -59,6 +59,14 @@ class ProofGenerateRequest(BaseModel):
     originator_name: Optional[str] = None
     originator_address: Optional[str] = None
     originator_account: Optional[str] = None
+    beneficiary_hpke_public_key: Optional[str] = Field(
+        None,
+        description=(
+            "Beneficiary VASP's X25519 public key (base64url, 32 bytes) for HPKE v2 "
+            "envelope encryption (RFC 9180). When omitted, falls back to "
+            "BENEFICIARY_HPKE_PUBLIC_KEY env var, then to legacy v1 shared-key AES-256-GCM."
+        ),
+    )
 
 
 class ProofVerifyRequest(BaseModel):
@@ -287,10 +295,6 @@ async def generate_proof(
     )
 
     # 11. Encrypt PII
-    keyring = load_keyring()
-    active_key = keyring.active_key
-    derived_key = derive_key(active_key.key_bytes, f"clearproof-pii-{proof_id}".encode())
-
     pii_payload = json.dumps(
         {
             "originator": {
@@ -303,14 +307,58 @@ async def generate_proof(
         }
     ).encode()
 
-    nonce, ciphertext = encrypt_pii(pii_payload, derived_key, proof_id)
+    # Prefer HPKE v2 envelopes (per-recipient keys, RFC 9180) when a
+    # beneficiary public key is available; fall back to legacy v1 shared-key
+    # AES-256-GCM during the migration window (SOTA plan item #1).
+    # Key resolution precedence:
+    #   1. explicit request field
+    #   2. BENEFICIARY_HPKE_PUBLIC_KEY env var (static counterparty config)
+    #   3. well-known discovery from destination_vasp_did (spec 0.3.0),
+    #      fail-open to v1 on discovery errors during the migration window
+    recipient_pubkey: bytes | None = None
+    hpke_pubkey_b64 = request.beneficiary_hpke_public_key or os.getenv("BENEFICIARY_HPKE_PUBLIC_KEY")
+    if hpke_pubkey_b64:
+        try:
+            recipient_pubkey = base64.urlsafe_b64decode(hpke_pubkey_b64.encode("ascii"))
+        except Exception:
+            raise HTTPException(status_code=422, detail="beneficiary_hpke_public_key is not valid base64url")
+        if len(recipient_pubkey) != 32:
+            raise HTTPException(status_code=422, detail="beneficiary_hpke_public_key must be 32 bytes (X25519)")
+    elif request.destination_vasp_did and os.getenv("HPKE_DISCOVERY_ENABLED", "1") != "0":
+        from src.protocol.discovery import DiscoveryError, resolve_hpke_public_key
+
+        try:
+            recipient_pubkey = await resolve_hpke_public_key(request.destination_vasp_did)
+        except DiscoveryError as exc:
+            logger.warning("HPKE discovery failed for %s: %s", request.destination_vasp_did, exc)
+
+    pii_envelope: dict | None = None
+    if recipient_pubkey is not None:
+        from src.sar.hpke_envelope import seal_envelope
+
+        pii_envelope = seal_envelope(pii_payload, recipient_pubkey, proof_id)
+        ciphertext = base64.urlsafe_b64decode(pii_envelope["ct"])
+        nonce = b""
+        encryption_algorithm = "HPKE-X25519-HKDF-SHA256-AES-256-GCM"
+    else:
+        logger.warning(
+            "No beneficiary HPKE key available — falling back to v1 shared-key "
+            "AES-256-GCM envelope. Set beneficiary_hpke_public_key or "
+            "BENEFICIARY_HPKE_PUBLIC_KEY to enable v2."
+        )
+        keyring = load_keyring()
+        active_key = keyring.active_key
+        derived_key = derive_key(active_key.key_bytes, f"clearproof-pii-{proof_id}".encode())
+        nonce, ciphertext = encrypt_pii(pii_payload, derived_key, proof_id)
+        encryption_algorithm = "AES-256-GCM"
 
     hybrid_payload = HybridPayload(
         compliance_proof=compliance_proof,
         encrypted_pii=ciphertext,
-        encryption_algorithm="AES-256-GCM",
+        encryption_algorithm=encryption_algorithm,
         pii_nonce=nonce,
         pii_associated_data=proof_id,
+        pii_envelope=pii_envelope,
     )
 
     # 12. Record to durable storage
@@ -388,10 +436,13 @@ async def generate_proof(
         "proof_id": proof_id,
         "transfer_id": transfer_id,
         "compliance_proof": compliance_proof.model_dump(),
-        "encrypted_pii": hybrid_payload.encrypted_pii,
+        # base64: raw ciphertext bytes are not JSON-safe (this previously only
+        # worked in tests because the mocked ciphertext was valid UTF-8)
+        "encrypted_pii": base64.b64encode(hybrid_payload.encrypted_pii).decode("ascii"),
         "encryption_algorithm": hybrid_payload.encryption_algorithm,
         "pii_nonce": base64.b64encode(hybrid_payload.pii_nonce).decode(),
         "pii_associated_data": hybrid_payload.pii_associated_data,
+        "pii_envelope": hybrid_payload.pii_envelope,
         "sar_review_flagged": sar_result.review_flagged,
         "sar_reasons": sar_result.flag_reasons,
     }
