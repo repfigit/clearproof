@@ -8,8 +8,16 @@ Covers:
 - Integration with credential model
 """
 
+import os
 import time
 from unittest.mock import MagicMock, patch
+
+# Set required env vars BEFORE importing anything from src.api.* to prevent
+# src/api/__init__.py from caching empty API_KEY at module load time.
+# This matches the pattern in tests/integration/test_api_endpoints.py.
+os.environ.setdefault("PII_MASTER_KEY", "a" * 64)
+os.environ.setdefault("AUTH_MODE", "api-key")
+os.environ.setdefault("API_KEY", "test-api-key-for-integration")
 
 import pytest
 from eth_account import Account

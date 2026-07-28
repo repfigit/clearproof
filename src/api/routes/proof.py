@@ -243,6 +243,7 @@ async def generate_proof(
         "sanctions_clear": [1 if credential.sanctions_clear else 0],
         "issued_at": [credential.issued_at],
         "expires_at": [credential.expires_at],
+        "wallet_ownership_verified": [1 if credential.wallet_ownership_verified else 0],
         "wallet_address_hash": [int(wallet_hash, 16)],
         "amount_usd": [int(request.amount_usd)],
         "tier2_threshold": [JURISDICTION_TIERS.get(request.jurisdiction, {}).get("tier2", 10000)],
