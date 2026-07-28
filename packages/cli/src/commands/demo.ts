@@ -90,18 +90,19 @@ const DEMO_INPUT: ComplianceInput = {
   transferTimestamp: 1711670400,
   jurisdictionCode: 21843, // "US" as uint16 (0x55 0x53)
   credentialCommitment:
-    '3946334516594870472864654055107878340628457451312090927820290073103136770198',
+    '1535026804069983646719003321209192566650416969181218063747264914629845874911',
   tier2Threshold: DEMO_THRESHOLDS.tier2,
   tier3Threshold: DEMO_THRESHOLDS.tier3,
   tier4Threshold: DEMO_THRESHOLDS.tier4,
 
   // === Private inputs: Credential preimage ===
-  // commitment = Poseidon(123456789, 2, 1, 1700000000, 1800000000)
+  // commitment = Poseidon(123456789, 2, 1, 1700000000, 1800000000, 1)
   issuerDid: '123456789',
   kycTier: 2,
   sanctionsClear: 1,
   issuedAt: 1700000000,
   expiresAt: 1800000000,
+  walletOwnershipVerified: 1,
 
   // === Private inputs: Issuer Merkle membership proof (depth 10) ===
   // Leaf = Poseidon(2, issuerDid) at index 0; siblings are zero subtrees
@@ -136,7 +137,7 @@ const DEMO_INPUT: ComplianceInput = {
   transferIdHash: '0',
   // nullifier = Poseidon(credentialCommitment, transferIdHash=0)
   credentialNullifier:
-    '13240535717232054844213623400351701779147624874153591729536053257199079312660',
+    '7602049054697139437093990099647002479730647641283828197300728393733309892704',
   proofExpiresAt: 1711670400 + 300, // transfer_timestamp + 300s TTL
 
   // === Private inputs: Amount ===

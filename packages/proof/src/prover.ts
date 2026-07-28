@@ -54,6 +54,7 @@ export async function generateProof(
     sanctions_clear: String(input.sanctionsClear),
     issued_at: String(input.issuedAt),
     expires_at: String(input.expiresAt),
+    wallet_ownership_verified: String(input.walletOwnershipVerified),
     issuer_path_elements: input.issuerPathElements,
     issuer_path_indices: input.issuerPathIndices,
     wallet_address_hash: input.walletAddressHash,

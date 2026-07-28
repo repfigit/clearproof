@@ -29,6 +29,7 @@ export interface ComplianceInput {
   sanctionsClear: number;
   issuedAt: number;
   expiresAt: number;
+  walletOwnershipVerified: number;
 
   // === Private inputs: Issuer Merkle membership proof ===
   issuerPathElements: string[];
