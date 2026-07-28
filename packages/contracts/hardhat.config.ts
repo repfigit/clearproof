@@ -17,6 +17,11 @@ const config: HardhatUserConfig = {
     },
   },
   networks: {
+    hardhat: {
+      // Prague: required for the EIP-2537 BLS12-381 precompiles used by
+      // contracts/bench/Groth16VerifierBLS.sol (ADR 0002 benchmark)
+      hardfork: "prague",
+    },
     // Testnets
     sepolia: {
       url: process.env.SEPOLIA_RPC_URL || "https://rpc.sepolia.org",
