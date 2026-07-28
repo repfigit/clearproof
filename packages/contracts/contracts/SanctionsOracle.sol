@@ -7,6 +7,13 @@ import "@openzeppelin/contracts/access/AccessControl.sol";
 import "@openzeppelin/contracts/utils/Pausable.sol";
 
 contract SanctionsOracle is AccessControl, Pausable {
+    // Custom errors
+    error ZeroAdmin();
+    error ZeroRoot();
+    error CooldownActive();
+    error LeafCountDecreasedTooMuch();
+    error PeriodOutOfBounds();
+
     bytes32 public constant ORACLE_ROLE = keccak256("ORACLE_ROLE");
 
     bytes32 public currentRoot;
@@ -36,7 +43,7 @@ contract SanctionsOracle is AccessControl, Pausable {
 
     constructor(address admin, bytes32 initialRoot, uint32 initialLeafCount) {
         // M-7: Zero-address validation
-        require(admin != address(0), "Zero admin");
+        if (admin == address(0)) revert ZeroAdmin();
         _grantRole(DEFAULT_ADMIN_ROLE, admin);
         _grantRole(ORACLE_ROLE, admin);
         currentRoot = initialRoot;
@@ -46,11 +53,11 @@ contract SanctionsOracle is AccessControl, Pausable {
     }
 
     function updateRoot(bytes32 newRoot, uint32 _leafCount) external onlyRole(ORACLE_ROLE) whenNotPaused {
-        require(newRoot != bytes32(0), "Zero root");
-        require(block.timestamp >= lastUpdated + UPDATE_COOLDOWN, "Cooldown active");
+        if (newRoot == bytes32(0)) revert ZeroRoot();
+        if (block.timestamp < lastUpdated + UPDATE_COOLDOWN) revert CooldownActive();
 
         // H-3: Leaf count floor — prevent silently clearing the sanctions list
-        require(_leafCount >= leafCount / 2, "Leaf count decreased too much");
+        if (_leafCount < leafCount / 2) revert LeafCountDecreasedTooMuch();
 
         bytes32 old = currentRoot;
         currentRoot = newRoot;
@@ -71,7 +78,7 @@ contract SanctionsOracle is AccessControl, Pausable {
 
     // M-2: Allow admin to configure grace period within bounds
     function setGracePeriod(uint256 newPeriod) external onlyRole(DEFAULT_ADMIN_ROLE) {
-        require(newPeriod >= 6 hours && newPeriod <= 168 hours, "Period out of bounds");
+        if (newPeriod < 6 hours || newPeriod > 168 hours) revert PeriodOutOfBounds();
         uint256 oldPeriod = gracePeriod;
         gracePeriod = newPeriod;
         emit GracePeriodUpdated(oldPeriod, newPeriod);

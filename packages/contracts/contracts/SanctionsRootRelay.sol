@@ -23,6 +23,10 @@ import "./ISanctionsRootReceiver.sol";
  *         4. No oracle redeployment needed
  */
 contract SanctionsRootRelay is ISanctionsRootReceiver, AccessControl {
+    // Custom errors
+    error ZeroAdmin();
+    error ZeroOracle();
+
     bytes32 public constant RELAYER_ROLE = keccak256("RELAYER_ROLE");
 
     SanctionsOracle public immutable oracle;
@@ -30,8 +34,8 @@ contract SanctionsRootRelay is ISanctionsRootReceiver, AccessControl {
     event RootRelayed(bytes32 indexed root, uint32 leafCount, address indexed relayer);
 
     constructor(address admin, address oracleAddress) {
-        require(admin != address(0), "Zero admin");
-        require(oracleAddress != address(0), "Zero oracle");
+        if (admin == address(0)) revert ZeroAdmin();
+        if (oracleAddress == address(0)) revert ZeroOracle();
         _grantRole(DEFAULT_ADMIN_ROLE, admin);
         _grantRole(RELAYER_ROLE, admin);
         oracle = SanctionsOracle(oracleAddress);

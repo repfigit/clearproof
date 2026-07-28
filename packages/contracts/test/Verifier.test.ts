@@ -101,7 +101,7 @@ describe("Groth16Verifier", function () {
 
     await expect(
       verifier.verifyProof(pA, pB, pC, tampered),
-    ).to.be.revertedWith("public signal >= scalar field");
+    ).to.be.revertedWithCustomError(verifier, "PublicSignalExceedsScalarField");
   });
 
   it("should reject a tampered-but-in-field public signal with false", async function () {

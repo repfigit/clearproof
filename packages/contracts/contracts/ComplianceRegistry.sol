@@ -20,6 +20,28 @@ interface IGroth16Verifier {
 }
 
 contract ComplianceRegistry is AccessControl, Pausable {
+    // Custom errors
+    error ZeroVerifier();
+    error ZeroRegistry();
+    error ZeroOracle();
+    error TransferAlreadyRecorded();
+    error SanctionsOraclePaused();
+    error VASPRegistryPaused();
+    error SanctionsOracleStale();
+    error VASPNotActive();
+    error NotRegisteredVASPWallet();
+    error WrongChain();
+    error WrongContract();
+    error ProofExpired();
+    error ProofTimestampInFuture();
+    error SanctionsRootMismatch();
+    error IssuerRootMismatch();
+    error TransferIDMismatch();
+    error CredentialAlreadyRevoked();
+    error ProofAlreadyUsed();
+    error ProofVerificationFailed();
+    error AlreadyRevoked();
+
     bytes32 public constant REVOKER_ROLE = keccak256("REVOKER_ROLE");
 
     IGroth16Verifier public immutable verifier;
@@ -41,9 +63,9 @@ contract ComplianceRegistry is AccessControl, Pausable {
 
     constructor(address _verifier, address _vaspRegistry, address _sanctionsOracle) {
         // M-7: Zero-address validation
-        require(_verifier != address(0), "Zero verifier");
-        require(_vaspRegistry != address(0), "Zero registry");
-        require(_sanctionsOracle != address(0), "Zero oracle");
+        if (_verifier == address(0)) revert ZeroVerifier();
+        if (_vaspRegistry == address(0)) revert ZeroRegistry();
+        if (_sanctionsOracle == address(0)) revert ZeroOracle();
 
         verifier = IGroth16Verifier(_verifier);
         vaspRegistry = VASPRegistry(_vaspRegistry);
@@ -62,49 +84,49 @@ contract ComplianceRegistry is AccessControl, Pausable {
         bytes32 vaspDidHash
     ) external whenNotPaused returns (bool) {
         // Replay prevention
-        require(proofs[transferId].timestamp == 0, "Transfer already recorded");
+        if (proofs[transferId].timestamp != 0) revert TransferAlreadyRecorded();
 
         // H-6: Dependency health checks
-        require(!sanctionsOracle.paused(), "Sanctions oracle paused");
-        require(!vaspRegistry.paused(), "VASP registry paused");
-        require(!sanctionsOracle.isStale(), "Sanctions oracle stale");
-        require(vaspRegistry.isActive(vaspDidHash), "VASP not active");
+        if (sanctionsOracle.paused()) revert SanctionsOraclePaused();
+        if (vaspRegistry.paused()) revert VASPRegistryPaused();
+        if (sanctionsOracle.isStale()) revert SanctionsOracleStale();
+        if (!vaspRegistry.isActive(vaspDidHash)) revert VASPNotActive();
 
         // Sender binding
         (address vaspWallet,,,, ) = vaspRegistry.vasps(vaspDidHash);
-        require(msg.sender == vaspWallet, "Not registered VASP wallet");
+        if (msg.sender != vaspWallet) revert NotRegisteredVASPWallet();
 
         // C-3: Domain binding (cross-chain replay protection)
-        require(_pubSignals[11] == block.chainid, "Wrong chain");
+        if (_pubSignals[11] != block.chainid) revert WrongChain();
         // Circuit signals are reduced mod BN128 scalar field order (r).
         // keccak256 produces 256-bit values that may exceed r, so we must
         // reduce the contract-side hash to match what the circuit stores.
         uint256 BN128_R = 21888242871839275222246405745257275088548364400416034343698204186575808495617;
-        require(uint256(keccak256(abi.encodePacked(address(this)))) % BN128_R == _pubSignals[12], "Wrong contract");
+        if (uint256(keccak256(abi.encodePacked(address(this)))) % BN128_R != _pubSignals[12]) revert WrongContract();
 
         // Proof expiration: proof_expires_at (signal[15]) is a circuit public signal.
         // The circuit constrains proof_expires_at > transfer_timestamp.
         // Here we check the proof hasn't expired yet.
-        require(block.timestamp <= _pubSignals[15], "Proof expired");
-        require(_pubSignals[5] <= block.timestamp, "Proof timestamp in future");
+        if (block.timestamp > _pubSignals[15]) revert ProofExpired();
+        if (_pubSignals[5] > block.timestamp) revert ProofTimestampInFuture();
 
         // C-4: State binding (proof matches current on-chain roots)
-        require(bytes32(_pubSignals[2]) == sanctionsOracle.currentRoot(), "Sanctions root mismatch");
-        require(bytes32(_pubSignals[3]) == vaspRegistry.issuerMerkleRoot(), "Issuer root mismatch");
+        if (bytes32(_pubSignals[2]) != sanctionsOracle.currentRoot()) revert SanctionsRootMismatch();
+        if (bytes32(_pubSignals[3]) != vaspRegistry.issuerMerkleRoot()) revert IssuerRootMismatch();
 
         // M-1: Transfer binding (proof bound to this transfer)
-        require(uint256(keccak256(abi.encodePacked(transferId))) % BN128_R == _pubSignals[13], "Transfer ID mismatch");
+        if (uint256(keccak256(abi.encodePacked(transferId))) % BN128_R != _pubSignals[13]) revert TransferIDMismatch();
 
         // C-5: Credential revocation check
-        require(!revokedCredentials[bytes32(_pubSignals[7])], "Credential revoked");
+        if (revokedCredentials[bytes32(_pubSignals[7])]) revert CredentialAlreadyRevoked();
 
         // M-3: Nullifier — one-time proof use (prevents same proof on different transferIds)
         bytes32 nullifier = bytes32(_pubSignals[14]);
-        require(!usedNullifiers[nullifier], "Proof already used");
+        if (usedNullifiers[nullifier]) revert ProofAlreadyUsed();
 
         // C-1: Cryptographic verification — revert on invalid proof
         bool valid = verifier.verifyProof(_pA, _pB, _pC, _pubSignals);
-        require(valid, "Proof verification failed");
+        if (!valid) revert ProofVerificationFailed();
 
         // Record
         usedNullifiers[nullifier] = true;
@@ -122,7 +144,7 @@ contract ComplianceRegistry is AccessControl, Pausable {
     }
 
     function revokeCredential(bytes32 commitment) external onlyRole(REVOKER_ROLE) {
-        require(!revokedCredentials[commitment], "Already revoked");
+        if (revokedCredentials[commitment]) revert AlreadyRevoked();
         revokedCredentials[commitment] = true;
         emit CredentialRevoked(commitment, msg.sender);
     }

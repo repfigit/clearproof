@@ -251,6 +251,6 @@ describe("E2E: Prove -> Submit On-Chain -> Verify", function () {
     // Verify replay protection — submitting same proof for the same transfer should fail
     await expect(
       registry.verifyAndRecord(transferId, pA, pB, pC, pubSignals, vaspDid)
-    ).to.be.revertedWith("Transfer already recorded");
+    ).to.be.revertedWithCustomError(registry, "TransferAlreadyRecorded");
   });
 });
