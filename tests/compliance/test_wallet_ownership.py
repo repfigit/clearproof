@@ -10,7 +10,6 @@ Covers:
 
 import os
 import time
-from unittest.mock import MagicMock, patch
 
 # Set required env vars BEFORE importing anything from src.api.* to prevent
 # src/api/__init__.py from caching empty API_KEY at module load time.
