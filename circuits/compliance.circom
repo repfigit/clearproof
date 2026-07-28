@@ -123,6 +123,9 @@ template ComplianceProof(sanctions_tree_depth, issuer_tree_depth) {
     // === PRIVATE INPUTS: Amount tier verification ===
     signal input actual_amount;
 
+    // === PRIVATE INPUTS: EU TFR wallet ownership (AIF-67) ===
+    signal input wallet_ownership_verified; // 1 if EU TFR wallet ownership verified
+
     // ================================================================
     // SUB-CIRCUIT 1: Credential Validity
     // ================================================================
@@ -137,6 +140,7 @@ template ComplianceProof(sanctions_tree_depth, issuer_tree_depth) {
     cred_check.sanctions_clear <== sanctions_clear;  // Audit fix #5: explicit input
     cred_check.issued_at <== issued_at;
     cred_check.expires_at <== expires_at;
+    cred_check.wallet_ownership_verified <== wallet_ownership_verified; // EU TFR (AIF-67)
     for (var i = 0; i < issuer_tree_depth; i++) {
         cred_check.issuer_path_elements[i] <== issuer_path_elements[i];
         cred_check.issuer_path_indices[i] <== issuer_path_indices[i];
