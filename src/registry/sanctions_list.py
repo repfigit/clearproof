@@ -4,43 +4,27 @@ Sorted Merkle tree of sanctioned wallet addresses.
 Supports non-membership proofs via gap proofs (adjacent-leaf technique).
 Rebuilt daily from OFAC SDN list, UN consolidated list, EU asset freeze list.
 
-Uses Poseidon hash (circuit-compatible) via ``scripts/poseidon_hash.js``.
-
-NOTE: All subprocess calls use asyncio.create_subprocess_exec (argument-list
-form, no shell) to prevent command injection.
+Uses Poseidon hash (circuit-compatible) via the native Python implementation
+in ``src/registry/poseidon.py`` (parity-tested against circomlibjs).
 """
 
 from __future__ import annotations
 
-import asyncio
 import json
 import math
 import os
 from typing import Any
 
+from src.registry.poseidon import poseidon_hash
+
 # ---------------------------------------------------------------------------
 # Poseidon helper (shared with credential_registry)
 # ---------------------------------------------------------------------------
 
-_POSEIDON_SCRIPT = os.environ.get(
-    "POSEIDON_HASH_SCRIPT",
-    os.path.join(os.path.dirname(__file__), "..", "..", "scripts", "poseidon_hash.js"),
-)
-
 
 async def _poseidon_hash(inputs: list[int | str]) -> str:
-    proc = await asyncio.create_subprocess_exec(
-        "node",
-        _POSEIDON_SCRIPT,
-        stdin=asyncio.subprocess.PIPE,
-        stdout=asyncio.subprocess.PIPE,
-        stderr=asyncio.subprocess.PIPE,
-    )
-    payload = json.dumps([str(v) for v in inputs]).encode()
-    stdout, stderr = await asyncio.wait_for(proc.communicate(input=payload), timeout=10)
-    if proc.returncode != 0:
-        raise RuntimeError(f"Poseidon hash failed: {stderr.decode().strip()}")
-    return stdout.decode().strip()
+    """Circuit-compatible Poseidon hash (native Python, decimal string out)."""
+    return str(poseidon_hash(inputs))
 
 
 def _address_to_int(address: str) -> int:

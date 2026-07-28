@@ -6,6 +6,7 @@ Tests basic request/response contracts for each route. Heavy ZK dependencies
 circuits or a Node.js subprocess.
 """
 
+import json
 import os
 import time
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -380,6 +381,92 @@ async def test_proof_generate_happy_path(client: AsyncClient):
         assert "encrypted_pii" in body
         assert body["compliance_proof"]["jurisdiction"] == "US"
         mock_fullprove.assert_called_once()
+
+
+@pytest.mark.asyncio
+async def test_proof_generate_hpke_v2_envelope(client: AsyncClient):
+    """POST /proof/generate with beneficiary_hpke_public_key emits an HPKE v2 envelope.
+
+    The envelope must be openable by the beneficiary's private key and must
+    NOT touch the legacy v1 shared-key encryption path.
+    """
+    import base64 as b64
+
+    from src.sar.hpke_envelope import derive_key_id, generate_keypair, open_envelope
+
+    beneficiary_priv, beneficiary_pub = generate_keypair()
+
+    mock_credential = MagicMock()
+    mock_credential.revoked = False
+    mock_credential.sanctions_clear = True
+    mock_credential.issuer_did = "did:web:issuer.example.com"
+    mock_credential.kyc_tier = "retail"
+    mock_credential.issued_at = int(time.time()) - 3600
+    mock_credential.expires_at = int(time.time()) + 86400
+
+    mock_proof_json = {"pi_a": ["1", "2"], "pi_b": [["3", "4"], ["5", "6"]], "pi_c": ["7", "8"]}
+    mock_public_signals = ["1", "0"] + ["0"] * 14
+
+    mock_witness = {
+        "left_neighbor": "100",
+        "right_neighbor": "200",
+        "left_path": {"siblings": ["1", "2", "3"], "indices": [0, 1, 0]},
+        "right_path": {"siblings": ["4", "5", "6"], "indices": [1, 0, 1]},
+    }
+    mock_issuer_witness = {"siblings": ["10", "20", "30"], "indices": [0, 1, 0]}
+
+    with (
+        patch("src.api.routes.proof._cred_registry.get", return_value=mock_credential),
+        patch("src.api.routes.proof._cred_registry.get_commitment", return_value="12345"),
+        patch(
+            "src.api.routes.proof._issuer_registry.generate_membership_witness",
+            new_callable=AsyncMock,
+            return_value=mock_issuer_witness,
+        ),
+        patch("src.api.routes.proof._issuer_registry.get_root", return_value="99999"),
+        patch("src.api.routes.proof.SanctionsMerkleTree.load") as mock_tree_load,
+        patch(
+            "src.api.routes.proof._prover.fullprove",
+            new_callable=AsyncMock,
+            return_value=(mock_proof_json, mock_public_signals),
+        ),
+        patch("src.api.routes.proof._load_vk", return_value={"vk_alpha_1": []}),
+        patch("src.api.routes.proof._audit_log.append"),
+        patch("src.registry.credential_registry._poseidon_hash", new_callable=AsyncMock, return_value="42"),
+        # v1 path must NOT be used when an HPKE key is supplied
+        patch("src.sar.encryption.encrypt_pii", side_effect=AssertionError("v1 path used")),
+    ):
+        mock_tree = MagicMock()
+        mock_tree.root = "55555"
+        mock_tree.generate_nonmembership_witness = AsyncMock(return_value=mock_witness)
+        mock_tree_load.return_value = mock_tree
+
+        resp = await client.post(
+            "/proof/generate",
+            json={
+                "credential_id": "cred-1",
+                "wallet_address": "0x1234567890abcdef1234567890abcdef12345678",
+                "amount_usd": 500.0,
+                "asset": "USDC",
+                "destination_wallet": "0xabcdefabcdefabcdefabcdefabcdefabcdefabcd",
+                "jurisdiction": "US",
+                "idempotency_key": "test-idempotency-key-hpke-001",
+                "beneficiary_hpke_public_key": b64.urlsafe_b64encode(beneficiary_pub).decode(),
+            },
+            headers={"X-API-Key": API_KEY},
+        )
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body["encryption_algorithm"] == "HPKE-X25519-HKDF-SHA256-AES-256-GCM"
+        envelope = body["pii_envelope"]
+        assert envelope["v"] == 2
+        assert envelope["kid"] == derive_key_id(beneficiary_pub)
+        assert envelope["aad"] == body["proof_id"]
+
+        # Beneficiary can open the envelope; PII round-trips.
+        recovered = json.loads(open_envelope(envelope, beneficiary_priv))
+        assert recovered["transfer_id"] == body["transfer_id"]
+        assert recovered["proof_id"] == body["proof_id"]
 
 
 # -----------------------------------------------------------------------
