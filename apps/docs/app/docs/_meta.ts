@@ -22,6 +22,11 @@ export default {
   },
   sanctions: 'Sanctions Oracle',
   deployment: 'Deployment',
+  '---compliance': {
+    type: 'separator',
+    title: 'Compliance',
+  },
+  gdpr: 'GDPR Data-Minimization',
   '---community': {
     type: 'separator',
     title: 'Community',

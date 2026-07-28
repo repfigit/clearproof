@@ -27,6 +27,8 @@ sequenceDiagram
 
 **The ZK proof attests.** Encrypted PII satisfies the law. Neither requires the other — but together they give VASPs cryptographic compliance evidence with minimal data sprawl.
 
+This architecture resolves the TFR vs GDPR tension: the proof verifies compliance without exposing personal data, and encrypted PII travels only when legally required. See [GDPR Data-Minimization by Design](apps/docs/app/docs/gdpr/page.mdx) for the full positioning.
+
 ## Assurance Status
 
 clearproof is **pre-production, pilot-stage software**. Current assurance posture, stated plainly:

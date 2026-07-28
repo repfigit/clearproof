@@ -1,0 +1,80 @@
+# GDPR Data-Minimization by Design
+
+## The TFR vs GDPR tension
+
+The EU Transfer of Funds Regulation (TFR) requires VASPs to transmit originator and beneficiary information with every transfer. GDPR simultaneously requires that personal data be adequate, relevant, and limited to what is necessary (data minimization, Article 5(1)(c)).
+
+These two obligations pull in opposite directions. Transmit everything and you violate minimization. Transmit nothing and you violate the TFR. The industry has treated this as an irreconcilable conflict.
+
+Recent policy work frames the resolution. The [INATBA 2025 working paper on ZKP for GDPR](https://inatba.org/workstreams/data-protection/) argues that zero-knowledge proofs can satisfy regulatory verification requirements while minimizing the personal data that travels between counterparties. The [a16z privacy-preserving regulatory frameworks](https://a16zcrypto.com/posts/article/privacy-preserving-regulatory-frameworks/) analysis reaches the same conclusion: the architecture exists to split "prove compliance" from "transmit raw data" into separate operations.
+
+clearproof implements exactly this split.
+
+## How the hybrid payload resolves it
+
+The architecture separates two concerns that traditional Travel Rule implementations conflate:
+
+1. **Proving compliance was performed** — a machine-verifiable attestation that sanctions screening, credential validation, and amount checks all passed. This is the zero-knowledge proof.
+2. **Transmitting personal data** — the originator/beneficiary information required by regulation. This is encrypted and travels only when legally necessary.
+
+The ZK proof contains no personal data. It exposes 16 public signals: compliance status, amount tier (not the exact amount), jurisdiction code, credential commitment, sanctions tree root, and domain binding parameters. The counterparty can verify that compliance was performed without receiving any PII.
+
+The encrypted PII travels in the same envelope but under a separate cryptographic layer. AES-256-GCM encryption with HKDF-derived keys and envelope-bound associated data ensures the ciphertext cannot be replayed across transfers. The counterparty decrypts only when legally required for record-keeping or suspicious activity reporting.
+
+### What the proof reveals
+
+| Public signal | Content | Personal data? |
+| --- | --- | --- |
+| `is_compliant` | 1 if all checks pass | No |
+| `amount_tier` | 1-4 (not the exact amount) | No |
+| `jurisdiction_code` | ISO 3166-1 alpha-2 | No |
+| `sanctions_tree_root` | Current OFAC/UN/EU Merkle root | No |
+| `issuer_tree_root` | Trusted credential issuer root | No |
+| `credential_commitment` | Poseidon hash of credential preimage | No (commitment only) |
+| `credential_nullifier` | One-time use, prevents replay | No |
+| `transfer_id_hash` | Binds proof to specific transfer | No |
+| `domain_chain_id` | Binds proof to specific chain | No |
+| `domain_contract_hash` | Binds proof to specific registry | No |
+| `transfer_timestamp` | Unix timestamp | No |
+| `proof_expires_at` | Proof TTL | No |
+| `sar_review_flag` | Advisory flag (excluded from bridge payloads) | No |
+
+No field in the public signals contains name, address, account number, or any other personal identifier.
+
+### What the counterparty receives
+
+The counterparty VASP receives the hybrid payload: the ZK proof (192 bytes, publicly verifiable) plus the AES-256-GCM encrypted PII. The encrypted PII contains IVMS101 originator data. Decryption requires the counterparty's key, exchanged via the transport layer (TRISA mTLS or equivalent).
+
+The counterparty can:
+- Verify the proof independently (under 1ms) without any key material
+- Decrypt the PII only when legally required for compliance records
+- Confirm the proof is bound to their specific transfer via domain binding
+
+The counterparty cannot:
+- Extract personal data from the proof alone
+- Replay the encrypted PII in a different transfer context (envelope binding)
+- Use the proof for a different transfer (nullifier + domain binding)
+
+## Data-flow verification
+
+Every claim above traces to code:
+
+- **Encryption**: `src/sar/encryption.py` — AES-256-GCM with 12-byte nonce, HKDF-SHA256 key derivation, envelope_id as associated data
+- **Hybrid payload model**: `src/protocol/hybrid_payload.py` — `encrypted_pii` (AES-256-GCM ciphertext), `pii_nonce` (12 bytes), `pii_associated_data` (envelope binding), `encryption_algorithm` ("AES-256-GCM")
+- **Public signals**: `circuits/compliance.circom` — 16 signals enumerated in the README circuits section
+- **SAR flag exclusion**: `src/protocol/hybrid_payload.py` lines 66, 102 — `sar_review_flag` explicitly excluded from TRP and TRISA bridge payloads (BSA anti-tipping-off)
+- **Bridge serialization**: `to_trp_extension()` and `to_trisa_envelope()` in `src/protocol/hybrid_payload.py` — proof fields and encrypted PII placed in extensions, not in plaintext Travel Rule fields
+
+## Positioning, not certification
+
+This page describes how clearproof's architecture aligns with GDPR data-minimization principles. It does not constitute legal advice or a compliance certification. VASPs deploying clearproof should consult their own data protection counsel regarding their specific obligations under GDPR, the TFR, and applicable national implementations.
+
+The architecture is designed to minimize data exposure. Whether a specific deployment satisfies GDPR depends on the full context: key management, access controls, retention policies, and the legal basis for processing. The proof system eliminates unnecessary data transmission; the surrounding operational controls determine whether the overall system meets regulatory requirements.
+
+## References
+
+- INATBA (2025), "Zero-Knowledge Proofs for GDPR-Compliant Travel Rule Compliance"
+- a16z crypto research, "Privacy-Preserving Regulatory Frameworks for Digital Assets"
+- EU Regulation 2023/1113 (Transfer of Funds Regulation)
+- GDPR Article 5(1)(c) — data minimization principle
+- FATF Recommendation 16 — Travel Rule requirements
