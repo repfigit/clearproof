@@ -16,12 +16,6 @@ include "../../node_modules/circomlib/circuits/mux1.circom";
  *   - siblings[depth]: sibling hashes at each level
  *   - indices[depth]: path direction bits (0 = leaf is left child, 1 = right)
  *   - valid: output signal, 1 if proof is valid
- *
- * MerkleNonMembership(depth):
- *   Proves a query_key is NOT in a sorted Merkle tree using the gap proof
- *   approach: the prover supplies two adjacent leaves (left_key, right_key)
- *   such that left_key < query_key < right_key, and both leaves are verified
- *   as members of the tree at adjacent positions.
  */
 
 // ============================================================
@@ -91,87 +85,4 @@ template MerkleTreeVerifier(levels) {
     // MerkleTreeVerifier uses a hard constraint instead of an output signal:
     // the root must match exactly or the circuit fails.
     proof.valid === 1;
-}
-
-// ============================================================
-// Non-membership proof via sorted-tree gap proof
-// ============================================================
-//
-// DEPRECATED: This template uses free-input adjacency which is vulnerable.
-// Use SanctionsNonMembership from sanctions_nonmembership.circom instead,
-// which derives adjacency from Merkle path bits.
-// TODO: Remove in v0.3.0
-//
-// A sorted Merkle tree stores keys in ascending order by leaf index.
-// To prove query_key is NOT in the tree, the prover shows two adjacent
-// leaves (left_key at index N, right_key at index N+1) that bracket
-// the query_key: left_key < query_key < right_key.
-//
-// Since the tree is sorted and the leaves are adjacent, there is no
-// position where query_key could exist.
-template MerkleNonMembership(depth) {
-    signal input root;               // Merkle root of the sorted tree
-    signal input query_key;          // The key to prove is NOT in the tree
-
-    signal input left_key;           // Largest key in tree < query_key
-    signal input right_key;          // Smallest key in tree > query_key
-    signal input left_index;         // Leaf index of left_key
-    signal input right_index;        // Leaf index of right_key
-
-    // Merkle paths for both neighbors
-    signal input left_siblings[depth];
-    signal input left_indices[depth];
-    signal input right_siblings[depth];
-    signal input right_indices[depth];
-
-    signal output valid;
-
-    // CONSTRAINT 1: left_key < query_key (strict)
-    component lt_left = LessThan(252);
-    lt_left.in[0] <== left_key;
-    lt_left.in[1] <== query_key;
-    lt_left.out === 1;
-
-    // CONSTRAINT 2: query_key < right_key (strict)
-    component lt_right = LessThan(252);
-    lt_right.in[0] <== query_key;
-    lt_right.in[1] <== right_key;
-    lt_right.out === 1;
-
-    // CONSTRAINT 3: The two leaves are adjacent in the sorted tree
-    // right_index == left_index + 1
-    right_index === left_index + 1;
-
-    // CONSTRAINT 4: left_key is a valid member of the tree
-    // Domain-separated leaf hash: Poseidon(0x01, left_key)
-    component left_leaf_hash = Poseidon(2);
-    left_leaf_hash.inputs[0] <== 1;  // domain tag for leaf
-    left_leaf_hash.inputs[1] <== left_key;
-
-    component left_proof = MerkleProof(depth);
-    left_proof.leaf <== left_leaf_hash.out;
-    left_proof.root <== root;
-    for (var i = 0; i < depth; i++) {
-        left_proof.siblings[i] <== left_siblings[i];
-        left_proof.indices[i] <== left_indices[i];
-    }
-    left_proof.valid === 1;
-
-    // CONSTRAINT 5: right_key is a valid member of the tree
-    // Domain-separated leaf hash: Poseidon(0x01, right_key)
-    component right_leaf_hash = Poseidon(2);
-    right_leaf_hash.inputs[0] <== 1;  // domain tag for leaf
-    right_leaf_hash.inputs[1] <== right_key;
-
-    component right_proof = MerkleProof(depth);
-    right_proof.leaf <== right_leaf_hash.out;
-    right_proof.root <== root;
-    for (var i = 0; i < depth; i++) {
-        right_proof.siblings[i] <== right_siblings[i];
-        right_proof.indices[i] <== right_indices[i];
-    }
-    right_proof.valid === 1;
-
-    // If all constraints pass, the gap proof is valid
-    valid <== 1;
 }

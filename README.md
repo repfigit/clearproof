@@ -34,7 +34,7 @@ clearproof is **pre-production, pilot-stage software**. Current assurance postur
 | Area | Status |
 |------|--------|
 | Trusted setup | Development-only single-party setup. Production keys require the MPC ceremony — runbook at `docs/internal/CEREMONY_RUNBOOK.md`. |
-| Circuit audit | Not yet performed. Do not rely on circuits for production fund movement. |
+| Circuit audit | Not yet performed. Do not rely on circuits for production fund movement. Circomspect static analysis runs in CI on every PR (`scripts/circuit_lint.sh`), with intentional findings allowlisted and justified inline. |
 | Contract audit | Not yet performed. Deployments below are Sepolia testnet pilots. |
 | Bridges (TRP / TRISA / TAIP-10) | Prototype-level data models and tests; bilateral interop runs are in progress. |
 | Sanctions data | Rebuilt from live OFAC/EU feeds; on-chain staleness checks fail closed. |
@@ -193,7 +193,8 @@ Start the API server and visit `http://localhost:8000/docs` for interactive Swag
 
 | Variable | Required | Description |
 |----------|----------|-------------|
-| `PII_MASTER_KEY` | Yes | Stable key for PII encryption (server will not start without it) |
+| `PII_MASTER_KEY` | Yes | Stable key for legacy v1 PII encryption (server will not start without it) |
+| `BENEFICIARY_HPKE_PUBLIC_KEY` | No | Beneficiary VASP's X25519 public key (base64url) — enables HPKE v2 PII envelopes (RFC 9180). Per-request `beneficiary_hpke_public_key` takes precedence. Without a key, the API falls back to v1 shared-key AES-256-GCM with a deprecation warning |
 | `VASP_DID` | No | This VASP's DID (default: `did:web:vasp.example.com`) |
 | `CIRCUIT_ARTIFACTS_DIR` | No | Path to circuit artifacts (default: `./artifacts`) |
 | `CORS_ALLOWED_ORIGINS` | No | Comma-separated origins (default: `http://localhost:3000`) |

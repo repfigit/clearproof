@@ -27,18 +27,29 @@ class HybridPayload(BaseModel):
     compliance_proof: ComplianceProof
 
     # Encrypted PII component (satisfies "transmit" requirement)
-    # Encrypted via AES-256-GCM; key exchanged via TRISA mTLS or DH
-    encrypted_pii: bytes = Field(..., description="AES-256-GCM encrypted IVMS101 originator PII")
+    # v1: AES-256-GCM with a shared master key (legacy).
+    # v2: HPKE (RFC 9180) sealed to the beneficiary VASP's X25519 public key;
+    #     the full envelope travels in ``pii_envelope``.
+    encrypted_pii: bytes = Field(..., description="Encrypted IVMS101 originator PII")
     encryption_algorithm: str = Field(default="AES-256-GCM")
-    pii_nonce: bytes = Field(..., description="12-byte nonce for AES-256-GCM")
+    pii_nonce: bytes = Field(default=b"", description="12-byte nonce for AES-256-GCM (v1 only)")
     pii_associated_data: str = Field(..., description="Envelope binding associated data")
+    pii_envelope: dict[str, Any] | None = Field(
+        default=None,
+        description="HPKE v2 envelope (see src/sar/hpke_envelope.py); set iff encryption_algorithm is HPKE",
+    )
 
     @field_validator("pii_nonce")
     @classmethod
     def validate_nonce_length(cls, v: bytes) -> bytes:
-        if len(v) != 12:
-            raise ValueError("pii_nonce must be exactly 12 bytes")
+        if len(v) not in (0, 12):
+            raise ValueError("pii_nonce must be exactly 12 bytes (or empty for HPKE v2 envelopes)")
         return v
+
+    @property
+    def is_hpke_v2(self) -> bool:
+        """True if this payload carries an HPKE v2 envelope rather than v1 AES-GCM."""
+        return self.pii_envelope is not None and self.pii_envelope.get("v") == 2
 
     def to_trp_extension(self) -> dict[str, Any]:
         """
@@ -69,6 +80,7 @@ class HybridPayload(BaseModel):
                 "encryption_algorithm": self.encryption_algorithm,
                 "pii_nonce": base64.b64encode(self.pii_nonce).decode("ascii"),
                 "pii_associated_data": self.pii_associated_data,
+                "pii_envelope": self.pii_envelope,
             }
         }
 
@@ -103,5 +115,6 @@ class HybridPayload(BaseModel):
                 },
                 "pii_nonce": base64.b64encode(self.pii_nonce).decode("ascii"),
                 "pii_associated_data": self.pii_associated_data,
+                "pii_envelope": self.pii_envelope,
             },
         }
