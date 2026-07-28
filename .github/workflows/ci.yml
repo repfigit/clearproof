@@ -203,7 +203,12 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      # circuits include ../node_modules/circomlib — needed for include resolution
+      - run: npm install
+      # ubuntu-latest runners ship rustup + stable cargo; no toolchain action needed
       - uses: Swatinem/rust-cache@v2
       - name: Install circomspect
         run: cargo install circomspect --locked
