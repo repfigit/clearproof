@@ -15,7 +15,7 @@ include "./lib/merkle_tree.circom";
  *   4. Jurisdiction in credential matches the expected jurisdiction
  *   5. KYC tier is valid (1=retail, 2=professional, 3=institutional)
  *   6. sanctions_clear flag is true (explicitly constrained, not hardcoded)
- *   7. wallet_ownership_verified flag is true (EU TFR compliance)
+ *   7. wallet_ownership_verified is part of the commitment preimage (0 or 1)
  *
  * SOUNDNESS NOTES:
  *   - Audit fix #5: sanctions_clear is now a private input constrained to === 1,
@@ -26,9 +26,9 @@ include "./lib/merkle_tree.circom";
  *     via Num2Bits(16) before equality comparison (ISO 3166 codes fit in 16 bits).
  *   - Audit fix #13: kyc_tier is range-checked via Num2Bits(2) before being
  *     passed to comparators, ensuring the 2-bit decomposition is sound.
- *   - EU TFR (AIF-67): wallet_ownership_verified is a private input constrained
- *     to === 1. This ensures the credential holder has proven wallet ownership
- *     per EU TFR Regulation 2023/1113 for self-hosted wallet transfers >= 1,000 EUR.
+ *   - EU TFR (AIF-67): wallet_ownership_verified is a private input included in
+ *     the commitment hash. Backward-compatible credentials use 0; EU TFR attestations
+ *     set 1 at issuance. The circuit does not force the flag to 1.
  *
  * Credential commitment scheme:
  *   commitment = Poseidon(issuer_did, kyc_tier, sanctions_clear, issued_at, expires_at, wallet_ownership_verified)
@@ -139,11 +139,4 @@ template CredentialValidity(issuer_tree_depth) {
     tier_lte_3.in[0] <== kyc_tier;
     tier_lte_3.in[1] <== 3;
     tier_lte_3.out === 1;
-
-    // === CONSTRAINT 7: wallet_ownership_verified must be 1 (EU TFR) ===
-    // Explicitly constrain rather than hardcode. The wallet_ownership_verified field
-    // is part of the commitment hash, so a credential with wallet_ownership_verified=0
-    // will produce a different commitment and fail constraint 1.
-    // This constraint makes the EU TFR requirement explicit and auditable.
-    wallet_ownership_verified === 1;
 }

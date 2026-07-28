@@ -181,7 +181,7 @@ class WalletOwnershipVerifier:
         return attestation
 
     def get_pending_challenge(self, nonce: str) -> Optional[WalletOwnershipChallenge]:
-        """Retrieve a pending challenge by nonce."""
+        """Retrieve a pending challenge by nonce (non-consuming read)."""
         challenge = self._pending_challenges.get(nonce)
         if challenge is None:
             return None
@@ -191,6 +191,18 @@ class WalletOwnershipVerifier:
         if now > challenge.expires_at:
             # Expired challenge, remove it
             del self._pending_challenges[nonce]
+            return None
+
+        return challenge
+
+    def consume_pending_challenge(self, nonce: str) -> Optional[WalletOwnershipChallenge]:
+        """Atomically retrieve and remove a pending challenge by nonce."""
+        challenge = self._pending_challenges.pop(nonce, None)
+        if challenge is None:
+            return None
+
+        now = int(time.time())
+        if now > challenge.expires_at:
             return None
 
         return challenge

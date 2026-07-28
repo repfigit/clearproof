@@ -6,6 +6,7 @@ POST /credential/revoke             — Revoke an existing credential.
 GET  /credential/{credential_id}    — Retrieve credential status (not full data).
 POST /credential/wallet/challenge   — Issue wallet ownership challenge (EU TFR).
 POST /credential/wallet/verify      — Verify wallet ownership signature (EU TFR).
+POST /credential/wallet/revoke      — Revoke wallet ownership attestation (EU TFR).
 """
 
 import logging
@@ -130,6 +131,20 @@ class WalletVerifyResponse(BaseModel):
     timestamp: int
     expires_at: int
     wallet_ownership_verified: bool = True
+
+
+class WalletRevokeRequest(BaseModel):
+    """Request body for POST /credential/wallet/revoke."""
+
+    attestation_id: str = Field(..., description="Attestation to revoke")
+
+
+class WalletRevokeResponse(BaseModel):
+    """Response body for POST /credential/wallet/revoke."""
+
+    revoked: bool
+    attestation_id: str
+    revoked_at: int
 
 
 # ---------------------------------------------------------------------------
@@ -317,8 +332,8 @@ async def verify_wallet_ownership(
     On success, creates an attestation record that can be referenced by
     credential proof generation.
     """
-    # Look up the pending challenge
-    challenge = _verifier.get_pending_challenge(request.nonce)
+    # Atomically consume the pending challenge (single-use)
+    challenge = _verifier.consume_pending_challenge(request.nonce)
     if challenge is None:
         raise HTTPException(status_code=400, detail="Challenge not found or expired")
 
@@ -344,4 +359,34 @@ async def verify_wallet_ownership(
         timestamp=attestation.timestamp,
         expires_at=attestation.expires_at,
         wallet_ownership_verified=True,
+    )
+
+
+@router.post(
+    "/wallet/revoke",
+    response_model=WalletRevokeResponse,
+    summary="Revoke wallet ownership attestation (EU TFR)",
+)
+async def revoke_wallet_attestation(
+    request: WalletRevokeRequest,
+    _auth: dict = Depends(JWTAuthDependency),
+):
+    """
+    Revoke a wallet ownership attestation.
+
+    Revoked attestations will no longer be considered valid for credential
+    proof generation.
+    """
+    if not _verifier.revoke_attestation(request.attestation_id):
+        raise HTTPException(status_code=404, detail="Attestation not found")
+
+    logger.info(
+        "Wallet ownership attestation revoked: attestation=%s",
+        request.attestation_id,
+    )
+
+    return WalletRevokeResponse(
+        revoked=True,
+        attestation_id=request.attestation_id,
+        revoked_at=int(time.time()),
     )
