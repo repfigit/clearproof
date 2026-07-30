@@ -1,0 +1,11 @@
+{
+  "$comment": "Canonical jurisdiction -> amount-tier thresholds (USD or USD-equivalent). Single source of truth for the Python SDK, the TypeScript SDK, and the on-chain ComplianceRegistry seed. Changing a value here is a consensus change: every verifier must agree, or previously valid proofs stop verifying. See docs/internal/CIRCUIT_SIGNALS.md.",
+  "version": 1,
+  "jurisdictions": {
+    "US": { "tier2": 250, "tier3": 3000, "tier4": 10000 },
+    "EU": { "tier2": 250, "tier3": 1000, "tier4": 10000 },
+    "SG": { "tier2": 250, "tier3": 1500, "tier4": 10000 },
+    "AE": { "tier2": 250, "tier3": 1000, "tier4": 10000 }
+  },
+  "default": { "tier2": 250, "tier3": 1000, "tier4": 10000 }
+}

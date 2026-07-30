@@ -26,9 +26,32 @@ describe.skipIf(!vectorPresent)('verifier parity vector (off-chain)', () => {
 
   it('verifies the committed compliance proof off-chain', async () => {
     const result = await verifyProof(proof, publicSignals, vkeyPath);
-    expect(result.valid).toBe(true);
+    // The parity guarantee is cryptographic: the same proof must satisfy the
+    // pairing check here and on-chain. `proofValid` is that check. `valid`
+    // additionally requires policy binding, which this dev vector does not
+    // satisfy — see the test below.
+    expect(result.proofValid).toBe(true);
     expect(result.isCompliant).toBe(true);
     expect(result.sarReviewFlag).toBe(false);
+  });
+
+  it('documents that the committed vector does not satisfy threshold binding', async () => {
+    // AIF-79. The vector claims jurisdiction "US" (signal 6 = 21843) but
+    // carries thresholds 25000/300000/1000000, which match neither the US
+    // table (250/3000/10000) nor any other entry — they are ~100x the real
+    // values. This is precisely the defect AIF-79 fixes, preserved here in
+    // the repo's own reference artifact: cryptographically valid, policy
+    // meaningless.
+    //
+    // The vector cannot be regenerated without the proving key, which is not
+    // committed (dev artifacts only; MANIFEST.json marks it devKeysOnly).
+    // Regenerating it end-to-end is tracked in AIF-89; when that lands, this
+    // test should flip to expecting `valid === true` and be deleted.
+    const result = await verifyProof(proof, publicSignals, vkeyPath);
+    expect(result.thresholdsBound).toBe(false);
+    expect(result.valid).toBe(false);
+    expect(result.rejectionReasons).toContain('threshold_mismatch');
+    expect(result.jurisdiction).toBe('US');
   });
 
   it('has the expected 16 public signals and compliant output values', () => {
@@ -41,7 +64,10 @@ describe.skipIf(!vectorPresent)('verifier parity vector (off-chain)', () => {
     const tampered = [...publicSignals];
     tampered[4] = tampered[4] === '2' ? '3' : '2'; // flip amount_tier
     const result = await verifyProof(proof, tampered, vkeyPath);
-    expect(result.valid).toBe(false);
+    // Assert on the pairing check specifically: `valid` would now be false for
+    // this vector regardless of tampering, so it can no longer evidence that
+    // the signal flip was detected.
+    expect(result.proofValid).toBe(false);
   });
 
   it('rejects a tampered proof element', async () => {

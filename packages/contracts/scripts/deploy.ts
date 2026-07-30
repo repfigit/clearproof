@@ -1,4 +1,6 @@
 import { ethers, run } from "hardhat";
+import { readFileSync } from "fs";
+import { resolve } from "path";
 
 async function main() {
   const [deployer] = await ethers.getSigners();
@@ -37,6 +39,34 @@ async function main() {
   await registry.waitForDeployment();
   const registryAddr = await registry.getAddress();
   console.log("ComplianceRegistry deployed to:", registryAddr);
+
+  // 5. Seed the jurisdiction threshold table (AIF-79).
+  //
+  // tier2/3/4_threshold are unconstrained circuit inputs, so verifyAndRecord
+  // rejects any proof whose thresholds disagree with this table. A registry
+  // deployed without seeding accepts nothing — the default entry in particular
+  // must exist, or every unregistered jurisdiction reverts.
+  console.log("\nSeeding jurisdiction thresholds...");
+  const thresholdConfig = JSON.parse(
+    readFileSync(resolve(__dirname, "../../../config/jurisdiction_thresholds.json"), "utf-8")
+  );
+
+  const encodeJurisdiction = (code: string): number => {
+    const buf = Buffer.from(code.toUpperCase(), "ascii");
+    if (buf.length !== 2) throw new Error(`Jurisdiction code must be alpha-2: ${code}`);
+    return (buf[0] << 8) | buf[1];
+  };
+
+  const seed = async (key: number, label: string, t: { tier2: number; tier3: number; tier4: number }) => {
+    const tx = await registry.setJurisdictionThresholds(key, t.tier2, t.tier3, t.tier4);
+    await tx.wait();
+    console.log(`  ${label}: ${t.tier2}/${t.tier3}/${t.tier4}`);
+  };
+
+  await seed(0, "DEFAULT", thresholdConfig.default);
+  for (const [code, t] of Object.entries(thresholdConfig.jurisdictions)) {
+    await seed(encodeJurisdiction(code), code, t as { tier2: number; tier3: number; tier4: number });
+  }
 
   console.log("\n=== Deployment complete ===");
   console.log(`  Verifier:         ${verifierAddr}`);

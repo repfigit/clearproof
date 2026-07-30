@@ -83,6 +83,10 @@ class ProofVerifyResponse(BaseModel):
     proof_id: str
     compliance_attestations: dict
     verified_at: int
+    rejection_reasons: list[str] = Field(
+        default_factory=list,
+        description="Why the proof was rejected. Empty when valid is true.",
+    )
 
 
 async def _hash_wallet(address: str) -> str:
@@ -169,12 +173,13 @@ async def generate_proof(
 ):
     from src.protocol.compliance_proof import ComplianceProof
     from src.protocol.hybrid_payload import HybridPayload
-    from src.prover.tier_mapping import JURISDICTION_TIERS, compute_tier
+    from src.prover.tier_mapping import compute_tier, get_thresholds
     from src.sar.encryption import derive_key, encrypt_pii
     from src.sar.sar_review import evaluate_sar_flags
     from src.storage.keyring import load_keyring
 
     tier = compute_tier(request.amount_usd, request.jurisdiction)
+    _thresholds = get_thresholds(request.jurisdiction)
 
     if tier >= 3 and not request.originator_name:
         raise HTTPException(
@@ -253,9 +258,15 @@ async def generate_proof(
         "expires_at": [credential.expires_at],
         "wallet_address_hash": [int(wallet_hash, 16)],
         "amount_usd": [int(request.amount_usd)],
-        "tier2_threshold": [JURISDICTION_TIERS.get(request.jurisdiction, {}).get("tier2", 10000)],
-        "tier3_threshold": [JURISDICTION_TIERS.get(request.jurisdiction, {}).get("tier3", 100000)],
-        "tier4_threshold": [JURISDICTION_TIERS.get(request.jurisdiction, {}).get("tier4", 1000000)],
+        # Must come from the shared accessor: these are unconstrained public
+        # inputs, so every verifier re-derives them from the same table. The
+        # previous inline .get(..., 10000/100000/1000000) fallbacks diverged
+        # from JURISDICTION_TIERS["DEFAULT"] and skipped case normalization,
+        # so a lowercase or unlisted jurisdiction produced thresholds no
+        # verifier would ever agree with.
+        "tier2_threshold": [_thresholds["tier2"]],
+        "tier3_threshold": [_thresholds["tier3"]],
+        "tier4_threshold": [_thresholds["tier4"]],
         "transfer_timestamp": [int(time.time())],
         "jurisdiction_code": [_encode_jurisdiction(request.jurisdiction)],
         "credential_commitment": [commitment_int],
@@ -464,18 +475,43 @@ async def verify_proof(
     if len(signals) < 16:
         raise HTTPException(status_code=400, detail="Insufficient public signals (expected 16)")
 
-    attestations = {
-        "is_compliant": int(signals[0]) == 1,
-        "sar_review_flag": int(signals[1]) == 1,
-        "amount_tier": int(signals[4]),
-    }
+    rejection_reasons: list[str] = []
+    if not valid:
+        rejection_reasons.append("groth16_invalid")
+
+    from src.prover.tier_mapping import decode_jurisdiction, thresholds_match_jurisdiction
+
+    # Public signals arrive from a counterparty VASP: treat every element as
+    # untrusted input, not as a well-formed integer.
+    try:
+        attestations = {
+            "is_compliant": int(signals[0]) == 1,
+            "sar_review_flag": int(signals[1]) == 1,
+            "amount_tier": int(signals[4]),
+            "jurisdiction": decode_jurisdiction(int(signals[6])),
+        }
+    except (TypeError, ValueError):
+        raise HTTPException(status_code=400, detail="Malformed public signals (expected decimal integers)")
+
+    # Threshold binding. tier2/3/4_threshold (signals 8-10) are unconstrained
+    # public inputs — the prover chooses them. A prover that submits an
+    # arbitrarily high tier2_threshold lands any amount in tier 1, defeating
+    # both the tier attestation and the SAR review flag. Mirrors the on-chain
+    # check in ComplianceRegistry.verifyAndRecord.
+    thresholds_ok = thresholds_match_jurisdiction(signals)
+    attestations["thresholds_bound"] = thresholds_ok
+    if not thresholds_ok:
+        valid = False
+        rejection_reasons.append("threshold_mismatch")
 
     if attestations["amount_tier"] != request.expected_amount_tier:
         valid = False
+        rejection_reasons.append("amount_tier_mismatch")
 
     return ProofVerifyResponse(
         valid=valid,
         proof_id=request.proof_id,
         compliance_attestations=attestations,
         verified_at=int(time.time()),
+        rejection_reasons=rejection_reasons,
     )
