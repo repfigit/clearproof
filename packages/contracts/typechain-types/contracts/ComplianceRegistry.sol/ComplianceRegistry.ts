@@ -23,16 +23,35 @@ import type {
   TypedContractMethod,
 } from "../../common";
 
+export declare namespace ComplianceRegistry {
+  export type ThresholdsStruct = {
+    tier2: BigNumberish;
+    tier3: BigNumberish;
+    tier4: BigNumberish;
+    registered: boolean;
+  };
+
+  export type ThresholdsStructOutput = [
+    tier2: bigint,
+    tier3: bigint,
+    tier4: bigint,
+    registered: boolean
+  ] & { tier2: bigint; tier3: bigint; tier4: bigint; registered: boolean };
+}
+
 export interface ComplianceRegistryInterface extends Interface {
   getFunction(
     nameOrSignature:
       | "DEFAULT_ADMIN_ROLE"
+      | "DEFAULT_JURISDICTION_KEY"
       | "REVOKER_ROLE"
+      | "THRESHOLD_ADMIN_ROLE"
       | "getRoleAdmin"
       | "grantRole"
       | "hasRole"
       | "isRevoked"
       | "isVerified"
+      | "jurisdictionThresholds"
       | "pause"
       | "paused"
       | "proofs"
@@ -41,7 +60,9 @@ export interface ComplianceRegistryInterface extends Interface {
       | "revokeRole"
       | "revokedCredentials"
       | "sanctionsOracle"
+      | "setJurisdictionThresholds"
       | "supportsInterface"
+      | "thresholdsFor"
       | "unpause"
       | "usedNullifiers"
       | "vaspRegistry"
@@ -52,6 +73,7 @@ export interface ComplianceRegistryInterface extends Interface {
   getEvent(
     nameOrSignatureOrTopic:
       | "CredentialRevoked"
+      | "JurisdictionThresholdsSet"
       | "Paused"
       | "ProofVerified"
       | "RoleAdminChanged"
@@ -65,7 +87,15 @@ export interface ComplianceRegistryInterface extends Interface {
     values?: undefined
   ): string;
   encodeFunctionData(
+    functionFragment: "DEFAULT_JURISDICTION_KEY",
+    values?: undefined
+  ): string;
+  encodeFunctionData(
     functionFragment: "REVOKER_ROLE",
+    values?: undefined
+  ): string;
+  encodeFunctionData(
+    functionFragment: "THRESHOLD_ADMIN_ROLE",
     values?: undefined
   ): string;
   encodeFunctionData(
@@ -87,6 +117,10 @@ export interface ComplianceRegistryInterface extends Interface {
   encodeFunctionData(
     functionFragment: "isVerified",
     values: [BytesLike]
+  ): string;
+  encodeFunctionData(
+    functionFragment: "jurisdictionThresholds",
+    values: [BigNumberish]
   ): string;
   encodeFunctionData(functionFragment: "pause", values?: undefined): string;
   encodeFunctionData(functionFragment: "paused", values?: undefined): string;
@@ -112,8 +146,16 @@ export interface ComplianceRegistryInterface extends Interface {
     values?: undefined
   ): string;
   encodeFunctionData(
+    functionFragment: "setJurisdictionThresholds",
+    values: [BigNumberish, BigNumberish, BigNumberish, BigNumberish]
+  ): string;
+  encodeFunctionData(
     functionFragment: "supportsInterface",
     values: [BytesLike]
+  ): string;
+  encodeFunctionData(
+    functionFragment: "thresholdsFor",
+    values: [BigNumberish]
   ): string;
   encodeFunctionData(functionFragment: "unpause", values?: undefined): string;
   encodeFunctionData(
@@ -142,7 +184,15 @@ export interface ComplianceRegistryInterface extends Interface {
     data: BytesLike
   ): Result;
   decodeFunctionResult(
+    functionFragment: "DEFAULT_JURISDICTION_KEY",
+    data: BytesLike
+  ): Result;
+  decodeFunctionResult(
     functionFragment: "REVOKER_ROLE",
+    data: BytesLike
+  ): Result;
+  decodeFunctionResult(
+    functionFragment: "THRESHOLD_ADMIN_ROLE",
     data: BytesLike
   ): Result;
   decodeFunctionResult(
@@ -153,6 +203,10 @@ export interface ComplianceRegistryInterface extends Interface {
   decodeFunctionResult(functionFragment: "hasRole", data: BytesLike): Result;
   decodeFunctionResult(functionFragment: "isRevoked", data: BytesLike): Result;
   decodeFunctionResult(functionFragment: "isVerified", data: BytesLike): Result;
+  decodeFunctionResult(
+    functionFragment: "jurisdictionThresholds",
+    data: BytesLike
+  ): Result;
   decodeFunctionResult(functionFragment: "pause", data: BytesLike): Result;
   decodeFunctionResult(functionFragment: "paused", data: BytesLike): Result;
   decodeFunctionResult(functionFragment: "proofs", data: BytesLike): Result;
@@ -174,7 +228,15 @@ export interface ComplianceRegistryInterface extends Interface {
     data: BytesLike
   ): Result;
   decodeFunctionResult(
+    functionFragment: "setJurisdictionThresholds",
+    data: BytesLike
+  ): Result;
+  decodeFunctionResult(
     functionFragment: "supportsInterface",
+    data: BytesLike
+  ): Result;
+  decodeFunctionResult(
+    functionFragment: "thresholdsFor",
     data: BytesLike
   ): Result;
   decodeFunctionResult(functionFragment: "unpause", data: BytesLike): Result;
@@ -199,6 +261,31 @@ export namespace CredentialRevokedEvent {
   export interface OutputObject {
     commitment: string;
     revoker: string;
+  }
+  export type Event = TypedContractEvent<InputTuple, OutputTuple, OutputObject>;
+  export type Filter = TypedDeferredTopicFilter<Event>;
+  export type Log = TypedEventLog<Event>;
+  export type LogDescription = TypedLogDescription<Event>;
+}
+
+export namespace JurisdictionThresholdsSetEvent {
+  export type InputTuple = [
+    jurisdictionCode: BigNumberish,
+    tier2: BigNumberish,
+    tier3: BigNumberish,
+    tier4: BigNumberish
+  ];
+  export type OutputTuple = [
+    jurisdictionCode: bigint,
+    tier2: bigint,
+    tier3: bigint,
+    tier4: bigint
+  ];
+  export interface OutputObject {
+    jurisdictionCode: bigint;
+    tier2: bigint;
+    tier3: bigint;
+    tier4: bigint;
   }
   export type Event = TypedContractEvent<InputTuple, OutputTuple, OutputObject>;
   export type Filter = TypedDeferredTopicFilter<Event>;
@@ -358,7 +445,11 @@ export interface ComplianceRegistry extends BaseContract {
 
   DEFAULT_ADMIN_ROLE: TypedContractMethod<[], [string], "view">;
 
+  DEFAULT_JURISDICTION_KEY: TypedContractMethod<[], [bigint], "view">;
+
   REVOKER_ROLE: TypedContractMethod<[], [string], "view">;
+
+  THRESHOLD_ADMIN_ROLE: TypedContractMethod<[], [string], "view">;
 
   getRoleAdmin: TypedContractMethod<[role: BytesLike], [string], "view">;
 
@@ -377,6 +468,19 @@ export interface ComplianceRegistry extends BaseContract {
   isRevoked: TypedContractMethod<[commitment: BytesLike], [boolean], "view">;
 
   isVerified: TypedContractMethod<[transferId: BytesLike], [boolean], "view">;
+
+  jurisdictionThresholds: TypedContractMethod<
+    [arg0: BigNumberish],
+    [
+      [bigint, bigint, bigint, boolean] & {
+        tier2: bigint;
+        tier3: bigint;
+        tier4: bigint;
+        registered: boolean;
+      }
+    ],
+    "view"
+  >;
 
   pause: TypedContractMethod<[], [void], "nonpayable">;
 
@@ -416,9 +520,26 @@ export interface ComplianceRegistry extends BaseContract {
 
   sanctionsOracle: TypedContractMethod<[], [string], "view">;
 
+  setJurisdictionThresholds: TypedContractMethod<
+    [
+      jurisdictionCode: BigNumberish,
+      tier2: BigNumberish,
+      tier3: BigNumberish,
+      tier4: BigNumberish
+    ],
+    [void],
+    "nonpayable"
+  >;
+
   supportsInterface: TypedContractMethod<
     [interfaceId: BytesLike],
     [boolean],
+    "view"
+  >;
+
+  thresholdsFor: TypedContractMethod<
+    [jurisdictionCode: BigNumberish],
+    [ComplianceRegistry.ThresholdsStructOutput],
     "view"
   >;
 
@@ -451,7 +572,13 @@ export interface ComplianceRegistry extends BaseContract {
     nameOrSignature: "DEFAULT_ADMIN_ROLE"
   ): TypedContractMethod<[], [string], "view">;
   getFunction(
+    nameOrSignature: "DEFAULT_JURISDICTION_KEY"
+  ): TypedContractMethod<[], [bigint], "view">;
+  getFunction(
     nameOrSignature: "REVOKER_ROLE"
+  ): TypedContractMethod<[], [string], "view">;
+  getFunction(
+    nameOrSignature: "THRESHOLD_ADMIN_ROLE"
   ): TypedContractMethod<[], [string], "view">;
   getFunction(
     nameOrSignature: "getRoleAdmin"
@@ -476,6 +603,20 @@ export interface ComplianceRegistry extends BaseContract {
   getFunction(
     nameOrSignature: "isVerified"
   ): TypedContractMethod<[transferId: BytesLike], [boolean], "view">;
+  getFunction(
+    nameOrSignature: "jurisdictionThresholds"
+  ): TypedContractMethod<
+    [arg0: BigNumberish],
+    [
+      [bigint, bigint, bigint, boolean] & {
+        tier2: bigint;
+        tier3: bigint;
+        tier4: bigint;
+        registered: boolean;
+      }
+    ],
+    "view"
+  >;
   getFunction(
     nameOrSignature: "pause"
   ): TypedContractMethod<[], [void], "nonpayable">;
@@ -519,8 +660,27 @@ export interface ComplianceRegistry extends BaseContract {
     nameOrSignature: "sanctionsOracle"
   ): TypedContractMethod<[], [string], "view">;
   getFunction(
+    nameOrSignature: "setJurisdictionThresholds"
+  ): TypedContractMethod<
+    [
+      jurisdictionCode: BigNumberish,
+      tier2: BigNumberish,
+      tier3: BigNumberish,
+      tier4: BigNumberish
+    ],
+    [void],
+    "nonpayable"
+  >;
+  getFunction(
     nameOrSignature: "supportsInterface"
   ): TypedContractMethod<[interfaceId: BytesLike], [boolean], "view">;
+  getFunction(
+    nameOrSignature: "thresholdsFor"
+  ): TypedContractMethod<
+    [jurisdictionCode: BigNumberish],
+    [ComplianceRegistry.ThresholdsStructOutput],
+    "view"
+  >;
   getFunction(
     nameOrSignature: "unpause"
   ): TypedContractMethod<[], [void], "nonpayable">;
@@ -554,6 +714,13 @@ export interface ComplianceRegistry extends BaseContract {
     CredentialRevokedEvent.InputTuple,
     CredentialRevokedEvent.OutputTuple,
     CredentialRevokedEvent.OutputObject
+  >;
+  getEvent(
+    key: "JurisdictionThresholdsSet"
+  ): TypedContractEvent<
+    JurisdictionThresholdsSetEvent.InputTuple,
+    JurisdictionThresholdsSetEvent.OutputTuple,
+    JurisdictionThresholdsSetEvent.OutputObject
   >;
   getEvent(
     key: "Paused"
@@ -608,6 +775,17 @@ export interface ComplianceRegistry extends BaseContract {
       CredentialRevokedEvent.InputTuple,
       CredentialRevokedEvent.OutputTuple,
       CredentialRevokedEvent.OutputObject
+    >;
+
+    "JurisdictionThresholdsSet(uint16,uint64,uint64,uint64)": TypedContractEvent<
+      JurisdictionThresholdsSetEvent.InputTuple,
+      JurisdictionThresholdsSetEvent.OutputTuple,
+      JurisdictionThresholdsSetEvent.OutputObject
+    >;
+    JurisdictionThresholdsSet: TypedContractEvent<
+      JurisdictionThresholdsSetEvent.InputTuple,
+      JurisdictionThresholdsSetEvent.OutputTuple,
+      JurisdictionThresholdsSetEvent.OutputObject
     >;
 
     "Paused(address)": TypedContractEvent<

@@ -212,21 +212,54 @@ function verifyProof(
 ) public view returns (bool)
 ```
 
-snarkjs outputs public signals in this order: **outputs first** (indices 0-1), then **public inputs** in declaration order (indices 2-15). All 16 slots are actively validated by ComplianceRegistry:
+snarkjs outputs public signals in this order: **outputs first** (indices 0-1), then **public inputs** in declaration order (indices 2-15).
 
-| Slot | Signal | On-Chain Usage |
-|------|--------|----------------|
-| 0 | `is_compliant` | Must equal 1 for proof acceptance |
-| 1 | `sar_review_flag` | Stored in `userSARFlags` mapping |
-| 2 | `sanctions_tree_root` | Checked against `SanctionsOracle.root()` |
-| 3 | `issuer_tree_root` | Checked against `IssuerRegistry.root()` |
-| 5 | `transfer_timestamp` | Must be ≤ `block.timestamp` |
-| 7 | `credential_commitment` | Used for credential binding |
-| 11 | `domain_chain_id` | Must equal `block.chainid` |
-| 12 | `domain_contract_hash` | Must equal keccak256 of registry address |
-| 13 | `transfer_id_hash` | Unique per transfer, prevents replay |
-| 14 | `credential_nullifier` | Stored on-chain, prevents credential reuse |
-| 15 | `proof_expires_at` | Must be ≥ `block.timestamp` |
+### Which signals are constrained in-circuit, and which are not
+
+This distinction is load-bearing and easy to get wrong. Some public inputs are
+**not constrained by the circuit at all** — the prover chooses their value
+freely, and the only thing standing between a chosen value and an accepted
+proof is a verifier-side check. If a verifier omits that check, the attestation
+built on that signal is worthless even though the proof is cryptographically
+valid.
+
+| Slot | Signal | Constrained in-circuit? | Enforced by |
+|------|--------|------------------------|-------------|
+| 0 | `is_compliant` | Literal constant `1` (see note) | — |
+| 1 | `sar_review_flag` | Derived from `amount_tier` | circuit |
+| 2 | `sanctions_tree_root` | No | `ComplianceRegistry` vs `SanctionsOracle.currentRoot()` |
+| 3 | `issuer_tree_root` | No | `ComplianceRegistry` vs `VASPRegistry.issuerMerkleRoot()` |
+| 4 | `amount_tier` | Derived from amount vs thresholds | circuit (but see 8-10) |
+| 5 | `transfer_timestamp` | Range only | `ComplianceRegistry` (not in future) |
+| 6 | `jurisdiction_code` | Range only (16-bit) | `ComplianceRegistry._checkThresholds` (must be alpha-2) |
+| 7 | `credential_commitment` | Yes — Poseidon preimage | circuit + revocation check |
+| 8-10 | `tier2/3/4_threshold` | **No** | `ComplianceRegistry._checkThresholds`, `verifyProof` (TS), `/proof/verify` (Python) |
+| 11 | `domain_chain_id` | **No** | `ComplianceRegistry` vs `block.chainid` |
+| 12 | `domain_contract_hash` | **No** | `ComplianceRegistry` vs keccak256 of its own address |
+| 13 | `transfer_id_hash` | No | `ComplianceRegistry` vs keccak256(transferId) mod r |
+| 14 | `credential_nullifier` | Yes — Poseidon preimage | circuit + `usedNullifiers` |
+| 15 | `proof_expires_at` | `> transfer_timestamp` | `ComplianceRegistry` vs `block.timestamp` |
+
+Notes:
+
+- **`is_compliant` is the literal constant `1`**, not a computed verdict. It is
+  sound — the circuit aborts if any constraint fails, so a proof only exists for
+  a compliant witness — but an integrator reading `publicSignals[0]` as a
+  computed result is misreading it.
+- **Slots 8-10 (thresholds) are the subtlest case.** `amount_tier` *is* derived
+  in-circuit, but it is derived *from these prover-supplied thresholds*. A
+  prover that submits `tier2_threshold = 2**63` gets a valid proof that a $50M
+  transfer is tier 1 — defeating the tier attestation and, transitively, the
+  SAR review flag. Every verifier must therefore re-derive the thresholds from
+  its own table for the jurisdiction in slot 6. The canonical table is
+  `config/jurisdiction_thresholds.json`; the on-chain copy is seeded by
+  `packages/contracts/scripts/deploy.ts` and is the authority for on-chain
+  submission. Cross-language agreement is asserted by
+  `tests/unit/test_jurisdiction_thresholds.py` and
+  `packages/proof/test/thresholds.test.ts`.
+- Unregistered jurisdictions resolve to the FATF default entry
+  (`DEFAULT_JURISDICTION_KEY = 0` on-chain). Whether unregistered jurisdictions
+  should instead be rejected outright is an open policy question — see AIF-79.
 
 ## Signal Hashing Schemes
 

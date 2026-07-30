@@ -2,7 +2,7 @@ import { Command } from 'commander';
 import crypto from 'crypto';
 import fs from 'fs';
 import path from 'path';
-import { generateProof, verifyProof } from '@clearproof/proof';
+import { generateProof, verifyProof, getThresholds } from '@clearproof/proof';
 import type { ComplianceInput } from '@clearproof/proof';
 
 export function defaultArtifactsDir(): string {
@@ -77,6 +77,9 @@ const ZERO_SUBTREE = [
  * leaf hashes (all < 2^252 for the circuit's LessThan(252) range checks).
  * Issuer tree (depth 10): single issuer leaf at index 0, zero subtrees above.
  */
+const DEMO_JURISDICTION = 'US';
+const DEMO_THRESHOLDS = getThresholds(DEMO_JURISDICTION);
+
 const DEMO_INPUT: ComplianceInput = {
   // === Public inputs ===
   sanctionsTreeRoot:
@@ -88,9 +91,9 @@ const DEMO_INPUT: ComplianceInput = {
   jurisdictionCode: 21843, // "US" as uint16 (0x55 0x53)
   credentialCommitment:
     '3946334516594870472864654055107878340628457451312090927820290073103136770198',
-  tier2Threshold: 25000,   // $250.00 in cents
-  tier3Threshold: 300000,  // $3,000.00 in cents
-  tier4Threshold: 1000000, // $10,000.00 in cents
+  tier2Threshold: DEMO_THRESHOLDS.tier2,
+  tier3Threshold: DEMO_THRESHOLDS.tier3,
+  tier4Threshold: DEMO_THRESHOLDS.tier4,
 
   // === Private inputs: Credential preimage ===
   // commitment = Poseidon(123456789, 2, 1, 1700000000, 1800000000)
@@ -137,7 +140,7 @@ const DEMO_INPUT: ComplianceInput = {
   proofExpiresAt: 1711670400 + 300, // transfer_timestamp + 300s TTL
 
   // === Private inputs: Amount ===
-  actualAmount: 100000, // $1,000.00 in cents — tier 2 (between $250 and $3,000)
+  actualAmount: 1000, // $1,000 USD — tier 2 (between $250 and $3,000)
 };
 
 export const demoCommand = new Command('demo')

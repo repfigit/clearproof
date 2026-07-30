@@ -60,7 +60,16 @@ export interface ProofResult {
  * Result returned after verifying a Groth16 proof.
  */
 export interface VerifyResult {
+  /** True only when the pairing check passes AND the thresholds are bound. */
   valid: boolean;
+  /** The Groth16 pairing check alone. */
+  proofValid: boolean;
+  /** Whether signals 8-10 match this verifier's table for signal 6. */
+  thresholdsBound: boolean;
+  /** Decoded ISO 3166-1 alpha-2 code from signal 6, or null if malformed. */
+  jurisdiction: string | null;
+  /** Machine-readable rejection reasons; empty when `valid` is true. */
+  rejectionReasons: string[];
   isCompliant: boolean;
   sarReviewFlag: boolean;
   publicSignals: string[];
