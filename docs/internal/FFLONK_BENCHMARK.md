@@ -85,7 +85,9 @@ Note that CI currently pins by SHA-256 while iden3 publishes blake2b. Both are r
 
 ### 4. The snarkjs fflonk verifier is GPL-3.0, and re-implementing it is not a weekend job
 
-ADR 0001 replaced the GPL-3.0 snarkjs Groth16 template with our own Apache-2.0 implementation (`scripts/generate_verifier.mjs`), specifically so the patent grant and licence story work for enterprise adoption. `snarkjs zkey export solidityverifier` on an fflonk zkey emits **`// SPDX-License-Identifier: GPL-3.0`**.
+ADR 0001 replaced the GPL-3.0 snarkjs Groth16 template with our own Apache-2.0 implementation (`scripts/generate_verifier.mjs`), specifically so the patent grant and licence story work for enterprise adoption. `snarkjs zkey export solidityverifier` on an fflonk zkey emits a Solidity file whose SPDX header declares **GPL-3.0**.
+
+> Note for future editors: do not write that header's literal tag in this repo's Markdown. `reuse lint` scans every file for the bare identifier token and will read it as a real licence declaration for the containing file, then fail on the surrounding Markdown punctuation. An earlier draft of this line broke the `license-compliance` CI job exactly that way.
 
 Scale of the problem: our Apache Groth16 verifier is ~300 lines against a shared `Pairing.sol`. The fflonk template is **1,566 lines** of hand-optimised Yul-heavy Solidity. Re-implementing it cleanly is a substantial, security-critical project — not comparable to the Groth16 rewrite.
 
