@@ -15,6 +15,22 @@ import { ethers, run } from "hardhat";
 import * as fs from "fs";
 import * as path from "path";
 
+/**
+ * Canonical jurisdiction thresholds. ComplianceRegistry takes the default entry
+ * as a constructor argument (AIF-95) so a registry can never exist unseeded;
+ * the per-jurisdiction entries are seeded after deployment.
+ */
+const thresholdConfig = JSON.parse(
+  fs.readFileSync(path.resolve(__dirname, "../../../config/jurisdiction_thresholds.json"), "utf-8")
+);
+
+function encodeJurisdiction(code: string): number {
+  const buf = Buffer.from(code.toUpperCase(), "ascii");
+  if (buf.length !== 2) throw new Error(`Jurisdiction code must be alpha-2: ${code}`);
+  return (buf[0] << 8) | buf[1];
+}
+
+
 async function main() {
   const [deployer] = await ethers.getSigners();
   const network = await ethers.provider.getNetwork();
@@ -63,10 +79,26 @@ async function main() {
   // 4. ComplianceRegistry
   console.log("[4/5] Deploying ComplianceRegistry...");
   const Registry = await ethers.getContractFactory("ComplianceRegistry");
-  const registry = await Registry.deploy(verifierAddr, vaspRegistryAddr, sanctionsOracleAddr);
+  const registry = await Registry.deploy(
+    verifierAddr,
+    vaspRegistryAddr,
+    sanctionsOracleAddr,
+    thresholdConfig.default.tier2,
+    thresholdConfig.default.tier3,
+    thresholdConfig.default.tier4
+  );
   await registry.waitForDeployment();
   const registryAddr = await registry.getAddress();
   console.log(`  → ${registryAddr}`);
+
+  for (const [code, t] of Object.entries(thresholdConfig.jurisdictions) as [
+    string,
+    { tier2: number; tier3: number; tier4: number },
+  ][]) {
+    const tx = await registry.setJurisdictionThresholds(encodeJurisdiction(code), t.tier2, t.tier3, t.tier4);
+    await tx.wait();
+  }
+  console.log(`  seeded ${Object.keys(thresholdConfig.jurisdictions).length} jurisdiction thresholds`);
 
   // 5. SanctionsRootRelay
   console.log("[5/5] Deploying SanctionsRootRelay...");

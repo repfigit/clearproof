@@ -57,7 +57,10 @@ describe("E2E: Prove -> Submit On-Chain -> Verify", function () {
     const registry = await Registry.deploy(
       await verifier.getAddress(),
       await vaspRegistry.getAddress(),
-      await sanctionsOracle.getAddress()
+      await sanctionsOracle.getAddress(),
+      250,
+      1000,
+      10000
     );
     await registry.waitForDeployment();
 

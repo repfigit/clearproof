@@ -84,7 +84,24 @@ contract ComplianceRegistry is AccessControl, Pausable {
     event ProofVerified(bytes32 indexed transferId, bytes32 indexed nullifier, bool isCompliant, bool sarFlag);
     event CredentialRevoked(bytes32 indexed commitment, address revoker);
 
-    constructor(address _verifier, address _vaspRegistry, address _sanctionsOracle) {
+    /// @param defaultTier2 Lower bound of tier 2 for jurisdictions with no explicit entry.
+    /// @param defaultTier3 Lower bound of tier 3 for the same.
+    /// @param defaultTier4 Lower bound of tier 4 for the same.
+    ///
+    /// @dev The default entry is set here rather than in a follow-up transaction
+    /// on purpose. verifyAndRecord rejects any proof whose thresholds disagree
+    /// with this table, and every lookup falls through to the default entry, so
+    /// a registry deployed with an empty table accepts *nothing* — a silent,
+    /// total outage with no on-chain signal. Taking the default in the
+    /// constructor makes that state unrepresentable.
+    constructor(
+        address _verifier,
+        address _vaspRegistry,
+        address _sanctionsOracle,
+        uint64 defaultTier2,
+        uint64 defaultTier3,
+        uint64 defaultTier4
+    ) {
         // M-7: Zero-address validation
         if (_verifier == address(0)) revert ZeroVerifier();
         if (_vaspRegistry == address(0)) revert ZeroRegistry();
@@ -97,6 +114,10 @@ contract ComplianceRegistry is AccessControl, Pausable {
         _grantRole(DEFAULT_ADMIN_ROLE, msg.sender);
         _grantRole(REVOKER_ROLE, msg.sender);
         _grantRole(THRESHOLD_ADMIN_ROLE, msg.sender);
+
+        // Shares validation with the external setter, so the constructor cannot
+        // install an out-of-order default.
+        _setJurisdictionThresholds(DEFAULT_JURISDICTION_KEY, defaultTier2, defaultTier3, defaultTier4);
     }
 
     /// @notice Register or update the thresholds accepted for a jurisdiction.
@@ -108,6 +129,10 @@ contract ComplianceRegistry is AccessControl, Pausable {
         external
         onlyRole(THRESHOLD_ADMIN_ROLE)
     {
+        _setJurisdictionThresholds(jurisdictionCode, tier2, tier3, tier4);
+    }
+
+    function _setJurisdictionThresholds(uint16 jurisdictionCode, uint64 tier2, uint64 tier3, uint64 tier4) internal {
         // Ordering is what makes the tier comparison meaningful; an out-of-order
         // table would silently make some tiers unreachable.
         if (!(tier2 < tier3 && tier3 < tier4)) revert ThresholdsNotOrdered();

@@ -50,12 +50,15 @@ async function deployAll() {
   const registry = await Registry.deploy(
     await verifier.getAddress(),
     await vaspRegistry.getAddress(),
-    await sanctionsOracle.getAddress()
+    await sanctionsOracle.getAddress(),
+    DEFAULT_T.tier2,
+    DEFAULT_T.tier3,
+    DEFAULT_T.tier4
   );
   await registry.waitForDeployment();
 
-  // Seed the threshold table the way deploy.ts does.
-  await registry.setJurisdictionThresholds(DEFAULT_KEY, DEFAULT_T.tier2, DEFAULT_T.tier3, DEFAULT_T.tier4);
+  // Seed the per-jurisdiction entries the way deploy.ts does. The default entry
+  // is set by the constructor — see AIF-95.
   await registry.setJurisdictionThresholds(Number(US.code), US.tier2, US.tier3, US.tier4);
   await registry.setJurisdictionThresholds(Number(EU.code), EU.tier2, EU.tier3, EU.tier4);
 
@@ -211,6 +214,71 @@ describe("ComplianceRegistry — threshold binding (AIF-79)", function () {
     await expect(
       registry.connect(vaspWallet).verifyAndRecord(transferId, p.pA, p.pB, p.pC, defaulted, didHash)
     ).to.not.be.revertedWithCustomError(registry, "ThresholdMismatch");
+  });
+
+  describe("constructor-set default (AIF-95)", function () {
+    it("resolves the default with no post-deploy transaction", async function () {
+      const [admin] = await ethers.getSigners();
+
+      const Verifier = await ethers.getContractFactory("Groth16Verifier");
+      const verifier = await Verifier.deploy();
+      const VASPRegistry = await ethers.getContractFactory("VASPRegistry");
+      const vaspRegistry = await VASPRegistry.deploy(admin.address);
+      const SanctionsOracle = await ethers.getContractFactory("SanctionsOracle");
+      const oracle = await SanctionsOracle.deploy(
+        admin.address,
+        ethers.zeroPadValue(ethers.toBeHex(1234n), 32),
+        50
+      );
+
+      const Registry = await ethers.getContractFactory("ComplianceRegistry");
+      const registry = await Registry.deploy(
+        await verifier.getAddress(),
+        await vaspRegistry.getAddress(),
+        await oracle.getAddress(),
+        DEFAULT_T.tier2,
+        DEFAULT_T.tier3,
+        DEFAULT_T.tier4
+      );
+      await registry.waitForDeployment();
+
+      // No setJurisdictionThresholds call has been made. Before AIF-95 the table
+      // was empty here and the registry accepted nothing at all.
+      const resolved = await registry.thresholdsFor(Number(US.code));
+      expect(resolved.registered).to.equal(true);
+      expect(resolved.tier2).to.equal(DEFAULT_T.tier2);
+      expect(resolved.tier3).to.equal(DEFAULT_T.tier3);
+      expect(resolved.tier4).to.equal(DEFAULT_T.tier4);
+    });
+
+    it("rejects an out-of-order default at construction", async function () {
+      const [admin] = await ethers.getSigners();
+
+      const Verifier = await ethers.getContractFactory("Groth16Verifier");
+      const verifier = await Verifier.deploy();
+      const VASPRegistry = await ethers.getContractFactory("VASPRegistry");
+      const vaspRegistry = await VASPRegistry.deploy(admin.address);
+      const SanctionsOracle = await ethers.getContractFactory("SanctionsOracle");
+      const oracle = await SanctionsOracle.deploy(
+        admin.address,
+        ethers.zeroPadValue(ethers.toBeHex(1234n), 32),
+        50
+      );
+
+      const Registry = await ethers.getContractFactory("ComplianceRegistry");
+      // The constructor shares validation with the external setter, so it
+      // cannot be used to install a table the setter would reject.
+      await expect(
+        Registry.deploy(
+          await verifier.getAddress(),
+          await vaspRegistry.getAddress(),
+          await oracle.getAddress(),
+          5000n,
+          1000n,
+          10000n
+        )
+      ).to.be.revertedWithCustomError(Registry, "ThresholdsNotOrdered");
+    });
   });
 
   describe("setJurisdictionThresholds", function () {

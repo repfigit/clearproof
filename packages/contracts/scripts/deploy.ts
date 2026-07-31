@@ -35,20 +35,32 @@ async function main() {
   // 4. ComplianceRegistry
   console.log("Deploying ComplianceRegistry...");
   const Registry = await ethers.getContractFactory("ComplianceRegistry");
-  const registry = await Registry.deploy(verifierAddr, vaspRegistryAddr, sanctionsOracleAddr);
+  const thresholdConfig = JSON.parse(
+    readFileSync(resolve(__dirname, "../../../config/jurisdiction_thresholds.json"), "utf-8")
+  );
+  const registry = await Registry.deploy(
+    verifierAddr,
+    vaspRegistryAddr,
+    sanctionsOracleAddr,
+    thresholdConfig.default.tier2,
+    thresholdConfig.default.tier3,
+    thresholdConfig.default.tier4
+  );
   await registry.waitForDeployment();
   const registryAddr = await registry.getAddress();
   console.log("ComplianceRegistry deployed to:", registryAddr);
 
-  // 5. Seed the jurisdiction threshold table (AIF-79).
+  // 5. Seed the per-jurisdiction thresholds (AIF-79).
   //
   // tier2/3/4_threshold are unconstrained circuit inputs, so verifyAndRecord
-  // rejects any proof whose thresholds disagree with this table. A registry
-  // deployed without seeding accepts nothing — the default entry in particular
-  // must exist, or every unregistered jurisdiction reverts.
+  // rejects any proof whose thresholds disagree with this table. The default
+  // entry is a constructor argument (AIF-95) so a registry can never exist in
+  // a state where it accepts nothing; only the per-jurisdiction overrides are
+  // seeded here.
   console.log("\nSeeding jurisdiction thresholds...");
-  const thresholdConfig = JSON.parse(
-    readFileSync(resolve(__dirname, "../../../config/jurisdiction_thresholds.json"), "utf-8")
+  console.log(
+    `  DEFAULT (constructor): ${thresholdConfig.default.tier2}/` +
+      `${thresholdConfig.default.tier3}/${thresholdConfig.default.tier4}`
   );
 
   const encodeJurisdiction = (code: string): number => {
@@ -63,7 +75,6 @@ async function main() {
     console.log(`  ${label}: ${t.tier2}/${t.tier3}/${t.tier4}`);
   };
 
-  await seed(0, "DEFAULT", thresholdConfig.default);
   for (const [code, t] of Object.entries(thresholdConfig.jurisdictions)) {
     await seed(encodeJurisdiction(code), code, t as { tier2: number; tier3: number; tier4: number });
   }

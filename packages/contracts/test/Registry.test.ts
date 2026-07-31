@@ -229,7 +229,10 @@ describe("ComplianceRegistry (extended)", function () {
     const registry = await Registry.deploy(
       await verifier.getAddress(),
       await vaspRegistry.getAddress(),
-      await sanctionsOracle.getAddress()
+      await sanctionsOracle.getAddress(),
+      250,
+      1000,
+      10000
     );
     await registry.waitForDeployment();
 
@@ -332,7 +335,10 @@ describe("Integration: Full Flow", function () {
     const registry = await Registry.deploy(
       await verifier.getAddress(),
       await vaspRegistry.getAddress(),
-      await sanctionsOracle.getAddress()
+      await sanctionsOracle.getAddress(),
+      250,
+      1000,
+      10000
     );
     await registry.waitForDeployment();
 

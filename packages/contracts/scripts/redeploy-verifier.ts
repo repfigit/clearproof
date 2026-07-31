@@ -26,6 +26,22 @@ import { ethers } from "hardhat";
 import * as fs from "fs";
 import * as path from "path";
 
+/**
+ * Canonical jurisdiction thresholds. ComplianceRegistry takes the default entry
+ * as a constructor argument (AIF-95) so a registry can never exist unseeded;
+ * the per-jurisdiction entries are seeded after deployment.
+ */
+const thresholdConfig = JSON.parse(
+  fs.readFileSync(path.resolve(__dirname, "../../../config/jurisdiction_thresholds.json"), "utf-8")
+);
+
+function encodeJurisdiction(code: string): number {
+  const buf = Buffer.from(code.toUpperCase(), "ascii");
+  if (buf.length !== 2) throw new Error(`Jurisdiction code must be alpha-2: ${code}`);
+  return (buf[0] << 8) | buf[1];
+}
+
+
 async function main() {
   const [deployer] = await ethers.getSigners();
   const network = await ethers.provider.getNetwork();
@@ -70,10 +86,26 @@ async function main() {
     verifierAddr,
     existing.contracts.VASPRegistry,
     existing.contracts.SanctionsOracle,
+    thresholdConfig.default.tier2,
+    thresholdConfig.default.tier3,
+    thresholdConfig.default.tier4,
   );
   await registry.waitForDeployment();
   const registryAddr = await registry.getAddress();
   console.log(`  → ${registryAddr}`);
+
+  // Seed per-jurisdiction thresholds. Without this the new registry has only the
+  // default entry, so e.g. US would silently resolve to tier3 = 1000 instead of
+  // 3000 — a behavior change introduced by the redeploy rather than by policy.
+  console.log("\nSeeding jurisdiction thresholds...");
+  for (const [code, t] of Object.entries(thresholdConfig.jurisdictions) as [
+    string,
+    { tier2: number; tier3: number; tier4: number },
+  ][]) {
+    const tx = await registry.setJurisdictionThresholds(encodeJurisdiction(code), t.tier2, t.tier3, t.tier4);
+    await tx.wait();
+    console.log(`  ${code}: ${t.tier2}/${t.tier3}/${t.tier4}`);
+  }
 
   // Update deployment record, preserving the previous addresses for rollback reference
   const updated = {
