@@ -173,7 +173,10 @@ describe("ComplianceRegistry (domain-bound)", function () {
     const registry = await Registry.deploy(
       await verifier.getAddress(),
       await vaspRegistry.getAddress(),
-      await sanctionsOracle.getAddress()
+      await sanctionsOracle.getAddress(),
+      250,
+      1000,
+      10000
     );
     await registry.waitForDeployment();
 
