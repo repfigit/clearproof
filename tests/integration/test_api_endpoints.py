@@ -356,7 +356,9 @@ async def test_proof_generate_happy_path(client: AsyncClient):
         patch("src.registry.credential_registry._poseidon_hash", new_callable=AsyncMock, return_value="42"),
         patch("src.sar.encryption.encrypt_pii", return_value=(b"0" * 12, b"encrypted-pii")),
         patch("src.sar.encryption.derive_key", return_value=b"k" * 32),
+        patch("src.api.wallet_ownership._verifier.get_active_attestation") as mock_attestation,
     ):
+        mock_attestation.return_value = MagicMock(revoked=False, expires_at=int(time.time()) + 3600)
         mock_tree = MagicMock()
         mock_tree.root = "55555"
         mock_tree.generate_nonmembership_witness = AsyncMock(return_value=mock_witness)
@@ -435,7 +437,9 @@ async def test_proof_generate_hpke_v2_envelope(client: AsyncClient):
         patch("src.registry.credential_registry._poseidon_hash", new_callable=AsyncMock, return_value="42"),
         # v1 path must NOT be used when an HPKE key is supplied
         patch("src.sar.encryption.encrypt_pii", side_effect=AssertionError("v1 path used")),
+        patch("src.api.wallet_ownership._verifier.get_active_attestation") as mock_attestation,
     ):
+        mock_attestation.return_value = MagicMock(revoked=False, expires_at=int(time.time()) + 3600)
         mock_tree = MagicMock()
         mock_tree.root = "55555"
         mock_tree.generate_nonmembership_witness = AsyncMock(return_value=mock_witness)
