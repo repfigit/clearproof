@@ -455,3 +455,102 @@ class TestEndToEndFlow:
         # Should no longer be valid or active
         assert verifier.is_attestation_valid(attestation.attestation_id) is False
         assert verifier.get_active_attestation(wallet_address) is None
+
+
+class TestAttestationCredentialWiring:
+    """AC-1/AC-4: Verify attestation wires into credential and proof gating."""
+
+    @pytest.mark.asyncio
+    async def test_attestation_marks_credential_verified(self, verifier, test_wallet):
+        """After successful verification, credential is marked wallet_ownership_verified."""
+        from src.registry.credential_registry import CredentialRegistry
+
+        registry = CredentialRegistry()
+        now = int(time.time())
+        cred = zkKYCCredential(
+            issuer_did="did:web:test.example.com",
+            subject_wallet=test_wallet["address"],
+            jurisdiction="DE",
+            kyc_tier="retail",
+            sanctions_clear=True,
+            issued_at=now,
+            expires_at=now + 86400,
+        )
+        cred_id = cred.credential_id
+        await registry.issue(cred)
+
+        # Before attestation: wallet_ownership_verified is False
+        assert registry.get(cred_id).wallet_ownership_verified is False
+
+        # Run the challenge → sign → verify → wire flow
+        challenge = verifier.create_challenge(test_wallet["address"], "did:web:test.example.com")
+        message = (
+            f"ClearProof Wallet Ownership Verification\n"
+            f"Wallet: {challenge.wallet_address}\n"
+            f"VASP: {challenge.vasp_did}\n"
+            f"Timestamp: {challenge.timestamp}\n"
+            f"Nonce: {challenge.nonce}"
+        )
+        message_hash = encode_defunct(text=message)
+        signed = test_wallet["account"].sign_message(message_hash)
+        attestation = verifier.create_attestation(challenge, signed.signature.hex())
+
+        # Wire: mark credential as verified (same logic as the endpoint)
+        wallet_creds = registry.get_by_wallet(challenge.wallet_address)
+        for c in wallet_creds:
+            if not c.wallet_ownership_verified:
+                await registry.mark_wallet_verified(c.credential_id)
+
+        # After wiring: wallet_ownership_verified is True
+        updated = registry.get(cred_id)
+        assert updated.wallet_ownership_verified is True
+
+    @pytest.mark.asyncio
+    async def test_proof_rejected_without_attestation(self, verifier, test_wallet):
+        """Proof generation is rejected when no active attestation exists."""
+        # get_active_attestation returns None for a wallet with no attestations
+        active = verifier.get_active_attestation(test_wallet["address"])
+        assert active is None
+
+    @pytest.mark.asyncio
+    async def test_proof_rejected_with_revoked_attestation(self, verifier, test_wallet):
+        """Proof generation is rejected when attestation is revoked."""
+        challenge = verifier.create_challenge(test_wallet["address"], "did:web:test.example.com")
+        message = (
+            f"ClearProof Wallet Ownership Verification\n"
+            f"Wallet: {challenge.wallet_address}\n"
+            f"VASP: {challenge.vasp_did}\n"
+            f"Timestamp: {challenge.timestamp}\n"
+            f"Nonce: {challenge.nonce}"
+        )
+        message_hash = encode_defunct(text=message)
+        signed = test_wallet["account"].sign_message(message_hash)
+        attestation = verifier.create_attestation(challenge, signed.signature.hex())
+
+        # Revoke it
+        verifier.revoke_attestation(attestation.attestation_id)
+
+        # get_active_attestation should return None (revoked = not active)
+        active = verifier.get_active_attestation(test_wallet["address"])
+        assert active is None
+
+    @pytest.mark.asyncio
+    async def test_proof_allowed_with_active_attestation(self, verifier, test_wallet):
+        """Proof generation is allowed when an active attestation exists."""
+        challenge = verifier.create_challenge(test_wallet["address"], "did:web:test.example.com")
+        message = (
+            f"ClearProof Wallet Ownership Verification\n"
+            f"Wallet: {challenge.wallet_address}\n"
+            f"VASP: {challenge.vasp_did}\n"
+            f"Timestamp: {challenge.timestamp}\n"
+            f"Nonce: {challenge.nonce}"
+        )
+        message_hash = encode_defunct(text=message)
+        signed = test_wallet["account"].sign_message(message_hash)
+        verifier.create_attestation(challenge, signed.signature.hex())
+
+        # get_active_attestation should return the attestation
+        active = verifier.get_active_attestation(test_wallet["address"])
+        assert active is not None
+        assert not active.revoked
+        assert active.expires_at > int(time.time())

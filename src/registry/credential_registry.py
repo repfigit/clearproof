@@ -133,3 +133,22 @@ class CredentialRegistry:
     def get(self, credential_id: str) -> zkKYCCredential | None:
         """Retrieve a credential by ID, or ``None`` if not found."""
         return self._credentials.get(credential_id)
+
+    def get_by_wallet(self, wallet_address: str) -> list[zkKYCCredential]:
+        """Return all credentials whose ``subject_wallet`` matches *wallet_address*."""
+        from web3 import Web3
+
+        checksum = Web3.to_checksum_address(wallet_address)
+        return [c for c in self._credentials.values() if c.subject_wallet == checksum]
+
+    async def mark_wallet_verified(self, credential_id: str) -> None:
+        """Set ``wallet_ownership_verified=True`` and recompute the commitment.
+
+        The commitment includes the verification flag, so it must be
+        recalculated after the flag changes.
+        """
+        cred = self._credentials.get(credential_id)
+        if cred is None:
+            raise KeyError(f"Unknown credential: {credential_id}")
+        cred.wallet_ownership_verified = True
+        self._commitments[credential_id] = await _poseidon_hash(cred._field_ints())

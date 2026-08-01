@@ -213,7 +213,21 @@ async def generate_proof(
     if int(time.time()) > credential.expires_at:
         raise HTTPException(status_code=410, detail="Credential expired")
 
-    # 4c. Evaluate SAR flags
+    # 4c. AC-2/AC-3: Enforce attestation liveness — reject proof generation
+    # when no valid attestation exists for this wallet.
+    from src.api.wallet_ownership import _verifier
+
+    active_attestation = _verifier.get_active_attestation(request.wallet_address)
+    if active_attestation is None:
+        raise HTTPException(
+            status_code=403,
+            detail=(
+                "No active wallet ownership attestation. "
+                "Complete /credential/wallet/challenge + /credential/wallet/verify first."
+            ),
+        )
+
+    # 4d. Evaluate SAR flags
     sar_result = evaluate_sar_flags(
         tier,
         request.jurisdiction,

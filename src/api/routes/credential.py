@@ -330,11 +330,19 @@ async def verify_wallet_ownership(
     # Create attestation
     attestation = _verifier.create_attestation(challenge, request.signature)
 
+    # AC-1: Wire the attestation into the credential — mark all credentials
+    # for this wallet as wallet_ownership_verified and recompute commitments.
+    wallet_creds = _registry.get_by_wallet(challenge.wallet_address)
+    for cred in wallet_creds:
+        if not cred.wallet_ownership_verified:
+            await _registry.mark_wallet_verified(cred.credential_id)
+
     logger.info(
-        "Wallet ownership verified: wallet=%s vasp=%s attestation=%s",
+        "Wallet ownership verified: wallet=%s vasp=%s attestation=%s credentials_updated=%d",
         attestation.wallet_address,
         attestation.vasp_did,
         attestation.attestation_id,
+        len(wallet_creds),
     )
 
     return WalletVerifyResponse(
