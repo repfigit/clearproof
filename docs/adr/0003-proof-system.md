@@ -30,6 +30,35 @@ The go threshold was: on-chain verification gas ≤ 2× Groth16 baseline.
 
 UltraHonk exceeds the 2× threshold by 2-4×. **No-go.**
 
+### L2 addendum (2026-08-02, AIF-99)
+
+**The table above is an L1 table and should not be read as an L2 table.** On a
+rollup, total cost is execution gas *plus* an L1 data-availability charge that
+scales with the compressed size of the transaction, so proof size is a
+recurring cost the gas column does not capture. `docs/internal/FFLONK_BENCHMARK.md`
+measures this for Base, OP Mainnet and Arbitrum One.
+
+Two findings that bear on this ADR:
+
+1. **The ranking survives, because verification is execution-heavy.** A
+   341k-gas pairing check amortises a few hundred extra DA bytes against a
+   large execution cost — unlike a 21k-gas transfer, where DA dominates. At
+   fees observed on 2026-08-02 the DA term is 0–2% of total cost on all three
+   chains, and gas ranking and total-cost ranking agree.
+
+2. **The margin is thinner on cheap-gas L2s, and post-Fusaka it is coupled to
+   L1 fees.** Since EIP-7918 the blob base fee is pinned to a reserve floor
+   derived from the L1 execution base fee, so an L1 fee recovery now raises
+   rollup DA costs where previously it did not. For the fflonk comparison the
+   crossover on OP Mainnet is an L1 base fee of ~1.7 gwei — below where L1 sat
+   for most of 2025.
+
+Consequence for the mitigation "L2 deployment (gas costs are lower on L2s, may
+change the calculus)" below: **it does not change the calculus for UltraHonk.**
+Larger proofs pay the DA penalty on every verification on every L2, so a 2–3 KB
+UltraHonk proof compounds its execution-gas penalty rather than escaping it.
+The no-go is strengthened, not softened, by L2 deployment.
+
 ## Consequences
 
 ### Positive
@@ -57,7 +86,9 @@ UltraHonk exceeds the 2× threshold by 2-4×. **No-go.**
    - EIP-7849 precompile finalization
    - Gas cost optimization (target: <2× Groth16)
    - Noir ecosystem maturity (Poseidon library, production audits)
-   - L2 deployment (gas costs are lower on L2s, may change the calculus)
+   - L2 deployment — gas costs are lower on L2s, but see the L2 addendum
+     above: larger proofs pay an L1 data-availability charge on every L2
+     verification, so L2 does not rescue a proof system that lost on size
 
 ## Alternatives Considered
 
