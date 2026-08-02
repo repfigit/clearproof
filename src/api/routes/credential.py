@@ -13,15 +13,13 @@ from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 
+from src.api.dependencies import get_credential_registry
 from src.api.middleware.auth import JWTAuthDependency
 from src.registry.credential_registry import CredentialRegistry, zkKYCCredential
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/credential", tags=["credential"])
-
-# Module-level singleton (C-3 fix: use CredentialRegistry class, not missing functions)
-_registry = CredentialRegistry()
 
 
 # ---------------------------------------------------------------------------
@@ -97,6 +95,7 @@ class CredentialStatusResponse(BaseModel):
 async def issue_credential(
     request: CredentialIssueRequest,
     _auth: dict = Depends(JWTAuthDependency),
+    _registry: CredentialRegistry = Depends(get_credential_registry),
 ):
     """
     Issue a new zkKYC credential and register it in the credential registry.
@@ -143,6 +142,7 @@ async def issue_credential(
 async def revoke_credential(
     request: CredentialRevokeRequest,
     _auth: dict = Depends(JWTAuthDependency),
+    _registry: CredentialRegistry = Depends(get_credential_registry),
 ):
     """
     Revoke a previously-issued zkKYC credential.
@@ -179,6 +179,7 @@ async def revoke_credential(
 async def get_credential_status(
     credential_id: str,
     _auth: dict = Depends(JWTAuthDependency),
+    _registry: CredentialRegistry = Depends(get_credential_registry),
 ):
     """
     Retrieve the status of a credential (active / revoked / expired).
