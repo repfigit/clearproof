@@ -20,7 +20,9 @@ os.environ.setdefault("PII_MASTER_KEY", "a" * 64)
 os.environ.setdefault("AUTH_MODE", "api-key")
 os.environ.setdefault("API_KEY", "test-api-key-for-integration")
 
+from src.api.dependencies import get_credential_registry  # noqa: E402
 from src.api.main import app  # noqa: E402
+from src.registry.credential_registry import CredentialRegistry  # noqa: E402
 
 API_KEY = os.environ["API_KEY"]
 
@@ -174,28 +176,41 @@ async def test_proof_verify_with_valid_input(client: AsyncClient):
 # -----------------------------------------------------------------------
 
 
+@pytest.fixture
+def mock_registry():
+    """Create a mock CredentialRegistry for testing."""
+    registry = MagicMock(spec=CredentialRegistry)
+    registry.issue = AsyncMock()
+    registry.get = MagicMock()
+    registry.revoke = MagicMock()
+    registry.get_commitment = MagicMock()
+    
+    # Override the dependency
+    app.dependency_overrides[get_credential_registry] = lambda: registry
+    yield registry
+    # Clean up after test
+    app.dependency_overrides.clear()
+
+
 @pytest.mark.asyncio
-async def test_credential_issue_creates_credential(client: AsyncClient):
+async def test_credential_issue_creates_credential(client: AsyncClient, mock_registry):
     """POST /credential/issue with valid input should return the credential."""
-    # The endpoint constructs zkKYCCredential internally and calls _registry.issue().
-    # Mock _registry.issue() to return a known commitment without touching state.
-    with patch("src.api.routes.credential._registry.issue", new_callable=AsyncMock) as mock_issue:
-        mock_issue.return_value = "0xdeadbeef"
-        resp = await client.post(
-            "/credential/issue",
-            json={
-                "issuer_did": "did:web:issuer.example.com",
-                "subject_wallet": "0x1234567890abcdef",
-                "jurisdiction": "US",
-                "kyc_tier": "retail",
-            },
-            headers={"X-API-Key": API_KEY},
-        )
-        assert resp.status_code == 200
-        body = resp.json()
-        assert body["credential_id"] is not None
-        assert body["commitment"] == "0xdeadbeef"
-        assert body["issuer_did"] == "did:web:issuer.example.com"
+    mock_registry.issue.return_value = "0xdeadbeef"
+    resp = await client.post(
+        "/credential/issue",
+        json={
+            "issuer_did": "did:web:issuer.example.com",
+            "subject_wallet": "0x1234567890abcdef",
+            "jurisdiction": "US",
+            "kyc_tier": "retail",
+        },
+        headers={"X-API-Key": API_KEY},
+    )
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["credential_id"] is not None
+    assert body["commitment"] == "0xdeadbeef"
+    assert body["issuer_did"] == "did:web:issuer.example.com"
 
 
 @pytest.mark.asyncio
@@ -219,18 +234,18 @@ async def test_credential_issue_requires_auth(client: AsyncClient):
 
 
 @pytest.mark.asyncio
-async def test_credential_get_not_found(client: AsyncClient):
+async def test_credential_get_not_found(client: AsyncClient, mock_registry):
     """GET /credential/{id} for a non-existent credential should return 404."""
-    with patch("src.api.routes.credential._registry.get", return_value=None):
-        resp = await client.get(
-            "/credential/nonexistent-id",
-            headers={"X-API-Key": API_KEY},
-        )
-        assert resp.status_code == 404
+    mock_registry.get.return_value = None
+    resp = await client.get(
+        "/credential/nonexistent-id",
+        headers={"X-API-Key": API_KEY},
+    )
+    assert resp.status_code == 404
 
 
 @pytest.mark.asyncio
-async def test_credential_get_existing(client: AsyncClient):
+async def test_credential_get_existing(client: AsyncClient, mock_registry):
     """GET /credential/{id} for an existing credential returns its status."""
     mock_cred = MagicMock()
     mock_cred.revoked = False
@@ -241,15 +256,15 @@ async def test_credential_get_existing(client: AsyncClient):
     mock_cred.issued_at = int(time.time()) - 3600
     mock_cred.credential_id = "cred-123"
 
-    with patch("src.api.routes.credential._registry.get", return_value=mock_cred):
-        resp = await client.get(
-            "/credential/cred-123",
-            headers={"X-API-Key": API_KEY},
-        )
-        assert resp.status_code == 200
-        body = resp.json()
-        assert body["credential_id"] == "cred-123"
-        assert body["status"] == "active"
+    mock_registry.get.return_value = mock_cred
+    resp = await client.get(
+        "/credential/cred-123",
+        headers={"X-API-Key": API_KEY},
+    )
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["credential_id"] == "cred-123"
+    assert body["status"] == "active"
 
 
 # -----------------------------------------------------------------------
@@ -258,54 +273,52 @@ async def test_credential_get_existing(client: AsyncClient):
 
 
 @pytest.mark.asyncio
-async def test_credential_revoke_success(client: AsyncClient):
+async def test_credential_revoke_success(client: AsyncClient, mock_registry):
     """POST /credential/revoke for an active credential returns revoked=true."""
     mock_cred = MagicMock()
     mock_cred.revoked = False
 
-    with (
-        patch("src.api.routes.credential._registry.get", return_value=mock_cred),
-        patch("src.api.routes.credential._registry.revoke"),
-    ):
-        resp = await client.post(
-            "/credential/revoke",
-            json={
-                "credential_id": "cred-123",
-                "reason": "Testing revocation",
-            },
-            headers={"X-API-Key": API_KEY},
-        )
-        assert resp.status_code == 200
-        body = resp.json()
-        assert body["revoked"] is True
-        assert body["credential_id"] == "cred-123"
+    mock_registry.get.return_value = mock_cred
+    mock_registry.revoke.return_value = None
+    resp = await client.post(
+        "/credential/revoke",
+        json={
+            "credential_id": "cred-123",
+            "reason": "Testing revocation",
+        },
+        headers={"X-API-Key": API_KEY},
+    )
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["revoked"] is True
+    assert body["credential_id"] == "cred-123"
 
 
 @pytest.mark.asyncio
-async def test_credential_revoke_not_found(client: AsyncClient):
+async def test_credential_revoke_not_found(client: AsyncClient, mock_registry):
     """POST /credential/revoke for a non-existent credential returns 404."""
-    with patch("src.api.routes.credential._registry.get", return_value=None):
-        resp = await client.post(
-            "/credential/revoke",
-            json={"credential_id": "nonexistent"},
-            headers={"X-API-Key": API_KEY},
-        )
-        assert resp.status_code == 404
+    mock_registry.get.return_value = None
+    resp = await client.post(
+        "/credential/revoke",
+        json={"credential_id": "nonexistent"},
+        headers={"X-API-Key": API_KEY},
+    )
+    assert resp.status_code == 404
 
 
 @pytest.mark.asyncio
-async def test_credential_revoke_already_revoked(client: AsyncClient):
+async def test_credential_revoke_already_revoked(client: AsyncClient, mock_registry):
     """POST /credential/revoke for an already-revoked credential returns 400."""
     mock_cred = MagicMock()
     mock_cred.revoked = True
 
-    with patch("src.api.routes.credential._registry.get", return_value=mock_cred):
-        resp = await client.post(
-            "/credential/revoke",
-            json={"credential_id": "cred-123"},
-            headers={"X-API-Key": API_KEY},
-        )
-        assert resp.status_code == 400
+    mock_registry.get.return_value = mock_cred
+    resp = await client.post(
+        "/credential/revoke",
+        json={"credential_id": "cred-123"},
+        headers={"X-API-Key": API_KEY},
+    )
+    assert resp.status_code == 400
 
 
 # -----------------------------------------------------------------------
@@ -314,7 +327,7 @@ async def test_credential_revoke_already_revoked(client: AsyncClient):
 
 
 @pytest.mark.asyncio
-async def test_proof_generate_happy_path(client: AsyncClient):
+async def test_proof_generate_happy_path(client: AsyncClient, mock_registry):
     """POST /proof/generate with valid input should return a hybrid payload."""
     mock_credential = MagicMock()
     mock_credential.revoked = False
@@ -336,9 +349,10 @@ async def test_proof_generate_happy_path(client: AsyncClient):
 
     mock_issuer_witness = {"siblings": ["10", "20", "30"], "indices": [0, 1, 0]}
 
+    mock_registry.get.return_value = mock_credential
+    mock_registry.get_commitment.return_value = "12345"
+
     with (
-        patch("src.api.routes.proof._cred_registry.get", return_value=mock_credential),
-        patch("src.api.routes.proof._cred_registry.get_commitment", return_value="12345"),
         patch(
             "src.api.routes.proof._issuer_registry.generate_membership_witness",
             new_callable=AsyncMock,
@@ -384,7 +398,7 @@ async def test_proof_generate_happy_path(client: AsyncClient):
 
 
 @pytest.mark.asyncio
-async def test_proof_generate_hpke_v2_envelope(client: AsyncClient):
+async def test_proof_generate_hpke_v2_envelope(client: AsyncClient, mock_registry):
     """POST /proof/generate with beneficiary_hpke_public_key emits an HPKE v2 envelope.
 
     The envelope must be openable by the beneficiary's private key and must
@@ -415,9 +429,10 @@ async def test_proof_generate_hpke_v2_envelope(client: AsyncClient):
     }
     mock_issuer_witness = {"siblings": ["10", "20", "30"], "indices": [0, 1, 0]}
 
+    mock_registry.get.return_value = mock_credential
+    mock_registry.get_commitment.return_value = "12345"
+
     with (
-        patch("src.api.routes.proof._cred_registry.get", return_value=mock_credential),
-        patch("src.api.routes.proof._cred_registry.get_commitment", return_value="12345"),
         patch(
             "src.api.routes.proof._issuer_registry.generate_membership_witness",
             new_callable=AsyncMock,

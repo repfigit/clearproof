@@ -21,6 +21,7 @@ from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 
+from src.api.dependencies import get_credential_registry
 from src.api.middleware.auth import JWTAuthDependency
 from src.api.middleware.rate_limit import RateLimiter
 from src.prover.snarkjs_prover import SnarkJSProver
@@ -35,7 +36,6 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/proof", tags=["proof"])
 
-_cred_registry = CredentialRegistry()
 _issuer_registry = IssuerRegistry()
 _prover = SnarkJSProver()
 _audit_log = AuditLog()
@@ -170,6 +170,7 @@ async def generate_proof(
     request: ProofGenerateRequest,
     _auth: dict = Depends(JWTAuthDependency),
     _rl: None = Depends(_proof_generate_limiter),
+    _cred_registry: CredentialRegistry = Depends(get_credential_registry),
 ):
     from src.protocol.compliance_proof import ComplianceProof
     from src.protocol.hybrid_payload import HybridPayload
