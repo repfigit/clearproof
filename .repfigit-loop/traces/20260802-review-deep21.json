@@ -1,0 +1,12 @@
+{
+  "skill": "repfigit-review",
+  "ranAt": "2026-08-02T04:30:00Z",
+  "outcome": "no-work",
+  "issueId": "AIF-80",
+  "prNumber": 21,
+  "failureCategory": "ci-pending",
+  "humanInterventions": 0,
+  "toolCalls": 14,
+  "verdictCycles": 0,
+  "notes": "PR #21 (TIER-3, AIF-80) waiting: required checks circuits/python-tests/typescript-build IN_PROGRESS; no verdict posted, no labels changed, no state write"
+}

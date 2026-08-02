@@ -1,0 +1,12 @@
+{
+  "skill": "repfigit-build",
+  "ranAt": "2026-08-02T12:00:00Z",
+  "outcome": "shipped",
+  "issueId": "AIF-80",
+  "prNumber": 21,
+  "failureCategory": "none",
+  "humanInterventions": 0,
+  "toolCalls": 47,
+  "verdictCycles": 0,
+  "notes": "Fixed split-brain CredentialRegistry by introducing shared FastAPI dependency. All tests pass."
+}

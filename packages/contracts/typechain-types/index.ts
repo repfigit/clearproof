@@ -16,6 +16,8 @@ export type { IERC165 } from "./@openzeppelin/contracts/utils/introspection/IERC
 export { IERC165__factory } from "./factories/@openzeppelin/contracts/utils/introspection/IERC165__factory";
 export type { Pausable } from "./@openzeppelin/contracts/utils/Pausable";
 export { Pausable__factory } from "./factories/@openzeppelin/contracts/utils/Pausable__factory";
+export type { ReentrancyGuard } from "./@openzeppelin/contracts/utils/ReentrancyGuard";
+export { ReentrancyGuard__factory } from "./factories/@openzeppelin/contracts/utils/ReentrancyGuard__factory";
 export type { Groth16VerifierBLS } from "./contracts/bench/Groth16VerifierBLS";
 export { Groth16VerifierBLS__factory } from "./factories/contracts/bench/Groth16VerifierBLS__factory";
 export type { ComplianceRegistry } from "./contracts/ComplianceRegistry.sol/ComplianceRegistry";
@@ -32,3 +34,5 @@ export type { SanctionsRootRelay } from "./contracts/SanctionsRootRelay";
 export { SanctionsRootRelay__factory } from "./factories/contracts/SanctionsRootRelay__factory";
 export type { VASPRegistry } from "./contracts/VASPRegistry";
 export { VASPRegistry__factory } from "./factories/contracts/VASPRegistry__factory";
+export type { VerifierRouter } from "./contracts/VerifierRouter.sol/VerifierRouter";
+export { VerifierRouter__factory } from "./factories/contracts/VerifierRouter.sol/VerifierRouter__factory";

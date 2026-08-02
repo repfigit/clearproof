@@ -34,6 +34,10 @@ declare module "hardhat/types/runtime" {
       signerOrOptions?: ethers.Signer | FactoryOptions
     ): Promise<Contracts.Pausable__factory>;
     getContractFactory(
+      name: "ReentrancyGuard",
+      signerOrOptions?: ethers.Signer | FactoryOptions
+    ): Promise<Contracts.ReentrancyGuard__factory>;
+    getContractFactory(
       name: "Groth16VerifierBLS",
       signerOrOptions?: ethers.Signer | FactoryOptions
     ): Promise<Contracts.Groth16VerifierBLS__factory>;
@@ -65,6 +69,14 @@ declare module "hardhat/types/runtime" {
       name: "VASPRegistry",
       signerOrOptions?: ethers.Signer | FactoryOptions
     ): Promise<Contracts.VASPRegistry__factory>;
+    getContractFactory(
+      name: "IGroth16Verifier",
+      signerOrOptions?: ethers.Signer | FactoryOptions
+    ): Promise<Contracts.IGroth16Verifier__factory>;
+    getContractFactory(
+      name: "VerifierRouter",
+      signerOrOptions?: ethers.Signer | FactoryOptions
+    ): Promise<Contracts.VerifierRouter__factory>;
 
     getContractAt(
       name: "AccessControl",
@@ -91,6 +103,11 @@ declare module "hardhat/types/runtime" {
       address: string | ethers.Addressable,
       signer?: ethers.Signer
     ): Promise<Contracts.Pausable>;
+    getContractAt(
+      name: "ReentrancyGuard",
+      address: string | ethers.Addressable,
+      signer?: ethers.Signer
+    ): Promise<Contracts.ReentrancyGuard>;
     getContractAt(
       name: "Groth16VerifierBLS",
       address: string | ethers.Addressable,
@@ -131,6 +148,16 @@ declare module "hardhat/types/runtime" {
       address: string | ethers.Addressable,
       signer?: ethers.Signer
     ): Promise<Contracts.VASPRegistry>;
+    getContractAt(
+      name: "IGroth16Verifier",
+      address: string | ethers.Addressable,
+      signer?: ethers.Signer
+    ): Promise<Contracts.IGroth16Verifier>;
+    getContractAt(
+      name: "VerifierRouter",
+      address: string | ethers.Addressable,
+      signer?: ethers.Signer
+    ): Promise<Contracts.VerifierRouter>;
 
     deployContract(
       name: "AccessControl",
@@ -152,6 +179,10 @@ declare module "hardhat/types/runtime" {
       name: "Pausable",
       signerOrOptions?: ethers.Signer | DeployContractOptions
     ): Promise<Contracts.Pausable>;
+    deployContract(
+      name: "ReentrancyGuard",
+      signerOrOptions?: ethers.Signer | DeployContractOptions
+    ): Promise<Contracts.ReentrancyGuard>;
     deployContract(
       name: "Groth16VerifierBLS",
       signerOrOptions?: ethers.Signer | DeployContractOptions
@@ -184,6 +215,14 @@ declare module "hardhat/types/runtime" {
       name: "VASPRegistry",
       signerOrOptions?: ethers.Signer | DeployContractOptions
     ): Promise<Contracts.VASPRegistry>;
+    deployContract(
+      name: "IGroth16Verifier",
+      signerOrOptions?: ethers.Signer | DeployContractOptions
+    ): Promise<Contracts.IGroth16Verifier>;
+    deployContract(
+      name: "VerifierRouter",
+      signerOrOptions?: ethers.Signer | DeployContractOptions
+    ): Promise<Contracts.VerifierRouter>;
 
     deployContract(
       name: "AccessControl",
@@ -210,6 +249,11 @@ declare module "hardhat/types/runtime" {
       args: any[],
       signerOrOptions?: ethers.Signer | DeployContractOptions
     ): Promise<Contracts.Pausable>;
+    deployContract(
+      name: "ReentrancyGuard",
+      args: any[],
+      signerOrOptions?: ethers.Signer | DeployContractOptions
+    ): Promise<Contracts.ReentrancyGuard>;
     deployContract(
       name: "Groth16VerifierBLS",
       args: any[],
@@ -250,6 +294,16 @@ declare module "hardhat/types/runtime" {
       args: any[],
       signerOrOptions?: ethers.Signer | DeployContractOptions
     ): Promise<Contracts.VASPRegistry>;
+    deployContract(
+      name: "IGroth16Verifier",
+      args: any[],
+      signerOrOptions?: ethers.Signer | DeployContractOptions
+    ): Promise<Contracts.IGroth16Verifier>;
+    deployContract(
+      name: "VerifierRouter",
+      args: any[],
+      signerOrOptions?: ethers.Signer | DeployContractOptions
+    ): Promise<Contracts.VerifierRouter>;
 
     // default types
     getContractFactory(

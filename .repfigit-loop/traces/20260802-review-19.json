@@ -1,0 +1,12 @@
+{
+  "skill": "repfigit-review",
+  "ranAt": "2026-08-02T04:25:00Z",
+  "outcome": "skipped",
+  "issueId": "AIF-86",
+  "prNumber": 19,
+  "failureCategory": "none",
+  "humanInterventions": 0,
+  "toolCalls": 7,
+  "verdictCycles": 2,
+  "notes": "PR #19 dedup guard fired — verdict for head SHA d550fbb already exists (posted 2026-07-31 and 2026-08-01). Head unchanged since. No new commits, no re-review. Required checks pass; PR remains escalated needs-human-review (ADR governance call)."
+}

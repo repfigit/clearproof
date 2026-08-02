@@ -23,85 +23,81 @@ import type {
   TypedContractMethod,
 } from "../../common";
 
-export declare namespace ComplianceRegistry {
-  export type ThresholdsStruct = {
-    tier2: BigNumberish;
-    tier3: BigNumberish;
-    tier4: BigNumberish;
-    registered: boolean;
-  };
-
-  export type ThresholdsStructOutput = [
-    tier2: bigint,
-    tier3: bigint,
-    tier4: bigint,
-    registered: boolean
-  ] & { tier2: bigint; tier3: bigint; tier4: bigint; registered: boolean };
-}
-
-export interface ComplianceRegistryInterface extends Interface {
+export interface VerifierRouterInterface extends Interface {
   getFunction(
     nameOrSignature:
+      | "ADMIN_ROLE"
       | "DEFAULT_ADMIN_ROLE"
-      | "DEFAULT_JURISDICTION_KEY"
-      | "REVOKER_ROLE"
-      | "THRESHOLD_ADMIN_ROLE"
+      | "EMERGENCY_ROLE"
+      | "activateVerifier"
+      | "completeRetirement"
+      | "disableVerifier"
       | "getRoleAdmin"
+      | "getVerifier"
       | "grantRole"
       | "hasRole"
-      | "isRevoked"
-      | "isVerified"
-      | "jurisdictionThresholds"
+      | "isVerifierActive"
+      | "minTimelock"
       | "pause"
       | "paused"
-      | "proofs"
+      | "pendingRegistrations"
+      | "pendingRetirements"
+      | "registerVerifier"
       | "renounceRole"
-      | "revokeCredential"
       | "revokeRole"
-      | "revokedCredentials"
-      | "sanctionsOracle"
-      | "setJurisdictionThresholds"
-      | "setVerifierSelector"
+      | "scheduleRetirement"
       | "supportsInterface"
-      | "thresholdsFor"
+      | "timelocks"
       | "unpause"
-      | "usedNullifiers"
-      | "vaspRegistry"
-      | "verifierRouter"
-      | "verifierSelector"
-      | "verifyAndRecord"
+      | "updateTimelock"
+      | "verifiers"
+      | "verifyProof"
   ): FunctionFragment;
 
   getEvent(
     nameOrSignatureOrTopic:
-      | "CredentialRevoked"
-      | "JurisdictionThresholdsSet"
       | "Paused"
-      | "ProofVerified"
       | "RoleAdminChanged"
       | "RoleGranted"
       | "RoleRevoked"
+      | "TimelockUpdated"
       | "Unpaused"
+      | "VerifierActivated"
+      | "VerifierDisabled"
+      | "VerifierRegistered"
+      | "VerifierRetired"
   ): EventFragment;
 
+  encodeFunctionData(
+    functionFragment: "ADMIN_ROLE",
+    values?: undefined
+  ): string;
   encodeFunctionData(
     functionFragment: "DEFAULT_ADMIN_ROLE",
     values?: undefined
   ): string;
   encodeFunctionData(
-    functionFragment: "DEFAULT_JURISDICTION_KEY",
+    functionFragment: "EMERGENCY_ROLE",
     values?: undefined
   ): string;
   encodeFunctionData(
-    functionFragment: "REVOKER_ROLE",
-    values?: undefined
+    functionFragment: "activateVerifier",
+    values: [BytesLike, string]
   ): string;
   encodeFunctionData(
-    functionFragment: "THRESHOLD_ADMIN_ROLE",
-    values?: undefined
+    functionFragment: "completeRetirement",
+    values: [BytesLike]
+  ): string;
+  encodeFunctionData(
+    functionFragment: "disableVerifier",
+    values: [BytesLike]
   ): string;
   encodeFunctionData(
     functionFragment: "getRoleAdmin",
+    values: [BytesLike]
+  ): string;
+  encodeFunctionData(
+    functionFragment: "getVerifier",
     values: [BytesLike]
   ): string;
   encodeFunctionData(
@@ -113,46 +109,37 @@ export interface ComplianceRegistryInterface extends Interface {
     values: [BytesLike, AddressLike]
   ): string;
   encodeFunctionData(
-    functionFragment: "isRevoked",
+    functionFragment: "isVerifierActive",
     values: [BytesLike]
   ): string;
   encodeFunctionData(
-    functionFragment: "isVerified",
-    values: [BytesLike]
-  ): string;
-  encodeFunctionData(
-    functionFragment: "jurisdictionThresholds",
-    values: [BigNumberish]
+    functionFragment: "minTimelock",
+    values?: undefined
   ): string;
   encodeFunctionData(functionFragment: "pause", values?: undefined): string;
   encodeFunctionData(functionFragment: "paused", values?: undefined): string;
-  encodeFunctionData(functionFragment: "proofs", values: [BytesLike]): string;
+  encodeFunctionData(
+    functionFragment: "pendingRegistrations",
+    values: [BytesLike]
+  ): string;
+  encodeFunctionData(
+    functionFragment: "pendingRetirements",
+    values: [BytesLike]
+  ): string;
+  encodeFunctionData(
+    functionFragment: "registerVerifier",
+    values: [BytesLike, AddressLike, string]
+  ): string;
   encodeFunctionData(
     functionFragment: "renounceRole",
     values: [BytesLike, AddressLike]
-  ): string;
-  encodeFunctionData(
-    functionFragment: "revokeCredential",
-    values: [BytesLike]
   ): string;
   encodeFunctionData(
     functionFragment: "revokeRole",
     values: [BytesLike, AddressLike]
   ): string;
   encodeFunctionData(
-    functionFragment: "revokedCredentials",
-    values: [BytesLike]
-  ): string;
-  encodeFunctionData(
-    functionFragment: "sanctionsOracle",
-    values?: undefined
-  ): string;
-  encodeFunctionData(
-    functionFragment: "setJurisdictionThresholds",
-    values: [BigNumberish, BigNumberish, BigNumberish, BigNumberish]
-  ): string;
-  encodeFunctionData(
-    functionFragment: "setVerifierSelector",
+    functionFragment: "scheduleRetirement",
     values: [BytesLike]
   ): string;
   encodeFunctionData(
@@ -160,161 +147,106 @@ export interface ComplianceRegistryInterface extends Interface {
     values: [BytesLike]
   ): string;
   encodeFunctionData(
-    functionFragment: "thresholdsFor",
-    values: [BigNumberish]
+    functionFragment: "timelocks",
+    values: [BytesLike]
   ): string;
   encodeFunctionData(functionFragment: "unpause", values?: undefined): string;
   encodeFunctionData(
-    functionFragment: "usedNullifiers",
+    functionFragment: "updateTimelock",
+    values: [BigNumberish]
+  ): string;
+  encodeFunctionData(
+    functionFragment: "verifiers",
     values: [BytesLike]
   ): string;
   encodeFunctionData(
-    functionFragment: "vaspRegistry",
-    values?: undefined
-  ): string;
-  encodeFunctionData(
-    functionFragment: "verifierRouter",
-    values?: undefined
-  ): string;
-  encodeFunctionData(
-    functionFragment: "verifierSelector",
-    values?: undefined
-  ): string;
-  encodeFunctionData(
-    functionFragment: "verifyAndRecord",
+    functionFragment: "verifyProof",
     values: [
       BytesLike,
       [BigNumberish, BigNumberish],
       [[BigNumberish, BigNumberish], [BigNumberish, BigNumberish]],
       [BigNumberish, BigNumberish],
-      BigNumberish[],
-      BytesLike
+      BigNumberish[]
     ]
   ): string;
 
+  decodeFunctionResult(functionFragment: "ADMIN_ROLE", data: BytesLike): Result;
   decodeFunctionResult(
     functionFragment: "DEFAULT_ADMIN_ROLE",
     data: BytesLike
   ): Result;
   decodeFunctionResult(
-    functionFragment: "DEFAULT_JURISDICTION_KEY",
+    functionFragment: "EMERGENCY_ROLE",
     data: BytesLike
   ): Result;
   decodeFunctionResult(
-    functionFragment: "REVOKER_ROLE",
+    functionFragment: "activateVerifier",
     data: BytesLike
   ): Result;
   decodeFunctionResult(
-    functionFragment: "THRESHOLD_ADMIN_ROLE",
+    functionFragment: "completeRetirement",
+    data: BytesLike
+  ): Result;
+  decodeFunctionResult(
+    functionFragment: "disableVerifier",
     data: BytesLike
   ): Result;
   decodeFunctionResult(
     functionFragment: "getRoleAdmin",
     data: BytesLike
   ): Result;
+  decodeFunctionResult(
+    functionFragment: "getVerifier",
+    data: BytesLike
+  ): Result;
   decodeFunctionResult(functionFragment: "grantRole", data: BytesLike): Result;
   decodeFunctionResult(functionFragment: "hasRole", data: BytesLike): Result;
-  decodeFunctionResult(functionFragment: "isRevoked", data: BytesLike): Result;
-  decodeFunctionResult(functionFragment: "isVerified", data: BytesLike): Result;
   decodeFunctionResult(
-    functionFragment: "jurisdictionThresholds",
+    functionFragment: "isVerifierActive",
+    data: BytesLike
+  ): Result;
+  decodeFunctionResult(
+    functionFragment: "minTimelock",
     data: BytesLike
   ): Result;
   decodeFunctionResult(functionFragment: "pause", data: BytesLike): Result;
   decodeFunctionResult(functionFragment: "paused", data: BytesLike): Result;
-  decodeFunctionResult(functionFragment: "proofs", data: BytesLike): Result;
+  decodeFunctionResult(
+    functionFragment: "pendingRegistrations",
+    data: BytesLike
+  ): Result;
+  decodeFunctionResult(
+    functionFragment: "pendingRetirements",
+    data: BytesLike
+  ): Result;
+  decodeFunctionResult(
+    functionFragment: "registerVerifier",
+    data: BytesLike
+  ): Result;
   decodeFunctionResult(
     functionFragment: "renounceRole",
     data: BytesLike
   ): Result;
-  decodeFunctionResult(
-    functionFragment: "revokeCredential",
-    data: BytesLike
-  ): Result;
   decodeFunctionResult(functionFragment: "revokeRole", data: BytesLike): Result;
   decodeFunctionResult(
-    functionFragment: "revokedCredentials",
-    data: BytesLike
-  ): Result;
-  decodeFunctionResult(
-    functionFragment: "sanctionsOracle",
-    data: BytesLike
-  ): Result;
-  decodeFunctionResult(
-    functionFragment: "setJurisdictionThresholds",
-    data: BytesLike
-  ): Result;
-  decodeFunctionResult(
-    functionFragment: "setVerifierSelector",
+    functionFragment: "scheduleRetirement",
     data: BytesLike
   ): Result;
   decodeFunctionResult(
     functionFragment: "supportsInterface",
     data: BytesLike
   ): Result;
-  decodeFunctionResult(
-    functionFragment: "thresholdsFor",
-    data: BytesLike
-  ): Result;
+  decodeFunctionResult(functionFragment: "timelocks", data: BytesLike): Result;
   decodeFunctionResult(functionFragment: "unpause", data: BytesLike): Result;
   decodeFunctionResult(
-    functionFragment: "usedNullifiers",
+    functionFragment: "updateTimelock",
     data: BytesLike
   ): Result;
+  decodeFunctionResult(functionFragment: "verifiers", data: BytesLike): Result;
   decodeFunctionResult(
-    functionFragment: "vaspRegistry",
+    functionFragment: "verifyProof",
     data: BytesLike
   ): Result;
-  decodeFunctionResult(
-    functionFragment: "verifierRouter",
-    data: BytesLike
-  ): Result;
-  decodeFunctionResult(
-    functionFragment: "verifierSelector",
-    data: BytesLike
-  ): Result;
-  decodeFunctionResult(
-    functionFragment: "verifyAndRecord",
-    data: BytesLike
-  ): Result;
-}
-
-export namespace CredentialRevokedEvent {
-  export type InputTuple = [commitment: BytesLike, revoker: AddressLike];
-  export type OutputTuple = [commitment: string, revoker: string];
-  export interface OutputObject {
-    commitment: string;
-    revoker: string;
-  }
-  export type Event = TypedContractEvent<InputTuple, OutputTuple, OutputObject>;
-  export type Filter = TypedDeferredTopicFilter<Event>;
-  export type Log = TypedEventLog<Event>;
-  export type LogDescription = TypedLogDescription<Event>;
-}
-
-export namespace JurisdictionThresholdsSetEvent {
-  export type InputTuple = [
-    jurisdictionCode: BigNumberish,
-    tier2: BigNumberish,
-    tier3: BigNumberish,
-    tier4: BigNumberish
-  ];
-  export type OutputTuple = [
-    jurisdictionCode: bigint,
-    tier2: bigint,
-    tier3: bigint,
-    tier4: bigint
-  ];
-  export interface OutputObject {
-    jurisdictionCode: bigint;
-    tier2: bigint;
-    tier3: bigint;
-    tier4: bigint;
-  }
-  export type Event = TypedContractEvent<InputTuple, OutputTuple, OutputObject>;
-  export type Filter = TypedDeferredTopicFilter<Event>;
-  export type Log = TypedEventLog<Event>;
-  export type LogDescription = TypedLogDescription<Event>;
 }
 
 export namespace PausedEvent {
@@ -322,31 +254,6 @@ export namespace PausedEvent {
   export type OutputTuple = [account: string];
   export interface OutputObject {
     account: string;
-  }
-  export type Event = TypedContractEvent<InputTuple, OutputTuple, OutputObject>;
-  export type Filter = TypedDeferredTopicFilter<Event>;
-  export type Log = TypedEventLog<Event>;
-  export type LogDescription = TypedLogDescription<Event>;
-}
-
-export namespace ProofVerifiedEvent {
-  export type InputTuple = [
-    transferId: BytesLike,
-    nullifier: BytesLike,
-    isCompliant: boolean,
-    sarFlag: boolean
-  ];
-  export type OutputTuple = [
-    transferId: string,
-    nullifier: string,
-    isCompliant: boolean,
-    sarFlag: boolean
-  ];
-  export interface OutputObject {
-    transferId: string;
-    nullifier: string;
-    isCompliant: boolean;
-    sarFlag: boolean;
   }
   export type Event = TypedContractEvent<InputTuple, OutputTuple, OutputObject>;
   export type Filter = TypedDeferredTopicFilter<Event>;
@@ -412,6 +319,18 @@ export namespace RoleRevokedEvent {
   export type LogDescription = TypedLogDescription<Event>;
 }
 
+export namespace TimelockUpdatedEvent {
+  export type InputTuple = [newTimelock: BigNumberish];
+  export type OutputTuple = [newTimelock: bigint];
+  export interface OutputObject {
+    newTimelock: bigint;
+  }
+  export type Event = TypedContractEvent<InputTuple, OutputTuple, OutputObject>;
+  export type Filter = TypedDeferredTopicFilter<Event>;
+  export type Log = TypedEventLog<Event>;
+  export type LogDescription = TypedLogDescription<Event>;
+}
+
 export namespace UnpausedEvent {
   export type InputTuple = [account: AddressLike];
   export type OutputTuple = [account: string];
@@ -424,11 +343,75 @@ export namespace UnpausedEvent {
   export type LogDescription = TypedLogDescription<Event>;
 }
 
-export interface ComplianceRegistry extends BaseContract {
-  connect(runner?: ContractRunner | null): ComplianceRegistry;
+export namespace VerifierActivatedEvent {
+  export type InputTuple = [selector: BytesLike, verifier: AddressLike];
+  export type OutputTuple = [selector: string, verifier: string];
+  export interface OutputObject {
+    selector: string;
+    verifier: string;
+  }
+  export type Event = TypedContractEvent<InputTuple, OutputTuple, OutputObject>;
+  export type Filter = TypedDeferredTopicFilter<Event>;
+  export type Log = TypedEventLog<Event>;
+  export type LogDescription = TypedLogDescription<Event>;
+}
+
+export namespace VerifierDisabledEvent {
+  export type InputTuple = [selector: BytesLike, verifier: AddressLike];
+  export type OutputTuple = [selector: string, verifier: string];
+  export interface OutputObject {
+    selector: string;
+    verifier: string;
+  }
+  export type Event = TypedContractEvent<InputTuple, OutputTuple, OutputObject>;
+  export type Filter = TypedDeferredTopicFilter<Event>;
+  export type Log = TypedEventLog<Event>;
+  export type LogDescription = TypedLogDescription<Event>;
+}
+
+export namespace VerifierRegisteredEvent {
+  export type InputTuple = [
+    selector: BytesLike,
+    verifier: AddressLike,
+    name: string,
+    timelock: BigNumberish
+  ];
+  export type OutputTuple = [
+    selector: string,
+    verifier: string,
+    name: string,
+    timelock: bigint
+  ];
+  export interface OutputObject {
+    selector: string;
+    verifier: string;
+    name: string;
+    timelock: bigint;
+  }
+  export type Event = TypedContractEvent<InputTuple, OutputTuple, OutputObject>;
+  export type Filter = TypedDeferredTopicFilter<Event>;
+  export type Log = TypedEventLog<Event>;
+  export type LogDescription = TypedLogDescription<Event>;
+}
+
+export namespace VerifierRetiredEvent {
+  export type InputTuple = [selector: BytesLike, verifier: AddressLike];
+  export type OutputTuple = [selector: string, verifier: string];
+  export interface OutputObject {
+    selector: string;
+    verifier: string;
+  }
+  export type Event = TypedContractEvent<InputTuple, OutputTuple, OutputObject>;
+  export type Filter = TypedDeferredTopicFilter<Event>;
+  export type Log = TypedEventLog<Event>;
+  export type LogDescription = TypedLogDescription<Event>;
+}
+
+export interface VerifierRouter extends BaseContract {
+  connect(runner?: ContractRunner | null): VerifierRouter;
   waitForDeployment(): Promise<this>;
 
-  interface: ComplianceRegistryInterface;
+  interface: VerifierRouterInterface;
 
   queryFilter<TCEvent extends TypedContractEvent>(
     event: TCEvent,
@@ -467,15 +450,33 @@ export interface ComplianceRegistry extends BaseContract {
     event?: TCEvent
   ): Promise<this>;
 
+  ADMIN_ROLE: TypedContractMethod<[], [string], "view">;
+
   DEFAULT_ADMIN_ROLE: TypedContractMethod<[], [string], "view">;
 
-  DEFAULT_JURISDICTION_KEY: TypedContractMethod<[], [bigint], "view">;
+  EMERGENCY_ROLE: TypedContractMethod<[], [string], "view">;
 
-  REVOKER_ROLE: TypedContractMethod<[], [string], "view">;
+  activateVerifier: TypedContractMethod<
+    [selector: BytesLike, name: string],
+    [void],
+    "nonpayable"
+  >;
 
-  THRESHOLD_ADMIN_ROLE: TypedContractMethod<[], [string], "view">;
+  completeRetirement: TypedContractMethod<
+    [selector: BytesLike],
+    [void],
+    "nonpayable"
+  >;
+
+  disableVerifier: TypedContractMethod<
+    [selector: BytesLike],
+    [void],
+    "nonpayable"
+  >;
 
   getRoleAdmin: TypedContractMethod<[role: BytesLike], [string], "view">;
+
+  getVerifier: TypedContractMethod<[selector: BytesLike], [string], "view">;
 
   grantRole: TypedContractMethod<
     [role: BytesLike, account: AddressLike],
@@ -489,47 +490,34 @@ export interface ComplianceRegistry extends BaseContract {
     "view"
   >;
 
-  isRevoked: TypedContractMethod<[commitment: BytesLike], [boolean], "view">;
-
-  isVerified: TypedContractMethod<[transferId: BytesLike], [boolean], "view">;
-
-  jurisdictionThresholds: TypedContractMethod<
-    [arg0: BigNumberish],
-    [
-      [bigint, bigint, bigint, boolean] & {
-        tier2: bigint;
-        tier3: bigint;
-        tier4: bigint;
-        registered: boolean;
-      }
-    ],
+  isVerifierActive: TypedContractMethod<
+    [selector: BytesLike],
+    [boolean],
     "view"
   >;
+
+  minTimelock: TypedContractMethod<[], [bigint], "view">;
 
   pause: TypedContractMethod<[], [void], "nonpayable">;
 
   paused: TypedContractMethod<[], [boolean], "view">;
 
-  proofs: TypedContractMethod<
+  pendingRegistrations: TypedContractMethod<
     [arg0: BytesLike],
-    [
-      [string, bigint, boolean] & {
-        proofHash: string;
-        timestamp: bigint;
-        verified: boolean;
-      }
-    ],
+    [string],
     "view"
   >;
 
-  renounceRole: TypedContractMethod<
-    [role: BytesLike, callerConfirmation: AddressLike],
+  pendingRetirements: TypedContractMethod<[arg0: BytesLike], [boolean], "view">;
+
+  registerVerifier: TypedContractMethod<
+    [selector: BytesLike, verifier: AddressLike, name: string],
     [void],
     "nonpayable"
   >;
 
-  revokeCredential: TypedContractMethod<
-    [commitment: BytesLike],
+  renounceRole: TypedContractMethod<
+    [role: BytesLike, callerConfirmation: AddressLike],
     [void],
     "nonpayable"
   >;
@@ -540,23 +528,8 @@ export interface ComplianceRegistry extends BaseContract {
     "nonpayable"
   >;
 
-  revokedCredentials: TypedContractMethod<[arg0: BytesLike], [boolean], "view">;
-
-  sanctionsOracle: TypedContractMethod<[], [string], "view">;
-
-  setJurisdictionThresholds: TypedContractMethod<
-    [
-      jurisdictionCode: BigNumberish,
-      tier2: BigNumberish,
-      tier3: BigNumberish,
-      tier4: BigNumberish
-    ],
-    [void],
-    "nonpayable"
-  >;
-
-  setVerifierSelector: TypedContractMethod<
-    [_verifierSelector: BytesLike],
+  scheduleRetirement: TypedContractMethod<
+    [selector: BytesLike],
     [void],
     "nonpayable"
   >;
@@ -567,33 +540,40 @@ export interface ComplianceRegistry extends BaseContract {
     "view"
   >;
 
-  thresholdsFor: TypedContractMethod<
-    [jurisdictionCode: BigNumberish],
-    [ComplianceRegistry.ThresholdsStructOutput],
-    "view"
-  >;
+  timelocks: TypedContractMethod<[arg0: BytesLike], [bigint], "view">;
 
   unpause: TypedContractMethod<[], [void], "nonpayable">;
 
-  usedNullifiers: TypedContractMethod<[arg0: BytesLike], [boolean], "view">;
+  updateTimelock: TypedContractMethod<
+    [newTimelock: BigNumberish],
+    [void],
+    "nonpayable"
+  >;
 
-  vaspRegistry: TypedContractMethod<[], [string], "view">;
-
-  verifierRouter: TypedContractMethod<[], [string], "view">;
-
-  verifierSelector: TypedContractMethod<[], [string], "view">;
-
-  verifyAndRecord: TypedContractMethod<
+  verifiers: TypedContractMethod<
+    [arg0: BytesLike],
     [
-      transferId: BytesLike,
+      [string, bigint, bigint, boolean, string] & {
+        verifier: string;
+        registeredAt: bigint;
+        disabledAt: bigint;
+        active: boolean;
+        name: string;
+      }
+    ],
+    "view"
+  >;
+
+  verifyProof: TypedContractMethod<
+    [
+      selector: BytesLike,
       _pA: [BigNumberish, BigNumberish],
       _pB: [[BigNumberish, BigNumberish], [BigNumberish, BigNumberish]],
       _pC: [BigNumberish, BigNumberish],
-      _pubSignals: BigNumberish[],
-      vaspDidHash: BytesLike
+      _pubSignals: BigNumberish[]
     ],
     [boolean],
-    "nonpayable"
+    "view"
   >;
 
   getFunction<T extends ContractMethod = ContractMethod>(
@@ -601,20 +581,33 @@ export interface ComplianceRegistry extends BaseContract {
   ): T;
 
   getFunction(
+    nameOrSignature: "ADMIN_ROLE"
+  ): TypedContractMethod<[], [string], "view">;
+  getFunction(
     nameOrSignature: "DEFAULT_ADMIN_ROLE"
   ): TypedContractMethod<[], [string], "view">;
   getFunction(
-    nameOrSignature: "DEFAULT_JURISDICTION_KEY"
-  ): TypedContractMethod<[], [bigint], "view">;
-  getFunction(
-    nameOrSignature: "REVOKER_ROLE"
+    nameOrSignature: "EMERGENCY_ROLE"
   ): TypedContractMethod<[], [string], "view">;
   getFunction(
-    nameOrSignature: "THRESHOLD_ADMIN_ROLE"
-  ): TypedContractMethod<[], [string], "view">;
+    nameOrSignature: "activateVerifier"
+  ): TypedContractMethod<
+    [selector: BytesLike, name: string],
+    [void],
+    "nonpayable"
+  >;
+  getFunction(
+    nameOrSignature: "completeRetirement"
+  ): TypedContractMethod<[selector: BytesLike], [void], "nonpayable">;
+  getFunction(
+    nameOrSignature: "disableVerifier"
+  ): TypedContractMethod<[selector: BytesLike], [void], "nonpayable">;
   getFunction(
     nameOrSignature: "getRoleAdmin"
   ): TypedContractMethod<[role: BytesLike], [string], "view">;
+  getFunction(
+    nameOrSignature: "getVerifier"
+  ): TypedContractMethod<[selector: BytesLike], [string], "view">;
   getFunction(
     nameOrSignature: "grantRole"
   ): TypedContractMethod<
@@ -630,25 +623,11 @@ export interface ComplianceRegistry extends BaseContract {
     "view"
   >;
   getFunction(
-    nameOrSignature: "isRevoked"
-  ): TypedContractMethod<[commitment: BytesLike], [boolean], "view">;
+    nameOrSignature: "isVerifierActive"
+  ): TypedContractMethod<[selector: BytesLike], [boolean], "view">;
   getFunction(
-    nameOrSignature: "isVerified"
-  ): TypedContractMethod<[transferId: BytesLike], [boolean], "view">;
-  getFunction(
-    nameOrSignature: "jurisdictionThresholds"
-  ): TypedContractMethod<
-    [arg0: BigNumberish],
-    [
-      [bigint, bigint, bigint, boolean] & {
-        tier2: bigint;
-        tier3: bigint;
-        tier4: bigint;
-        registered: boolean;
-      }
-    ],
-    "view"
-  >;
+    nameOrSignature: "minTimelock"
+  ): TypedContractMethod<[], [bigint], "view">;
   getFunction(
     nameOrSignature: "pause"
   ): TypedContractMethod<[], [void], "nonpayable">;
@@ -656,17 +635,17 @@ export interface ComplianceRegistry extends BaseContract {
     nameOrSignature: "paused"
   ): TypedContractMethod<[], [boolean], "view">;
   getFunction(
-    nameOrSignature: "proofs"
+    nameOrSignature: "pendingRegistrations"
+  ): TypedContractMethod<[arg0: BytesLike], [string], "view">;
+  getFunction(
+    nameOrSignature: "pendingRetirements"
+  ): TypedContractMethod<[arg0: BytesLike], [boolean], "view">;
+  getFunction(
+    nameOrSignature: "registerVerifier"
   ): TypedContractMethod<
-    [arg0: BytesLike],
-    [
-      [string, bigint, boolean] & {
-        proofHash: string;
-        timestamp: bigint;
-        verified: boolean;
-      }
-    ],
-    "view"
+    [selector: BytesLike, verifier: AddressLike, name: string],
+    [void],
+    "nonpayable"
   >;
   getFunction(
     nameOrSignature: "renounceRole"
@@ -676,9 +655,6 @@ export interface ComplianceRegistry extends BaseContract {
     "nonpayable"
   >;
   getFunction(
-    nameOrSignature: "revokeCredential"
-  ): TypedContractMethod<[commitment: BytesLike], [void], "nonpayable">;
-  getFunction(
     nameOrSignature: "revokeRole"
   ): TypedContractMethod<
     [role: BytesLike, account: AddressLike],
@@ -686,93 +662,55 @@ export interface ComplianceRegistry extends BaseContract {
     "nonpayable"
   >;
   getFunction(
-    nameOrSignature: "revokedCredentials"
-  ): TypedContractMethod<[arg0: BytesLike], [boolean], "view">;
-  getFunction(
-    nameOrSignature: "sanctionsOracle"
-  ): TypedContractMethod<[], [string], "view">;
-  getFunction(
-    nameOrSignature: "setJurisdictionThresholds"
-  ): TypedContractMethod<
-    [
-      jurisdictionCode: BigNumberish,
-      tier2: BigNumberish,
-      tier3: BigNumberish,
-      tier4: BigNumberish
-    ],
-    [void],
-    "nonpayable"
-  >;
-  getFunction(
-    nameOrSignature: "setVerifierSelector"
-  ): TypedContractMethod<[_verifierSelector: BytesLike], [void], "nonpayable">;
+    nameOrSignature: "scheduleRetirement"
+  ): TypedContractMethod<[selector: BytesLike], [void], "nonpayable">;
   getFunction(
     nameOrSignature: "supportsInterface"
   ): TypedContractMethod<[interfaceId: BytesLike], [boolean], "view">;
   getFunction(
-    nameOrSignature: "thresholdsFor"
-  ): TypedContractMethod<
-    [jurisdictionCode: BigNumberish],
-    [ComplianceRegistry.ThresholdsStructOutput],
-    "view"
-  >;
+    nameOrSignature: "timelocks"
+  ): TypedContractMethod<[arg0: BytesLike], [bigint], "view">;
   getFunction(
     nameOrSignature: "unpause"
   ): TypedContractMethod<[], [void], "nonpayable">;
   getFunction(
-    nameOrSignature: "usedNullifiers"
-  ): TypedContractMethod<[arg0: BytesLike], [boolean], "view">;
+    nameOrSignature: "updateTimelock"
+  ): TypedContractMethod<[newTimelock: BigNumberish], [void], "nonpayable">;
   getFunction(
-    nameOrSignature: "vaspRegistry"
-  ): TypedContractMethod<[], [string], "view">;
+    nameOrSignature: "verifiers"
+  ): TypedContractMethod<
+    [arg0: BytesLike],
+    [
+      [string, bigint, bigint, boolean, string] & {
+        verifier: string;
+        registeredAt: bigint;
+        disabledAt: bigint;
+        active: boolean;
+        name: string;
+      }
+    ],
+    "view"
+  >;
   getFunction(
-    nameOrSignature: "verifierRouter"
-  ): TypedContractMethod<[], [string], "view">;
-  getFunction(
-    nameOrSignature: "verifierSelector"
-  ): TypedContractMethod<[], [string], "view">;
-  getFunction(
-    nameOrSignature: "verifyAndRecord"
+    nameOrSignature: "verifyProof"
   ): TypedContractMethod<
     [
-      transferId: BytesLike,
+      selector: BytesLike,
       _pA: [BigNumberish, BigNumberish],
       _pB: [[BigNumberish, BigNumberish], [BigNumberish, BigNumberish]],
       _pC: [BigNumberish, BigNumberish],
-      _pubSignals: BigNumberish[],
-      vaspDidHash: BytesLike
+      _pubSignals: BigNumberish[]
     ],
     [boolean],
-    "nonpayable"
+    "view"
   >;
 
-  getEvent(
-    key: "CredentialRevoked"
-  ): TypedContractEvent<
-    CredentialRevokedEvent.InputTuple,
-    CredentialRevokedEvent.OutputTuple,
-    CredentialRevokedEvent.OutputObject
-  >;
-  getEvent(
-    key: "JurisdictionThresholdsSet"
-  ): TypedContractEvent<
-    JurisdictionThresholdsSetEvent.InputTuple,
-    JurisdictionThresholdsSetEvent.OutputTuple,
-    JurisdictionThresholdsSetEvent.OutputObject
-  >;
   getEvent(
     key: "Paused"
   ): TypedContractEvent<
     PausedEvent.InputTuple,
     PausedEvent.OutputTuple,
     PausedEvent.OutputObject
-  >;
-  getEvent(
-    key: "ProofVerified"
-  ): TypedContractEvent<
-    ProofVerifiedEvent.InputTuple,
-    ProofVerifiedEvent.OutputTuple,
-    ProofVerifiedEvent.OutputObject
   >;
   getEvent(
     key: "RoleAdminChanged"
@@ -796,36 +734,49 @@ export interface ComplianceRegistry extends BaseContract {
     RoleRevokedEvent.OutputObject
   >;
   getEvent(
+    key: "TimelockUpdated"
+  ): TypedContractEvent<
+    TimelockUpdatedEvent.InputTuple,
+    TimelockUpdatedEvent.OutputTuple,
+    TimelockUpdatedEvent.OutputObject
+  >;
+  getEvent(
     key: "Unpaused"
   ): TypedContractEvent<
     UnpausedEvent.InputTuple,
     UnpausedEvent.OutputTuple,
     UnpausedEvent.OutputObject
   >;
+  getEvent(
+    key: "VerifierActivated"
+  ): TypedContractEvent<
+    VerifierActivatedEvent.InputTuple,
+    VerifierActivatedEvent.OutputTuple,
+    VerifierActivatedEvent.OutputObject
+  >;
+  getEvent(
+    key: "VerifierDisabled"
+  ): TypedContractEvent<
+    VerifierDisabledEvent.InputTuple,
+    VerifierDisabledEvent.OutputTuple,
+    VerifierDisabledEvent.OutputObject
+  >;
+  getEvent(
+    key: "VerifierRegistered"
+  ): TypedContractEvent<
+    VerifierRegisteredEvent.InputTuple,
+    VerifierRegisteredEvent.OutputTuple,
+    VerifierRegisteredEvent.OutputObject
+  >;
+  getEvent(
+    key: "VerifierRetired"
+  ): TypedContractEvent<
+    VerifierRetiredEvent.InputTuple,
+    VerifierRetiredEvent.OutputTuple,
+    VerifierRetiredEvent.OutputObject
+  >;
 
   filters: {
-    "CredentialRevoked(bytes32,address)": TypedContractEvent<
-      CredentialRevokedEvent.InputTuple,
-      CredentialRevokedEvent.OutputTuple,
-      CredentialRevokedEvent.OutputObject
-    >;
-    CredentialRevoked: TypedContractEvent<
-      CredentialRevokedEvent.InputTuple,
-      CredentialRevokedEvent.OutputTuple,
-      CredentialRevokedEvent.OutputObject
-    >;
-
-    "JurisdictionThresholdsSet(uint16,uint64,uint64,uint64)": TypedContractEvent<
-      JurisdictionThresholdsSetEvent.InputTuple,
-      JurisdictionThresholdsSetEvent.OutputTuple,
-      JurisdictionThresholdsSetEvent.OutputObject
-    >;
-    JurisdictionThresholdsSet: TypedContractEvent<
-      JurisdictionThresholdsSetEvent.InputTuple,
-      JurisdictionThresholdsSetEvent.OutputTuple,
-      JurisdictionThresholdsSetEvent.OutputObject
-    >;
-
     "Paused(address)": TypedContractEvent<
       PausedEvent.InputTuple,
       PausedEvent.OutputTuple,
@@ -835,17 +786,6 @@ export interface ComplianceRegistry extends BaseContract {
       PausedEvent.InputTuple,
       PausedEvent.OutputTuple,
       PausedEvent.OutputObject
-    >;
-
-    "ProofVerified(bytes32,bytes32,bool,bool)": TypedContractEvent<
-      ProofVerifiedEvent.InputTuple,
-      ProofVerifiedEvent.OutputTuple,
-      ProofVerifiedEvent.OutputObject
-    >;
-    ProofVerified: TypedContractEvent<
-      ProofVerifiedEvent.InputTuple,
-      ProofVerifiedEvent.OutputTuple,
-      ProofVerifiedEvent.OutputObject
     >;
 
     "RoleAdminChanged(bytes32,bytes32,bytes32)": TypedContractEvent<
@@ -881,6 +821,17 @@ export interface ComplianceRegistry extends BaseContract {
       RoleRevokedEvent.OutputObject
     >;
 
+    "TimelockUpdated(uint256)": TypedContractEvent<
+      TimelockUpdatedEvent.InputTuple,
+      TimelockUpdatedEvent.OutputTuple,
+      TimelockUpdatedEvent.OutputObject
+    >;
+    TimelockUpdated: TypedContractEvent<
+      TimelockUpdatedEvent.InputTuple,
+      TimelockUpdatedEvent.OutputTuple,
+      TimelockUpdatedEvent.OutputObject
+    >;
+
     "Unpaused(address)": TypedContractEvent<
       UnpausedEvent.InputTuple,
       UnpausedEvent.OutputTuple,
@@ -890,6 +841,50 @@ export interface ComplianceRegistry extends BaseContract {
       UnpausedEvent.InputTuple,
       UnpausedEvent.OutputTuple,
       UnpausedEvent.OutputObject
+    >;
+
+    "VerifierActivated(bytes32,address)": TypedContractEvent<
+      VerifierActivatedEvent.InputTuple,
+      VerifierActivatedEvent.OutputTuple,
+      VerifierActivatedEvent.OutputObject
+    >;
+    VerifierActivated: TypedContractEvent<
+      VerifierActivatedEvent.InputTuple,
+      VerifierActivatedEvent.OutputTuple,
+      VerifierActivatedEvent.OutputObject
+    >;
+
+    "VerifierDisabled(bytes32,address)": TypedContractEvent<
+      VerifierDisabledEvent.InputTuple,
+      VerifierDisabledEvent.OutputTuple,
+      VerifierDisabledEvent.OutputObject
+    >;
+    VerifierDisabled: TypedContractEvent<
+      VerifierDisabledEvent.InputTuple,
+      VerifierDisabledEvent.OutputTuple,
+      VerifierDisabledEvent.OutputObject
+    >;
+
+    "VerifierRegistered(bytes32,address,string,uint256)": TypedContractEvent<
+      VerifierRegisteredEvent.InputTuple,
+      VerifierRegisteredEvent.OutputTuple,
+      VerifierRegisteredEvent.OutputObject
+    >;
+    VerifierRegistered: TypedContractEvent<
+      VerifierRegisteredEvent.InputTuple,
+      VerifierRegisteredEvent.OutputTuple,
+      VerifierRegisteredEvent.OutputObject
+    >;
+
+    "VerifierRetired(bytes32,address)": TypedContractEvent<
+      VerifierRetiredEvent.InputTuple,
+      VerifierRetiredEvent.OutputTuple,
+      VerifierRetiredEvent.OutputObject
+    >;
+    VerifierRetired: TypedContractEvent<
+      VerifierRetiredEvent.InputTuple,
+      VerifierRetiredEvent.OutputTuple,
+      VerifierRetiredEvent.OutputObject
     >;
   };
 }

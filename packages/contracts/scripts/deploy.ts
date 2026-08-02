@@ -6,7 +6,16 @@ async function main() {
   const [deployer] = await ethers.getSigners();
   console.log("Deploying with account:", deployer.address);
 
-  // 1. Groth16Verifier
+  // 1. VerifierRouter
+  console.log("\nDeploying VerifierRouter...");
+  const VerifierRouter = await ethers.getContractFactory("VerifierRouter");
+  const timelockPeriod = 24 * 60 * 60; // 24 hours in seconds
+  const verifierRouter = await VerifierRouter.deploy(timelockPeriod);
+  await verifierRouter.waitForDeployment();
+  const verifierRouterAddr = await verifierRouter.getAddress();
+  console.log("VerifierRouter deployed to:", verifierRouterAddr);
+
+  // 2. Groth16Verifier
   console.log("\nDeploying Groth16Verifier...");
   const Verifier = await ethers.getContractFactory("Groth16Verifier");
   const verifier = await Verifier.deploy();
@@ -14,7 +23,20 @@ async function main() {
   const verifierAddr = await verifier.getAddress();
   console.log("Groth16Verifier deployed to:", verifierAddr);
 
-  // 2. VASPRegistry
+  // 3. Register the verifier with the router
+  console.log("\nRegistering verifier with router...");
+  const verifierSelector = ethers.keccak256(ethers.toUtf8Bytes("groth16-bn254-v1"));
+  let tx = await verifierRouter.registerVerifier(verifierSelector, verifierAddr, "Groth16 BN254 v1");
+  await tx.wait();
+  console.log("Verifier registered with selector:", verifierSelector);
+
+  // 4. Activate the verifier
+  console.log("\nActivating verifier...");
+  tx = await verifierRouter.activateVerifier(verifierSelector, "Groth16 BN254 v1");
+  await tx.wait();
+  console.log("Verifier activated");
+
+  // 5. VASPRegistry
   console.log("Deploying VASPRegistry...");
   const VASPRegistry = await ethers.getContractFactory("VASPRegistry");
   const vaspRegistry = await VASPRegistry.deploy(deployer.address);
@@ -22,7 +44,7 @@ async function main() {
   const vaspRegistryAddr = await vaspRegistry.getAddress();
   console.log("VASPRegistry deployed to:", vaspRegistryAddr);
 
-  // 3. SanctionsOracle
+  // 6. SanctionsOracle
   console.log("Deploying SanctionsOracle...");
   const initialRoot = ethers.keccak256(ethers.toUtf8Bytes("initial-sanctions-root"));
   const initialLeafCount = 0;
@@ -32,14 +54,15 @@ async function main() {
   const sanctionsOracleAddr = await sanctionsOracle.getAddress();
   console.log("SanctionsOracle deployed to:", sanctionsOracleAddr);
 
-  // 4. ComplianceRegistry
+  // 7. ComplianceRegistry
   console.log("Deploying ComplianceRegistry...");
   const Registry = await ethers.getContractFactory("ComplianceRegistry");
   const thresholdConfig = JSON.parse(
     readFileSync(resolve(__dirname, "../../../config/jurisdiction_thresholds.json"), "utf-8")
   );
   const registry = await Registry.deploy(
-    verifierAddr,
+    verifierRouterAddr,
+    verifierSelector,
     vaspRegistryAddr,
     sanctionsOracleAddr,
     thresholdConfig.default.tier2,
@@ -50,7 +73,7 @@ async function main() {
   const registryAddr = await registry.getAddress();
   console.log("ComplianceRegistry deployed to:", registryAddr);
 
-  // 5. Seed the per-jurisdiction thresholds (AIF-79).
+  // 8. Seed the per-jurisdiction thresholds (AIF-79).
   //
   // tier2/3/4_threshold are unconstrained circuit inputs, so verifyAndRecord
   // rejects any proof whose thresholds disagree with this table. The default
@@ -80,10 +103,11 @@ async function main() {
   }
 
   console.log("\n=== Deployment complete ===");
-  console.log(`  Verifier:         ${verifierAddr}`);
-  console.log(`  VASPRegistry:     ${vaspRegistryAddr}`);
-  console.log(`  SanctionsOracle:  ${sanctionsOracleAddr}`);
-  console.log(`  Registry:         ${registryAddr}`);
+  console.log(`  VerifierRouter:     ${verifierRouterAddr}`);
+  console.log(`  Groth16Verifier:    ${verifierAddr}`);
+  console.log(`  VASPRegistry:       ${vaspRegistryAddr}`);
+  console.log(`  SanctionsOracle:    ${sanctionsOracleAddr}`);
+  console.log(`  Registry:           ${registryAddr}`);
 
   // Write deployment addresses to file for downstream tools
   const fs = await import("fs");
@@ -92,6 +116,7 @@ async function main() {
     chainId: (await ethers.provider.getNetwork()).chainId.toString(),
     timestamp: new Date().toISOString(),
     contracts: {
+      VerifierRouter: verifierRouterAddr,
       Groth16Verifier: verifierAddr,
       VASPRegistry: vaspRegistryAddr,
       SanctionsOracle: sanctionsOracleAddr,
@@ -108,10 +133,11 @@ async function main() {
   if (process.env.ETHERSCAN_API_KEY || process.env.BASESCAN_API_KEY) {
     console.log("\nVerifying contracts on block explorer...");
     try {
+      await run("verify:verify", { address: verifierRouterAddr, constructorArguments: [timelockPeriod] });
       await run("verify:verify", { address: verifierAddr, constructorArguments: [] });
       await run("verify:verify", { address: vaspRegistryAddr, constructorArguments: [deployer.address] });
       await run("verify:verify", { address: sanctionsOracleAddr, constructorArguments: [deployer.address, initialRoot, initialLeafCount] });
-      await run("verify:verify", { address: registryAddr, constructorArguments: [verifierAddr, vaspRegistryAddr, sanctionsOracleAddr] });
+      await run("verify:verify", { address: registryAddr, constructorArguments: [verifierRouterAddr, verifierSelector, vaspRegistryAddr, sanctionsOracleAddr] });
       console.log("All contracts verified!");
     } catch (e: any) {
       console.log("Verification failed (can retry later):", e.message?.slice(0, 100));

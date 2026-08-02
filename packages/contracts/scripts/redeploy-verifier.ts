@@ -71,70 +71,73 @@ async function main() {
   console.log(`  VASPRegistry:    ${existing.contracts.VASPRegistry}`);
   console.log(`  SanctionsOracle: ${existing.contracts.SanctionsOracle}\n`);
 
-  // 1. New Groth16Verifier (Apache-2.0 implementation)
-  console.log("[1/2] Deploying Groth16Verifier (Apache-2.0 build)...");
+  // Load the existing verifier router
+  console.log("[1/3] Loading VerifierRouter...");
+  const verifierRouterAddr = existing.contracts.VerifierRouter;
+  if (!verifierRouterAddr) {
+    console.error("No VerifierRouter address found in deployment. Cannot proceed.");
+    process.exit(1);
+  }
+  console.log(`  → ${verifierRouterAddr}`);
+
+  const verifierRouter = await ethers.getContractAt("VerifierRouter", verifierRouterAddr);
+
+  // 2. New Groth16Verifier (Apache-2.0 implementation)
+  console.log("[2/3] Deploying Groth16Verifier (Apache-2.0 build)...");
   const Verifier = await ethers.getContractFactory("Groth16Verifier");
   const verifier = await Verifier.deploy();
   await verifier.waitForDeployment();
   const verifierAddr = await verifier.getAddress();
   console.log(`  → ${verifierAddr}`);
 
-  // 2. New ComplianceRegistry pointing at the new verifier + existing state
-  console.log("[2/2] Deploying ComplianceRegistry...");
-  const Registry = await ethers.getContractFactory("ComplianceRegistry");
-  const registry = await Registry.deploy(
-    verifierAddr,
-    existing.contracts.VASPRegistry,
-    existing.contracts.SanctionsOracle,
-    thresholdConfig.default.tier2,
-    thresholdConfig.default.tier3,
-    thresholdConfig.default.tier4,
-  );
-  await registry.waitForDeployment();
-  const registryAddr = await registry.getAddress();
-  console.log(`  → ${registryAddr}`);
+  // 3. Register the new verifier with the router
+  console.log("[3/3] Registering new verifier with VerifierRouter...");
+  const verifierSelector = ethers.keccak256(ethers.toUtf8Bytes("groth16-bn254-v2"));
+  let tx = await verifierRouter.registerVerifier(verifierSelector, verifierAddr, "Groth16 BN254 v2");
+  await tx.wait();
+  console.log("  Verifier registered with selector:", verifierSelector);
 
-  // Seed per-jurisdiction thresholds. Without this the new registry has only the
-  // default entry, so e.g. US would silently resolve to tier3 = 1000 instead of
-  // 3000 — a behavior change introduced by the redeploy rather than by policy.
-  console.log("\nSeeding jurisdiction thresholds...");
-  for (const [code, t] of Object.entries(thresholdConfig.jurisdictions) as [
-    string,
-    { tier2: number; tier3: number; tier4: number },
-  ][]) {
-    const tx = await registry.setJurisdictionThresholds(encodeJurisdiction(code), t.tier2, t.tier3, t.tier4);
-    await tx.wait();
-    console.log(`  ${code}: ${t.tier2}/${t.tier3}/${t.tier4}`);
-  }
+  // Activate the new verifier
+  tx = await verifierRouter.activateVerifier(verifierSelector, "Groth16 BN254 v2");
+  await tx.wait();
+  console.log("  Verifier activated");
+
+  // Update the ComplianceRegistry to use the new verifier
+  console.log("[4/4] Updating ComplianceRegistry to use new verifier...");
+  const registryAddr = existing.contracts.ComplianceRegistry;
+  const registry = await ethers.getContractAt("ComplianceRegistry", registryAddr);
+  tx = await registry.setVerifierSelector(verifierSelector);
+  await tx.wait();
+  console.log("  ComplianceRegistry updated to use new verifier");
 
   // Update deployment record, preserving the previous addresses for rollback reference
   const updated = {
     ...existing,
     timestamp: new Date().toISOString(),
     previous: {
-      Groth16Verifier: existing.contracts.Groth16Verifier,
-      ComplianceRegistry: existing.contracts.ComplianceRegistry,
+      ...existing.previous,
+      Groth16Verifier: verifierAddr,
       retiredAt: new Date().toISOString(),
-      reason: "Apache-2.0 verifier redeploy (ADR 0001 Option B)",
+      reason: "New verifier registered with VerifierRouter (AIF-100)",
     },
     contracts: {
       ...existing.contracts,
       Groth16Verifier: verifierAddr,
-      ComplianceRegistry: registryAddr,
     },
   };
   fs.writeFileSync(deploymentPath, JSON.stringify(updated, null, 2));
 
   console.log(`\n=== Redeploy complete ===`);
-  console.log(`  Groth16Verifier:     ${verifierAddr}  (was ${existing.contracts.Groth16Verifier})`);
-  console.log(`  ComplianceRegistry:  ${registryAddr}  (was ${existing.contracts.ComplianceRegistry})`);
+  console.log(`  Groth16Verifier:     ${verifierAddr}  (registered with VerifierRouter)`);
+  console.log(`  VerifierRouter:      ${verifierRouterAddr}  (unchanged)`);
+  console.log(`  ComplianceRegistry:  ${registryAddr}  (updated to use new verifier)`);
   console.log(`  VASPRegistry:        ${existing.contracts.VASPRegistry}  (unchanged)`);
-  console.log(`  SanctionsOracle:     ${existing.contracts.SanctionsOracle}  (unchanged — no relay needed)`);
+  console.log(`  SanctionsOracle:     ${existing.contracts.SanctionsOracle}  (unchanged)`);
   console.log(`\nSaved to ${deploymentPath}`);
   console.log("\nFollow-ups:");
   console.log("  1. Update contract addresses in README.md and packages/contracts/README.md");
   console.log("  2. Set COMPLIANCE_REGISTRY_ADDRESS / COMPLIANCE_REGISTRY for API + scripts");
-  console.log("  3. domain_contract_hash changed — proofs bound to the old registry will not verify");
+  console.log("  3. domain_contract_hash is unchanged — proofs will continue to verify with the new verifier");
 }
 
 main().catch((err) => {

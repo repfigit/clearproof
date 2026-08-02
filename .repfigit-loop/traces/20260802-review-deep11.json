@@ -1,0 +1,12 @@
+{
+  "skill": "repfigit-review",
+  "ranAt": "2026-08-02T00:00:00Z",
+  "outcome": "skipped",
+  "issueId": "AIF-67",
+  "prNumber": 11,
+  "failureCategory": "ci-failing",
+  "humanInterventions": 0,
+  "toolCalls": 8,
+  "verdictCycles": 4,
+  "notes": "PR #11 deep-review pass skipped: hard dedup guard matched existing verdict on SHA 552d40f3 (comment 5149805179). PR already escalated needs-human-review with [CI] circuits-check failure and [SCOPE-CONFLICT AC-6<->NG-1]; circuits required check still FAILING on HEAD, confirming prior verdict still applies. No re-post, no label change, no state write per skill 4a."
+}

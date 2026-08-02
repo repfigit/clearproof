@@ -7,21 +7,11 @@ import "@openzeppelin/contracts/access/AccessControl.sol";
 import "@openzeppelin/contracts/utils/Pausable.sol";
 import "./VASPRegistry.sol";
 import "./SanctionsOracle.sol";
-
-/// @dev Interface for the Groth16 verifier with 16 public signals.
-/// The concrete Groth16Verifier.sol will be regenerated after circuit recompilation.
-interface IGroth16Verifier {
-    function verifyProof(
-        uint[2] calldata _pA,
-        uint[2][2] calldata _pB,
-        uint[2] calldata _pC,
-        uint[16] calldata _pubSignals
-    ) external view returns (bool);
-}
+import "./VerifierRouter.sol";
 
 contract ComplianceRegistry is AccessControl, Pausable {
     // Custom errors
-    error ZeroVerifier();
+    error ZeroVerifierRouter();
     error ZeroRegistry();
     error ZeroOracle();
     error TransferAlreadyRecorded();
@@ -44,6 +34,7 @@ contract ComplianceRegistry is AccessControl, Pausable {
     error MalformedJurisdictionCode();
     error ThresholdMismatch();
     error ThresholdsNotOrdered();
+    error VerifierSelectorNotSet();
 
     bytes32 public constant REVOKER_ROLE = keccak256("REVOKER_ROLE");
     bytes32 public constant THRESHOLD_ADMIN_ROLE = keccak256("THRESHOLD_ADMIN_ROLE");
@@ -67,7 +58,8 @@ contract ComplianceRegistry is AccessControl, Pausable {
 
     event JurisdictionThresholdsSet(uint16 indexed jurisdictionCode, uint64 tier2, uint64 tier3, uint64 tier4);
 
-    IGroth16Verifier public immutable verifier;
+    VerifierRouter public verifierRouter;
+    bytes32 public verifierSelector;
     VASPRegistry public immutable vaspRegistry;
     SanctionsOracle public immutable sanctionsOracle;
 
@@ -95,7 +87,8 @@ contract ComplianceRegistry is AccessControl, Pausable {
     /// total outage with no on-chain signal. Taking the default in the
     /// constructor makes that state unrepresentable.
     constructor(
-        address _verifier,
+        address _verifierRouter,
+        bytes32 _verifierSelector,
         address _vaspRegistry,
         address _sanctionsOracle,
         uint64 defaultTier2,
@@ -103,11 +96,12 @@ contract ComplianceRegistry is AccessControl, Pausable {
         uint64 defaultTier4
     ) {
         // M-7: Zero-address validation
-        if (_verifier == address(0)) revert ZeroVerifier();
+        if (_verifierRouter == address(0)) revert ZeroVerifierRouter();
         if (_vaspRegistry == address(0)) revert ZeroRegistry();
         if (_sanctionsOracle == address(0)) revert ZeroOracle();
 
-        verifier = IGroth16Verifier(_verifier);
+        verifierRouter = VerifierRouter(_verifierRouter);
+        verifierSelector = _verifierSelector;
         vaspRegistry = VASPRegistry(_vaspRegistry);
         sanctionsOracle = SanctionsOracle(_sanctionsOracle);
 
@@ -118,6 +112,12 @@ contract ComplianceRegistry is AccessControl, Pausable {
         // Shares validation with the external setter, so the constructor cannot
         // install an out-of-order default.
         _setJurisdictionThresholds(DEFAULT_JURISDICTION_KEY, defaultTier2, defaultTier3, defaultTier4);
+    }
+
+    /// @notice Set the verifier selector to use
+    /// @param _verifierSelector The selector for the verifier to use
+    function setVerifierSelector(bytes32 _verifierSelector) external onlyRole(DEFAULT_ADMIN_ROLE) {
+        verifierSelector = _verifierSelector;
     }
 
     /// @notice Register or update the thresholds accepted for a jurisdiction.
@@ -228,7 +228,9 @@ contract ComplianceRegistry is AccessControl, Pausable {
         if (usedNullifiers[nullifier]) revert ProofAlreadyUsed();
 
         // C-1: Cryptographic verification — revert on invalid proof
-        bool valid = verifier.verifyProof(_pA, _pB, _pC, _pubSignals);
+        if (verifierSelector == bytes32(0)) revert VerifierSelectorNotSet();
+        
+        bool valid = verifierRouter.verifyProof(verifierSelector, _pA, _pB, _pC, _pubSignals);
         if (!valid) revert ProofVerificationFailed();
 
         // Record

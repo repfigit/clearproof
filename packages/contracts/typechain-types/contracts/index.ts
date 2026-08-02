@@ -3,6 +3,8 @@
 /* eslint-disable */
 import type * as complianceRegistrySol from "./ComplianceRegistry.sol";
 export type { complianceRegistrySol };
+import type * as verifierRouterSol from "./VerifierRouter.sol";
+export type { verifierRouterSol };
 import type * as bench from "./bench";
 export type { bench };
 export type { Groth16Verifier } from "./Groth16Verifier";

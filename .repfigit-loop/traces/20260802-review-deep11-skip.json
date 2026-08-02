@@ -1,0 +1,12 @@
+{
+  "skill": "repfigit-review",
+  "ranAt": "2026-08-02T04:30:00Z",
+  "outcome": "skipped",
+  "issueId": "AIF-67",
+  "prNumber": 11,
+  "failureCategory": "none",
+  "humanInterventions": 0,
+  "toolCalls": 14,
+  "verdictCycles": 5,
+  "notes": "PR #11 skipped: verdict marker for current head 552d40f3 exists and needs-human-review label set"
+}
