@@ -102,4 +102,24 @@ describe('cross-language parity', () => {
       expect(t.tier3).toBeLessThan(t.tier4);
     }
   });
+
+  it('default is at least as strict as every registered jurisdiction', () => {
+    /**
+     * AIF-97 — the default thresholds are the fail-to-strictest fallback for
+     * unregistered jurisdiction codes. A lower tier escalates to Travel Rule
+     * sooner, so `default.tierN <= jurisdiction.tierN` for every tier means
+     * the prover cannot profit from claiming an unknown code: the fallback
+     * is never looser than a registered jurisdiction.
+     *
+     * If a new jurisdiction is added with a stricter threshold than the
+     * default, this test fails and the config must be amended — either the
+     * new jurisdiction's thresholds are raised, or the default is lowered
+     * to maintain the invariant.
+     */
+    for (const [code, thresholds] of Object.entries(config.jurisdictions) as [string, { tier2: number; tier3: number; tier4: number }][]) {
+      expect(DEFAULT_THRESHOLDS.tier2, `${code} tier2 stricter than default`).toBeLessThanOrEqual(thresholds.tier2);
+      expect(DEFAULT_THRESHOLDS.tier3, `${code} tier3 stricter than default`).toBeLessThanOrEqual(thresholds.tier3);
+      expect(DEFAULT_THRESHOLDS.tier4, `${code} tier4 stricter than default`).toBeLessThanOrEqual(thresholds.tier4);
+    }
+  });
 });
