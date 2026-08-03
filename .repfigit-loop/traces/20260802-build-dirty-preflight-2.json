@@ -1,0 +1,12 @@
+{
+  "skill": "repfigit-build",
+  "ranAt": "2026-08-02T00:00:00Z",
+  "outcome": "stalled",
+  "issueId": null,
+  "prNumber": 0,
+  "failureCategory": "tool-loop",
+  "humanInterventions": 0,
+  "toolCalls": 3,
+  "verdictCycles": 0,
+  "notes": "preflight failed: dirty working tree — cannot proceed until tree is clean"
+}

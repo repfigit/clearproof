@@ -1,0 +1,12 @@
+{
+  "skill": "repfigit-review",
+  "ranAt": "2026-08-03T05:55:00Z",
+  "outcome": "changes-requested",
+  "issueId": "AIF-98",
+  "prNumber": 23,
+  "failureCategory": "ci-failing",
+  "humanInterventions": 0,
+  "toolCalls": 18,
+  "verdictCycles": 2,
+  "notes": "PR #23 (AIF-98) second attempt: restored transfer binding + observe-not-enforce flip addressed prior [SECURITY]/[AC-2], but introduced 3 new [CI] python-tests regressions (deleted imports SanctionsMerkleTree/_poseidon_hash/_address_to_int and _get_db_from_app helper but left call sites dangling -> NameError/AttributeError) and a new [DEFECT] (ChainReader.get_vasp_info doesn't exist -> off-chain jurisdiction check is a silent no-op via broad except). Also [AC-1] no test for JurisdictionCodeMismatch event. hardhat-tests failures are pre-existing on base f1b93d7 (DomainBinding.test.ts calls verifyAndRecord from admin signer not vaspWallet -> NotRegisteredVASPWallet); filed as AIF-118 (environmental, not blocking this PR). Gate script failed (REPO_DIR null) — AIF-117 already filed. Labels: loop-changes-requested retained, loop-approved removed."
+}

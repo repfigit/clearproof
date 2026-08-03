@@ -1,0 +1,12 @@
+{
+  "skill": "repfigit-build",
+  "ranAt": "2026-08-03T05:45:00Z",
+  "outcome": "fixed-pr",
+  "issueId": "AIF-98",
+  "prNumber": 23,
+  "failureCategory": "none",
+  "humanInterventions": 0,
+  "toolCalls": 0,
+  "verdictCycles": 2,
+  "notes": "AIF-98 PR #23 fixed: restored transfer binding, made jurisdiction observation-only, fixed Python index and 5 test fixture constructor calls. 4 pre-existing CI failures remain unrelated."
+}

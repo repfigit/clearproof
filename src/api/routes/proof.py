@@ -24,10 +24,11 @@ from pydantic import BaseModel, Field
 from src.api.dependencies import get_credential_registry
 from src.api.middleware.auth import JWTAuthDependency
 from src.api.middleware.rate_limit import RateLimiter
+from src.chain.reader import ChainReader, get_chain_reader
 from src.prover.snarkjs_prover import SnarkJSProver
 from src.registry.credential_registry import CredentialRegistry
 from src.registry.issuer_registry import IssuerRegistry
-from src.chain.reader import ChainReader
+from src.registry.sanctions_list import SanctionsMerkleTree, _address_to_int, _poseidon_hash
 from src.sar.audit_log import AuditLog
 from src.storage.audit import PersistentAuditLog
 from src.storage.database import Database
@@ -140,17 +141,25 @@ def _load_vk() -> dict:
 # ---------------------------------------------------------------------------
 
 
+def _get_db(app) -> Optional[Database]:
+    return getattr(getattr(app, "state", None), "db", None)
+
+
+def _get_db_from_app() -> Optional[Database]:
+    from src.api.main import app as _app
+
+    return _get_db(_app)
+
+
 def _get_chain_from_app():
     """Get chain reader from app state, or create a new one if not available."""
     try:
         from src.api.main import app as _app
         chain_reader = getattr(getattr(_app.state, "chain_reader", None), "reader", None) if hasattr(_app, "state") else None
         if chain_reader is None:
-            # Create a new chain reader if not found in app state
-            chain_reader = ChainReader()
+            chain_reader = get_chain_reader()
         return chain_reader
     except Exception:
-        # If we can't get or create a chain reader, return None
         return None
 
 

@@ -1,0 +1,12 @@
+{
+  "skill": "repfigit-review",
+  "ranAt": "2026-08-02T05:55:10.439677+00:00",
+  "outcome": "skipped",
+  "issueId": "AIF-67",
+  "prNumber": 11,
+  "failureCategory": "ci-failing",
+  "humanInterventions": 0,
+  "toolCalls": 14,
+  "verdictCycles": 4,
+  "notes": "PR #11 head 552d40f unchanged since 2026-08-01 escalation; verdict marker exists for this SHA (circuits CI fail + AC-6/NG-1 scope conflict); needs-human-review active, awaiting human product decision. Dedup guard: no duplicate verdict posted."
+}

@@ -1,0 +1,12 @@
+{
+  "skill": "repfigit-review",
+  "ranAt": "2026-08-02T05:32:54.054188+00:00",
+  "outcome": "skipped",
+  "issueId": "AIF-67",
+  "prNumber": 11,
+  "failureCategory": "ci-failing",
+  "humanInterventions": 0,
+  "toolCalls": 0,
+  "verdictCycles": 5,
+  "notes": "PR #11 head 552d40f3 already has repfigit-review verdict (2026-08-01T04:31:59Z); dedup guard hard-stop, no new comment. Still escalated needs-human-review (SCOPE-CONFLICT AC-6 vs NG-1) + circuits CI failing. Reconciliation pass: no recent merges needed Linear moves (AIF-66/68/69/70/71/72/74/79/95 all Done)."
+}

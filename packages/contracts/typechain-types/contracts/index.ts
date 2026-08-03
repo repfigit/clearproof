@@ -8,6 +8,7 @@ export type { bench };
 export type { ComplianceRegistry } from "./ComplianceRegistry";
 export type { Groth16Verifier } from "./Groth16Verifier";
 export type { ISanctionsRootReceiver } from "./ISanctionsRootReceiver";
+export type { MockVerifier } from "./MockVerifier";
 export type { SanctionsOracle } from "./SanctionsOracle";
 export type { SanctionsRootRelay } from "./SanctionsRootRelay";
 export type { VASPRegistry } from "./VASPRegistry";

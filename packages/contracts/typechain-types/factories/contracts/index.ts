@@ -6,6 +6,7 @@ export * as bench from "./bench";
 export { ComplianceRegistry__factory } from "./ComplianceRegistry__factory";
 export { Groth16Verifier__factory } from "./Groth16Verifier__factory";
 export { ISanctionsRootReceiver__factory } from "./ISanctionsRootReceiver__factory";
+export { MockVerifier__factory } from "./MockVerifier__factory";
 export { SanctionsOracle__factory } from "./SanctionsOracle__factory";
 export { SanctionsRootRelay__factory } from "./SanctionsRootRelay__factory";
 export { VASPRegistry__factory } from "./VASPRegistry__factory";

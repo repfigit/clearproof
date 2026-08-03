@@ -1,0 +1,12 @@
+{
+  "skill": "repfigit-build",
+  "ranAt": "2026-08-03T05:49:22Z",
+  "outcome": "shipped",
+  "issueId": "AIF-97",
+  "prNumber": 24,
+  "failureCategory": "none",
+  "humanInterventions": 0,
+  "toolCalls": 22,
+  "verdictCycles": 0,
+  "notes": "AIF-97 shipped PR #24 — added fail-to-strictest assertions to Python + TypeScript parity suites"
+}

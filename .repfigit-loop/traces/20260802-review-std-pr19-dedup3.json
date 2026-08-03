@@ -1,0 +1,12 @@
+{
+  "skill": "repfigit-review",
+  "ranAt": "2026-08-02T08:30:00Z",
+  "outcome": "skipped",
+  "issueId": "AIF-86",
+  "prNumber": 19,
+  "failureCategory": "none",
+  "humanInterventions": 0,
+  "toolCalls": 5,
+  "verdictCycles": 2,
+  "notes": "PR #19 TIER-2 standard pass: hard dedup guard fired (2 verdict comments already exist for head sha d550fbb1b60344f6e7d011a2b76566c981804aba) — skipped, no comment/label/state-file write per §4a."
+}

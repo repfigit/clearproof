@@ -1,0 +1,12 @@
+{
+  "skill": "repfigit-build",
+  "ranAt": "2026-08-02T15:00:00Z",
+  "outcome": "shipped",
+  "issueId": "AIF-81",
+  "prNumber": null,
+  "failureCategory": "none",
+  "humanInterventions": 0,
+  "toolCalls": 42,
+  "verdictCycles": 0,
+  "notes": "Fixed AIF-81: POST /proof/generate builds correct circuit inputs and generates valid proof"
+}

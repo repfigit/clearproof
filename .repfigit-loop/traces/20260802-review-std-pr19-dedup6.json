@@ -1,0 +1,12 @@
+{
+  "skill": "repfigit-review",
+  "ranAt": "2026-08-02T00:00:00Z",
+  "outcome": "skipped",
+  "issueId": "AIF-86",
+  "prNumber": 19,
+  "failureCategory": "none",
+  "humanInterventions": 0,
+  "toolCalls": 3,
+  "verdictCycles": 3,
+  "notes": "PR #19 skipped — hard dedup guard: verdict marker for d550fbb already present (3 markers, 1 for current SHA). PR carries loop-approved + needs-human-review. No re-review."
+}

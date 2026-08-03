@@ -1,0 +1,12 @@
+{
+  "skill": "repfigit-review",
+  "ranAt": "2026-08-02T05:05:00.000000+00:00",
+  "outcome": "skipped",
+  "issueId": "AIF-86",
+  "prNumber": 19,
+  "failureCategory": "none",
+  "humanInterventions": 0,
+  "toolCalls": 6,
+  "verdictCycles": 2,
+  "notes": "Standard cron pass. PR #19 head d550fbb unchanged; hard pre-post dedup guard (§4a) fired — 2 verdict comments already carry marker repfigit-review:d550fbb1b60344f6e7d011a2b76566c981804aba. Skipped without posting, label change, or state-file write. PR remains escalated (needs-human-review + loop-approved) pending ADR 0004 product decision. Reconciliation: PR #21 (AIF-80) merged today, Linear issue already in Done — no move needed. PR #20 carried no Closes ref. PR #18 (AIF-95) merged 2026-07-31, issue already Done. No other recently merged PRs link to open AIF issues. No review candidates left."
+}

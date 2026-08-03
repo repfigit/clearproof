@@ -1,0 +1,12 @@
+{
+  "skill": "repfigit-review",
+  "ranAt": "2026-08-02T04:42:30+00:00",
+  "outcome": "merged",
+  "issueId": "AIF-80",
+  "prNumber": 21,
+  "failureCategory": "none",
+  "humanInterventions": 0,
+  "toolCalls": 28,
+  "verdictCycles": 1,
+  "notes": "TIER-3 deep review (API security path): PR #21 approved and merged via Path A. Verified AIF-80 done-when: exactly one CredentialRegistry() construction site; ran regression test + 18/18 integration suite live. AIF-80 moved to Done."
+}

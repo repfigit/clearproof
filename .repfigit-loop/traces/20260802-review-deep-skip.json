@@ -1,0 +1,12 @@
+{
+  "skill": "repfigit-review",
+  "ranAt": "2026-08-02T08:31:13Z",
+  "outcome": "skipped",
+  "issueId": "AIF-67",
+  "prNumber": 11,
+  "failureCategory": "none",
+  "humanInterventions": 0,
+  "toolCalls": 4,
+  "verdictCycles": 5,
+  "notes": "Hard dedup guard: 2 prior verdicts already posted for head 552d40f (escalated, needs-human-review); no new commits, pass skipped"
+}

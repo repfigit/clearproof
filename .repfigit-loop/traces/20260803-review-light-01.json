@@ -1,0 +1,12 @@
+{
+  "skill": "repfigit-review",
+  "ranAt": "2026-08-03T06:30:00Z",
+  "outcome": "no-work",
+  "issueId": null,
+  "prNumber": 0,
+  "failureCategory": "none",
+  "humanInterventions": 0,
+  "toolCalls": 24,
+  "verdictCycles": 0,
+  "notes": "Gate script failed (REPO_DIR unset in subprocess env; AIF-117 + repfigit-loop PR #8 fix in review). Manual re-run of gate with REPO_DIR set: no TIER-1 PRs need light review on clearproof (PRs 11/23 TIER-3, 19/24 already reviewed at head, 22 draft). Merged-PR reconciliation: all linked issues already Done. Filed AIF-120 (follow-up): .repfigit-loop/traces/ missing from .gitignore (PR #20 gap), 5 traces accidentally committed in f1b93d7."
+}

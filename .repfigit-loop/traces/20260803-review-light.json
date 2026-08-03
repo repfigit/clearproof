@@ -1,0 +1,12 @@
+{
+  "skill": "repfigit-review",
+  "ranAt": "2026-08-03T05:05:00Z",
+  "outcome": "no-work",
+  "issueId": null,
+  "prNumber": 0,
+  "failureCategory": "none",
+  "humanInterventions": 0,
+  "toolCalls": 16,
+  "verdictCycles": 0,
+  "notes": "Light tier: gate (run with REPO_DIR/TIER_FILTER=light set) silent exit 0 — no TIER-1 PRs need review. Unreviewed #23 (AIF-98) and #11 (AIF-67) are both TIER-3 (contracts/security paths) → routed to deep cron. #22 draft, #19 escalated at matching head. Merged-PR reconcile: all 8 linked issues (AIF-95/79/66/70/69/68/72/74) already Done, no moves. Note: repfigit-gate-review.sh failed on original invocation (REPO_DIR unset in script env) — re-ran manually with env vars; cron jobs.json does list REPO_DIR for job 23f6aaaf3e75."
+}

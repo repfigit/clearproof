@@ -1,0 +1,12 @@
+{
+  "skill": "repfigit-review",
+  "ranAt": "2026-08-02T07:38:53Z",
+  "outcome": "skipped",
+  "issueId": "AIF-67",
+  "prNumber": 11,
+  "failureCategory": "ci-failing",
+  "humanInterventions": 0,
+  "toolCalls": 14,
+  "verdictCycles": 6,
+  "notes": "PR #11 deep-review skipped: hard dedup guard (2 existing verdict comments on SHA 552d40f3, skill 4a). Prior verdict escalated needs-human-review with [CI] circuits failure + [SCOPE-CONFLICT AC-6<->NG-1]. This pass independently re-confirmed the CI root cause: demo/vector credentialNullifier 7602049054... does not match Poseidon(6-field commitment, transferIdHash=0); correct value is 7737909070051718242795984279469265730683188154948456570358128171542539804603 (verified with native Python Poseidon). circuits required check still FAILING on HEAD. PR labels now show loop-changes-requested (human removed needs-human-review without fixing the SHA) but marker dedup still applies - no re-post, no label change, no state write. Merged-PR reconciliation: all recently merged PRs' linked issues already Done, nothing to move. 6 verdicts on this PR = ping-pong pattern; learn should mine repeat-escalation label handling."
+}

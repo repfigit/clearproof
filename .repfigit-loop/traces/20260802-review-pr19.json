@@ -1,0 +1,12 @@
+{
+  "skill": "repfigit-review",
+  "ranAt": "2026-08-02T20:40:55Z",
+  "outcome": "skipped",
+  "issueId": "AIF-86",
+  "prNumber": 19,
+  "failureCategory": "none",
+  "humanInterventions": 0,
+  "toolCalls": 9,
+  "verdictCycles": 2,
+  "notes": "PR #19 head d550fbb1 — hard pre-post dedup guard fired: 2 verdict comments already exist for this exact SHA (comment IDs 5146646548 and 5149791558). Skipped without posting or label changes. Reconciliation: AIF-80 and AIF-95 already Done."
+}

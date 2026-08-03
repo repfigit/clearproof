@@ -1,0 +1,12 @@
+{
+  "skill": "repfigit-review",
+  "ranAt": "2026-08-02T05:45:00Z",
+  "outcome": "skipped",
+  "issueId": "AIF-86",
+  "prNumber": 19,
+  "failureCategory": "none",
+  "humanInterventions": 0,
+  "toolCalls": 6,
+  "verdictCycles": 3,
+  "notes": "PR #19 head d550fbb already has 2 verdict comments for this exact SHA (2026-07-31T19:21:53Z and 2026-08-01T04:27:50Z). Hard pre-post dedup guard (step 4a) fires: count=2 ≥ 1. Skipped without posting/labeling/state-write. All 7 required checks pass, mergeable CLEAN, labels loop-approved + needs-human-review already applied (ADR governance hold). State file absent (gitignored) so cheap-path cannot short-circuit; dedup guard is the operative path. No new commits since prior verdict."
+}

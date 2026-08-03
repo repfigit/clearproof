@@ -312,6 +312,171 @@ describe("ComplianceRegistry (extended)", function () {
 
     await expect(registry.connect(other).revokeCredential(commitment)).to.be.reverted;
   });
+
+  it("should emit JurisdictionCodeMismatch event when proof jurisdiction differs from VASP registration", async function () {
+    const [admin, vaspWallet] = await ethers.getSigners();
+    const chainId = (await ethers.provider.getNetwork()).chainId;
+
+    // Deploy mock verifier + router
+    const MockVerifier = await ethers.getContractFactory("MockVerifier");
+    const mockVerifier = await MockVerifier.deploy();
+    await mockVerifier.waitForDeployment();
+
+    const VerifierRouter = await ethers.getContractFactory("VerifierRouter");
+    const router = await VerifierRouter.deploy(0); // 0 timelock for tests
+    await router.waitForDeployment();
+
+    const selector = ethers.keccak256(ethers.toUtf8Bytes("groth16-bn254-v1"));
+    await router.registerVerifier(selector, await mockVerifier.getAddress(), "mock");
+    await router.activateVerifier(selector, "mock");
+
+    const VASPRegistry = await ethers.getContractFactory("VASPRegistry");
+    const vaspRegistry = await VASPRegistry.deploy(admin.address);
+    await vaspRegistry.waitForDeployment();
+
+    const initialRoot = ethers.keccak256(ethers.toUtf8Bytes("sanctions-root"));
+    const SanctionsOracle = await ethers.getContractFactory("SanctionsOracle");
+    const sanctionsOracle = await SanctionsOracle.deploy(admin.address, initialRoot, 50);
+    await sanctionsOracle.waitForDeployment();
+
+    const Registry = await ethers.getContractFactory("ComplianceRegistry");
+    const registry = await Registry.deploy(
+      await router.getAddress(),
+      selector,
+      await vaspRegistry.getAddress(),
+      await sanctionsOracle.getAddress(),
+      250,
+      1000,
+      10000
+    );
+    await registry.waitForDeployment();
+
+    // Register VASP with jurisdiction "US"
+    const vaspDid = ethers.keccak256(ethers.toUtf8Bytes("did:web:us-vasp.example"));
+    await vaspRegistry.registerVASP(vaspDid, vaspWallet.address, "US", "");
+
+    // Set up thresholds for both US and EU
+    await registry.setJurisdictionThresholds(0x5553, 250, 1000, 10000); // "US"
+    await registry.setJurisdictionThresholds(0x4555, 100, 500, 5000);   // "EU"
+
+    // Build proof with jurisdiction "EU" (0x4555) but VASP registered as "US" (0x5553)
+    const BN128_R = 21888242871839275222246405745257275088548364400416034343698204186575808495617n;
+    const transferId = ethers.keccak256(ethers.toUtf8Bytes("transfer-jurisdiction-mismatch"));
+    const transferIdHash = (BigInt(
+      ethers.keccak256(ethers.solidityPacked(["bytes32"], [transferId]))
+    ) % BN128_R);
+
+    const registryAddress = await registry.getAddress();
+    const domainContractHash = (BigInt(
+      ethers.keccak256(ethers.solidityPacked(["address"], [registryAddress]))
+    ) % BN128_R);
+
+    const currentTime = await time.latest();
+    const proofExpiresAt = currentTime + 600;
+
+    const pubSignals: bigint[] = [
+      1n, 0n, BigInt(initialRoot), 0n, 2n, BigInt(currentTime),
+      0x4555n, 0n, 100n, 500n, 5000n,
+      BigInt(chainId), domainContractHash, transferIdHash, 0n, BigInt(proofExpiresAt),
+    ];
+
+    const dummyProof = {
+      pA: [BigInt(1), BigInt(2)] as [bigint, bigint],
+      pB: [[BigInt(1), BigInt(2)], [BigInt(3), BigInt(4)]] as [[bigint, bigint], [bigint, bigint]],
+      pC: [BigInt(1), BigInt(2)] as [bigint, bigint],
+    };
+
+    await expect(
+      registry.connect(vaspWallet).verifyAndRecord(
+        transferId, dummyProof.pA, dummyProof.pB, dummyProof.pC, pubSignals, vaspDid
+      )
+    )
+      .to.emit(registry, "JurisdictionCodeMismatch")
+      .withArgs(transferId, 0x4555n, 0x5553n);
+
+    expect(await registry.isVerified(transferId)).to.equal(true);
+  });
+
+  it("should NOT emit JurisdictionCodeMismatch when jurisdictions match", async function () {
+    const [admin, vaspWallet] = await ethers.getSigners();
+    const chainId = (await ethers.provider.getNetwork()).chainId;
+
+    // Deploy mock verifier + router
+    const MockVerifier = await ethers.getContractFactory("MockVerifier");
+    const mockVerifier = await MockVerifier.deploy();
+    await mockVerifier.waitForDeployment();
+
+    const VerifierRouter = await ethers.getContractFactory("VerifierRouter");
+    const router = await VerifierRouter.deploy(0);
+    await router.waitForDeployment();
+
+    const selector = ethers.keccak256(ethers.toUtf8Bytes("groth16-bn254-v1"));
+    await router.registerVerifier(selector, await mockVerifier.getAddress(), "mock");
+    await router.activateVerifier(selector, "mock");
+
+    const VASPRegistry = await ethers.getContractFactory("VASPRegistry");
+    const vaspRegistry = await VASPRegistry.deploy(admin.address);
+    await vaspRegistry.waitForDeployment();
+
+    const initialRoot = ethers.keccak256(ethers.toUtf8Bytes("sanctions-root"));
+    const SanctionsOracle = await ethers.getContractFactory("SanctionsOracle");
+    const sanctionsOracle = await SanctionsOracle.deploy(admin.address, initialRoot, 50);
+    await sanctionsOracle.waitForDeployment();
+
+    const Registry = await ethers.getContractFactory("ComplianceRegistry");
+    const registry = await Registry.deploy(
+      await router.getAddress(),
+      selector,
+      await vaspRegistry.getAddress(),
+      await sanctionsOracle.getAddress(),
+      250,
+      1000,
+      10000
+    );
+    await registry.waitForDeployment();
+
+    const vaspDid = ethers.keccak256(ethers.toUtf8Bytes("did:web:matching-vasp.example"));
+    await vaspRegistry.registerVASP(vaspDid, vaspWallet.address, "US", "");
+    await registry.setJurisdictionThresholds(0x5553, 250, 1000, 10000);
+
+    const BN128_R = 21888242871839275222246405745257275088548364400416034343698204186575808495617n;
+    const transferId = ethers.keccak256(ethers.toUtf8Bytes("transfer-jurisdiction-match"));
+    const transferIdHash = (BigInt(
+      ethers.keccak256(ethers.solidityPacked(["bytes32"], [transferId]))
+    ) % BN128_R);
+
+    const registryAddress = await registry.getAddress();
+    const domainContractHash = (BigInt(
+      ethers.keccak256(ethers.solidityPacked(["address"], [registryAddress]))
+    ) % BN128_R);
+
+    const currentTime = await time.latest();
+    const proofExpiresAt = currentTime + 600;
+
+    const pubSignals: bigint[] = [
+      1n, 0n, BigInt(initialRoot), 0n, 2n, BigInt(currentTime),
+      0x5553n, 0n, 250n, 1000n, 10000n,
+      BigInt(chainId), domainContractHash, transferIdHash, 0n, BigInt(proofExpiresAt),
+    ];
+
+    const dummyProof = {
+      pA: [BigInt(1), BigInt(2)] as [bigint, bigint],
+      pB: [[BigInt(1), BigInt(2)], [BigInt(3), BigInt(4)]] as [[bigint, bigint], [bigint, bigint]],
+      pC: [BigInt(1), BigInt(2)] as [bigint, bigint],
+    };
+
+    const tx = await registry.connect(vaspWallet).verifyAndRecord(
+      transferId, dummyProof.pA, dummyProof.pB, dummyProof.pC, pubSignals, vaspDid
+    );
+    const receipt = await tx.wait();
+
+    const mismatchEvents = receipt!.logs.filter(
+      (log: { topics: string[] }) =>
+        log.topics[0] === ethers.id("JurisdictionCodeMismatch(bytes32,uint256,uint256)")
+    );
+    expect(mismatchEvents).to.have.length(0);
+    expect(await registry.isVerified(transferId)).to.equal(true);
+  });
 });
 
 describe("Integration: Full Flow", function () {

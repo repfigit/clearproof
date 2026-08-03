@@ -167,6 +167,25 @@ class ChainReader:
         _cache_set(cache_key, active)
         return active
 
+    async def get_vasp_info(self, did: str) -> tuple:
+        """Read full VASP record from VASPRegistry.
+
+        Args:
+            did: The VASP DID string (e.g. "did:web:vasp.example.com").
+
+        Returns:
+            Tuple: (wallet, jurisdiction, discoveryEndpoint, active, registeredAt)
+        """
+        did_hash = self._w3.keccak(text=did)
+        cache_key = f"vasp_info:{did_hash.hex()}"
+        cached = _cache_get(cache_key)
+        if cached is not None:
+            return cached
+
+        result = await self._vasp_registry.functions.vasps(did_hash).call()
+        _cache_set(cache_key, result)
+        return result
+
     async def is_credential_revoked(self, commitment: str) -> bool:
         """Check if a credential commitment has been revoked.
 

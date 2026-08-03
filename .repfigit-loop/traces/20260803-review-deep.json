@@ -1,0 +1,12 @@
+{
+  "skill": "repfigit-review",
+  "ranAt": "2026-08-03T03:15:00Z",
+  "outcome": "no-work",
+  "issueId": null,
+  "prNumber": 0,
+  "failureCategory": "none",
+  "humanInterventions": 0,
+  "toolCalls": 16,
+  "verdictCycles": 0,
+  "notes": "Deep tier: no PRs need review. PR #11 (AIF-67, TIER-3) already has two verdicts incl. TIER-3 deep review for current head 552d40f3 (needs-human-review); PR #19 escalated at matching head (state file + marker); PR #22 is draft. Note: repfigit-gate-review.sh failed on invocation (REPO_DIR unset) — context taken from cron prompt instead."
+}
