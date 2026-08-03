@@ -53,9 +53,11 @@ describe("E2E: Prove -> Submit On-Chain -> Verify", function () {
     const sanctionsOracle = await SanctionsOracle.deploy(admin.address, sanctionsRoot, 10);
     await sanctionsOracle.waitForDeployment();
 
+    const selector = ethers.keccak256(ethers.toUtf8Bytes("groth16-bn254-v1"));
     const Registry = await ethers.getContractFactory("ComplianceRegistry");
     const registry = await Registry.deploy(
       await verifier.getAddress(),
+      selector,
       await vaspRegistry.getAddress(),
       await sanctionsOracle.getAddress(),
       250,

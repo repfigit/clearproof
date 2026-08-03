@@ -46,9 +46,11 @@ async function deployAll() {
   const sanctionsOracle = await SanctionsOracle.deploy(admin.address, initialRoot, 50);
   await sanctionsOracle.waitForDeployment();
 
+  const selector = ethers.keccak256(ethers.toUtf8Bytes("groth16-bn254-v1"));
   const Registry = await ethers.getContractFactory("ComplianceRegistry");
   const registry = await Registry.deploy(
     await verifier.getAddress(),
+    selector,
     await vaspRegistry.getAddress(),
     await sanctionsOracle.getAddress(),
     DEFAULT_T.tier2,
@@ -234,6 +236,7 @@ describe("ComplianceRegistry — threshold binding (AIF-79)", function () {
       const Registry = await ethers.getContractFactory("ComplianceRegistry");
       const registry = await Registry.deploy(
         await verifier.getAddress(),
+        ethers.keccak256(ethers.toUtf8Bytes("groth16-bn254-v1")),
         await vaspRegistry.getAddress(),
         await oracle.getAddress(),
         DEFAULT_T.tier2,
@@ -271,6 +274,7 @@ describe("ComplianceRegistry — threshold binding (AIF-79)", function () {
       await expect(
         Registry.deploy(
           await verifier.getAddress(),
+          ethers.keccak256(ethers.toUtf8Bytes("groth16-bn254-v1")),
           await vaspRegistry.getAddress(),
           await oracle.getAddress(),
           5000n,

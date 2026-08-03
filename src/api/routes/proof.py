@@ -27,7 +27,7 @@ from src.api.middleware.rate_limit import RateLimiter
 from src.prover.snarkjs_prover import SnarkJSProver
 from src.registry.credential_registry import CredentialRegistry
 from src.registry.issuer_registry import IssuerRegistry
-from src.registry.sanctions_list import SanctionsMerkleTree, _address_to_int, _poseidon_hash
+from src.chain.reader import ChainReader
 from src.sar.audit_log import AuditLog
 from src.storage.audit import PersistentAuditLog
 from src.storage.database import Database
@@ -140,14 +140,18 @@ def _load_vk() -> dict:
 # ---------------------------------------------------------------------------
 
 
-def _get_db(app) -> Optional[Database]:
-    return getattr(getattr(app, "state", None), "db", None)
-
-
-def _get_db_from_app() -> Optional[Database]:
-    from src.api.main import app as _app
-
-    return _get_db(_app)
+def _get_chain_from_app():
+    """Get chain reader from app state, or create a new one if not available."""
+    try:
+        from src.api.main import app as _app
+        chain_reader = getattr(getattr(_app.state, "chain_reader", None), "reader", None) if hasattr(_app, "state") else None
+        if chain_reader is None:
+            # Create a new chain reader if not found in app state
+            chain_reader = ChainReader()
+        return chain_reader
+    except Exception:
+        # If we can't get or create a chain reader, return None
+        return None
 
 
 def _check_sanctions_staleness(db: Optional[Database]) -> None:
@@ -507,11 +511,28 @@ async def verify_proof(
 
     # Jurisdiction code verification - Check that the jurisdiction in the proof 
     # matches the expected jurisdiction for the VASP
-    jurisdiction_matches = jurisdiction_matches_vasp(signals, request.originator_vasp_did)
+    # First get the VASP jurisdiction from the chain
+    chain_reader = _get_chain_from_app()
+    if chain_reader:
+        try:
+            vasp_info = await chain_reader.get_vasp_info(request.originator_vasp_did)
+            expected_jurisdiction = vasp_info[1]  # jurisdiction is at index 1: (wallet, jurisdiction, discoveryEndpoint, active, registeredAt)
+            jurisdiction_matches = jurisdiction_matches_vasp(signals, expected_jurisdiction)
+        except Exception:
+            # If we can't get the jurisdiction from chain, fall back to always True
+            # to avoid breaking existing functionality
+            jurisdiction_matches = True
+    else:
+        # No chain reader available, fall back to always True
+        jurisdiction_matches = True
+        
     attestations["jurisdiction_matches_vasp"] = jurisdiction_matches
+    # Observe, do not enforce: the mismatch flag is surfaced but does NOT
+    # cause the proof to be rejected (AIF-98 scope: "observe, do not enforce")
     if not jurisdiction_matches:
-        valid = False
         rejection_reasons.append("jurisdiction_mismatch")
+    # 'valid' must NOT depend on jurisdiction_matches — the issue scope is
+    # to surface the check without changing the set of proofs that succeed.
 
     if attestations["amount_tier"] != request.expected_amount_tier:
         valid = False

@@ -228,6 +228,7 @@ describe("ComplianceRegistry (extended)", function () {
     const Registry = await ethers.getContractFactory("ComplianceRegistry");
     const registry = await Registry.deploy(
       await verifier.getAddress(),
+      ethers.keccak256(ethers.toUtf8Bytes("groth16-bn254-v1")),
       await vaspRegistry.getAddress(),
       await sanctionsOracle.getAddress(),
       250,
@@ -334,6 +335,7 @@ describe("Integration: Full Flow", function () {
     const Registry = await ethers.getContractFactory("ComplianceRegistry");
     const registry = await Registry.deploy(
       await verifier.getAddress(),
+      ethers.keccak256(ethers.toUtf8Bytes("groth16-bn254-v1")),
       await vaspRegistry.getAddress(),
       await sanctionsOracle.getAddress(),
       250,

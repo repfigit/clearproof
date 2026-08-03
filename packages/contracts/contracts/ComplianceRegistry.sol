@@ -35,7 +35,6 @@ contract ComplianceRegistry is AccessControl, Pausable {
     error ThresholdMismatch();
     error ThresholdsNotOrdered();
     error VerifierSelectorNotSet();
-    // error JurisdictionCodeMismatch(); // Removed to avoid duplicate identifier error
 
     bytes32 public constant REVOKER_ROLE = keccak256("REVOKER_ROLE");
     bytes32 public constant THRESHOLD_ADMIN_ROLE = keccak256("THRESHOLD_ADMIN_ROLE");
@@ -216,12 +215,15 @@ contract ComplianceRegistry is AccessControl, Pausable {
         if (bytes32(_pubSignals[2]) != sanctionsOracle.currentRoot()) revert SanctionsRootMismatch();
         if (bytes32(_pubSignals[3]) != vaspRegistry.issuerMerkleRoot()) revert IssuerRootMismatch();
 
+        // M-1: Transfer binding (proof bound to this transfer)
+        if (uint256(keccak256(abi.encodePacked(transferId))) % BN128_R != _pubSignals[13]) revert TransferIDMismatch();
+
         // AIF-98: Jurisdiction code verification
         // Check that the jurisdiction code in the proof matches the VASP's registered jurisdiction
         uint256 claimedJurisdictionCode = _pubSignals[6];
         (, string memory jurisdiction,,,) = vaspRegistry.vasps(vaspDidHash);
         uint256 expectedJurisdictionCode = _encodeJurisdiction(jurisdiction);
-        
+
         if (claimedJurisdictionCode != expectedJurisdictionCode) {
             emit JurisdictionCodeMismatch(transferId, claimedJurisdictionCode, expectedJurisdictionCode);
         }

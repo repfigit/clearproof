@@ -42,10 +42,9 @@ export async function verifyProof(
   const rejectionReasons: string[] = [];
   if (!proofValid) rejectionReasons.push('groth16_invalid');
   if (!thresholdsBound) rejectionReasons.push('threshold_mismatch');
-  if (!jurisdictionMatchesVASP) rejectionReasons.push('jurisdiction_mismatch');
 
   return {
-    valid: proofValid && thresholdsBound && jurisdictionMatchesVASP,
+    valid: proofValid && thresholdsBound,
     proofValid,
     thresholdsBound,
     jurisdictionMatchesVASP,
