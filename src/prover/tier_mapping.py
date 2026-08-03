@@ -103,6 +103,27 @@ def thresholds_match_jurisdiction(public_signals: list[str]) -> bool:
     return submitted == (expected["tier2"], expected["tier3"], expected["tier4"])
 
 
+def jurisdiction_matches_vasp(public_signals: list[str], expected_jurisdiction: str) -> bool:
+    """
+    Check if the jurisdiction code in the public signals matches an expected jurisdiction.
+    
+    Args:
+        public_signals: The full 16-element array of public signals
+        expected_jurisdiction: The expected jurisdiction code (e.g. "US", "EU")
+        
+    Returns:
+        True if the jurisdiction codes match, False otherwise
+    """
+    if len(public_signals) < 16:
+        return False
+
+    claimed_jurisdiction = decode_jurisdiction(int(public_signals[6]))
+    if claimed_jurisdiction is None:
+        return False
+
+    return claimed_jurisdiction == expected_jurisdiction.upper()
+
+
 def compute_tier(amount_usd: float, jurisdiction: str) -> int:
     """
     Return the compliance tier (1–4) for a given amount and jurisdiction.

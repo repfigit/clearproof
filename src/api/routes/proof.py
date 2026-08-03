@@ -480,7 +480,7 @@ async def verify_proof(
     if not valid:
         rejection_reasons.append("groth16_invalid")
 
-    from src.prover.tier_mapping import decode_jurisdiction, thresholds_match_jurisdiction
+    from src.prover.tier_mapping import decode_jurisdiction, thresholds_match_jurisdiction, jurisdiction_matches_vasp
 
     # Public signals arrive from a counterparty VASP: treat every element as
     # untrusted input, not as a well-formed integer.
@@ -504,6 +504,14 @@ async def verify_proof(
     if not thresholds_ok:
         valid = False
         rejection_reasons.append("threshold_mismatch")
+
+    # Jurisdiction code verification - Check that the jurisdiction in the proof 
+    # matches the expected jurisdiction for the VASP
+    jurisdiction_matches = jurisdiction_matches_vasp(signals, request.originator_vasp_did)
+    attestations["jurisdiction_matches_vasp"] = jurisdiction_matches
+    if not jurisdiction_matches:
+        valid = False
+        rejection_reasons.append("jurisdiction_mismatch")
 
     if attestations["amount_tier"] != request.expected_amount_tier:
         valid = False

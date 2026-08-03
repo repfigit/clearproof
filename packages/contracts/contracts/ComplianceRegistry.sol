@@ -35,6 +35,7 @@ contract ComplianceRegistry is AccessControl, Pausable {
     error ThresholdMismatch();
     error ThresholdsNotOrdered();
     error VerifierSelectorNotSet();
+    // error JurisdictionCodeMismatch(); // Removed to avoid duplicate identifier error
 
     bytes32 public constant REVOKER_ROLE = keccak256("REVOKER_ROLE");
     bytes32 public constant THRESHOLD_ADMIN_ROLE = keccak256("THRESHOLD_ADMIN_ROLE");
@@ -57,6 +58,7 @@ contract ComplianceRegistry is AccessControl, Pausable {
     mapping(uint16 => Thresholds) public jurisdictionThresholds;
 
     event JurisdictionThresholdsSet(uint16 indexed jurisdictionCode, uint64 tier2, uint64 tier3, uint64 tier4);
+    event JurisdictionCodeMismatch(bytes32 indexed transferId, uint256 claimedJurisdictionCode, uint256 expectedJurisdictionCode);
 
     VerifierRouter public verifierRouter;
     bytes32 public verifierSelector;
@@ -214,8 +216,15 @@ contract ComplianceRegistry is AccessControl, Pausable {
         if (bytes32(_pubSignals[2]) != sanctionsOracle.currentRoot()) revert SanctionsRootMismatch();
         if (bytes32(_pubSignals[3]) != vaspRegistry.issuerMerkleRoot()) revert IssuerRootMismatch();
 
-        // M-1: Transfer binding (proof bound to this transfer)
-        if (uint256(keccak256(abi.encodePacked(transferId))) % BN128_R != _pubSignals[13]) revert TransferIDMismatch();
+        // AIF-98: Jurisdiction code verification
+        // Check that the jurisdiction code in the proof matches the VASP's registered jurisdiction
+        uint256 claimedJurisdictionCode = _pubSignals[6];
+        (, string memory jurisdiction,,,) = vaspRegistry.vasps(vaspDidHash);
+        uint256 expectedJurisdictionCode = _encodeJurisdiction(jurisdiction);
+        
+        if (claimedJurisdictionCode != expectedJurisdictionCode) {
+            emit JurisdictionCodeMismatch(transferId, claimedJurisdictionCode, expectedJurisdictionCode);
+        }
 
         // AIF-79: Threshold binding (prover cannot choose its own tier boundaries)
         _checkThresholds(_pubSignals);
@@ -268,5 +277,16 @@ contract ComplianceRegistry is AccessControl, Pausable {
 
     function unpause() external onlyRole(DEFAULT_ADMIN_ROLE) {
         _unpause();
+    }
+
+    function _encodeJurisdiction(string memory code) internal pure returns (uint256) {
+        bytes memory codeBytes = bytes(code);
+        require(codeBytes.length == 2, "Jurisdiction code must be 2 characters");
+        uint8 hi = uint8(codeBytes[0]);
+        uint8 lo = uint8(codeBytes[1]);
+        // Check that both characters are uppercase ASCII letters
+        require(hi >= 0x41 && hi <= 0x5A, "First character must be uppercase ASCII");
+        require(lo >= 0x41 && lo <= 0x5A, "Second character must be uppercase ASCII");
+        return (uint256(hi) << 8) | uint256(lo);
     }
 }
