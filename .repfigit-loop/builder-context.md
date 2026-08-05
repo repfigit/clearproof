@@ -25,6 +25,12 @@
 - Patterns: Wrong-repo issues should be unassigned, labeled `agent-ready` removed, moved back to Backlog, and commented with reason. This is a skip (step 8a), not a block.
 - Gotchas: Gate script failure masked this as wrong repo from the start. Manual classification needed when gate is broken.
 
+## AIF-124 — 2026-08-05 — Fixed missing REPO_DIR handling in repfigit gate scripts
+
+- Architecture: The repfigit gate scripts (`repfigit-gate-build.sh` and `repfigit-gate-review.sh`) were failing with "parameter null or not set" when `REPO_DIR` was missing, causing cron jobs to crash.
+- Patterns: Fixed by implementing option 2 from the issue description: on missing `REPO_DIR`, print a warning to stderr and exit 0 (silent no-op) instead of exit 1.
+- Gotchas: The fix preserves backwards compatibility and normal functionality when `REPO_DIR` is properly set, while preventing crashes in cron environments.
+
 ## Retry log
 
 - AIF-67 — 2026-07-28 — status: escalated — stuck after 3 repair cycles; NG-1 backward-compat conflict + ADR 0002 staging question require product decision
@@ -33,3 +39,4 @@
 - AIF-122 — 2026-08-05 — status: failed — wrong-repo (string-utils doesn't exist in clearproof); gate script error; missing AGENT_IDENTITY
 - general — 2026-08-05 — status: failed — Linear MCP tools unavailable; cannot list issues or claim work; pass aborted at step 2 (pick)
 - general — 2026-08-05 — status: failed — wrong-repo (AIF-123 nh-muni-watch, AIF-32/34/33 ai-factory-pyd); all 4 unassigned agent-ready issues belong to other repos; skipped all
+- AIF-124 — 2026-08-05 — status: failed — gate script error (REPO_DIR not set in cron)
