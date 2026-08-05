@@ -1,0 +1,12 @@
+{
+  "skill": "repfigit-build",
+  "ranAt": "2026-08-05T01:07:00Z",
+  "outcome": "no-work",
+  "issueId": "AIF-122",
+  "prNumber": 0,
+  "failureCategory": "wrong-repo",
+  "humanInterventions": 0,
+  "toolCalls": 14,
+  "verdictCycles": 0,
+  "notes": "AIF-122 references a string-utils library with shout/whisper functions that do not exist in clearproof; skipped as wrong repo and commented on Linear issue"
+}

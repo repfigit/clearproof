@@ -1,0 +1,12 @@
+{
+  "skill": "repfigit-review",
+  "ranAt": "2026-08-03T06:45:00Z",
+  "outcome": "no-work",
+  "issueId": null,
+  "prNumber": 0,
+  "failureCategory": "none",
+  "humanInterventions": 0,
+  "toolCalls": 5,
+  "verdictCycles": 0,
+  "notes": "No TIER-2 PRs need review. Open PRs: #24 escalated (skip), #23 is TIER-3 (3976 add, touches ComplianceRegistry.verifyAndRecord + proof verification security paths) -> routes to deep cron kimi-k3 not standard cron glm-5.2, #22 draft (skip), #19 loop-approved+needs-human-review (skip), #11 needs-human-review (skip). Merged-PR reconciliation: AIF-80 (PR #21) and AIF-95 (PR #18) already Done; PRs #20 and #9 have no Closes link. Gate script failed with REPO_DIR unset but cron prompt supplied runtime context directly."
+}

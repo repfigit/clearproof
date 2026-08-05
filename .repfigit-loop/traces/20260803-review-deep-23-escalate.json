@@ -1,0 +1,12 @@
+{
+  "skill": "repfigit-review",
+  "ranAt": "2026-08-03T07:11:00Z",
+  "outcome": "escalated",
+  "issueId": "AIF-98",
+  "prNumber": 23,
+  "failureCategory": "ci-failing",
+  "humanInterventions": 1,
+  "toolCalls": 30,
+  "verdictCycles": 2,
+  "notes": "PR #23 (AIF-98): TIER-3 deep review. AIF-98 implementation per spec (observe, don't enforce) but required hardhat-tests check fails on 3 pre-existing DomainBinding adversarial tests on main; environmental root cause outside PR diff, already covered by AIF-118 (commented with fresh evidence + fix). Also flagged ~5000 lines of committed debris (loop traces, AIF-AIF-XX junk files, scratch test scripts). Escalated needs-human-review. PR #11 skipped via hard dedup guard (2 prior verdicts on current SHA)."
+}

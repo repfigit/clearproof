@@ -22,9 +22,5 @@
 ## Retry log
 
 - AIF-67 — 2026-07-28 — status: escalated — stuck after 3 repair cycles; NG-1 backward-compat conflict + ADR 0002 staging question require product decision
-
-## AIF-86 — 2026-07-31 — fflonk benchmark: 32% cheaper verification, no ceremony, 20x slower proving
-
-- Architecture: proof-system work needs a fresh compile — `artifacts/` is gitignored and the checked-in copy was ~9 days stale. Compile with the CI-pinned circom binary (v2.2.2, sha256 f3d8d1fd…fe9d5) into `build/`, never trust `artifacts/`.
-- Patterns: `tests/vectors/compliance/input.json` is camelCase (SDK-facing); `generate_witness.js` needs snake_case. The authoritative mapping is `packages/proof/src/prover.ts` ~line 37. Gas is measured with `verifyProof.estimateGas` to match `Groth16VerifierBLS.bench.ts`; a locally generated Groth16 verifier reproduced ADR 0003's published baseline to within 37 gas, so that harness is trustworthy.
-- Gotchas: fflonk needs ptau 2^19, NOT the 2^18 pinned in CI — it fails with "Section 2 too small" (needs 9x domainSize G1 points). iden3 publishes blake2b hashes while CI pins sha256; both are recorded in FFLONK_BENCHMARK.md. `snarkjs zkey export soliditycalldata` emits ONE flat array (24 proof + 16 signals), not two. The snarkjs fflonk verifier is GPL-3.0 — generate it into `packages/contracts/contracts/bench/` locally and delete it; that directory already contains a tracked Apache file (Groth16VerifierBLS.sol), so never `rm -rf` it.
+- AIF-86 — 2026-07-31 — fflonk benchmark: 32% cheaper verification, no ceremony, 20x slower proving
+- AIF-122 — 2026-08-05 — status: failed — Linear API unreachable, cannot claim issue
