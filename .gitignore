@@ -75,3 +75,4 @@ htmlcov/
 # which trips the builder's clean-tree preflight check on every run.
 # builder-context.md is deliberately NOT ignored — it is durable repo knowledge.
 .repfigit-loop/*.json
+.repfigit-loop/traces/
