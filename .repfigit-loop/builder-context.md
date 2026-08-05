@@ -1,6 +1,6 @@
 # Builder context
 
-## AIF-67 (PR #11) — 2026-07-28 — Fixed missing wallet_ownership_verified circuit input
+## AIF-122 (PR #11) — 2026-07-28 — Fixed missing wallet_ownership_verified circuit input
 
 - Architecture: Circuit inputs flow from TypeScript SDK (packages/proof/src/types.ts + prover.ts) → test vectors (tests/vectors/compliance/input.json) → demo CLI (packages/cli/src/commands/demo.ts). All three must stay in sync with circuits/*.circom signal declarations.
 - Patterns: When adding a new circuit input, must update: (1) ComplianceInput type, (2) prover mapping, (3) test vector JSON, (4) demo CLI DEMO_INPUT. Credential commitment is Poseidon hash of 6 fields (issuer_did, kyc_tier, sanctions_clear, issued_at, expires_at, wallet_ownership_verified). Nullifier = Poseidon(commitment, transfer_id_hash).
@@ -18,6 +18,12 @@
 - Architecture: CLI demo (packages/cli/src/commands/demo.ts) is the smoke test entry point. It must use the same threshold accessor as the verifiers, or the proof will fail verification when thresholds don't match jurisdiction.
 - Patterns: When jurisdiction thresholds change, the demo must call `getThresholds(jurisdiction)` instead of hardcoding values. The actualAmount must be in the same scale as the thresholds (USD, not cents).
 - Gotchas: The demo test failure about missing artifacts is pre-existing (artifacts not compiled locally) — not related to threshold changes. CI compiles artifacts before running the smoke test.
+
+## AIF-122 — 2026-08-05 — Wrong-repo skip: string-utils doesn't exist in clearproof
+
+- Architecture: AIF-122 references a `string-utils` library with `shout`/`whisper` functions — this repo (clearproof) is a ZK infrastructure project, not a general utility library. The issue likely belongs to a different builder in the same Linear team.
+- Patterns: Wrong-repo issues should be unassigned, labeled `agent-ready` removed, moved back to Backlog, and commented with reason. This is a skip (step 8a), not a block.
+- Gotchas: Gate script failure masked this as wrong repo from the start. Manual classification needed when gate is broken.
 
 ## Retry log
 
