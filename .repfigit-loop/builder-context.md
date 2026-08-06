@@ -46,3 +46,9 @@
 - Architecture: AIF-128 references `skills/repfigit-review/SKILL.md` and `repfigit-fleet.yaml` — these files live in the repfigit-loop repo, not clearproof. Same Linear team but different codebase.
 - Patterns: Wrong-repo issues: unassign, remove `agent-ready`, move to Backlog, comment with reason. Do NOT add `blocked` or retry log entry.
 - Gotchas: Gate script error masked this as wrong-repo from the start (REPO_DIR not set); manual classification needed when gate is broken.
+
+## AIF-126 — 2026-08-06 — Wrong-repo skip: repfigit_review.py not in clearproof
+
+- Architecture: AIF-126 references `scripts/lib/repfigit_review.py` and `scripts/repfigit-review-gate.sh` — these files live in the repfigit-loop repo, not clearproof (ZK infrastructure project).
+- Patterns: Wrong-repo issues: comment with reason, unassign (leave `agent-ready`), move to Backlog. Do NOT add `blocked`.
+- Gotchas: No clearproof-specific work available in queue; all unassigned agent-ready issues belong to other repos.
