@@ -40,3 +40,9 @@
 - general — 2026-08-05 — status: failed — Linear MCP tools unavailable; cannot list issues or claim work; pass aborted at step 2 (pick)
 - general — 2026-08-05 — status: failed — wrong-repo (AIF-123 nh-muni-watch, AIF-32/34/33 ai-factory-pyd); all 4 unassigned agent-ready issues belong to other repos; skipped all
 - AIF-124 — 2026-08-05 — status: failed — gate script error (REPO_DIR not set in cron)
+
+## AIF-128 — 2026-08-06 — Wrong-repo skip: SKILL.md/fleet.yaml not in clearproof
+
+- Architecture: AIF-128 references `skills/repfigit-review/SKILL.md` and `repfigit-fleet.yaml` — these files live in the repfigit-loop repo, not clearproof. Same Linear team but different codebase.
+- Patterns: Wrong-repo issues: unassign, remove `agent-ready`, move to Backlog, comment with reason. Do NOT add `blocked` or retry log entry.
+- Gotchas: Gate script error masked this as wrong-repo from the start (REPO_DIR not set); manual classification needed when gate is broken.
