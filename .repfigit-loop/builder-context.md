@@ -52,3 +52,9 @@
 - Architecture: AIF-126 references `scripts/lib/repfigit_review.py` and `scripts/repfigit-review-gate.sh` — these files live in the repfigit-loop repo, not clearproof (ZK infrastructure project).
 - Patterns: Wrong-repo issues: comment with reason, unassign (leave `agent-ready`), move to Backlog. Do NOT add `blocked`.
 - Gotchas: No clearproof-specific work available in queue; all unassigned agent-ready issues belong to other repos.
+
+## AIF-145 — 2026-08-17 — Wrong-repo skip: memory-gateway CI failures not in clearproof
+
+- Architecture: AIF-145 references `app.maintenance.detect_and_resolve_contradictions`, `app.auth.bind_workspace_claim`, `tests/test_contradiction_detection.py`, and CI at `github.com/repfigit/memory-gateway` — these are memory-gateway (Python app), not clearproof (ZK circuits + Solidity).
+- Patterns: Wrong-repo issues: comment with reason, unassign, move to Backlog, keep `agent-ready`. Do NOT add `blocked`.
+- Gotchas: Linear issue was already In Progress (started 2026-08-17 00:01:05) — possibly claimed by another builder or manually moved. Unassigned it and moved back to Backlog so the correct builder can pick it up.
