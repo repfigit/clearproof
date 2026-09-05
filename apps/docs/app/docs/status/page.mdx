@@ -1,0 +1,33 @@
+# Project status
+
+Last checked: **September 5, 2026**.
+
+**Pilot-stage, pre-production software.** Published npm packages: **0.3.0**. Development checkout: **0.4.0**. Main GitHub repository: **private**.
+
+## Available components and limits
+
+| Area | Current status |
+| --- | --- |
+| Public installation | Proof SDK 0.3.0 installation verified; CLI 0.3.0 installation fails because its `@clearproof/content` dependency is not publicly available |
+| Proof components | Groth16 circuits and SDKs exist; authenticated credential/holder/transfer binding requires further work |
+| API and storage | Components exist; complete durable tenant isolation and restart-safe workflow integration remain open |
+| Verification | Cryptographic fixtures exist; full API/SDK/registry acceptance parity remains open |
+| Encryption | AES-256-GCM and recipient HPKE components exist; discovery, migration, trusted keys and rotation require integration validation |
+| Travel Rule bridges | TRP, TRISA and TAIP-10 prototypes; complete bilateral interoperability is not established |
+| Deployment | Recorded Sepolia testnet contracts; no production readiness claim |
+| Assurance | No completed independent circuit or contract audit; current proving artifacts use development-only setup |
+
+## Planned pilot work
+
+1. Correct storage parsing, chain-cache isolation and discovery compatibility.
+2. Establish authenticated proof inputs, transfer binding, durable tenant state and verifier consistency.
+3. Add policy-change simulation with explained outcomes.
+4. Add read-only transfer investigations across compliance, counterparty and settlement events.
+5. Add independently verifiable historical evidence exports.
+6. Add observation-mode onboarding, simulated counterparties and a reproducible pilot.
+
+These are planned milestones, not generally available features. External credential-wallet integrations and ongoing provider-driven re-screening depend on an identified partner and supported upstream access.
+
+The proposed commercial direction is managed integrations and operational workflows around portable evidence. No customer adoption, pricing, service-level commitment or regulatory certification is asserted here.
+
+See [security](/docs/security), [testnet contracts](/docs/contracts) and [quickstart](/docs/quickstart).

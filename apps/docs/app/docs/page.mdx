@@ -1,42 +1,25 @@
 # Introduction
 
-**clearproof** generates zero-knowledge proofs that FATF Travel Rule compliance was performed correctly — without transmitting raw PII between counterparties.
+clearproof combines Circom/Groth16 proof components, encrypted personal-information payloads, a Python API, TypeScript tooling and EVM contracts. The intended users are teams at virtual asset service providers (VASPs), such as exchanges and custodians, evaluating transfer evidence alongside existing compliance systems.
 
-Encrypted PII travels alongside the proof in a hybrid payload, satisfying regulatory "transmit" requirements while minimizing data exposure.
+## Current scope
 
-## Terminology
+A circuit can check a specific mathematical statement about its inputs. Trustworthy transfer evidence additionally requires authenticated inputs, holder and transaction binding, approved policies, fresh sources and correct verifier behavior. Those integration and assurance requirements remain active work.
 
-**VASP** — Virtual Asset Service Provider. Any business that conducts exchange, transfer, safekeeping, or administration of virtual assets on behalf of customers. This includes cryptocurrency exchanges, custodial wallet providers, and financial institutions offering crypto services. VASPs are the regulated entities that the FATF Travel Rule applies to — they are the ones who must exchange originator and beneficiary information during transfers.
+Encrypted personal information can accompany a proof for an authorized recipient. Encryption does not eliminate required information exchange, and existing Travel Rule services may already provide encrypted messaging. TRP, TRISA and TAIP-10 bridge components are prototypes; complete bilateral interoperability is not claimed.
 
-## Why this exists
+## Components
 
-The FATF Travel Rule requires VASPs (Virtual Asset Service Providers) to exchange originator and beneficiary information for transfers above jurisdiction-specific thresholds. Current implementations transmit PII in cleartext between counterparties, creating honeypots.
-
-clearproof replaces cleartext exchange with a **hybrid payload**:
-
-1. A **Groth16 ZK proof** (192 bytes) that compliance checks passed
-2. **AES-256-GCM encrypted PII** that only the counterparty can decrypt
-3. **On-chain verification** that the proof is valid and domain-bound
-
-The counterparty receives cryptographic certainty that compliance was performed, plus encrypted PII for their own records — without either party broadcasting sensitive data.
-
-## What's inside
-
-| Package | Description |
+| Location | Purpose |
 | --- | --- |
-| `circuits/` | Circom circuits — compliance, sanctions, credentials, amount tiers |
-| `packages/proof` | TypeScript SDK for proof generation and verification |
-| `packages/cli` | CLI tool with demo proof flow |
-| `packages/contracts` | Solidity contracts for on-chain verification |
-| `src/` | Python FastAPI server — proof generation API, registries, chain interaction |
+| `circuits/` | Credential, sanctions non-membership and amount-tier circuit components |
+| `packages/proof` | TypeScript proving, cryptographic verification and discovery |
+| `packages/cli` | Local proof tooling and synthetic demonstration |
+| `packages/contracts` | Testnet verification, VASP registration and sanctions-root contracts |
+| `src/` | Python API, protocol, storage, credential, encryption and chain components |
 
-## Key design decisions
+## Availability
 
-| Decision | Choice | Rationale |
-| --- | --- | --- |
-| Proof system | Circom / Groth16 | Smallest proofs (192B), cheapest on-chain verification |
-| Proving | VASP-local | No external network dependency; deterministic latency |
-| PII handling | Hybrid payload | Satisfies regulatory "transmit" requirement |
-| SAR logic | Advisory flags | FinCEN SAR is activity-based, not automatic |
-| On-chain | Domain-bound verification | Prevents cross-chain and cross-contract replay |
-| Sanctions | Operator-confirmed updates | Human review before on-chain propagation |
+As checked September 5, 2026, the main repository is private. Public npm packages are **0.3.0**; the development checkout is **0.4.0**. Public documentation does not imply public source access or that every described development feature has shipped on npm.
+
+Start with [project status](/docs/status), [quickstart requirements](/docs/quickstart) and [security limitations](/docs/security).

@@ -1,52 +1,37 @@
-# Deployment
+# Development deployment
 
-## Environment variables
+This page covers local and testnet evaluation. A production launch still needs authenticated input/transfer binding, durable tenant state, verifier consistency, tested interoperability, approved artifacts and independent assurance.
 
-| Variable | Required | Default | Description |
-| --- | --- | --- | --- |
-| `PII_MASTER_KEY` | **Yes** | — | 32+ byte key for PII encryption |
-| `VASP_DID` | No | `did:web:vasp.example.com` | This VASP's DID |
-| `CIRCUIT_ARTIFACTS_DIR` | No | `./artifacts` | Path to compiled artifacts |
-| `CORS_ALLOWED_ORIGINS` | No | `http://localhost:3000` | Comma-separated origins |
-| `DEPLOYER_PRIVATE_KEY` | For deploy | — | Wallet private key |
-| `SEPOLIA_RPC_URL` | For deploy | — | Sepolia RPC endpoint |
-| `SIWE_DOMAIN` | No | `localhost` | SIWE domain |
-| `CHAIN_ID` | No | `11155111` | EVM chain ID |
-| `HKDF_SALT` | No | `zk-travel-rule-v1` | Salt for HKDF key derivation. Set explicitly for production. |
-| `COMPLIANCE_REGISTRY_ADDRESS` | For on-chain | — | Deployed ComplianceRegistry address (used for domain binding) |
+## Configuration
 
-## Startup validation
-
-The server validates at startup:
-
-1. **PII_MASTER_KEY entropy** — must be ≥32 bytes
-2. **Verification key** — must exist in artifacts directory
-3. **CORS configuration** — rejects `*` wildcard with credentials
-
-## Infrastructure
-
-**Minimum**: 2 vCPUs, 4 GB RAM, Python 3.11+, Node.js 20+
-
-**Recommended**: 4 vCPUs, 8 GB RAM, SSD storage
-
-## CI/CD
-
-| Job | Description |
+| Variable | Purpose |
 | --- | --- |
-| `python-tests` | ~144 pytest tests |
-| `typescript-build` | Type-check proof SDK and CLI |
-| `hardhat-tests` | 46 contract tests |
-| `circuits` | Circom compilation + constraint check |
+| `PII_MASTER_KEY` | Required at API startup: 64 valid hex characters or at least 32 UTF-8 bytes; generate a random secret |
+| `AUTH_MODE` | Select the supported API-key, JWT or SIWE authentication mode |
+| `API_KEY` | Required for protected requests in API-key mode |
+| `DATABASE_URL` | PostgreSQL connection; absence selects an in-memory evaluation path |
+| `CIRCUIT_ARTIFACTS_DIR` | Compatible local circuit artifacts |
+| `VASP_DID` | Configured VASP identity |
+| `VASP_DOMAIN` | Domain used by the discovery publisher |
+| `VASP_HPKE_PRIVATE_KEY` | Recipient X25519 private key for the HPKE path; keep secret |
+| `CORS_ALLOWED_ORIGINS` | Explicit allowed browser origins |
+| `CHAIN_RPC_URL` | RPC endpoint for chain readers |
+| `COMPLIANCE_REGISTRY_ADDRESS` | Registry deployment used for the intended verification context |
 
-Daily: `sanctions-update` rebuilds the tree and opens a PR.
+Startup checks key encoding/length and configures storage. It does not certify key randomness, artifact assurance, complete tenant isolation or end-to-end readiness. Current CORS handling removes wildcard origins when credentials are enabled.
 
-## Make targets
+## Validation
 
 ```bash
-make install && npm install # Install Python + Node dependencies
-make dev                    # Start API dev server
-make test                   # Run all tests
-make build-sanctions-tree   # Rebuild sanctions tree
-make update-sanctions-oracle NETWORK=sepolia
-make benchmark              # Proof latency benchmark
+make test
+npm run test:ts
+npm run build
 ```
+
+Contract checks run in `packages/contracts` with Hardhat. Real proofs additionally require the Circom/Powers of Tau/artifact setup. Test counts and latency depend on the checkout and environment.
+
+## Sanctions operations
+
+After a sanctions-root change, every intended chain must receive the corresponding relay update. Confirm the actual configured targets and freshness; do not infer successful relay from a local tree rebuild.
+
+See [recorded Sepolia contracts](/docs/contracts), [sanctions](/docs/sanctions) and [security](/docs/security). These instructions do not authorize or establish production use.

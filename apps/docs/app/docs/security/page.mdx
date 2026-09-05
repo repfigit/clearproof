@@ -1,57 +1,26 @@
-# Security
+# Security and assurance
 
-## Reporting vulnerabilities
+Last reviewed: September 5, 2026.
 
-Email **security@clearproof.dev** with description, reproduction steps, and impact assessment. We acknowledge within 48 hours.
+clearproof is **pre-production, pilot-stage software**. Independent circuit and contract audits have not been completed. Current proving artifacts use a development-only trusted setup. Testnet deployment and passing tests do not establish production safety.
 
-## Scope
+## Current boundaries
 
-| Component | Examples |
-| --- | --- |
-| ZK circuits | Soundness bugs, constraint under-specification, range check bypasses |
-| Encryption | Key derivation flaws, PII exposure, nonce reuse |
-| Protocol bridges | Information leakage in TRP/TRISA/TAIP-10 payloads |
-| Smart contracts | Replay attacks, access control bypasses, reentrancy |
-| Sanctions oracle | Tree manipulation, staleness exploitation |
-| TypeScript SDK | Input validation bypasses, unsafe defaults |
+- A cryptographically valid proof is not the same as an accepted transfer. Current off-chain verification does not yet reproduce every registry acceptance check.
+- Credential authenticity, holder authority, jurisdiction and actual transfer binding require coordinated improvements across the proof statement and application.
+- Recipient HPKE and legacy AES-256-GCM components exist. Key trust, discovery, rotation, failure behavior and migration need explicit integration validation.
+- Public signals expose metadata, including an advisory review signal in the current proof version. Omitting a named field from a bridge does not conceal information that remains in its public-signal array.
+- Domain, expiry, root and replay checks depend on the verifier and its configuration. The site does not claim that replay is universally impossible.
+- Persistent storage and authentication components do not yet constitute complete durable tenant isolation.
 
-**Out of scope**: third-party dependencies, test infrastructure, social engineering.
+## Controls to evaluate
 
-## Security architecture
+Use synthetic records and testnet funds. Check approved issuer/root/artifact provenance, recipient identity, key purpose, freshness, revocation, transfer binding and duplicate handling. Confirm that sensitive inputs remain inside authorized encrypted data flows and do not appear in logs or exports.
 
-### PII protection
+`PII_MASTER_KEY` startup validation checks accepted encoding and minimum length. It cannot establish that a supplied value has adequate randomness. Generate secrets securely and manage retention, backup and rotation deliberately.
 
-- AES-256-GCM encryption before PII leaves the VASP
-- `transfer_id` bound as AES-GCM associated data (AAD) — prevents cross-envelope payload replay
-- HKDF-derived keys from `PII_MASTER_KEY` with per-transfer context
-- Key entropy validated at startup (≥32 bytes)
-- HKDF salt defaults to `zk-travel-rule-v1` — set `HKDF_SALT` explicitly for production
-- PII never logged or included in error messages
+## Vulnerability reporting
 
-### TRISA protocol security
+The repository security policy lists **security@clearproof.dev** as its reporting address. Share reproduction steps and impact privately; do not post sensitive exploit details or personal information in a public issue. This documentation does not verify mailbox operation or promise a response-time SLA.
 
-- mTLS enforced by default on gRPC server (`require_client_auth=True`)
-- Constant-time HMAC verification (`hmac.compare_digest`) prevents timing attacks
-- Internal error details never leaked to counterparties over gRPC
-- `TRISAServer` inherits from generated servicer base — unimplemented RPCs return proper gRPC `UNIMPLEMENTED` status
-
-### Proof security
-
-- Domain-bound to chain ID + contract address
-- Credential nullifiers prevent double-use
-- Expiration timestamps enforced on-chain and off-chain
-- SAR flag never included in bridge payloads (BSA anti-tipping-off)
-
-### Rate limiting
-
-- Proof generation: 30/min per IP
-- Proof verification: 30/min per IP
-- Nonce generation: 60/min per IP
-
-## Disclosure policy
-
-Coordinated disclosure. 90-day window before public disclosure.
-
-## Bug bounty
-
-Coming soon.
+No active paid bug-bounty program is announced here. See [project status](/docs/status) for the implementation and assurance work that remains.

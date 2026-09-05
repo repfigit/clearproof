@@ -1,47 +1,25 @@
 # Sanctions Oracle
 
-The sanctions oracle maintains a Poseidon Merkle tree of sanctioned wallet hashes. The ZK circuit proves **non-membership** — that a given wallet is not in the tree.
+The sanctions components build a Poseidon Merkle representation and publish a root to an oracle. A non-membership proof establishes a relationship to that supplied tree; it is not a guarantee that all sanctions obligations have been satisfied.
 
-## Tree structure
+## Current construction
 
-- **Hash function**: Poseidon with domain tag `1`
-- **Depth**: 20 levels (~1M entries)
-- **Leaf format**: `Poseidon(1, wallet_hash)` (domain-separated)
-- **Sorting**: Leaves sorted by value for gap proofs
-- **Boundary sentinels**: `0` and `2^252 - 1` are permanent entries
+The circuit uses a sorted-tree gap proof with depth 20, domain-separated Poseidon leaves, Merkle paths and range checks. The tree builder and witness generator must agree on leaf encoding, sorting and boundary handling.
 
 ## Update workflow
 
-Updates follow a **PR-based workflow** (not direct push):
+The repository contains automation for source retrieval, tree rebuilds and proposed updates. Operators must validate source provenance, unexpected changes, target networks and relay results. The presence of a scheduled workflow does not demonstrate that the current deployed root is fresh.
 
-1. Daily GitHub Action fetches sanctions data from configured feeds
-2. Rebuilds Merkle tree locally
-3. **Sanity check** compares leaf count against previous — fails if delta exceeds threshold
-4. Opens a **pull request** with the updated tree
-5. Human operator reviews and merges
-6. New Merkle root submitted to `SanctionsOracle` contract
+After a root update, relay it to every intended deployment and verify consistency. A successful local build is insufficient evidence of an on-chain update.
 
-This prevents automated corruption of the sanctions list.
+## Contract controls
 
-## On-chain safeguards
+The current oracle source includes an update cooldown, a leaf-count floor, nonzero-root validation, a configurable grace period, pause controls and a bounded history of 1,000 roots. These checks reduce particular operational risks; they do not establish source correctness.
 
-The `SanctionsOracle` contract enforces:
+A registry can reject a stale root through the oracle's freshness check. API and SDK integrations need their own complete verification context; current parity remains open.
 
-- **Update cooldown**: 1 hour between root updates (prevents rapid manipulation)
-- **Leaf count floor**: new leaf count must be ≥ 50% of current (prevents accidental list clearing)
-- **Root history**: ring buffer stores the last 1000 roots with timestamps
-- **Configurable staleness**: `isStale()` returns true if the root is older than `gracePeriod` (default 24h, adjustable 6h–168h via `setGracePeriod()`)
-- **Pause/unpause**: admin can halt updates in emergencies
+## Evaluation
 
-Updates are forwarded through the `SanctionsRootRelay` adapter, which allows swapping the transport layer (operator EOA, LayerZero, CCIP) without redeploying the oracle.
+Use explicit test data for local scenarios. Do not treat offline sample addresses as a current sanctions list. Record source versions and observation times for any evidence that must be reconstructed later.
 
-## Staleness
-
-Monitor `SanctionsOracle.isStale()`. If the daily update fails and the root exceeds the grace period, on-chain proof verification will revert.
-
-## Manual rebuild
-
-```bash
-make build-sanctions-tree
-make update-sanctions-oracle NETWORK=sepolia
-```
+See [contracts](/docs/contracts) and [security](/docs/security).

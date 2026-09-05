@@ -7,72 +7,66 @@ cli-topic: quickstart
 
 # Quick Start
 
-Get clearproof running locally in under 10 minutes.
+This is a development setup guide, checked September 5, 2026. Use synthetic data and testnet funds. There is no guaranteed setup or proving time.
 
-## Prerequisites
+## Public package access
 
-- **Python 3.11+** with [uv](https://docs.astral.sh/uv/)
-- **Node.js 20+** with npm
-- **circom 2.2.2+** only if you want to recompile circuits from source
+The main source repository is private. Public npm packages are available at version 0.3.0:
 
-## Installation
+```bash
+npm install @clearproof/proof@0.3.0
+```
+
+Proof generation requires compatible circuit WASM and proving-key files. Verification requires the matching verification key. Inspect package contents before relying on exported artifact paths; installing the SDK alone does not create a complete proving environment.
+
+The development checkout is version 0.4.0. Do not assume it is identical to the published packages.
+
+The published CLI currently cannot be installed from the public registry because its `@clearproof/content` dependency is unavailable. The standalone proof SDK installation was verified. Use an authorized source checkout for CLI evaluation.
+
+## Setup for contributors with repository access
+
+Prerequisites: authorized GitHub access, Python 3.11+, Node.js 20+ with npm, and circom 2.2.2 for the circuit compilation path used in CI.
 
 ```bash
 git clone https://github.com/repfigit/clearproof.git
 cd clearproof
-
-# Install Python dependencies
-uv sync --all-extras
-
-# Install Node dependencies
 npm install
+uv sync --extra dev
+npm run build
+node packages/cli/dist/index.js --help
 ```
 
-## Run the demo
-
-The CLI demo uses prebuilt artifacts from `@clearproof/circuits`, generates a proof, verifies it locally, and prints the 16 public signals:
-
-```bash
-npx @clearproof/cli demo
-```
-
-If you are working from a repo checkout and want to regenerate artifacts, run:
+To compile development artifacts with the repository's documented setup:
 
 ```bash
 bash scripts/compile_circuits.sh
-npx @clearproof/cli demo --artifacts ./artifacts
 ```
 
-This produces artifacts in `artifacts/`:
-- `compliance_js/compliance.wasm` -- WASM prover
-- `compliance_final.zkey` -- proving key
-- `verification_key.json` -- verification key
+Expected artifact locations include `artifacts/compliance_js/compliance.wasm`, `artifacts/compliance_final.zkey` and `artifacts/verification_key.json`. The compilation path requires Powers of Tau input and circuit-specific setup. Locally generated development keys are not production keys.
 
-> **Note:** The bundled and locally compiled artifacts use a dev-only trusted setup. Production deployments require a proper multi-party ceremony.
+## API exploration
 
-
-## Start the API server
+For a disposable local evaluation:
 
 ```bash
 export AUTH_MODE=api-key
-export API_KEY=dev-api-key
-export PII_MASTER_KEY=$(openssl rand -hex 32)
-uv run uvicorn src.api.main:app --reload --port 8000
+export API_KEY="$(openssl rand -hex 32)"
+export PII_MASTER_KEY="$(openssl rand -hex 32)"
+uv run uvicorn src.api.main:app --reload --host 127.0.0.1 --port 8000
 ```
 
-Visit [http://localhost:8000/docs](http://localhost:8000/docs) for the Swagger UI.
+Open [the local OpenAPI UI](http://localhost:8000/docs). Protected requests use `X-API-Key` in this mode. Keep keys stable and protected for any evaluation whose encrypted records need to survive restart.
 
-> **Note:** Protected API requests must include `X-API-Key: dev-api-key`. The API server starts, but `/proof/generate` requires runtime state: at least one issued credential, a populated issuer registry, and a built sanctions tree. Run `python scripts/build_sanctions_tree.py --offline` to bootstrap the sanctions tree with hardcoded OFAC addresses.
+Starting the server does not establish a working proof workflow. Generation requires compatible artifacts, credential/issuer state and sanctions witnesses. Durable state, authenticated input binding and API/circuit consistency are still being completed. Do not treat synthetic demo output as a live transfer authorization.
 
-## Run tests
+## Checks
 
 ```bash
-# All Python tests
-uv run pytest tests/ -v
-
-# TypeScript build check
+make test
+npm run test:ts
 npm run build
-
-# Hardhat contract tests
-cd packages/contracts && npx hardhat test
 ```
+
+At this checkout, root `npm test` runs Python tests; `npm run test:ts` runs the TypeScript workspaces. Database integration tests need an isolated PostgreSQL instance. Real circuit checks have additional artifact/toolchain requirements.
+
+See [project status](/docs/status) before planning an integration.
