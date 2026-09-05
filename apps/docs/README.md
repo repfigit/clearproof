@@ -23,6 +23,12 @@ Remove these overrides after upgrading to a fixed Nextra release and checking
 all pages, including the 404 page. Development uses Webpack to avoid the current
 Turbopack MDX import-alias failure in this monorepo.
 
+The content API keeps `@clearproof/content` external to the server bundle so its
+Markdown/YAML paths remain relative to the package. The explicit Webpack external
+also covers npm workspace symlinks, which Next 15's package matcher misses.
+Check `/api/content/manifest` and `/api/content/topics/quickstart` after building
+and after deployment; successful page generation alone does not exercise them.
+
 Before updating public claims, check authenticated repository visibility,
 unauthenticated npm access and clean installation, the deployment manifest and
 actual testnet bytecode. Source features, published packages, deployed contracts
