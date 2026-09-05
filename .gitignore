@@ -53,6 +53,7 @@ graphify-out/
 
 # Next.js
 .next/
+.vercel/
 
 # Hardhat
 packages/contracts/cache/
