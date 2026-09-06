@@ -127,27 +127,6 @@ def main():
     from src.prover.pilot_compliance import PUBLIC_SIGNALS
 
     pilot = output / "pilot"
-    fixture = runpy.run_path(str(ROOT / "tests/unit/test_pilot_compliance.py"))
-    witness = fixture["witness"].__wrapped__()
-    (pilot / "synthetic.json").write_text(json.dumps(witness))
-    (pilot / "expected-public.json").write_text(json.dumps([witness[name] for name in PUBLIC_SIGNALS]))
-    run(
-        node,
-        pilot / "pilot_compliance_js/generate_witness.js",
-        pilot / "pilot_compliance_js/pilot_compliance.wasm",
-        pilot / "synthetic.json",
-        pilot / "synthetic.wtns",
-    )
-    run(
-        node,
-        cli,
-        "groth16",
-        "prove",
-        pilot / "UNAPPROVED-development.zkey",
-        pilot / "synthetic.wtns",
-        pilot / "proof.json",
-        pilot / "public.json",
-    )
     shutil.copyfile(pilot / "pilot_compliance_js/pilot_compliance.wasm", pilot / "pilot_compliance.wasm")
     # This digest identifies a source inventory; it is not a reproducible-build attestation.
     sources = {
@@ -175,7 +154,30 @@ def main():
     manifest = PilotArtifactManifest.model_validate_json(raw)
     (pilot / "manifest.json").write_bytes(raw)
     (pilot / "development-manifest-pin.txt").write_text(manifest.digest)
-    inspect_artifacts(pilot, trusted_digest=manifest.digest)
+    inspected = inspect_artifacts(pilot, trusted_digest=manifest.digest)
+    fixture = runpy.run_path(str(ROOT / "tests/unit/test_pilot_compliance.py"))
+    witness, context = fixture["synthetic_case"](artifact_manifest_digest=manifest.digest)
+    (pilot / "synthetic-context.json").write_text(context.model_dump_json())
+    inspected.check_artifact_context(context)
+    (pilot / "synthetic.json").write_text(json.dumps(witness))
+    (pilot / "expected-public.json").write_text(json.dumps([witness[name] for name in PUBLIC_SIGNALS]))
+    run(
+        node,
+        pilot / "pilot_compliance_js/generate_witness.js",
+        pilot / "pilot_compliance_js/pilot_compliance.wasm",
+        pilot / "synthetic.json",
+        pilot / "synthetic.wtns",
+    )
+    run(
+        node,
+        cli,
+        "groth16",
+        "prove",
+        pilot / "UNAPPROVED-development.zkey",
+        pilot / "synthetic.wtns",
+        pilot / "proof.json",
+        pilot / "public.json",
+    )
     run(
         sys.executable,
         "-m",

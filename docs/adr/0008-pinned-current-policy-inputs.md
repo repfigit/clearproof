@@ -79,3 +79,29 @@ activate policy, or authorize a transfer. Independent policy selection, the exac
 policy revision in the transfer commitment, and current authorization checks
 remain necessary. The full current-verifier integration and its context/manifest
 binding remain open; this change does not claim to complete those gates.
+
+## Synthetic manifest-bound proof reproduction
+
+The development builder now finalizes the artifact manifest before constructing
+its synthetic witness. The synthetic verification context includes that actual
+manifest digest, and its private projection binds it into the proved commitment.
+The builder retains `synthetic-context.json` beside the synthetic proof. These
+files contain only the repository's synthetic fixture, never customer inputs.
+
+The opt-in pairing integration reconstructs the expected synthetic context and
+public signals using the pinned manifest. It checks the artifact context before
+pairing and rejects the original proof under a substituted manifest's projection.
+The authorization nullifier remains stable when only artifacts change, preserving
+replay protection across artifact revisions.
+
+Regenerate older test bundles that lack this context with:
+
+```bash
+uv run python scripts/test_development_circuits.py NEW_OUTPUT_DIRECTORY
+```
+
+An existing local development-only phase-two Powers of Tau file can be supplied
+with `--prepared-ptau PATH`; its digest is recorded and its reuse is not a new
+ceremony or production approval. This flow still uses independently constructed
+synthetic roots and test trust; it does not complete durable current authorization
+or historical evidence verification.

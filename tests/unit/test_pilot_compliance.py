@@ -20,13 +20,16 @@ from src.registry.pilot_tree import PilotTree
 ROOT = Path(__file__).resolve().parents[2]
 
 
-@pytest.fixture
-def witness():
+def synthetic_case(*, artifact_manifest_digest=None):
     fixture = json.loads((ROOT / "specs/fixtures/transfer-v1.json").read_text())
     transfer = Transfer.model_validate(fixture["records"][0]["value"])
     context = VerificationContext.model_validate(
         {**fixture["records"][1]["value"], "proof_profile": "pilot-transfer-v1"}
     )
+    if artifact_manifest_digest is not None:
+        context = VerificationContext.model_validate(
+            {**context.model_dump(), "artifact_manifest_digest": artifact_manifest_digest}
+        )
     registry = AssetRegistry([AssetDefinition.model_validate(a) for a in fixture["assets"]])
     policy = PilotPolicy(
         policy_id="synthetic-policy",
@@ -94,7 +97,7 @@ def witness():
         ),
         quote_key,
     )
-    return compliance_witness(
+    witness = compliance_witness(
         transfer,
         context,
         registry,
@@ -107,6 +110,12 @@ def witness():
         valuation_trust=ValuationTrustStore([quote_authority]),
         policy_trust=PolicyTrustStore([policy], current_digests=(policy.digest,)),
     )
+    return witness, context
+
+
+@pytest.fixture
+def witness():
+    return synthetic_case()[0]
 
 
 @pytest.fixture(scope="module")
@@ -209,3 +218,12 @@ def test_sanctions_order_sentinels_and_invalid_inputs():
             tree.gap(address)
     with pytest.raises(ValueError):
         PilotSanctionsTree(addresses + addresses)
+
+
+def test_actual_manifest_binding_changes_proved_projection():
+    first, first_context = synthetic_case(artifact_manifest_digest="ab" * 32)
+    second, second_context = synthetic_case(artifact_manifest_digest="cd" * 32)
+    assert first_context.artifact_manifest_digest != second_context.artifact_manifest_digest
+    assert first["projection_commitment"] != second["projection_commitment"]
+    # Changing artifacts must not create another spend of the same authorization.
+    assert first["authorization_nullifier"] == second["authorization_nullifier"]
