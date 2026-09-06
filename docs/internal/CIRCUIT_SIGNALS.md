@@ -329,3 +329,63 @@ positive. Limb arithmetic enforces exact integer quotient/remainder semantics.
 `tier`. It exposes no output. The composed profile must keep the amount and tier
 private and bind policy/valuation provenance; these subcircuits do not change the
 legacy main ABI. See ADR 0004 and `src/prover/pilot_valuation.py` for witness rules.
+
+
+## Development private transfer projection
+
+`PilotTransferProjection` consumes `transfer_fields[48]`, `valuation_remainder`
+and the expected `projection_commitment`. Its `authorization_scope` output is
+for the parent holder-nullifier construction. This is not the final public ABI.
+
+| Index | Field |
+| --- | --- |
+| 0 | `transfer_digest_hi` |
+| 1 | `transfer_digest_lo` |
+| 2 | `context_digest_hi` |
+| 3 | `context_digest_lo` |
+| 4 | `tenant_hi` |
+| 5 | `tenant_lo` |
+| 6 | `transfer_id_hi` |
+| 7 | `transfer_id_lo` |
+| 8 | `nonce_hi` |
+| 9 | `nonce_lo` |
+| 10 | `originator_wallet` |
+| 11 | `beneficiary_wallet` |
+| 12 | `asset_chain` |
+| 13 | `asset_contract` |
+| 14 | `asset_decimals` |
+| 15 | `amount_base_units` |
+| 16 | `valuation_numerator` |
+| 17 | `valuation_denominator` |
+| 18 | `usd_cents` |
+| 19 | `valuation_observed_at` |
+| 20 | `valuation_expires_at` |
+| 21 | `transfer_created_at` |
+| 22 | `transfer_expires_at` |
+| 23 | `evaluated_at` |
+| 24 | `max_transfer_age` |
+| 25 | `jurisdiction` |
+| 26 | `deployment_chain` |
+| 27 | `deployment_address` |
+| 28 | `policy_digest_hi` |
+| 29 | `policy_digest_lo` |
+| 30 | `catalog_digest_hi` |
+| 31 | `catalog_digest_lo` |
+| 32 | `threshold_2` |
+| 33 | `threshold_3` |
+| 34 | `threshold_4` |
+| 35 | `private_tier` |
+| 36 | `originator_did_hi` |
+| 37 | `originator_did_lo` |
+| 38 | `originator_is_vasp` |
+| 39 | `beneficiary_did_hi` |
+| 40 | `beneficiary_did_lo` |
+| 41 | `beneficiary_is_vasp` |
+| 42 | `valuation_source_hi` |
+| 43 | `valuation_source_lo` |
+| 44 | `valuation_evidence_hi` |
+| 45 | `valuation_evidence_lo` |
+| 46 | `valuation_digest_hi` |
+| 47 | `valuation_digest_lo` |
+
+See ADR 0005 for canonical-record binding and trust boundaries.
