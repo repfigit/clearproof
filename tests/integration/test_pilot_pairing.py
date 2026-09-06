@@ -16,6 +16,7 @@ import pytest
 from src.protocol.transfer import VerificationContext
 from src.prover.pilot_artifacts import ArtifactError, inspect_artifacts
 from src.prover.pilot_compliance import PUBLIC_SIGNALS
+from src.prover.pilot_current import inspect_current_statement
 from src.prover.pilot_verifier import PilotPairingVerifier, ProofInspectionError
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -30,7 +31,9 @@ async def test_real_pinned_pairing_and_tampered_proof():
     context = VerificationContext.model_validate_json((root / "synthetic-context.json").read_bytes())
     artifacts.check_artifact_context(context)
     fixture = runpy.run_path(str(ROOT / "tests/unit/test_pilot_compliance.py"))
-    witness, reconstructed = fixture["synthetic_case"](artifact_manifest_digest=artifacts.manifest.digest)
+    witness, reconstructed, trusted_inputs = fixture["synthetic_case"](
+        artifact_manifest_digest=artifacts.manifest.digest, with_trust=True
+    )
     assert context == reconstructed
     bundle = ROOT / "node_modules/snarkjs/build/snarkjs.min.js"
     verifier = PilotPairingVerifier.load(
@@ -43,17 +46,19 @@ async def test_real_pinned_pairing_and_tampered_proof():
     signals = json.loads((root / "public.json").read_bytes())
     expected = json.loads((root / "expected-public.json").read_bytes())
     assert expected == [witness[name] for name in PUBLIC_SIGNALS]
-    result = await verifier.inspect(proof, signals, expected_signals=expected)
+    result = await inspect_current_statement(verifier, proof, signals=signals, **trusted_inputs)
     assert result.cryptographic_valid
-    alternate, _ = fixture["synthetic_case"](
-        artifact_manifest_digest=artifacts.manifest.digest, alternate_credential=True
+    alternate, _, alternate_inputs = fixture["synthetic_case"](
+        artifact_manifest_digest=artifacts.manifest.digest, alternate_credential=True, with_trust=True
     )
     alternate_signals = [alternate[name] for name in PUBLIC_SIGNALS]
     assert not (
         await verifier.inspect(proof, alternate_signals, expected_signals=alternate_signals)
     ).cryptographic_valid
+    with pytest.raises(ProofInspectionError, match="public_signal_context_mismatch"):
+        await inspect_current_statement(verifier, proof, signals=signals, **alternate_inputs)
     other_digest = "ab" * 32 if artifacts.manifest.digest != "ab" * 32 else "cd" * 32
-    other_witness, other_context = fixture["synthetic_case"](artifact_manifest_digest=other_digest)
+    other_witness, other_context, _ = fixture["synthetic_case"](artifact_manifest_digest=other_digest, with_trust=True)
     with pytest.raises(ArtifactError, match="artifact_context_mismatch"):
         artifacts.check_artifact_context(other_context)
     other_signals = [other_witness[name] for name in PUBLIC_SIGNALS]

@@ -157,7 +157,7 @@ def main():
     (pilot / "development-manifest-pin.txt").write_text(manifest.digest)
     inspected = inspect_artifacts(pilot, trusted_digest=manifest.digest)
     fixture = runpy.run_path(str(ROOT / "tests/unit/test_pilot_compliance.py"))
-    witness, context = fixture["synthetic_case"](artifact_manifest_digest=manifest.digest)
+    witness, context, _ = fixture["synthetic_case"](artifact_manifest_digest=manifest.digest, with_trust=True)
     (pilot / "synthetic-context.json").write_text(context.model_dump_json())
     inspected.check_artifact_context(context)
     (pilot / "synthetic.json").write_text(json.dumps(witness))

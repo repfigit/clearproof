@@ -11,16 +11,18 @@ from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 
 from src.policy.model import PilotPolicy, PolicySource, PolicyTrustStore
 from src.protocol.credential import PilotCredential, holder_commitment
+from src.protocol.root_snapshot import RootAuthority, RootSnapshot, RootTrustStore, sign_root
 from src.protocol.transfer import AssetDefinition, AssetRegistry, Transfer, VerificationContext
 from src.protocol.valuation_approval import ValuationApproval, ValuationAuthority, ValuationTrustStore, sign_valuation
 from src.prover.pilot_compliance import PUBLIC_SIGNALS, compliance_witness
+from src.prover.pilot_roots import CurrentRootPins
 from src.registry.pilot_sanctions import PilotSanctionsTree
 from src.registry.pilot_tree import PilotTree
 
 ROOT = Path(__file__).resolve().parents[2]
 
 
-def synthetic_case(*, artifact_manifest_digest=None, alternate_credential=False):
+def synthetic_case(*, artifact_manifest_digest=None, alternate_credential=False, with_trust=False):
     fixture = json.loads((ROOT / "specs/fixtures/transfer-v1.json").read_text())
     transfer = Transfer.model_validate(fixture["records"][0]["value"])
     context = VerificationContext.model_validate(
@@ -100,6 +102,74 @@ def synthetic_case(*, artifact_manifest_digest=None, alternate_credential=False)
         ),
         quote_key,
     )
+    policy_trust = PolicyTrustStore([policy], current_digests=(policy.digest,))
+    valuation_trust = ValuationTrustStore([quote_authority])
+    sanctions = PilotSanctionsTree([])
+    if with_trust:
+        # Public deterministic simulator key, exclusively for synthetic test roots.
+        root_key = Ed25519PrivateKey.from_private_bytes(bytes([7]) * 32)
+        authority = RootAuthority(
+            public_key=root_key.public_key().public_bytes_raw().hex(),
+            tenant_id=transfer.tenant_id,
+            chain_id=int(context.deployment_chain_id),
+            registry_address=context.deployment_address,
+            kinds=("issuance-root", "issuer-root", "sanctions-root"),
+            issuer_dids=(credential.issuer_did,),
+            not_before=transfer.created_at,
+            not_after=transfer.expires_at,
+        )
+        signed = [
+            sign_root(
+                RootSnapshot(
+                    tenant_id=transfer.tenant_id,
+                    chain_id=authority.chain_id,
+                    registry_address=authority.registry_address,
+                    kind=kind,
+                    issuer_did=credential.issuer_did if kind == "issuance-root" else None,
+                    root=root,
+                    tree_depth=8,
+                    source_digest="ef" * 32,
+                    revision=1,
+                    issued_at=transfer.created_at,
+                    expires_at=transfer.expires_at,
+                    key_id=authority.key_id,
+                ),
+                root_key,
+            )
+            for kind, root in zip(authority.kinds, (issuance.root, issuers.root, sanctions.root), strict=True)
+        ]
+        pins = CurrentRootPins(
+            tenant_id=transfer.tenant_id,
+            chain_id=authority.chain_id,
+            registry_address=authority.registry_address,
+            issuer_did=credential.issuer_did,
+            issuance_digest=signed[0].snapshot.digest,
+            issuer_digest=signed[1].snapshot.digest,
+            sanctions_digest=signed[2].snapshot.digest,
+        )
+        context = VerificationContext.model_validate(
+            {
+                **context.model_dump(),
+                "issuance_snapshot_digest": pins.issuance_digest,
+                "issuer_snapshot_digest": pins.issuer_digest,
+                "sanctions_snapshot_digest": pins.sanctions_digest,
+            }
+        )
+        inputs = dict(
+            transfer=transfer,
+            context=context,
+            credential=credential,
+            registry=registry,
+            policy_trust=policy_trust,
+            valuation_approval=quote_approval,
+            valuation_trust=valuation_trust,
+            root_trust=RootTrustStore([authority]),
+            root_pins=pins,
+            issuance=signed[0],
+            issuers=signed[1],
+            sanctions=signed[2],
+            now=context.evaluated_at,
+        )
     witness = compliance_witness(
         transfer,
         context,
@@ -108,11 +178,13 @@ def synthetic_case(*, artifact_manifest_digest=None, alternate_credential=False)
         secret="123456",
         issuance_path=issuance.membership("alternate" if alternate_credential else "credential"),
         issuer_path=issuers.membership("issuer"),
-        sanctions=PilotSanctionsTree([]),
+        sanctions=sanctions,
         valuation_approval=quote_approval,
-        valuation_trust=ValuationTrustStore([quote_authority]),
-        policy_trust=PolicyTrustStore([policy], current_digests=(policy.digest,)),
+        valuation_trust=valuation_trust,
+        policy_trust=policy_trust,
     )
+    if with_trust:
+        return witness, context, inputs
     return witness, context
 
 
