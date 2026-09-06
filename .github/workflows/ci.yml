@@ -6,6 +6,27 @@ on:
     branches: [main]
 
 jobs:
+  pilot-credential-witness:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - run: npm install
+      - run: uv sync --extra dev
+      - name: Install pinned Circom for witness checks
+        run: |
+          set -euo pipefail
+          curl --fail --location --max-time 120 https://github.com/iden3/circom/releases/download/v2.2.2/circom-linux-amd64 -o /tmp/pilot-circom
+          echo 'f3d8d1fdbc123779b80e210c909ee941d7a1e130c70365524646b48b8b0fe9d5  /tmp/pilot-circom' | sha256sum --check
+          sudo install /tmp/pilot-circom /usr/local/bin/circom
+          circom --version
+          node --version
+      - name: Real credential constraint and adversarial witness checks
+        run: uv run python -m pytest tests/unit/test_pilot_credential.py -q
+
   discovery:
     runs-on: ubuntu-latest
     steps:

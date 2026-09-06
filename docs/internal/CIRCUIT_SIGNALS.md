@@ -286,3 +286,34 @@ Domain-separated leaf hash for sanctions list entries.
 Poseidon(0x02, issuer_did)
 ```
 Domain-separated leaf hash for trusted issuer entries.
+
+## Development credential subcircuit (not the active compliance ABI)
+
+`circuits/pilot_credential.circom` defines `PilotCredentialValidity(issuance_depth,
+issuer_depth)` for `clearproof-credential-v1`. It does not instantiate `main`,
+change the legacy 16-signal ABI or provide an authorization endpoint. The test
+harness uses two-level trees solely to exercise membership constraints.
+
+`fields[13]` is the credential Poseidon preimage excluding domain tag 102:
+
+| Index | Value | Range |
+| --- | --- | --- |
+| 0–1 | SHA-256 of canonical issuer DID, high then low limb | 128 bits each |
+| 2–3 | SHA-256 of opaque tenant ID, high then low limb | 128 bits each |
+| 4–5 | Credential nonce, high then low limb | 128 bits each; jointly nonzero |
+| 6 | Subject EVM wallet | 160 bits, nonzero |
+| 7 | Poseidon(101, holder secret) | Nonzero BN254 scalar |
+| 8 | Uppercase ASCII jurisdiction bytes, big endian | Two bytes A–Z |
+| 9 | KYC tier | 1–3 |
+| 10–11 | Issued-at and expires-at | 53 bits each |
+| 12 | Issuer screening assertion | Must equal 1 |
+
+Other inputs are the holder secret, credential commitment, private issuance root
+and path, authorized issuer root and path, expected tenant limbs, expected subject,
+expected jurisdiction and evaluation time. Membership paths have boolean indices.
+The evaluation time must satisfy `issued_at <= evaluated_at < expires_at`.
+
+The composed circuit must bind the expected inputs to the actual transfer, hide
+private fields and remove the legacy SAR advisory signal. The current harness
+exposes expected subject/jurisdiction for testing only; it is not a privacy profile
+for published proofs. See ADR 0003 for external enrollment and root authority.
