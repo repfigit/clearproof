@@ -1,0 +1,162 @@
+# Clearproof adoption pilot implementation plan
+
+Created: 2026-09-05  
+Baseline: `4e7523147b26b23878265fa6759ec202e1a0b71e`  
+Status: implementation in progress; M0–M5 remain open until their acceptance gates pass  
+Canonical location: `docs/plans/2026-09-05-adoption-pilot-implementation.md`
+
+**Goal**
+
+Implement a reproducible Clearproof pilot for a stablecoin processor or custodian that already has compliance systems. Deliver trustworthy transfer evidence, policy-change simulation, read-only transfer investigations, historical verification and observation-mode onboarding. Keep the verifier and portable formats open, and prepare managed integration and operational workflows for a paid pilot.
+
+The active implementation goal covers **M0–M5** below. Credential-wallet expansion, provider-driven re-screening and production launch have explicit follow-on gates. This scope delivers an independently testable local pilot; it does not claim paying customers, regulatory approval, live vendor interoperability or production assurance.
+
+Research inputs: [initial assessment](</home/agent/obsidian/Research Reports/Clearproof/Clearproof - Use Cases Adoption and Monetization - 2026-09-05.md>) and [additional improvements](</home/agent/obsidian/Research Reports/Clearproof/Clearproof - Additional Improvements for Adoption and Revenue - 2026-09-05.md>). These contain the external evidence and its limits. Local code and newly run checks determine implementation status.
+
+**Delivery rules and architectural decisions**
+
+- Build one vertical workflow with the existing Python API, PostgreSQL, TS proof SDK and CLI. Keep policy/business logic in Python; the proof SDK remains a thin cryptographic adapter.
+- Define distinct results for cryptographic validity, policy decision, counterparty exchange, execution/settlement and historical evidence. Unknown or missing evidence must never silently become an authorization.
+- Preserve raw PII exclusively in the encrypted envelope architecture. Apply tenant authorization to records, event ingestion, exports, replay and decryption. Logs and policy reports contain minimized references and reason codes.
+- Use exact chain/asset identities, integer base units or validated decimal strings, explicit fiat valuation metadata and deterministic normalization. Bind the actual transfer facts to its receipt and proof statement.
+- Version credentials, proof statements, public-signal schemas, policy profiles, receipts and discovery documents. Explicitly reject unsupported combinations. Coordinate Python, Circom, contracts, TS types and fixtures when the proof ABI changes.
+- Retain the existing proving system unless the authenticated-input design requires a documented change. Verify approved artifact digests and provenance; local development keys must remain development-only.
+- Start integrations with read-only ingestion and local simulators. Customer data, vendor account access, external communications, deployments and production fund movement are separate operational steps; none is needed to complete the local pilot.
+- Use small reviewable changes. A milestone closes only with working code, meaningful acceptance tests and documented limitations. Do not convert failing tests into skips or declare a simulation to be live interoperability.
+- Reuse and correct the existing roadmap and verifier specification. The old `AIF-82-implementation-plan.md` contains an unrelated repository assumption; treat it as historical, not an implementation authority.
+
+**Milestones and dependency order**
+
+| Milestone | Result | Depends on | Completion gate |
+| --- | --- | --- | --- |
+| M0 | Safe storage parsing, isolated chain caches, interoperable and constrained discovery | Baseline inspection | Regression cases reproduce the old behavior and pass after fixes |
+| M1 | Authenticated proof/receipt foundation with durable tenant state | M0 | A valid synthetic transfer completes the real local proof path; adversarial bindings fail |
+| M2 | Versioned policy evaluation and change simulation | M1 schemas and verification context | Deterministic comparisons explain every changed or indeterminate outcome |
+| M3 | Read-only event ingestion and transfer investigations | M1 durable state and receipt IDs | Duplicate/reordered events reconcile to the same correct transfer state |
+| M4 | Independently verifiable historical evidence bundles | M1 trust/version model; M3 event evidence | Offline verification succeeds for complete evidence and reports missing evidence accurately |
+| M5 | Observation onboarding, executable scenarios and paid-pilot preparation | M2–M4 | A clean setup runs the complete documented pilot scenario and exports its results |
+
+M2 and M3 have separable implementation work after M1 interfaces stabilize. M4 can begin with synthetic signed records once the trust model is settled. Dependency order does not authorize additional agents by itself.
+
+No calendar completion date is promised before the M0 baseline and M1 proof-version design are measured. Report completed acceptance gates and actual blockers rather than percentage estimates.
+
+**M0 — fix the newly confirmed integration and security gaps**
+
+Local work-item IDs below are references for this plan, not filed tracker issues.
+
+| ID | Change | Existing locations | Acceptance |
+| --- | --- | --- | --- |
+| CP-001 | Replace `eval` proof deserialization with validated JSON; support a bounded legacy migration and actual database row shape | `src/storage/proofs.py`, `src/storage/database.py`, `src/storage/models.py` | Real DB round-trip works; expressions and malformed/oversized signals fail; migration preserves valid records without executing data |
+| CP-002 | Isolate caches by reader/deployment and define freshness/invalidation semantics | `src/chain/reader.py` | Two readers with different roots/registries cannot share results; concurrent calls, expiry and false/zero values behave correctly |
+| CP-003 | Align Python publishing and TS consuming of discovery; validate exact requested identity, key purpose, versions and allowed destinations | `src/api/routes/discovery.py`, `src/protocol/discovery.py`, `packages/proof/src/discovery.ts`, `specs/well-known-clearproof.md` | Python-produced fixtures pass TS; mismatched DIDs, loopback/link-local destinations, redirect/rebinding cases and malformed keys follow explicit policy |
+
+For CP-003, enforce destination policy at connection/egress boundaries, not just URL parsing. Permit explicitly configured private enterprise endpoints. Separate unsupported, unavailable and invalid responses. Document legacy key-field migration and prevent an encryption downgrade on discovery failure.
+
+**M1 — make the underlying statement and evidence trustworthy**
+
+This is the largest dependency. Establish the accepted proof statement before building product features on it.
+
+| ID | Change | Existing locations or proposed boundary | Acceptance |
+| --- | --- | --- | --- |
+| CP-004 | Specify a canonical transfer/evidence schema and verification context; normalize asset, amount, participants, tenant, deployment, policy and time | `src/protocol/`, `src/api/routes/proof.py`, `specs/`, `src/protocol/bridges/trp_bridge.py` | Stable cross-language commitments; same-symbol assets on different chains differ; unknown assets and ambiguous amounts fail |
+| CP-005 | Complete durable tenant-scoped credentials, proofs, roots, events, revocations and idempotency; wire issuance and proving to the same store | `src/storage/`, `src/registry/`, `src/api/dependencies.py`, auth middleware | Restart preserves state; cross-tenant access and conflicting duplicate requests fail; concurrent consumption cannot spend the same authorization twice |
+| CP-006 | Implement a versioned authenticated credential construction binding subject/holder authority, jurisdiction, issuer and authorized issuance | `src/registry/credential_registry.py`, `src/registry/issuer_registry.py`, `circuits/credential_validity.circom`, affected contracts | An unissued credential, substituted subject/jurisdiction, unauthorized issuer and wrong holder fail in the applicable verifier, including the real proof path |
+| CP-007 | Align witness generation and current verification acceptance across API, CLI/SDK context handling and contracts; correct policy units and confidential signal handling | `src/prover/`, `src/protocol/compliance_proof.py`, `circuits/`, `packages/proof/src/`, `packages/contracts/` | Shared valid and adversarial fixtures agree across implementations; no threshold-invalid “compliant” reference fixture; no public SAR advisory leakage |
+| CP-008 | Complete trusted recipient encryption and tamper-evident durable evidence; bind envelope metadata and separate verification from state-changing authorization consumption | `src/protocol/hybrid_payload.py`, `src/sar/`, `src/storage/audit.py`, API routes | Recipient decrypts only authorized envelopes; wrong recipient/key/AAD fails; rotation overlap works; failure never falls back silently; audit tampering is detected |
+| CP-009 | Bind approved runtime artifacts, proof version and policy schema to exact manifests; add a read-only `doctor` command | `packages/cli/src/commands/`, artifact loader paths, release metadata | Wrong/mixed/development artifacts receive explicit outcomes; production configuration rejects unapproved artifacts; diagnostics reveal no secrets |
+
+CP-006 starts with a short architecture decision recording the authenticated-input construction, trust authorities and migration. Evaluate issuance membership under an issuer-authorized root using the existing Merkle machinery; retain issuer authorization checks. Issuer membership alone is insufficient. If signature verification stays outside the circuit, identify the trusted attestor and authenticate its binding to the proved inputs; never label that signature as ZK-verified. Resolve the design with adversarial vectors before updating the circuit ABI.
+
+CP-007 must cover trusted roots and freshness, proof/credential expiry, future timestamps, jurisdiction and amount units, chain/contract audience, participants and actual transfer binding, issuer/VASP status, revocation and replay. Keep “inspect this proof” separate from “consume this authorization,” so read-only verification cannot accidentally spend a nullifier.
+
+Remove the advisory SAR signal from externally disclosed proof material through a coordinated proof-version change, or redesign its confidentiality before enabling that profile. Merely omitting the named JSON field is insufficient if public signals still reveal it.
+
+Generate changed development artifacts locally through documented commands. Do not commit newly generated development proving keys as production artifacts. Update the signal reference, vector-generation scripts, affected verifier source and version routing coherently; preserve historical verification of known prior versions without allowing unsafe legacy authorization.
+
+M1 exit evidence includes one unmocked local issue → prove → verify → encrypt/decrypt → persist/restart → export flow, plus negative proofs for the trust and binding cases. Business-policy tests remain separate from expensive real circuit tests.
+
+**M2 — policy evaluation and change simulation**
+
+**CP-010:** add a bounded Python policy evaluator with immutable policy versions, provenance, approved source references and explicit `ALLOW / REVIEW / DENY / INDETERMINATE` results. Keep legal applicability, information requirements and private amount-tier predicates distinguishable. A configured threshold must not imply that all other obligations disappear.
+
+**CP-011:** expose a `policy diff` CLI/API that compares two versions against synthetic or tenant-authorized cases. Include changed outcome, responsible rule, missing inputs, unsupported ZK coverage and review-queue impact. Store reviewed expected outcomes and policy approval history.
+
+Acceptance: deterministic results for identical snapshots; boundary cases at threshold minus/equal/plus the smallest unit; conflicting rules; stale/unavailable sources; unsupported predicates; field minimization; cross-language proof/policy parity for shared predicates. Replaying a case must cause no counterparty communication or authorization consumption.
+
+Entry points: `src/prover/tier_mapping.py` and existing policy fixtures; proposed `src/policy/`, authenticated API routes, CLI commands and versioned schemas. Keep business logic out of `packages/proof`.
+
+**M3 — transfer investigations and reconciliation**
+
+**CP-012:** add an append-only tenant-scoped event model, canonical business-transfer IDs, authenticated ingestion, deduplication, a transactional processing boundary and deterministic projections. Preserve event time, ingestion time, source and evidence references separately.
+
+**CP-013:** implement one documented custody-provider adapter, initially Fireblocks, with captured schema fixtures and a local signed-webhook simulator. Recheck current official provider documentation during implementation. Add one local bilateral Travel Rule scenario using the existing bridge interfaces; validate mandatory message semantics instead of treating extension-compatible JSON as accepted interoperability.
+
+**CP-014:** expose an investigation timeline and ageing queue through API and CLI, with a readable report. Join independent compliance, exchange, proof, custody and chain states. Include reason, owner, next action and provider links. Build a dedicated console only after the API/report demonstrates the workflow.
+
+Acceptance scenarios: duplicate and out-of-order events; invalid authentication; restart during processing; approval without submission; counterparty timeout; failed settlement; settled transfer with missing evidence; changed canonical block/finality; cross-tenant identifier collision. Reordered deliveries must converge to the same result, and read-only processing must never initiate funds movement.
+
+A fixture-tested provider adapter is a local acceptance result. Actual account integration and live interoperability require separate evidence at the customer gate.
+
+**M4 — historical evidence and offline verification**
+
+**CP-015:** define a portable bundle with a manifest of exact policy, signal-schema and verifier versions; authenticated decisions; source/root/status snapshots; transfer and envelope commitments; and available trusted timing evidence. Implement export and offline `verify-history`.
+
+Configure trusted issuers, attestors, artifacts and time sources independently of the bundle. Distinguish a self-asserted time from an authenticated observation. Record decision, source-observation, capture and verification times separately. Use maintained cryptographic verification components; do not invent timestamp cryptography.
+
+Return separate cryptographic checks and a historical outcome of supported, contradicted or indeterminate with scoped reasons. Missing revocation history must not be inferred from current status; later trust compromise must remain representable. Historical inspection cannot authorize transfer replay.
+
+Acceptance: an offline process with preconfigured trust reproduces a complete synthetic record; modifying a manifest, swapping a root/key/policy or removing necessary evidence changes the result correctly. Test expiry, rotated keys, insufficient timing evidence and unauthorized bundle access. Retain only customer-authorized encrypted evidence; do not publish customer records to public transparency logs.
+
+**M5 — onboarding, release evidence and monetization preparation**
+
+**CP-016:** productize observation mode with a durable distinction from enforcement. Add deterministic counterparties for accept/reject/request-information/timeout/key-rotation/unsupported-version cases and duplicate/reordered custody events. Produce coverage, disagreement and latency reports with data minimization.
+
+**CP-017:** provide a clean-environment quickstart, local service setup, reproducible synthetic demo, migration/rollback instructions, version compatibility matrix, observability and operator runbooks. Add an end-to-end acceptance command to CI. Correct stale claims and broken package/documentation references discovered during implementation.
+
+**CP-018:** prepare a paid-pilot brief, customer interview script, baseline-measurement worksheet and pricing experiment. Specify a free verifier/portable format/local simulator and proposed paid managed connectors, policy approval history, reconciliation and evidence preservation. Include operational usage counters with defined retry/deduplication semantics, without requiring a payment processor integration.
+
+Measure onboarding time, supported-case coverage, unexplained decision disagreement, time to diagnose an exception, stale-input exposure, evidence completeness and repeated operator use. These measurements support pricing discovery; generated reports and billing code do not establish willingness to pay.
+
+M5 exit: a fresh checkout completes the documented synthetic scenario, exercises observation and all four decision classes, produces a policy comparison and investigation report, exports evidence, and verifies it offline. All outputs identify simulated counterparties and development assurance accurately.
+
+**Follow-on work with explicit entry conditions**
+
+| Track | Work | Start condition | Real completion evidence |
+| --- | --- | --- | --- |
+| F1: external credentials | One issuer/profile adapter; OpenID4VP verifier; approved issuer/claim/status policy; privacy-aware status cache | A prospective buyer identifies the actual issuer/wallet ecosystem and provides permitted test access | Applicable conformance tests plus two independently developed wallets; holder-to-transaction authority and status failure cases verified |
+| F2: re-screening | Dependency index and targeted re-evaluation queue; preserve original decisions and deduplicate changes | A customer uses recurring decisions and an upstream provider supplies a permitted change feed or refresh API | Material upstream changes identify affected pending transfers; freshness and alert-quality measurements |
+| F3: trusted distribution | Managed signed runtime/policy updates, rollback protection and controlled rotation | Customers need managed upgrades beyond pinned packages | Maintained update framework validation, key-rotation and rollback/freeze tests |
+| F4: live paid pilot | Customer-authorized provider integration and observation deployment | Named budget owner, agreed scope/data permissions and account access | Repeated customer use, actual operational measurements and an agreed commercial arrangement |
+| F5: production authorization | Independent audit, closed findings, documented trusted setup/approved artifact path and deployment operations | Pilot value demonstrated and appropriate assurance/resources available | Independent assurance evidence and explicit production readiness review |
+
+F1–F5 remain visible follow-on work. Completing M0–M5 must not mark these complete or turn simulated evidence into claims of adoption.
+
+**Verification and definition of done**
+
+Use the current package scripts rather than stale command descriptions. At this checkout, root `npm test` runs Python; `npm run test:ts` runs the TS workspace tests.
+
+For each change, run focused tests for the affected behavior, relevant lint/type checks and necessary integration tests. At each integrated milestone, run the appropriate wider suite. Before closing M5, require:
+
+- `make test` for Python, including real PostgreSQL restart/tenant tests where relevant.
+- `npm run test:ts` for workspaces and contracts; run contract checks explicitly if workspace orchestration does not cover them.
+- `npm run build` and the TS `--noEmit` checks used by CI.
+- Ruff checks/format validation for changed Python files.
+- Dedicated unmocked circuit/proof tests for new proof statements and adversarial witness cases, separate from mocked compliance tests.
+- The clean-setup end-to-end pilot, offline evidence validation, negative trust cases, authenticated webhook scenarios, migration/recovery checks and secret/PII-output assertions.
+- Documentation/spec/vector alignment, actual artifact digest verification and a final repository diff review.
+
+Record exact commands, outcomes and environment limits in the execution log below. Investigate baseline failures and distinguish unrelated failures from new regressions; do not claim the full gate passed when a required service or artifact was unavailable.
+
+The active goal is complete only when M0–M5 pass these acceptance gates and the pilot documentation identifies every remaining external dependency. No revenue, production safety, audit completion or live provider support may be inferred from that result.
+
+**Execution log**
+
+| Date | Milestone | Evidence | Status |
+| --- | --- | --- | --- |
+| 2026-09-05 | Planning | Research converted into sequenced work, dependencies and acceptance gates; repository instructions and actual test scripts inspected | Complete |
+| 2026-09-05 | M0 / CP-001 | Reproduced JSONB write, concurrent-startup and cleanup failures on PostgreSQL 18.6. Implemented bounded JSON signal validation, strict legacy-list conversion, database constraints, real row decoding, atomic serialized migrations, failure cleanup and explicit nullifier-conflict handling. All unit tests plus the real-DB proof-storage suite pass: 212 tests. Ruff check passes. Migration/rollback guidance: `docs/operations/proof-storage-upgrade.md`. | CP-001 complete; CP-002 and CP-003 open |
+| 2026-09-05 | CP-017 | User prioritized website accuracy: authenticated GitHub API confirms main repository private; npm packages 0.3.0 versus checkout 0.4.0; standalone SDK install passes; public CLI install fails because `@clearproof/content` is unavailable; five Sepolia addresses have bytecode. Homepage deployed as clearproof-web commit `fd16d29`. Documentation refresh deployed to `docs.clearproof.world` (deployment `dpl_7FThp68fYo6NZifTPa2eBP7qUjNY`, code `c805646`). Production builds, homepage lint, shared content tests, mobile browser checks and live checks for 16 docs pages plus 3 content endpoints pass. The docs content API packaging fix is preserved in draft PR #26. Main content update is committed as `9452788`. | Partial; packaging and clean pilot remain open |
+
+| 2026-09-05 | Verification baseline | CI run `33999156760` at docs commit `9452788`: TypeScript, license and protobuf checks pass. Python collection fails in the SIWE/ABNF dependency with a core-rule `ALPHA` error; Hardhat reports 36 passing, 2 pending and 19 failing (outdated constructor fixtures and sender-binding expectations); circuit setup download returns HTTP 403. Circuit lint also passes; final result is four checks passing and three failing. No Python, circuit or contract source was changed by the website refresh. Investigate these gates as part of M0/M1 and CP-017; do not claim full CI passes. | Open |
+
+Update this log with implementation evidence. Keep unchecked milestones open until their tests and deliverables are verified.
