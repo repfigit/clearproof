@@ -317,3 +317,15 @@ The composed circuit must bind the expected inputs to the actual transfer, hide
 private fields and remove the legacy SAR advisory signal. The current harness
 exposes expected subject/jurisdiction for testing only; it is not a privacy profile
 for published proofs. See ADR 0003 for external enrollment and root authority.
+
+## Development valuation subcircuits
+
+`pilot_valuation.circom` adds `PilotValuation()` with private inputs
+`amount_base_units`, `numerator`, `denominator`, `usd_cents`, and `remainder`.
+Each is constrained as an unsigned 128-bit value; all but the remainder must be
+positive. Limb arithmetic enforces exact integer quotient/remainder semantics.
+
+`PilotAmountTier()` accepts `usd_cents`, three ordered positive `thresholds` and
+`tier`. It exposes no output. The composed profile must keep the amount and tier
+private and bind policy/valuation provenance; these subcircuits do not change the
+legacy main ABI. See ADR 0004 and `src/prover/pilot_valuation.py` for witness rules.

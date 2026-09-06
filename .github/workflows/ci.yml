@@ -39,8 +39,8 @@ jobs:
           sudo install /tmp/pilot-circom /usr/local/bin/circom
           circom --version
           node --version
-      - name: Real credential constraint and adversarial witness checks
-        run: uv run python -m pytest tests/unit/test_pilot_credential.py -q
+      - name: Real credential and valuation constraint checks
+        run: uv run python -m pytest tests/unit/test_pilot_credential.py tests/unit/test_pilot_valuation.py -q
 
   discovery:
     runs-on: ubuntu-latest
