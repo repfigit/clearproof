@@ -17,8 +17,9 @@ verification. Key IDs derive from public-key bytes, not configurable labels.
 `sign_root()` is a registrar utility, not an authorization policy. The registrar
 must check the source tree, eligible enrolled credentials and issuer authorization
 before signing. Signing an arbitrary caller root would defeat issuance membership.
-Automatic tree construction from enrollment and that policy enforcement are still
-pending. No production signing key or default trusted registrar is bundled.
+`build_issuance_tree()` now constructs candidates from persisted eligible
+enrollment. Atomic coordination of construction, registrar signing and publication
+is still pending. No production signing key or default trusted registrar is bundled.
 
 `RootPublicationService.publish()` requires a tenant admin, encrypted-record read
 access, and a valid scoped registrar signature. Issuance-root publication also
@@ -42,3 +43,28 @@ The tests use actual Ed25519 signatures and isolated PostgreSQL schemas. They
 cover scope, tampering, key retention, stale approval, concurrent successors,
 predecessor mismatch, tenant isolation and pool reconnection. They do not claim
 registrar operational independence, chain publication or real proof acceptance.
+
+
+## Issuance tree candidates
+
+`build_issuance_tree()` requires an issuer-scoped transaction with encrypted-read
+access. It scans the tenant's enrollment IDs in deterministic order, checks the
+issuer and enrollment deployment, re-verifies retained wallet signatures and
+acceptance time, and excludes revoked, expired or screening-failed credentials.
+Identity/commitment inconsistencies and malformed evidence stop construction.
+
+The local pilot scan is capped at 256 total tenant enrollments; excess records
+cause an explicit error, never a partial tree. This bound requires pagination and
+incremental construction work before larger deployments. `PilotTree` uses sparse
+Poseidon nodes with deterministic zero padding and supports depths 1–20 (default
+issuance depth 8). It rejects duplicate IDs/leaves and capacity overflow. Its
+membership witnesses are exercised by the actual credential WASM circuit tests.
+
+The returned private source record binds tenant, issuer, audience, evaluation
+time, depth and sorted credential IDs/commitments. Its canonical digest is the
+snapshot's proposed `source_digest`; source records belong in encrypted evidence.
+The candidate is not a signed approval. Hold the tenant lock through validation
+and construction. Do not nest `RootPublicationService.publish()` inside that
+transaction: atomic construction/signing/publication coordination still needs a
+shared transaction implementation. Publication must recheck eligibility to prevent
+a revocation between construction and approval from producing a stale head.

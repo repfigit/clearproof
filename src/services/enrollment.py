@@ -17,6 +17,10 @@ class EnrollmentIneligible(ValueError):
     """Enrollment is revoked, expired, inconsistent or failed screening."""
 
 
+class EnrollmentIntegrityError(ValueError):
+    """Persisted enrollment identity or commitment is inconsistent."""
+
+
 async def load_unrevoked_enrollment(tx: PilotTransaction, credential_id: str, *, now: int) -> PilotCredential:
     """Read enrollment and revocation in the caller's tenant transaction.
 
@@ -32,7 +36,10 @@ async def load_unrevoked_enrollment(tx: PilotTransaction, credential_id: str, *,
         credential.tenant_id != tx.tenant_id
         or credential.credential_nonce != credential_id
         or credential.commitment != stored["credential_commitment"]
-        or type(now) is not int
+    ):
+        raise EnrollmentIntegrityError("Enrollment identity or commitment failed")
+    if (
+        type(now) is not int
         or now < stored["accepted_at"]
         or not credential.issued_at <= now < credential.expires_at
         or not credential.sanctions_clear

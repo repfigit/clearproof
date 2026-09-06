@@ -391,6 +391,7 @@ async def test_durable_revocation_scope_retry_and_proving_precondition(db):
         RevocationRequest,
         load_unrevoked_enrollment,
     )
+    from src.services.issuance_tree import build_issuance_tree
 
     principal = Principal(
         tenant_id="tenant-a",
@@ -420,6 +421,24 @@ async def test_durable_revocation_scope_retry_and_proving_precondition(db):
     )
     signature = "0x" + wallet.sign_message(consent.signing_message()).signature.hex()
     await service().enroll(consent, signature, idempotency_key="enroll-1", now=110)
+    async with PilotStore(db, cipher(), principal).transaction() as tx:
+        initial_tree = await build_issuance_tree(
+            tx,
+            issuer_did=credential.issuer_did,
+            chain_id=31337,
+            registry_address="0x" + "1" * 40,
+            now=120,
+        )
+        assert initial_tree.tree.entries == ((credential.credential_nonce, credential.commitment),)
+        assert initial_tree.tree.membership(credential.credential_nonce)["root"] == initial_tree.tree.root
+        wrong_chain = await build_issuance_tree(
+            tx,
+            issuer_did=credential.issuer_did,
+            chain_id=31338,
+            registry_address="0x" + "1" * 40,
+            now=120,
+        )
+        assert wrong_chain.tree.entries == ()
     async with store(db).transaction() as tx:
         assert await load_unrevoked_enrollment(tx, "a" * 64, now=120) == credential
         for invalid_time in (109, 1000):
@@ -447,8 +466,62 @@ async def test_durable_revocation_scope_retry_and_proving_precondition(db):
     await db.close()
     await db.connect()
     assert await service().revoke(request, now=140) == first
+    async with PilotStore(db, cipher(), principal).transaction() as tx:
+        revoked_tree = await build_issuance_tree(
+            tx,
+            issuer_did=credential.issuer_did,
+            chain_id=31337,
+            registry_address="0x" + "1" * 40,
+            now=140,
+        )
+        assert revoked_tree.tree.entries == ()
+        assert revoked_tree.tree.root != initial_tree.tree.root
+        assert revoked_tree.source_digest != initial_tree.source_digest
     async with store(db).transaction() as tx:
         with pytest.raises(EnrollmentIneligible, match="revoked"):
             await load_unrevoked_enrollment(tx, "a" * 64, now=140)
     assert (await store(db).get("credential", "a" * 64))["consent"]["credential"] == credential.model_dump(mode="json")
     assert (await store(db).get("revocation", "a" * 64))["reason_code"] == "issuer-withdrawal"
+    # An encrypted row alone is not sufficient: tampered retained consent must
+    # stop the registrar build even if its commitment was recomputed.
+    from src.protocol.enrollment import EnrollmentError
+
+    bad = await store(db).get("credential", "a" * 64)
+    changed_credential = PilotCredential.model_validate({**credential.model_dump(), "credential_nonce": "b" * 64})
+    changed_consent = EnrollmentConsent.model_validate({**consent.model_dump(), "credential": changed_credential})
+    bad["consent"] = changed_consent.model_dump(mode="json")
+    bad["credential_commitment"] = changed_credential.commitment
+    async with PilotStore(db, cipher(), principal).transaction() as tx:
+        await tx.put("credential", "b" * 64, bad)
+        with pytest.raises(EnrollmentError):
+            await build_issuance_tree(
+                tx,
+                issuer_did=credential.issuer_did,
+                chain_id=31337,
+                registry_address="0x" + "1" * 40,
+                now=140,
+            )
+
+
+async def test_tenant_keyset_scan_and_issuance_capacity_fail_without_truncation(db):
+    from src.services.issuance_tree import build_issuance_tree
+
+    principal = Principal(
+        tenant_id="tenant-a",
+        actor_id="issuer",
+        roles=("credential:issue", "evidence:decrypt"),
+        issuer_dids=("did:web:issuer.example",),
+    )
+    a = PilotStore(db, cipher(), principal)
+    async with a.transaction() as tx:
+        for index in range(257):
+            await tx.put("credential", f"id-{index:04}", {})
+        ids = await tx.record_ids("credential")
+        assert len(ids) == 256 and ids[0] == "id-0000" and ids[-1] == "id-0255"
+        assert await tx.record_ids("credential", after=ids[-1]) == ["id-0256"]
+        with pytest.raises(ValueError, match="capacity"):
+            await build_issuance_tree(
+                tx, issuer_did="did:web:issuer.example", chain_id=31337, registry_address="0x" + "1" * 40, now=120
+            )
+    async with store(db, "tenant-b").transaction() as tx:
+        assert await tx.record_ids("credential") == []

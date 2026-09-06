@@ -157,6 +157,10 @@ class PilotTransaction:
         if self._closed:
             raise RuntimeError("Pilot transaction is closed")
 
+    def require_issuer(self, issuer_did: str) -> None:
+        self._check_open()
+        self._principal.require_issuer(issuer_did)
+
     async def _row(self, kind: str, record_id: str, revision: int | None = None) -> dict | None:
         self._check_open()
         if revision is not None and (type(revision) is not int or not 1 <= revision <= 2**53 - 1):
@@ -184,6 +188,24 @@ class PilotTransaction:
     async def put(self, kind: str, record_id: str, value: dict, *, expected_revision: int | None = None) -> int:
         self._principal.require(_WRITE_ROLES[_kind(kind)])
         return await self._put(kind, _identifier(record_id), value, expected_revision)
+
+    async def record_ids(self, kind: str, *, after: str | None = None, limit: int = 256) -> list[str]:
+        """Bounded, tenant-filtered keyset scan within the held transaction."""
+        self._check_open()
+        self._principal.require("evidence:decrypt")
+        _kind(kind)
+        if type(limit) is not int or not 1 <= limit <= 256:
+            raise ValueError("Scan limit must be 1–256")
+        if after is not None:
+            _identifier(after)
+        rows = await (
+            await self._conn.execute(
+                "SELECT DISTINCT record_id FROM pilot_records WHERE tenant_id=%s AND kind=%s "
+                "AND record_id > %s ORDER BY record_id LIMIT %s",
+                (self.tenant_id, kind, after or "", limit),
+            )
+        ).fetchall()
+        return [row[0] for row in rows]
 
     async def _put(self, kind: str, record_id: str, value: dict, expected_revision: int | None) -> int:
         self._check_open()

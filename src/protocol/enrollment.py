@@ -48,6 +48,11 @@ class EnrollmentConsent(Record):
             raise EnrollmentError("Enrollment audience mismatch")
         if type(now) is not int or not consent.credential.issued_at <= now < consent.consent_expires_at:
             raise EnrollmentError("Enrollment consent is outside its validity interval")
+        consent.verify_wallet_signature(signature)
+
+    def verify_wallet_signature(self, signature: str) -> None:
+        """Recheck retained wallet evidence; does not establish issuer authorization."""
+        consent = EnrollmentConsent.model_validate(self)
         # One canonical 65-byte EOA signature format; reject high-s malleability.
         # Contract-wallet/EIP-1271 enrollment needs a separate supported profile.
         try:

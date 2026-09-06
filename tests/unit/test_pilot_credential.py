@@ -10,6 +10,7 @@ import pytest
 from pydantic import ValidationError
 
 from src.protocol.credential import PilotCredential, holder_commitment
+from src.registry.pilot_tree import PilotTree
 from src.registry.poseidon import BN254_SCALAR_FIELD, poseidon_hash
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -33,22 +34,26 @@ def credential():
 
 def path(leaf):
     root = str(poseidon_hash([leaf, 0]))
-    return str(poseidon_hash([root, 0]))
+    return str(poseidon_hash([root, poseidon_hash([0, 0])]))
 
 
 @pytest.fixture
 def witness(credential):
-    issuance = path(credential.commitment)
-    authorized = path(credential.authorized_issuer_leaf(issuance))
+    issuance_tree = PilotTree([(credential.credential_nonce, credential.commitment)], depth=2)
+    issuance = issuance_tree.root
+    issuer_tree = PilotTree([("issuer", credential.authorized_issuer_leaf(issuance))], depth=2)
+    authorized = issuer_tree.root
+    issuance_path = issuance_tree.membership(credential.credential_nonce)
+    issuer_path = issuer_tree.membership("issuer")
     return credential.witness(
         secret="123456",
         evaluated_at=150,
         issuance_root=issuance,
         authorized_issuer_root=authorized,
-        issuance_siblings=["0", "0"],
-        issuance_indices=[0, 0],
-        issuer_siblings=["0", "0"],
-        issuer_indices=[0, 0],
+        issuance_siblings=issuance_path["siblings"],
+        issuance_indices=issuance_path["indices"],
+        issuer_siblings=issuer_path["siblings"],
+        issuer_indices=issuer_path["indices"],
     )
 
 
