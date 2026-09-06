@@ -11,17 +11,33 @@ import json
 import os
 import runpy
 import shutil
+import signal
 import subprocess
 import sys
+import time
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
 
-def run(*args, cwd=ROOT, env=None):
-    print("Development step:", args[0], args[1] if len(args) > 1 else "", flush=True)
-    subprocess.run([str(arg) for arg in args], cwd=cwd, env=env, check=True, timeout=1800)
+def run(*args, cwd=ROOT, env=None, timeout=1800):
+    # Arguments are development artifact paths/options, never customer inputs.
+    print("Development step:", " ".join(str(arg) for arg in args), flush=True)
+    started = time.monotonic()
+    process = subprocess.Popen([str(arg) for arg in args], cwd=cwd, env=env, start_new_session=True)
+    try:
+        code = process.wait(timeout=timeout)
+        if code:
+            raise subprocess.CalledProcessError(code, process.args)
+    finally:
+        # Kill the owned group on timeout/interruption, including worker children.
+        try:
+            os.killpg(process.pid, signal.SIGKILL)
+        except ProcessLookupError:
+            pass
+        process.wait()
+        print(f"Development step elapsed: {time.monotonic() - started:.1f}s", flush=True)
 
 
 def digest(path):
@@ -67,7 +83,7 @@ def main():
             "--name=Clearproof CI development only",
             "-e=unapproved-ci-development-not-a-production-ceremony",
         )
-        run(node, cli, "powersoftau", "prepare", "phase2", contributed, ptau)
+        run(node, cli, "powersoftau", "prepare", "phase2", contributed, ptau, "-v", timeout=5400)
         initial.unlink()
         contributed.unlink()
     (output / "ptau-sha256.txt").write_text(digest(ptau) + "\n")

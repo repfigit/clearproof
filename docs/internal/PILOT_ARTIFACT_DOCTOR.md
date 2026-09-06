@@ -128,3 +128,12 @@ fallback is used and no file-existence check is treated as production approval.
 The output marker and CI upload name both say `UNAPPROVED`. The CI upload excludes
 the large phase-one transcript; it retains the per-profile development artifacts
 for seven days. The production ceremony remains a separate follow-on gate.
+
+The hosted circuit run 34009491967 timed out during phase-two preparation at
+1,800 seconds. Preparation now has a bounded 5,400-second allowance and verbose
+snarkjs progress; other commands retain their 1,800-second limits. The CI job
+has a 150-minute total ceiling. Every command reports elapsed time, and the
+runner kills and reaps its owned process group on timeout or interruption.
+These changes do not establish CI success: a completed remote proof run is
+still required. Real subprocess tests cover success, nonzero exit and timeout
+termination of a spawned worker.

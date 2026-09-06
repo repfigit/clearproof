@@ -121,7 +121,8 @@ jobs:
 
   circuits:
     runs-on: ubuntu-latest
-    timeout-minutes: 60
+    # Phase-2 preparation alone exceeded 30 minutes on the hosted runner.
+    timeout-minutes: 150
     steps:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v4
