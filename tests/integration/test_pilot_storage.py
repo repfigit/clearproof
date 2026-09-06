@@ -2465,6 +2465,101 @@ async def test_durable_current_inspection_real_pairing_and_revocation(db, monkey
                 "timing": True,
                 "outcome": "supported",
             }
+            from src.prover.history_cli import HistoryReviewerConfiguration
+
+            reviewer_configuration = {
+                "schema_version": "clearproof-history-reviewer-v1",
+                "binding": expected_export_binding,
+                "artifact_manifest_digest": artifacts.manifest.digest,
+                "runtime_sha256": hashlib.sha256(verifier.bundle).hexdigest(),
+                "statement": {
+                    "policies": [policy.model_dump(mode="json")],
+                    "policy_pins": [policy.digest],
+                    "root_pins": configuration.root_pins.model_dump(mode="json"),
+                    "roots": [a.model_dump(mode="json") for a in configuration.root_trust._authorities],
+                    "valuations": [a.model_dump(mode="json") for a in configuration.valuation_trust._authorities],
+                },
+                "facts": [authority.model_dump(mode="json")],
+                "decisions": [decision_authority.model_dump(mode="json")],
+                "statuses": [status_authority.model_dump(mode="json")],
+                "information": [information_authority.model_dump(mode="json")],
+                "timing": {
+                    **timing_config,
+                    "certificate_der_base64": base64.b64encode(tsa_leaf.public_bytes(Encoding.DER)).decode(),
+                    "roots_der_base64": [base64.b64encode(tsa_root.public_bytes(Encoding.DER)).decode()],
+                },
+            }
+            HistoryReviewerConfiguration.model_validate_json(json.dumps(reviewer_configuration))
+            bundle_path, trust_path = tmp_path / "history.encrypted.json", tmp_path / "reviewer-trust.json"
+            bundle_path.write_bytes(encrypted)
+            trust_path.write_text(json.dumps(reviewer_configuration))
+            cli_args = [
+                "--bundle",
+                str(bundle_path),
+                "--trust",
+                str(trust_path),
+                "--artifacts",
+                str(root),
+                "--runtime",
+                str(runtime),
+                "--node",
+                str(verifier.node),
+                "--verified-at",
+                str(history_args["verified_at"]),
+            ]
+            python = str(Path(__file__).parents[2] / ".venv/bin/python")
+
+            def run_history_cli(prefix, key=reviewer_private.hex()):
+                return subprocess.run(prefix + cli_args, input=key + "\n", capture_output=True, text=True, timeout=30)
+
+            # The real user command runs with database access closed; the direct
+            # Python process also disables sockets before importing the command.
+            prefix = [
+                python,
+                "-c",
+                "import runpy,socket; "
+                "socket.socket.connect=lambda *a,**k: (_ for _ in ()).throw(RuntimeError('network forbidden')); "
+                "runpy.run_module('src.prover.history_cli',run_name='__main__')",
+            ]
+            command_result = run_history_cli(prefix)
+            assert command_result.returncode == 0, "History command failed"
+            command_report = json.loads(command_result.stdout)
+            assert command_report["outcome"] == "supported" and command_report["assurance"] == "development-unapproved"
+            assert command_report["scope"] == "recorded-local-policy-decision"
+            assert "Synthetic" not in command_result.stdout and reviewer_private.hex() not in command_result.stdout
+            if os.environ.get("CLEARPROOF_POLICY_CLI_TEST") == "1":
+                wrapped = run_history_cli(
+                    [
+                        str(verifier.node),
+                        str(Path(__file__).parents[2] / "packages/cli/dist/index.js"),
+                        "verify-history",
+                        "--python",
+                        python,
+                    ]
+                )
+                assert wrapped.returncode == 0 and json.loads(wrapped.stdout) == command_report
+            wrong_key = run_history_cli(prefix, generate_keypair()[0].hex())
+            assert wrong_key.returncode == 2 and json.loads(wrong_key.stdout)["outcome"] == "indeterminate"
+            partial_configuration = {k: v for k, v in reviewer_configuration.items() if k != "information"}
+            trust_path.write_text(json.dumps(partial_configuration))
+            partial = run_history_cli(prefix)
+            assert partial.returncode == 2 and json.loads(partial.stdout)["outcome"] == "indeterminate"
+            trust_path.write_text(json.dumps(reviewer_configuration))
+            # A decrypted/resealed synthetic bundle has valid recipient encryption
+            # but contradicts the independent receipt pin.
+            from src.sar.hpke_envelope import seal_envelope
+
+            changed = deepcopy(bundle)
+            changed["receipt"]["authorized_at"] += 1
+            sealed = json.loads(encrypted)
+            sealed["hpke"] = seal_envelope(
+                json.dumps(changed).encode(),
+                reviewer_public,
+                record_digest("clearproof/history-export-binding/v1", expected_export_binding),
+            )
+            bundle_path.write_text(json.dumps(sealed))
+            contradicted_cli = run_history_cli(prefix)
+            assert contradicted_cli.returncode == 1 and json.loads(contradicted_cli.stdout)["outcome"] == "contradicted"
             await db.connect()
             real_get = PilotTransaction.get
 

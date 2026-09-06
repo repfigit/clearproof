@@ -71,6 +71,7 @@ trust store from separate reviewer configuration, decrypts and verifies the
 bundle with database access closed and Python socket connections disabled, and
 returns `supported` without printing private evidence.
 
-The public `verify-history` CLI, user-facing trust configuration and the complete
-clean-environment pilot remain required. This stage does not complete CP-015 or
-M0–M5, and synthetic keys/authorities do not satisfy production assurance gates.
+The source [verify-history CLI](PILOT_VERIFY_HISTORY_CLI.md) accepts a versioned
+reviewer-trust configuration and emits minimized JSON results. The complete
+clean-environment pilot remains required for M0–M5; synthetic keys/authorities
+do not satisfy production assurance gates.

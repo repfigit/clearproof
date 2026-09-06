@@ -42,7 +42,8 @@ encrypted record. It cannot be part of the signed receipt itself without a cycle
 The first accepted response is preserved; the same response is idempotent and a
 different response requires a future renewal design. Export includes it when
 available. Stripping it leaves review indeterminate. Independent source approval and compromise review are separate requirements
-for a supported local-decision result. The public CLI remains open.
+for a supported local-decision result. The source verify-history CLI now exposes this review with independent trust
+configuration; distribution and the complete pilot remain separate work.
 
 Sources checked September 6, 2026:
 
