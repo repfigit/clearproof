@@ -1616,6 +1616,10 @@ async def test_durable_current_inspection_real_pairing_and_revocation(db, monkey
     with pytest.raises(HTTPException) as error:
         await service(reader).inspect(credential.credential_nonce, proof, signals, now=now)
     assert error.value.status_code == 403
+    if mutation == "authorization":
+        await check_current_inspection_http(
+            db, monkeypatch, principal, configuration, verifier, proof, signals, credential.credential_nonce
+        )
     wrong = [str(int(signals[0]) + 1), *signals[1:]]
     with pytest.raises(ProofInspectionError, match="public_signal_context_mismatch"):
         await service().inspect(credential.credential_nonce, proof, wrong, now=now)
@@ -2861,3 +2865,104 @@ async def test_policy_activation_requires_review_and_serializes_current_selectio
         await PolicyActivationService(db, cipher(), reviewer).activate(initial, idempotency_key="forbidden", now=now)
     async with db.connection() as conn:
         assert (await (await conn.execute("SELECT count(*) FROM pilot_consumptions")).fetchone())[0] == 0
+
+
+async def check_current_inspection_http(
+    db, monkeypatch, principal, configuration, verifier, proof, signals, credential_id
+):
+    """Same real proof/state through authenticated HTTP, with no dependency overrides."""
+    import json
+    import time
+
+    import jwt
+    from cryptography.hazmat.primitives import serialization
+    from cryptography.hazmat.primitives.asymmetric import ec
+    from httpx import ASGITransport, AsyncClient
+
+    from src.api.main import create_app
+    from src.api.middleware import auth
+    from src.api.routes.pilot_proof import InspectionTarget
+
+    key = ec.generate_private_key(ec.SECP256R1())
+    monkeypatch.setattr(auth, "AUTH_MODE", "jwt")
+    monkeypatch.setattr(
+        auth,
+        "JWT_PUBLIC_KEY",
+        key.public_key()
+        .public_bytes(serialization.Encoding.PEM, serialization.PublicFormat.SubjectPublicKeyInfo)
+        .decode(),
+    )
+    monkeypatch.setenv("PII_MASTER_KEY", (b"a" * 32).hex())
+    current = int(time.time())
+    claims = dict(
+        iss=auth.JWT_ISSUER,
+        aud=auth.JWT_AUDIENCE,
+        sub="simulator",
+        iat=current,
+        exp=current + 300,
+        tenant_id=principal.tenant_id,
+        actor_id=principal.actor_id,
+        roles=["proof:inspect", "evidence:decrypt"],
+    )
+
+    def headers(**changes):
+        return {"Authorization": "Bearer " + jwt.encode({**claims, **changes}, key, algorithm="ES256")}
+
+    body = dict(
+        target_id="synthetic-transfer", credential_id="unused", proof_json=proof.decode(), public_signals=signals
+    )
+    body["credential_id"] = credential_id
+    app = create_app()
+    app.state.db = db
+    targets = {(principal.tenant_id, "synthetic-transfer"): InspectionTarget(configuration, verifier)}
+    app.state.pilot_inspection_targets = targets
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        response = await client.post("/pilot/proof/inspect", json=body, headers=headers())
+        assert response.status_code == 200, response.text
+        assert response.json() == dict(
+            schema_version="clearproof-current-inspection-v1",
+            scope="current-statement-inspection",
+            authorization_consumed=False,
+            assurance="development-unapproved",
+            cryptographic_valid=True,
+            manifest_digest=configuration.context.artifact_manifest_digest,
+            proof_profile="pilot-transfer-v2",
+        )
+        altered_proof = json.loads(proof)
+        altered_proof["pi_a"] = altered_proof["pi_c"]
+        invalid = await client.post(
+            "/pilot/proof/inspect", json=dict(body, proof_json=json.dumps(altered_proof)), headers=headers()
+        )
+        assert invalid.status_code == 200, invalid.text
+        assert invalid.json()["cryptographic_valid"] is False
+        assert invalid.json()["authorization_consumed"] is False
+        assert (await client.post("/pilot/proof/inspect", json=body)).status_code == 401
+        for changes, status in [({"roles": ["proof:inspect"]}, 403), ({"tenant_id": "foreign"}, 404)]:
+            assert (
+                await client.post("/pilot/proof/inspect", json=body, headers=headers(**changes))
+            ).status_code == status
+        for altered in [dict(body, target_id="missing"), dict(body, credential_id="missing")]:
+            assert (await client.post("/pilot/proof/inspect", json=altered, headers=headers())).status_code == 404
+        for altered in [
+            dict(body, now=current),
+            dict(body, root_trust="PRIVATE-MARKER"),
+            dict(body, public_signals=[str(int(signals[0]) + 1), *signals[1:]]),
+            dict(body, public_signals=signals + ["0"]),
+            dict(body, proof_json="PRIVATE-MARKER"),
+        ]:
+            rejected = await client.post("/pilot/proof/inspect", json=altered, headers=headers())
+            assert rejected.status_code == 422, rejected.text
+            assert "PRIVATE-MARKER" not in rejected.text
+        duplicate = json.dumps(body)[:-1] + ',"target_id":"other"}'
+        assert (await client.post("/pilot/proof/inspect", content=duplicate, headers=headers())).status_code == 422
+        assert (await client.post("/pilot/proof/inspect", content=b"x" * 16385, headers=headers())).status_code == 413
+        app.state.pilot_inspection_targets = None
+        assert (await client.post("/pilot/proof/inspect", json=body, headers=headers())).status_code == 503
+        app.state.pilot_inspection_targets = targets
+    await db.close()
+    await db.connect()
+    restarted = create_app()
+    restarted.state.db = db
+    restarted.state.pilot_inspection_targets = targets
+    async with AsyncClient(transport=ASGITransport(app=restarted), base_url="http://test") as client:
+        assert (await client.post("/pilot/proof/inspect", json=body, headers=headers())).json()["cryptographic_valid"]
