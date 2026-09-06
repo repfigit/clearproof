@@ -5,6 +5,7 @@ import hashlib
 
 from src.policy.fact_approval import FactTrustStore
 from src.protocol.canonical import record_digest
+from src.protocol.information_approval import InformationTrustStore, SignedInformationApproval
 from src.protocol.transfer_information import validate_transfer_information
 from src.prover.pilot_verifier import PilotProof, public_signals
 from src.sar.pilot_envelope import MAX_PAYLOAD_BYTES, RecipientTrustStore, seal_pilot_envelope
@@ -26,6 +27,8 @@ class ProofAuthorizationService(ProofInspectionService):
         *,
         fact_trust: FactTrustStore,
         pii: bytes,
+        information_approval: SignedInformationApproval,
+        information_trust: InformationTrustStore,
         recipient_trust: RecipientTrustStore,
         recipient_key_id: str,
         idempotency_key: str,
@@ -45,6 +48,7 @@ class ProofAuthorizationService(ProofInspectionService):
         if type(pii) is not bytes or not 1 <= len(pii) <= MAX_PAYLOAD_BYTES:
             raise ValueError("Expected 1–32768 payload bytes")
         validate_transfer_information(pii, self._inputs["transfer"], self._context)
+        information_approval = SignedInformationApproval.model_validate(information_approval)
         PilotProof.parse(proof)
         signals = public_signals(signals)
         fact_ids = tuple(fact_ids)
@@ -59,12 +63,16 @@ class ProofAuthorizationService(ProofInspectionService):
             "transfer_digest": self._context.transfer_digest,
             "context_digest": self._context.digest,
             "recipient_key_id": recipient_key_id,
+            "information_signature_digest": hashlib.sha256(bytes.fromhex(information_approval.signature)).hexdigest(),
         }
         nullifier = format(int(signals[3]), "064x")
 
         async def persist(tx):
             if await tx.is_consumed(nullifier):
                 raise ReplayConflict("Authorization is already consumed")
+            information_trust.verify(
+                information_approval, pii, self._inputs["transfer"], self._context, credential_id=credential_id, now=now
+            )
             inspection, decision = await self._evaluate_transaction(
                 tx, credential_id, proof, signals, fact_ids, fact_trust=fact_trust, now=now
             )
@@ -98,6 +106,7 @@ class ProofAuthorizationService(ProofInspectionService):
                 "execution": "not-requested",
                 "envelope_digest": envelope_digest,
                 "recipient_key_id": recipient_key_id,
+                "information_signature_digest": request["information_signature_digest"],
             }
             receipt_id = record_digest("clearproof/local-authorization/v1", receipt)
             await tx.put(
@@ -111,6 +120,7 @@ class ProofAuthorizationService(ProofInspectionService):
                     "transfer": self._inputs["transfer"].model_dump(mode="json"),
                     "policy_evaluation": decision.model_dump(mode="json"),
                     "recipient_envelope": envelope,
+                    "information_approval": information_approval.model_dump(mode="json"),
                 },
             )
             await tx.put("receipt", receipt_id, receipt)
@@ -120,5 +130,12 @@ class ProofAuthorizationService(ProofInspectionService):
         # Payload fingerprints stay inside the encrypted idempotency request digest;
         # public identifiers bind randomized ciphertext, never a guessable PII hash.
         return await self._store.run_idempotent(
-            "consume-proof", idempotency_key, {**request, "payload_digest": hashlib.sha256(pii).hexdigest()}, persist
+            "consume-proof",
+            idempotency_key,
+            {
+                **request,
+                "payload_digest": hashlib.sha256(pii).hexdigest(),
+                "information_approval": information_approval.model_dump(mode="json"),
+            },
+            persist,
         )

@@ -1709,6 +1709,13 @@ async def test_durable_current_inspection_real_pairing_and_revocation(db, monkey
             import base64
 
             from src.protocol.canonical import record_digest
+            from src.protocol.information_approval import (
+                InformationApproval,
+                InformationAuthority,
+                InformationTrustStore,
+                SignedInformationApproval,
+                sign_information,
+            )
             from src.sar.hpke_envelope import generate_keypair
             from src.sar.pilot_envelope import RecipientAuthority, RecipientTrustStore, open_pilot_envelope
             from src.services.proof_authorization import AuthorizationRejected, ProofAuthorizationService
@@ -1735,6 +1742,36 @@ async def test_durable_current_inspection_real_pairing_and_revocation(db, monkey
                 pii=raw_information + b" " * (32768 - len(raw_information)),
                 recipient_key_id=recipient.key_id,
                 recipient_trust=RecipientTrustStore([recipient]),
+            )
+            information_key = Ed25519PrivateKey.generate()
+            information_authority = InformationAuthority(
+                public_key=information_key.public_key().public_bytes_raw().hex(),
+                tenant_id=principal.tenant_id,
+                chain_id=int(configuration.context.deployment_chain_id),
+                registry_address=configuration.context.deployment_address,
+                source_ids=("synthetic-kyc",),
+                not_before=now,
+                not_after=credential.expires_at,
+                max_lifetime_seconds=86400,
+            )
+            signed_information = sign_information(
+                InformationApproval(
+                    tenant_id=principal.tenant_id,
+                    transfer_digest=configuration.transfer.digest,
+                    context_digest=configuration.context.digest,
+                    credential_id=credential.credential_nonce,
+                    payload_digest=hashlib.sha256(payload_args["pii"]).hexdigest(),
+                    source_id="synthetic-kyc",
+                    source_evidence_digest="cd" * 32,
+                    signed_at=now,
+                    expires_at=credential.expires_at,
+                    key_id=information_authority.key_id,
+                ),
+                information_key,
+            )
+            payload_args.update(
+                information_approval=signed_information,
+                information_trust=InformationTrustStore([information_authority]),
             )
 
             async def authorize(key="consume-once", references=refs, who=authorizer, body=proof, **changes):
@@ -1766,6 +1803,16 @@ async def test_durable_current_inspection_real_pairing_and_revocation(db, monkey
             mismatched_information = {**information, "amount_base_units": "1"}
             with pytest.raises(ValueError, match="transfer information"):
                 await authorize(pii=json.dumps(mismatched_information).encode())
+            valid_but_unapproved = json.loads(raw_information)
+            valid_but_unapproved["originator"]["person"]["name"] = "Unapproved synthetic name"
+            with pytest.raises(ValueError, match="payload authority"):
+                await authorize(pii=json.dumps(valid_but_unapproved).encode())
+            invalid_approval = SignedInformationApproval(
+                approval=signed_information.approval,
+                signature="00" * 64,
+            )
+            with pytest.raises(ValueError, match="signature"):
+                await authorize(information_approval=invalid_approval)
             with pytest.raises(ValueError, match="Recipient key"):
                 await authorize(recipient_key_id="unknown")
             from src.services import proof_authorization as authorization_module
@@ -1845,6 +1892,11 @@ async def test_durable_current_inspection_real_pairing_and_revocation(db, monkey
             assert "Synthetic José Originator" not in json.dumps(record, ensure_ascii=False)
             assert "Synthetic Recipient Ltd" not in json.dumps(record)
             assert "payload_digest" not in record and "payload_digest" not in receipt
+            assert record["information_approval"] == signed_information.model_dump(mode="json")
+            assert (
+                receipt["information_signature_digest"]
+                == hashlib.sha256(bytes.fromhex(signed_information.signature)).hexdigest()
+            )
             assert (await retained.get("receipt", receipt["receipt_id"]))["authorized_at"] == now
             assert (await service().inspect(credential.credential_nonce, proof, signals, now=now)).cryptographic_valid
             async with db.connection() as conn:

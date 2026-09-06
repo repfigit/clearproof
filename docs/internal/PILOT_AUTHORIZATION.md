@@ -16,6 +16,8 @@ cannot consume or create authorization records.
 
 Authorization also requires a [trusted recipient envelope](PILOT_RECIPIENT_ENVELOPE.md).
 The supplied bytes must first satisfy the [bound information profile](PILOT_TRANSFER_INFORMATION.md).
+An independently trusted [information approval](PILOT_INFORMATION_APPROVAL.md)
+must cover the exact bytes and credential before the current inspection proceeds.
 After ALLOW it seals those validated bytes to a currently approved beneficiary VASP
 key. Encryption failure rejects the operation before any consumption commits.
 

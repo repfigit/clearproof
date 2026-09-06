@@ -32,11 +32,12 @@ its field names and tagged identity objects must not be advertised as an IVMS101
 wire message. A complete, versioned IVMS101 mapping and bilateral interoperability
 remain required work.
 
-Structural validation does not establish identity truth or authenticate the name
-and address against retained KYC evidence. The external business attestation about
-information completeness is still separately checked; it is not a signature over
-these plaintext bytes. Exact-payload source attestation, jurisdiction-specific
-requirements, sender authentication, delivery and acknowledgment remain open.
+Structural validation does not establish identity truth. Authorization additionally
+requires an [exact-payload source approval](PILOT_INFORMATION_APPROVAL.md), binding
+the name/address bytes and credential reference to a scoped trusted signer. The
+external business attestation about completeness remains a separate check. Actual
+source-document review/retention, jurisdiction-specific requirements, sender
+authentication, delivery and acknowledgment remain open.
 
 Focused tests cover natural/legal persons, Unicode, exact maximum-size bytes,
 private representations/errors, field and party substitution, missing/ambiguous
