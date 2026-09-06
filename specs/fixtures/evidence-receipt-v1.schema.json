@@ -1,0 +1,135 @@
+{
+  "additionalProperties": false,
+  "description": "Minimized result references. A digest alone is not an attestation signature.",
+  "properties": {
+    "schema_version": {
+      "const": "clearproof-evidence-receipt-v1",
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "receipt_id": {
+      "maxLength": 64,
+      "minLength": 1,
+      "pattern": "^[a-z0-9][a-z0-9_-]{0,63}$",
+      "title": "Receipt Id",
+      "type": "string"
+    },
+    "tenant_id": {
+      "maxLength": 64,
+      "minLength": 1,
+      "pattern": "^[a-z0-9][a-z0-9_-]{0,63}$",
+      "title": "Tenant Id",
+      "type": "string"
+    },
+    "transfer_digest": {
+      "maxLength": 64,
+      "minLength": 64,
+      "pattern": "^[0-9a-f]{64}$",
+      "title": "Transfer Digest",
+      "type": "string"
+    },
+    "verification_context_digest": {
+      "maxLength": 64,
+      "minLength": 64,
+      "pattern": "^[0-9a-f]{64}$",
+      "title": "Verification Context Digest",
+      "type": "string"
+    },
+    "encrypted_envelope_digest": {
+      "maxLength": 64,
+      "minLength": 64,
+      "pattern": "^[0-9a-f]{64}$",
+      "title": "Encrypted Envelope Digest",
+      "type": "string"
+    },
+    "proof_digest": {
+      "anyOf": [
+        {
+          "maxLength": 64,
+          "minLength": 64,
+          "pattern": "^[0-9a-f]{64}$",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "title": "Proof Digest"
+    },
+    "cryptographic_result": {
+      "enum": [
+        "valid",
+        "invalid",
+        "unavailable",
+        "not_evaluated"
+      ],
+      "title": "Cryptographic Result",
+      "type": "string"
+    },
+    "policy_result": {
+      "enum": [
+        "allow",
+        "review",
+        "deny",
+        "indeterminate"
+      ],
+      "title": "Policy Result",
+      "type": "string"
+    },
+    "exchange_result": {
+      "enum": [
+        "not_sent",
+        "sent",
+        "accepted",
+        "rejected",
+        "unknown"
+      ],
+      "title": "Exchange Result",
+      "type": "string"
+    },
+    "settlement_result": {
+      "enum": [
+        "not_observed",
+        "pending",
+        "confirmed",
+        "failed",
+        "unknown"
+      ],
+      "title": "Settlement Result",
+      "type": "string"
+    },
+    "authorization_result": {
+      "enum": [
+        "not_requested",
+        "not_consumed",
+        "consumed",
+        "rejected"
+      ],
+      "title": "Authorization Result",
+      "type": "string"
+    },
+    "observed_at": {
+      "maximum": 9007199254740991,
+      "minimum": 0,
+      "title": "Observed At",
+      "type": "integer"
+    }
+  },
+  "required": [
+    "schema_version",
+    "receipt_id",
+    "tenant_id",
+    "transfer_digest",
+    "verification_context_digest",
+    "encrypted_envelope_digest",
+    "proof_digest",
+    "cryptographic_result",
+    "policy_result",
+    "exchange_result",
+    "settlement_result",
+    "authorization_result",
+    "observed_at"
+  ],
+  "title": "EvidenceReceipt",
+  "type": "object"
+}
