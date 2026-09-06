@@ -26,7 +26,10 @@ expected binding metadata. It rejects wrong keys, changed associated data,
 ciphertext tampering, wrong bundle scope and oversized input. The helper returns
 private evidence to its authorized caller; it does not print or persist it.
 
-Decryption is not historical verification. The exported artifact is not a signed
+Decryption is not historical verification. A separate
+[offline inspector](PILOT_HISTORY_INSPECTION.md) checks linked integrity and real
+pairing against reviewer-supplied pins, while retaining an indeterminate historical
+outcome when authority evidence is missing. The exported artifact is not a signed
 decision certificate and HPKE base mode does not authenticate the exporter.
 Captured/local clocks and local revocation absence remain explicitly labeled.
 Independent historical trust, authenticated decision and timing evidence,

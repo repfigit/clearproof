@@ -2015,6 +2015,46 @@ async def test_durable_current_inspection_real_pairing_and_revocation(db, monkey
             assert captured_selection["revision"] == 1 and captured_selection["value"]["policy_digest"] == policy.digest
             for name, encoded in bundle["configuration_base64"].items():
                 assert base64.b64decode(encoded, validate=True) == expected_config[name]
+            from copy import deepcopy
+
+            from src.prover.history import inspect_history_bundle
+
+            history_args = dict(
+                expected_receipt_id=receipt["receipt_id"],
+                expected_tenant=principal.tenant_id,
+                verified_at=credential.expires_at + 100,
+            )
+            historical = await inspect_history_bundle(bundle, verifier, **history_args)
+            assert historical.integrity_valid and historical.cryptographic_valid
+            assert historical.outcome == "indeterminate"
+            assert "independent_timing_evidence_missing" in historical.reasons
+            assert "historical_revocation_evidence_missing" in historical.reasons
+            for mutation_kind in ("receipt", "root", "key", "policy", "envelope", "signal", "extra_record"):
+                changed_bundle = deepcopy(bundle)
+                if mutation_kind == "receipt":
+                    changed_bundle["receipt"]["authorized_at"] += 1
+                elif mutation_kind in ("root", "policy"):
+                    kind = "issuer-root" if mutation_kind == "root" else "policy"
+                    item = next(r for r in changed_bundle["records"] if r["kind"] == kind)
+                    item["value"]["injected"] = True
+                elif mutation_kind == "key":
+                    changed_bundle["configuration_base64"]["verification_key"] = base64.b64encode(b"{}").decode()
+                elif mutation_kind == "envelope":
+                    changed_bundle["proof"]["recipient_envelope"]["binding"]["sealed_at"] += 1
+                elif mutation_kind == "signal":
+                    changed_bundle["proof"]["signals"][0] = str(int(signals[0]) + 1)
+                else:
+                    changed_bundle["records"].append(changed_bundle["records"][0])
+                contradicted = await inspect_history_bundle(changed_bundle, verifier, **history_args)
+                assert contradicted.outcome == "contradicted" and not contradicted.integrity_valid
+            incomplete_bundle = deepcopy(bundle)
+            incomplete_bundle["records"].pop()
+            missing = await inspect_history_bundle(incomplete_bundle, verifier, **history_args)
+            assert missing.outcome == "indeterminate" and missing.reasons == ("missing_evidence",)
+            wrong_tenant = await inspect_history_bundle(
+                bundle, verifier, **{**history_args, "expected_tenant": "foreign"}
+            )
+            assert wrong_tenant.outcome == "contradicted"
             with pytest.raises(ValueError):
                 open_evidence_bundle(encrypted, generate_keypair()[0], expected_binding=expected_export_binding)
             with pytest.raises(ValueError):
@@ -2028,29 +2068,50 @@ async def test_durable_current_inspection_real_pairing_and_revocation(db, monkey
                 open_evidence_bundle(
                     json.dumps(corrupted).encode(), reviewer_private, expected_binding=expected_export_binding
                 )
-            # A fresh process can decrypt with no database or network access.
+            # A fresh process decrypts and pairs with independent pins and no database.
             await db.close()
             offline = subprocess.run(
                 [
                     str(Path(__file__).parents[2] / ".venv/bin/python"),
                     "-c",
-                    "import json,sys,socket; from src.services.evidence_export import open_evidence_bundle; "
+                    "import json,sys,socket,asyncio; from pathlib import Path; "
+                    "from src.services.evidence_export import open_evidence_bundle; "
+                    "from src.prover.history import inspect_history_bundle; "
+                    "from src.prover.pilot_artifacts import inspect_artifacts; "
+                    "from src.prover.pilot_verifier import PilotPairingVerifier; "
                     "socket.socket.connect=lambda *a,**k: (_ for _ in ()).throw(RuntimeError('network forbidden')); "
                     "v=json.load(sys.stdin); b=open_evidence_bundle(v['encrypted'].encode(),bytes.fromhex(v['key']),"
-                    "expected_binding=v['binding']); print(json.dumps({'receipt_id':b['receipt_id'],"
-                    "'records':len(b['records'])}))",
+                    "expected_binding=v['binding']); "
+                    "a=inspect_artifacts(Path(v['artifacts']),trusted_digest=v['pin']); "
+                    "p=PilotPairingVerifier.load(a,bundle_path=Path(v['runtime']),bundle_sha256=v['runtime_pin'],"
+                    "node=Path(v['node'])); r=asyncio.run(inspect_history_bundle(b,p,**v['history_args'])); "
+                    "print(json.dumps({'receipt_id':b['receipt_id'],'records':len(b['records']),"
+                    "'integrity':r.integrity_valid,'pairing':r.cryptographic_valid,'outcome':r.outcome}))",
                 ],
                 input=json.dumps(
-                    {"encrypted": encrypted.decode(), "key": reviewer_private.hex(), "binding": expected_export_binding}
+                    {
+                        "encrypted": encrypted.decode(),
+                        "key": reviewer_private.hex(),
+                        "binding": expected_export_binding,
+                        "artifacts": str(root),
+                        "pin": artifacts.manifest.digest,
+                        "runtime": str(runtime),
+                        "runtime_pin": hashlib.sha256(verifier.bundle).hexdigest(),
+                        "node": str(verifier.node),
+                        "history_args": history_args,
+                    }
                 ),
                 capture_output=True,
                 text=True,
-                timeout=15,
+                timeout=30,
             )
             assert offline.returncode == 0, "Offline export decryption failed"
             assert json.loads(offline.stdout) == {
                 "receipt_id": receipt["receipt_id"],
                 "records": len(bundle["records"]),
+                "integrity": True,
+                "pairing": True,
+                "outcome": "indeterminate",
             }
             await db.connect()
             real_get = PilotTransaction.get
