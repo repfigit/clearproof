@@ -53,3 +53,19 @@ Validation uses isolated real PostgreSQL schemas in
 not cryptographic proofs. Restart coverage closes/recreates the database connection
 pool and constructs new store objects; it does not claim a PostgreSQL server crash
 or full API-process recovery test.
+
+### Shared enrollment eligibility checks
+
+`load_unrevoked_enrollment` requires the caller's expected chain and registry
+alongside its tenant transaction and verification time. It verifies the retained
+wallet signature, record identity/commitment and original acceptance interval
+before checking present credential validity and revocation. Issuance-tree building
+uses this same boundary. Malformed acceptance evidence or an invalid signature
+fails the build rather than being treated as an expired credential to omit.
+
+Consent expiry limits when enrollment may be accepted; it does not shorten an
+already accepted credential's lifetime. Callers must still independently establish
+issuer/root authority, policy, valuation, transfer binding and proof validity.
+The loader neither authorizes a transfer nor consumes its nullifier. Current
+verification must run these checks in the same tenant transaction as consumption
+to prevent a revocation racing that decision; that service integration remains open.

@@ -386,6 +386,7 @@ async def test_durable_revocation_scope_retry_and_proving_precondition(db):
     from src.protocol.enrollment import EnrollmentConsent
     from src.services.enrollment import (
         EnrollmentIneligible,
+        EnrollmentIntegrityError,
         EnrollmentNotFound,
         EnrollmentService,
         RevocationRequest,
@@ -440,10 +441,23 @@ async def test_durable_revocation_scope_retry_and_proving_precondition(db):
         )
         assert wrong_chain.tree.entries == ()
     async with store(db).transaction() as tx:
-        assert await load_unrevoked_enrollment(tx, "a" * 64, now=120) == credential
+        assert (
+            await load_unrevoked_enrollment(tx, "a" * 64, chain_id=31337, registry_address="0x" + "1" * 40, now=120)
+            == credential
+        )
+        # Consent can expire after valid acceptance without expiring the credential.
+        assert (
+            await load_unrevoked_enrollment(tx, "a" * 64, chain_id=31337, registry_address="0x" + "1" * 40, now=201)
+            == credential
+        )
+        for chain_id, address in [(31338, "0x" + "1" * 40), (31337, "0x" + "2" * 40), (True, "0x" + "1" * 40)]:
+            with pytest.raises(EnrollmentIneligible, match="audience"):
+                await load_unrevoked_enrollment(tx, "a" * 64, chain_id=chain_id, registry_address=address, now=120)
         for invalid_time in (109, 1000):
             with pytest.raises(EnrollmentIneligible):
-                await load_unrevoked_enrollment(tx, "a" * 64, now=invalid_time)
+                await load_unrevoked_enrollment(
+                    tx, "a" * 64, chain_id=31337, registry_address="0x" + "1" * 40, now=invalid_time
+                )
     request = RevocationRequest(credential_id="a" * 64, idempotency_key="revoke-1", reason_code="issuer-withdrawal")
     for changes in [{"issuer_dids": ("did:web:other.example",)}, {"roles": ("evidence:decrypt",)}]:
         unauthorized = Principal.model_validate({**principal.model_dump(), **changes})
@@ -479,7 +493,7 @@ async def test_durable_revocation_scope_retry_and_proving_precondition(db):
         assert revoked_tree.source_digest != initial_tree.source_digest
     async with store(db).transaction() as tx:
         with pytest.raises(EnrollmentIneligible, match="revoked"):
-            await load_unrevoked_enrollment(tx, "a" * 64, now=140)
+            await load_unrevoked_enrollment(tx, "a" * 64, chain_id=31337, registry_address="0x" + "1" * 40, now=140)
     assert (await store(db).get("credential", "a" * 64))["consent"]["credential"] == credential.model_dump(mode="json")
     assert (await store(db).get("revocation", "a" * 64))["reason_code"] == "issuer-withdrawal"
     # An encrypted row alone is not sufficient: tampered retained consent must
@@ -494,6 +508,8 @@ async def test_durable_revocation_scope_retry_and_proving_precondition(db):
     async with PilotStore(db, cipher(), principal).transaction() as tx:
         await tx.put("credential", "b" * 64, bad)
         with pytest.raises(EnrollmentError):
+            await load_unrevoked_enrollment(tx, "b" * 64, chain_id=31337, registry_address="0x" + "1" * 40, now=140)
+        with pytest.raises(EnrollmentError):
             await build_issuance_tree(
                 tx,
                 issuer_did=credential.issuer_did,
@@ -501,6 +517,23 @@ async def test_durable_revocation_scope_retry_and_proving_precondition(db):
                 registry_address="0x" + "1" * 40,
                 now=140,
             )
+
+    # Even authentic consent must have been accepted within its signed interval.
+    for index, accepted_at in enumerate((True, 99, 200)):
+        nonce = str(index + 3) * 64
+        altered = PilotCredential.model_validate({**credential.model_dump(), "credential_nonce": nonce})
+        valid_consent = EnrollmentConsent.model_validate({**consent.model_dump(), "credential": altered})
+        record = {
+            **bad,
+            "consent": valid_consent.model_dump(mode="json"),
+            "signature": "0x" + wallet.sign_message(valid_consent.signing_message()).signature.hex(),
+            "credential_commitment": altered.commitment,
+            "accepted_at": accepted_at,
+        }
+        async with PilotStore(db, cipher(), principal).transaction() as tx:
+            await tx.put("credential", nonce, record)
+            with pytest.raises(EnrollmentIntegrityError, match="acceptance"):
+                await load_unrevoked_enrollment(tx, nonce, chain_id=31337, registry_address="0x" + "1" * 40, now=201)
 
 
 async def test_tenant_keyset_scan_and_issuance_capacity_fail_without_truncation(db):

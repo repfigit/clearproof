@@ -64,13 +64,10 @@ async def build_issuance_tree(
             or consent.registry_address != registry_address
         ):
             continue
-        # Recheck retained wallet evidence at its original acceptance time.
-        # Issuer scope was checked above against the authenticated operator.
-        consent.verify_wallet_signature(stored["signature"])
-        if not consent.credential.issued_at <= stored["accepted_at"] < consent.consent_expires_at:
-            raise ValueError("Enrollment acceptance is outside signed consent validity")
         try:
-            credential = await load_unrevoked_enrollment(tx, credential_id, now=now)
+            credential = await load_unrevoked_enrollment(
+                tx, credential_id, chain_id=chain_id, registry_address=registry_address, now=now
+            )
         except EnrollmentIneligible:
             continue
         entries.append((credential_id, credential.commitment))
