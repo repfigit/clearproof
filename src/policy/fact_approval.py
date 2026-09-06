@@ -64,6 +64,7 @@ class FactAuthority(Record):
     predicates: tuple[OpaqueId, ...] = Field(min_length=1, max_length=4)
     not_before: Epoch
     not_after: Epoch
+    compromised_at: Epoch | None = None
     max_lifetime_seconds: int = Field(ge=1, le=86400)
     max_observation_age_seconds: int = Field(ge=1, le=86400)
 
@@ -105,6 +106,7 @@ class FactTrustStore:
         context: VerificationContext,
         tenant_id: str,
         now: int,
+        verified_at: int | None = None,
     ) -> PolicyFacts:
         """Authenticate evidence; missing/false facts remain missing/false, never ALLOW.
 
@@ -119,10 +121,18 @@ class FactTrustStore:
             raise FactTrustError("Invalid current fact verification time")
         if tenant_id != transfer.tenant_id:
             raise FactTrustError("Fact verification tenant mismatch")
+        review_at = now if verified_at is None else verified_at
+        if type(review_at) is not int or not now <= review_at < 2**53:
+            raise FactTrustError("Invalid fact review time")
         unique = {}
         for value in approvals:
             signed = SignedFactApproval.model_validate(value)
             approval, fact = signed.approval, signed.approval.fact
+            if any(
+                a.key_id == approval.key_id and a.compromised_at is not None and a.compromised_at <= review_at
+                for a in self._authorities
+            ):
+                raise FactTrustError("Fact authority compromise is unresolved")
             if (approval.tenant_id, approval.transfer_digest, approval.context_digest) != (
                 tenant_id,
                 transfer.digest,

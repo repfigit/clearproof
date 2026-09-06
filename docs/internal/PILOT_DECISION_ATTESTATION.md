@@ -21,8 +21,7 @@ signer authority leaves the review indeterminate. The signature authenticates th
 operator decision, not every underlying source's truth or legal sufficiency.
 
 The statement explicitly labels its clock `operator-clock-only`. This is not an
-independent timestamp or proof of historical non-revocation. Historical inspection
-still cannot return `supported`. Status requires separate
+independent timestamp or proof of historical non-revocation. Historical support requires all independent checks. Status requires separate
 [registry authority delegation](PILOT_HISTORY_STATUS.md); independent timing
 evidence remains required. Exact idempotent retries recover the original receipt even after signer
 rotation or expiry and do not create a fresh authorization.

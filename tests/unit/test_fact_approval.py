@@ -166,3 +166,17 @@ def test_attestors_cannot_claim_proof_derived_results(case, predicate):
         FactApproval.model_validate(
             {**approval.model_dump(), "fact": {**approval.fact.model_dump(), "predicate": predicate}}
         )
+
+
+def test_historical_compromise_and_key_expiry(case):
+    _, authority, approvals, args, _ = case
+    reviewed_at = authority.not_after + 100
+    FactTrustStore([authority]).verify_for_context(approvals, **args, verified_at=reviewed_at)
+    compromised = FactAuthority.model_validate({**authority.model_dump(), "compromised_at": args["now"] + 1})
+    for authorities in ([compromised], [authority, compromised], [compromised, authority]):
+        with pytest.raises(FactTrustError, match="compromise"):
+            FactTrustStore(authorities).verify_for_context(approvals, **args, verified_at=reviewed_at)
+        with pytest.raises(FactTrustError, match="compromise"):
+            FactTrustStore(authorities).verify_for_context(approvals, **{**args, "now": args["now"] + 2})
+    with pytest.raises(FactTrustError):
+        FactTrustStore([authority]).verify_for_context(approvals, **args, verified_at=args["now"] - 1)

@@ -8,7 +8,7 @@ from src.protocol.canonical import record_digest
 from src.protocol.transfer import Transfer, VerificationContext
 
 
-def replay_history_policy(bundle, statement_trust, fact_trust: FactTrustStore, signals) -> bool:
+def replay_history_policy(bundle, statement_trust, fact_trust: FactTrustStore, signals, *, verified_at: int) -> bool:
     """Called only after successful independent statement reconstruction and pairing.
 
     The replay conditions on the captured local non-revocation observation. It
@@ -42,7 +42,12 @@ def replay_history_policy(bundle, statement_trust, fact_trust: FactTrustStore, s
             raise ValueError("Captured fact identity mismatch")
         approvals.append(signed)
     external = fact_trust.verify_for_context(
-        tuple(approvals), transfer=transfer, context=context, tenant_id=transfer.tenant_id, now=at
+        tuple(approvals),
+        transfer=transfer,
+        context=context,
+        tenant_id=transfer.tenant_id,
+        now=at,
+        verified_at=verified_at,
     )
     facts = with_verified_statement_facts(
         external, proof_digest=proof["proof_digest"], expires_at=int(signals[5]), observed_at=at

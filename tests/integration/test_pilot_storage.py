@@ -2168,7 +2168,6 @@ async def test_durable_current_inspection_real_pairing_and_revocation(db, monkey
             assert with_status.reasons == (
                 "independent_timing_evidence_missing",
                 "information_authority_unverified",
-                "historical_source_authority_review_incomplete",
             )
             timed = await inspect_history_bundle(
                 bundle,
@@ -2182,10 +2181,7 @@ async def test_durable_current_inspection_real_pairing_and_revocation(db, monkey
             )
             assert timed.timing_authenticated and timed.status_authenticated and timed.policy_reproduced
             assert timed.timestamp_observation.accuracy_us == 1000000
-            assert timed.reasons == (
-                "information_authority_unverified",
-                "historical_source_authority_review_incomplete",
-            )
+            assert timed.reasons == ("information_authority_unverified",)
             historical_information = InformationTrustStore([information_authority])
             informed = await inspect_history_bundle(
                 bundle,
@@ -2199,7 +2195,53 @@ async def test_durable_current_inspection_real_pairing_and_revocation(db, monkey
                 **history_args,
             )
             assert informed.information_authenticated and informed.timing_authenticated
-            assert informed.reasons == ("historical_source_authority_review_incomplete",)
+            assert informed.outcome == "supported" and informed.reasons == ()
+            full_review_trust = dict(
+                statement_trust=historical_trust,
+                fact_trust=trust,
+                decision_trust=decision_trust,
+                status_trust=status_trust,
+                timing_trust=timing_trust,
+                information_trust=historical_information,
+            )
+            for omitted in full_review_trust:
+                incomplete = await inspect_history_bundle(
+                    bundle,
+                    verifier,
+                    **{k: v for k, v in full_review_trust.items() if k != omitted},
+                    **history_args,
+                )
+                assert incomplete.outcome == "indeterminate" and incomplete.reasons
+            from src.protocol.root_snapshot import RootAuthority, RootTrustStore
+            from src.protocol.valuation_approval import ValuationAuthority, ValuationTrustStore
+
+            compromised_roots = RootTrustStore(
+                [
+                    RootAuthority.model_validate({**a.model_dump(), "compromised_at": now + 1})
+                    for a in configuration.root_trust._authorities
+                ]
+            )
+            compromised_quotes = ValuationTrustStore(
+                [
+                    ValuationAuthority.model_validate({**a.model_dump(), "compromised_at": now + 1})
+                    for a in configuration.valuation_trust._authorities
+                ]
+            )
+            compromised_facts = FactTrustStore(
+                [FactAuthority.model_validate({**authority.model_dump(), "compromised_at": now + 1})]
+            )
+            for changes in (
+                {"statement_trust": replace(historical_trust, root_trust=compromised_roots)},
+                {"statement_trust": replace(historical_trust, valuation_trust=compromised_quotes)},
+                {"fact_trust": compromised_facts},
+            ):
+                uncertain_source = await inspect_history_bundle(
+                    bundle,
+                    verifier,
+                    **{**full_review_trust, **changes},
+                    **history_args,
+                )
+                assert uncertain_source.outcome == "indeterminate" and uncertain_source.reasons
             changed_information_claim = deepcopy(bundle)
             changed_information_claim["proof"]["information_approval"]["approval"]["source_evidence_digest"] = "ef" * 32
             invalid_information = await inspect_history_bundle(
@@ -2379,24 +2421,8 @@ async def test_durable_current_inspection_real_pairing_and_revocation(db, monkey
             offline = subprocess.run(
                 [
                     str(Path(__file__).parents[2] / ".venv/bin/python"),
-                    "-c",
-                    "import json,sys,socket,asyncio; from pathlib import Path; "
-                    "from src.services.evidence_export import open_evidence_bundle; "
-                    "from src.prover.history import inspect_history_bundle; "
-                    "from src.prover.history_timing import TimestampTrust; from cryptography import x509; "
-                    "from src.prover.pilot_artifacts import inspect_artifacts; "
-                    "from src.prover.pilot_verifier import PilotPairingVerifier; "
-                    "socket.socket.connect=lambda *a,**k: (_ for _ in ()).throw(RuntimeError('network forbidden')); "
-                    "v=json.load(sys.stdin); b=open_evidence_bundle(v['encrypted'].encode(),bytes.fromhex(v['key']),"
-                    "expected_binding=v['binding']); "
-                    "a=inspect_artifacts(Path(v['artifacts']),trusted_digest=v['pin']); "
-                    "p=PilotPairingVerifier.load(a,bundle_path=Path(v['runtime']),bundle_sha256=v['runtime_pin'],"
-                    "node=Path(v['node'])); t=TimestampTrust(certificate=x509.load_der_x509_certificate("
-                    "bytes.fromhex(v['tsa_leaf'])),roots=(x509.load_der_x509_certificate(bytes.fromhex(v['tsa_root'])),),"
-                    "**v['timing_config']); "
-                    "r=asyncio.run(inspect_history_bundle(b,p,timing_trust=t,**v['history_args'])); "
-                    "print(json.dumps({'receipt_id':b['receipt_id'],'records':len(b['records']),"
-                    "'integrity':r.integrity_valid,'pairing':r.cryptographic_valid,'timing':r.timing_authenticated,'outcome':r.outcome}))",
+                    "-m",
+                    "tests.offline_history_fixture",
                 ],
                 input=json.dumps(
                     {
@@ -2412,6 +2438,18 @@ async def test_durable_current_inspection_real_pairing_and_revocation(db, monkey
                         "tsa_leaf": tsa_leaf.public_bytes(Encoding.DER).hex(),
                         "tsa_root": tsa_root.public_bytes(Encoding.DER).hex(),
                         "timing_config": timing_config,
+                        "trust": {
+                            "policy": policy.model_dump(mode="json"),
+                            "root_pins": configuration.root_pins.model_dump(mode="json"),
+                            "roots": [a.model_dump(mode="json") for a in configuration.root_trust._authorities],
+                            "valuations": [
+                                a.model_dump(mode="json") for a in configuration.valuation_trust._authorities
+                            ],
+                            "facts": authority.model_dump(mode="json"),
+                            "decision": decision_authority.model_dump(mode="json"),
+                            "status": status_authority.model_dump(mode="json"),
+                            "information": information_authority.model_dump(mode="json"),
+                        },
                     }
                 ),
                 capture_output=True,
@@ -2425,7 +2463,7 @@ async def test_durable_current_inspection_real_pairing_and_revocation(db, monkey
                 "integrity": True,
                 "pairing": True,
                 "timing": True,
-                "outcome": "indeterminate",
+                "outcome": "supported",
             }
             await db.connect()
             real_get = PilotTransaction.get

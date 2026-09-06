@@ -87,6 +87,7 @@ class RootAuthority(Record):
     issuer_dids: tuple[str, ...] = Field(default=(), max_length=256)
     not_before: Epoch
     not_after: Epoch
+    compromised_at: Epoch | None = None
 
     @model_validator(mode="after")
     def scope(self):
@@ -110,10 +111,20 @@ class RootTrustStore:
             raise ValueError("Configure 1–256 root authorities")
         self._authorities = tuple(RootAuthority.model_validate(a) for a in authorities)
 
-    def verify_historical(self, signed: SignedRootSnapshot, *, evaluated_at: int) -> RootSnapshot:
+    def verify_historical(
+        self, signed: SignedRootSnapshot, *, evaluated_at: int, verified_at: int | None = None
+    ) -> RootSnapshot:
         """Authenticate approval at a given time; does NOT prove it was the current head."""
         signed = SignedRootSnapshot.model_validate(signed)
         snapshot = signed.snapshot
+        review_at = evaluated_at if verified_at is None else verified_at
+        if type(review_at) is not int or type(evaluated_at) is not int or not 0 <= evaluated_at <= review_at < 2**53:
+            raise RootTrustError("Invalid root review time")
+        if any(
+            a.key_id == snapshot.key_id and a.compromised_at is not None and a.compromised_at <= review_at
+            for a in self._authorities
+        ):
+            raise RootTrustError("Root authority compromise is unresolved")
         if type(evaluated_at) is not int or not snapshot.issued_at <= evaluated_at < snapshot.expires_at:
             raise RootTrustError("Root approval is outside its validity interval")
         for authority in self._authorities:

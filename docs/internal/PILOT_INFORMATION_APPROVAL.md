@@ -65,5 +65,6 @@ beneficiary's decryption key and does not log payload fields or hashes. This
 check authenticates the retained source assertion; it does not independently
 prove that ciphertext decrypts to the approved payload. The authenticated
 operator receipt binds the approved signature and recipient envelope together.
-Broader historical source compromise review remains required before supported
-historical outcomes are enabled.
+Historical root, valuation and fact checks also apply reviewer-time compromise
+configuration. Support requires every layer in
+[historical inspection](PILOT_HISTORY_INSPECTION.md).

@@ -23,7 +23,7 @@ class HistoryStatementTrust:
     root_pins: CurrentRootPins
 
 
-def reconstruct_history_statement(bundle, verifier, trust: HistoryStatementTrust, signals):
+def reconstruct_history_statement(bundle, verifier, trust: HistoryStatementTrust, signals, *, verified_at: int):
     if not isinstance(trust, HistoryStatementTrust):
         raise ValueError("Independent statement trust required")
     proof, receipt = bundle["proof"], bundle["receipt"]
@@ -70,6 +70,17 @@ def reconstruct_history_statement(bundle, verifier, trust: HistoryStatementTrust
         name: SignedRootSnapshot.model_validate_json(json.dumps(source(kind)))
         for name, kind in (("issuance", "issuance-root"), ("issuers", "issuer-root"), ("sanctions", "sanctions-root"))
     }
+    for signed in roots.values():
+        trust.root_trust.verify_historical(signed, evaluated_at=at, verified_at=verified_at)
+    valuation = SignedValuationApproval.model_validate_json(configuration("valuation_approval"))
+    trust.valuation_trust.verify_for_transfer(
+        valuation,
+        transfer,
+        registry,
+        tenant_id=transfer.tenant_id,
+        now=at,
+        verified_at=verified_at,
+    )
     return expected_current_signals(
         artifacts=verifier.artifacts,
         transfer=transfer,
@@ -78,7 +89,7 @@ def reconstruct_history_statement(bundle, verifier, trust: HistoryStatementTrust
         registry=registry,
         policy_trust=trust.policy_trust,
         valuation_trust=trust.valuation_trust,
-        valuation_approval=SignedValuationApproval.model_validate_json(configuration("valuation_approval")),
+        valuation_approval=valuation,
         root_trust=trust.root_trust,
         root_pins=trust.root_pins,
         signals=signals,

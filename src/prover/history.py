@@ -25,7 +25,9 @@ from src.services.timestamp_evidence import timestamp_record_bytes
 
 @dataclass(frozen=True)
 class HistoryInspection:
-    outcome: Literal["contradicted", "indeterminate"]
+    """Support for a recorded local decision under configured trust, not legal certification."""
+
+    outcome: Literal["supported", "contradicted", "indeterminate"]
     integrity_valid: bool
     cryptographic_valid: bool | None
     verified_at: int
@@ -178,7 +180,9 @@ async def inspect_history_bundle(
     statement_valid = None
     if statement_trust is not None:
         try:
-            expected = reconstruct_history_statement(bundle, verifier, statement_trust, signals)
+            expected = reconstruct_history_statement(
+                bundle, verifier, statement_trust, signals, verified_at=verified_at
+            )
         except (ValueError, KeyError, TypeError):
             return HistoryInspection("indeterminate", True, None, verified_at, ("statement_trust_unavailable",), False)
         if expected != signals:
@@ -193,7 +197,9 @@ async def inspect_history_bundle(
     policy_reproduced = None
     if statement_valid and fact_trust is not None:
         try:
-            policy_reproduced = replay_history_policy(bundle, statement_trust, fact_trust, signals)
+            policy_reproduced = replay_history_policy(
+                bundle, statement_trust, fact_trust, signals, verified_at=verified_at
+            )
         except (ValueError, KeyError, TypeError):
             return HistoryInspection(
                 "indeterminate", True, True, verified_at, ("policy_evidence_untrusted",), True, False
@@ -320,8 +326,19 @@ async def inspect_history_bundle(
                 timestamp_observation,
                 False,
             )
+    supported = all(
+        value is True
+        for value in (
+            statement_valid,
+            policy_reproduced,
+            decision_authenticated,
+            status_authenticated,
+            timing_authenticated,
+            information_authenticated,
+        )
+    )
     return HistoryInspection(
-        "indeterminate",
+        "supported" if supported else "indeterminate",
         True,
         True,
         verified_at,
@@ -332,7 +349,6 @@ async def inspect_history_bundle(
             *(("historical_revocation_evidence_missing",) if status_authenticated is None else ()),
             *(("independent_timing_evidence_missing",) if timing_authenticated is None else ()),
             *(("information_authority_unverified",) if information_authenticated is None else ()),
-            "historical_source_authority_review_incomplete",
         ),
         statement_valid,
         policy_reproduced,

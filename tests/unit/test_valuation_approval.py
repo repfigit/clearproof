@@ -171,3 +171,25 @@ def test_cross_protocol_signature_and_wrong_signing_key_rejected(case):
         verify((key, authority, other, transfer, registry))
     with pytest.raises(ValuationTrustError, match="Signing key"):
         sign_valuation(signed.approval, Ed25519PrivateKey.generate())
+
+
+def test_historical_compromise_and_key_expiry(case):
+    _, authority, signed, transfer, registry = case
+    args = dict(tenant_id=transfer.tenant_id, now=transfer.created_at + 10)
+    review_at = transfer.expires_at + 100
+    ValuationTrustStore([authority]).verify_for_transfer(signed, transfer, registry, **args, verified_at=review_at)
+    compromised = ValuationAuthority.model_validate({**authority.model_dump(), "compromised_at": args["now"] + 1})
+    for authorities in ([compromised], [authority, compromised], [compromised, authority]):
+        with pytest.raises(ValuationTrustError, match="compromise"):
+            ValuationTrustStore(authorities).verify_for_transfer(
+                signed, transfer, registry, **args, verified_at=review_at
+            )
+        with pytest.raises(ValuationTrustError, match="compromise"):
+            ValuationTrustStore(authorities).verify_for_transfer(
+                signed,
+                transfer,
+                registry,
+                **{**args, "now": args["now"] + 2},
+            )
+    with pytest.raises(ValuationTrustError):
+        ValuationTrustStore([authority]).verify_for_transfer(signed, transfer, registry, **args, verified_at=True)

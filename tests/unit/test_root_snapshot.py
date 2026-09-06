@@ -125,3 +125,16 @@ def test_rotation_requires_retained_explicit_keys_and_exact_issuer_scope(approva
     )
     with pytest.raises(RootTrustError):
         rotated.verify_historical(sign_root(issuance, private), evaluated_at=150)
+
+
+def test_historical_key_compromise_and_duplicate_scope_cannot_be_bypassed(approval):
+    _, approved, signed = approval
+    RootTrustStore([approved]).verify_historical(signed, evaluated_at=150, verified_at=1000)
+    compromised = RootAuthority.model_validate({**approved.model_dump(), "compromised_at": 160})
+    for authorities in ([compromised], [approved, compromised], [compromised, approved]):
+        with pytest.raises(RootTrustError, match="compromise"):
+            RootTrustStore(authorities).verify_historical(signed, evaluated_at=150, verified_at=1000)
+        with pytest.raises(RootTrustError, match="compromise"):
+            RootTrustStore(authorities).verify_historical(signed, evaluated_at=170)
+    with pytest.raises(RootTrustError):
+        RootTrustStore([approved]).verify_historical(signed, evaluated_at=150, verified_at=149)

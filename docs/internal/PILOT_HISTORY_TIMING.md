@@ -24,10 +24,9 @@ trust; it authenticates existence of bytes, not their truth.
 
 The [timing ADR](../adr/0010-historical-rfc3161-timing.md) documents the maintained
 library, certificate/policy pinning, accuracy and compromise rules. No production
-TSA or operational clock assurance is claimed. Historical source authority review
-remains incomplete: broader source compromise handling still needs independent historical
-validation before `supported` is safe. Information approvals have a separate
-optional source-authentication check.
+TSA or operational clock assurance is claimed. Historical source approvals and known compromise are checked separately.
+A supported local-decision result requires every independent trust layer described
+in [historical inspection](PILOT_HISTORY_INSPECTION.md).
 
 Tests exercise real OpenSSL responses, offline verification after certificate
 expiry, incorrect leaf/root pins and policy, tampering, rebinding, future review,

@@ -58,6 +58,7 @@ class ValuationAuthority(Record):
     source_ids: tuple[OpaqueId, ...] = Field(min_length=1, max_length=16)
     not_before: Epoch
     not_after: Epoch
+    compromised_at: Epoch | None = None
     max_quote_lifetime_seconds: int = Field(ge=1, le=86400)
     max_observation_age_seconds: int = Field(ge=1, le=86400)
 
@@ -90,6 +91,7 @@ class ValuationTrustStore:
         *,
         tenant_id: str,
         now: int,
+        verified_at: int | None = None,
     ) -> ValuationApproval:
         """Use the authenticated tenant and an operator clock, not request-supplied values.
 
@@ -99,6 +101,14 @@ class ValuationTrustStore:
         signed = SignedValuationApproval.model_validate(signed)
         transfer = Transfer.model_validate(transfer)
         approval, quote = signed.approval, signed.approval.valuation
+        review_at = now if verified_at is None else verified_at
+        if type(review_at) is not int or type(now) is not int or not 0 <= now <= review_at < 2**53:
+            raise ValuationTrustError("Invalid valuation review time")
+        if any(
+            a.key_id == approval.key_id and a.compromised_at is not None and a.compromised_at <= review_at
+            for a in self._authorities
+        ):
+            raise ValuationTrustError("Valuation authority compromise is unresolved")
         if type(now) is not int or not approval.signed_at <= now < quote.expires_at:
             raise ValuationTrustError("Valuation approval is outside its validity interval")
         transfer.validate_catalog(registry)

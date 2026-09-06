@@ -1,108 +1,76 @@
-# Offline integrity and proof inspection
+# Offline historical decision inspection
 
-`inspect_history_bundle` accepts a decrypted export, an independently configured
-`PilotPairingVerifier`, expected tenant and receipt ID, and the reviewer's current
-verification time. It performs no network calls, database reads, writes or
-authorization consumption. The bundle cannot choose the expected receipt pin or
-the verifier's artifact/runtime pins.
+`inspect_history_bundle` reviews a decrypted export against an independently
+configured `PilotPairingVerifier`, expected tenant and receipt ID, and reviewer
+time. It performs no database reads, network calls, writes or authorization
+consumption. Bundled keys, policies and certificates cannot approve themselves.
 
-Integrity checks cover receipt and evidence-manifest identities, transfer/context
-scope, proof bytes/digest, profile/artifact/runtime agreement, public domain/time
-fields, nullifier, declared policy-decision references, exact recipient-envelope
-binding, information-signature digest, proof identity, unique record references
-and pinned record hashes. Captured configuration must match its recorded bytes
-and the independently supplied artifact manifest and verification key.
+The historical outcome describes support for the **recorded local policy
+decision under the configured trust authorities**. It does not certify legal
+compliance, source-document truth, global screening coverage, delivery, settlement
+or production readiness. The beneficiary's private information is not decrypted
+by inspection. The signed operator receipt binds its approved information signature
+and recipient envelope; this is not independent ciphertext-to-plaintext validation.
 
-With reviewer-supplied `HistoryStatementTrust`, inspection also reconstructs the
-v2 expected public vector at the claimed authorization time. It revalidates the
-captured wallet consent and credential/audience binding, compares captured root
-pins with independently approved historical pins, verifies signed root and
-valuation approvals, rebuilds the catalog, and uses independently selected policy
-thresholds. The same current-statement implementation performs the projection,
-credential/root binding, integer valuation and lifetime checks. Reviewer time is
-not substituted for the claimed historical evaluation time.
+## Checks and independent inputs
 
-The pinned verifier then performs real Groth16 pairing against those expectations.
-Without statement trust it checks only the captured vector. The report keeps
-`integrity_valid` and `cryptographic_valid` separate from its historical outcome:
+1. Integrity checks cover expected receipt and evidence-manifest identities,
+   tenant/transfer/context, original proof bytes and public signals, exact record
+   revisions/hashes, captured configuration, policy report and recipient envelope
+   binding. Artifact and runtime pins come from the reviewer.
+2. `statement_trust` reconstructs the v2 circuit statement using captured wallet
+   consent, exact credential, catalog, valuation, three signed roots and independently
+   approved historical root/policy selection. Real Groth16 pairing must agree.
+3. `fact_trust` authenticates exact captured external facts and replays the entire
+   policy report, including reasons and matched rules. Replay uses the captured
+   status observation conditionally until its authority is separately verified.
+4. `decision_trust` verifies the [operator decision signature](PILOT_DECISION_ATTESTATION.md)
+   over the receipt, evidence digest and context.
+5. `status_trust` independently delegates [historical status authority](PILOT_HISTORY_STATUS.md)
+   for the credential's issuer and pilot registry. Current status is never used to
+   replace a past observation.
+6. `timing_trust` verifies the [RFC 3161 timestamp](PILOT_HISTORY_TIMING.md), including
+   exact TSA leaf/root/policy, accuracy and decision-window bounds. It authenticates
+   existence of the signed record within that interval, not its exact decision time.
+7. `information_trust` authenticates the [retained information-source approval](PILOT_INFORMATION_APPROVAL.md)
+   without payload decryption or underlying-document validation.
 
-- Altered linked evidence or failed pairing yields `contradicted`, with a scoped
-  integrity/pairing reason. This contradicts the artifact's claim; it is not a
-  regulatory policy DENY decision.
-- Missing referenced evidence or unavailable pairing yields `indeterminate`.
-- Successful reconstruction sets `statement_valid`; unavailable historical trust
-  stays indeterminate, and a reconstructed-vector mismatch contradicts the claim.
-- Successful pairing still yields `indeterminate`, naming any unverified decision authority,
-  historical revocation and independent timing evidence gaps. If reconstruction
-  was omitted, unverified semantics is also reported. This implementation cannot
-  yet return `supported`.
+Validity is checked at the claimed historical decision time. Known compromise is
+checked at reviewer time for root, valuation, fact, information, decision, status
+and timestamp authorities. A self-asserted pre-compromise signing time does not
+bypass it. Root/valuation/fact stores reject a key if any configured entry records
+a known compromise, so a second scope entry cannot override the finding. Removed
+keys also remain unavailable; ordinary expiry permits previously valid evidence.
+These are independently configured trust decisions, not live compromise discovery.
 
-Supplying independent `fact_trust` as well as statement trust enables conditional
-policy replay after successful reconstruction and pairing. Exact retained fact
-IDs and signatures, source/tenant/context scope and historical validity are checked
-at the claimed authorization time. The same derived-fact helper used in current
-authorization combines the facts, and the policy evaluator must reproduce the
-entire retained report, including its reasons and matched rules.
+## Outcomes
 
-`policy_reproduced` describes that conditional equality. The replay explicitly
-requires the captured local non-revocation observation at the decision time; it
-does not authenticate that observation. Missing or untrusted fact authority stays
-indeterminate. A report that differs from the replay is contradicted even when
-the underlying Groth16 proof is valid. No policy replay runs on failed pairing or
-without reconstructed statement semantics.
+- `supported`: integrity, pairing, statement reconstruction, policy reproduction,
+  decision, status, timing and information authentication all succeed. The report
+  has no unresolved reason codes. This supports the scoped recorded claim under
+  the supplied authorities and still cannot authorize replay.
+- `contradicted`: linked evidence or cryptographic checks contradict the artifact's
+  claim. Examples include changed evidence, failed pairing, a mismatched replayed
+  policy report, or an invalid decision/information signature. This is not a new
+  regulatory policy `DENY` decision.
+- `indeterminate`: necessary evidence, runtime or independently approved trust is
+  missing, compromised or insufficient. Removing any required trust layer prevents
+  support. Successful pairing alone is insufficient.
 
-Proof expiry at the reviewer's time does not itself prevent historical pairing.
-`verified_at` is recorded separately; embedded decision/capture times remain
-claims to authenticate. Integrity and pairing alone cannot upgrade a locally observed absence of
-revocation into authoritative historical status or authorize a replay.
+Reports separate `integrity_valid`, `cryptographic_valid`, `statement_valid`,
+`policy_reproduced`, `decision_authenticated`, `status_authenticated`,
+`timing_authenticated`, `information_authenticated` and the timestamp's accuracy
+interval. A check not run remains unset. Proof expiry at reviewer time does not
+prevent historical review; operator and reviewer clocks remain distinct.
 
-The PostgreSQL/real-proof scenario checks exported history after expiry, later
-policy activation and credential revocation. It rejects altered receipts, roots,
-policies, keys, envelopes, signals and duplicate records; missing source records
-remain indeterminate. A fresh process decrypts and pairs with database access
-closed and Python socket connections disabled, using independently supplied
-artifact and runtime pins. Reports contain codes and booleans, not personal fields.
+The real-proof PostgreSQL test reviews an expired synthetic record after later
+policy activation and revocation. It covers all outcomes, missing trust layers,
+changed manifest/root/key/policy/envelope/signals, missing records, invalid source
+signatures and later key compromise. A fresh Python process reconstructs every
+trust store from separate reviewer configuration, decrypts and verifies the
+bundle with database access closed and Python socket connections disabled, and
+returns `supported` without printing private evidence.
 
-Tests also reconstruct the expired historical proof with independent original
-pins and reject a replacement root pin or the latest policy selection. Accepting
-historical pins is an explicit reviewer configuration decision; the bundle does
-not establish those pins' authority or prove absence of intervening compromise.
-
-Tests reproduce the original policy report, detect a fabricated report reason,
-and refuse a fact source excluded by reviewer trust. Successful replay still
-retains status history and independent timing reasons, plus decision authority
-when its independent check is omitted.
-
-Required next layers are broader historical source compromise handling, the
-`supported` path and `verify-history` CLI. This stage does not complete CP-015.
-
-Reviewer-supplied `decision_trust` verifies the retained
-[decision attestation](PILOT_DECISION_ATTESTATION.md) against the exact receipt,
-evidence and context. Success sets `decision_authenticated` and removes the
-unverified-decision reason. An invalid signature yields `contradicted`; missing,
-unknown or compromised authority yields `indeterminate`. Compromise is checked at
-reviewer time, so an operator's claimed earlier time cannot bypass it. Successful
-authentication still leaves historical status and independent timing unresolved.
-
-Optional reviewer-supplied `status_trust` independently delegates registry status
-authority for the issuer. The [historical status check](PILOT_HISTORY_STATUS.md)
-runs only after statement reconstruction, verifies the signed captured observation
-and records `status_authenticated`. Successful status authentication removes the
-missing-revocation-evidence reason for that configured pilot registry scope;
-independent timing remains unresolved. Current status is never queried or used
-as a replacement for the original observation.
-
-Reviewer-supplied `timing_trust` authenticates the exported
-[RFC 3161 timestamp](PILOT_HISTORY_TIMING.md). The report separates
-`timing_authenticated` and its accuracy interval from operator times. Missing
-or invalid timing stays indeterminate. Even when reconstruction, pairing, policy,
-decision, status and timing pass, `historical_source_authority_review_incomplete`
-remains until broader historical source compromise checks are independently verified; this version still cannot return `supported`.
-
-Optional `information_trust` authenticates the retained
-[information approval](PILOT_INFORMATION_APPROVAL.md) at the historical decision
-time using independently configured source keys. It sets
-`information_authenticated`, with no payload decryption or underlying-document
-verification. Invalid signatures contradict the retained claim; missing, excluded
-or compromised source authority stays indeterminate. Without this check,
-`information_authority_unverified` remains explicit.
+The public `verify-history` CLI, user-facing trust configuration and the complete
+clean-environment pilot remain required. This stage does not complete CP-015 or
+M0–M5, and synthetic keys/authorities do not satisfy production assurance gates.
