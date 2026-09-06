@@ -16,6 +16,12 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
+# Auth configuration is read at import time. Establish the synthetic test
+# defaults before any test module imports the API, regardless of collection order.
+os.environ.setdefault("PII_MASTER_KEY", "a" * 64)
+os.environ.setdefault("AUTH_MODE", "api-key")
+os.environ.setdefault("API_KEY", "test-api-key-for-integration")
+
 from src.protocol.compliance_proof import ComplianceProof
 from src.protocol.hybrid_payload import HybridPayload
 from src.registry.credential_registry import CredentialRegistry, zkKYCCredential

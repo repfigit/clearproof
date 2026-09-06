@@ -42,7 +42,7 @@ jobs:
       - uses: astral-sh/setup-uv@v4
       - run: uv sync --extra dev
       - name: Real PostgreSQL proof storage, migration and parsing checks
-        run: uv run python -m pytest tests/integration/test_proof_storage.py tests/unit/test_stored_signals.py -q
+        run: uv run python -m pytest tests/integration/test_proof_storage.py tests/integration/test_pilot_storage.py tests/unit/test_stored_signals.py tests/unit/test_pilot_cipher.py -q
 
   python-tests:
     runs-on: ubuntu-latest
