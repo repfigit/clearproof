@@ -32,3 +32,30 @@ never production trust. The real pairing gate reconstructs the simulator trust
 independently and invokes this inspection boundary. Unit checks cover mismatched
 credentials/issuers, policy replacement, forged quotes and time/expiry bounds;
 substituting another valid credential changes the expected public commitment.
+
+## Durable inspection service
+
+`ProofInspectionService` accepts authenticated server configuration and a tenant
+principal. It requires `proof:inspect` and `evidence:decrypt`. Its request selects
+only a credential ID, proof and public signals; server configuration supplies the
+transfer/context and trust inventories. The service loads and revalidates the
+wallet-signed enrollment, current eligibility and revocation record, then checks
+that the retained issuance/issuer/sanctions heads equal the configured approvals.
+A newer retained revision invalidates an older configured pin.
+
+All reads and pairing run inside the existing tenant transaction lock, serializing
+with supported enrollment, revocation and root writers. This bounds a potential
+revocation race at the local storage boundary, but does not create a policy
+activation protocol or a cross-system snapshot. The service performs no writes and
+returns cryptographic inspection only. It does not consume a nullifier or decide
+business-policy authorization. Pairing holds the tenant lock for its bounded
+runtime; this is acceptable for the bounded local pilot, not a throughput claim.
+
+The PostgreSQL integration enrolls a synthetic EOA through `EnrollmentService`,
+publishes signed roots, inspects a real development proof, reconnects, and repeats.
+It rejects a foreign tenant, missing role, modified signal, newly replaced root
+head and revoked credential. Read-only record and consumption counts are checked.
+The circuit CI job runs this test with its own fresh artifacts and PostgreSQL
+service. Standalone database tests without an artifact directory skip this gate;
+set `CLEARPROOF_PILOT_TEST_ARTIFACTS` to a fresh generated pilot directory to enable
+it. An enabled gate fails on missing or incompatible files.

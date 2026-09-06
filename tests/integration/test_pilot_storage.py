@@ -1483,3 +1483,103 @@ async def exercise_investigation_cli(app, token, scope, expected_queue, expected
             await asyncio.wait_for(task, 10)
         finally:
             sock.close()
+
+
+@pytest.mark.skipif(not os.getenv("CLEARPROOF_PILOT_TEST_ARTIFACTS"), reason="requires fresh synthetic pilot artifacts")
+async def test_durable_current_inspection_real_pairing_and_revocation(db):
+    import hashlib
+    import json
+    import runpy
+    import shutil
+    from pathlib import Path
+
+    from eth_account import Account
+
+    from src.protocol.enrollment import EnrollmentConsent
+    from src.protocol.root_snapshot import RootSnapshot, RootTrustError, sign_root
+    from src.prover.pilot_artifacts import inspect_artifacts
+    from src.prover.pilot_verifier import PilotPairingVerifier, ProofInspectionError
+    from src.services.enrollment import EnrollmentIneligible, EnrollmentService, RevocationRequest
+    from src.services.proof_inspection import CurrentStatementConfiguration, ProofInspectionService
+    from src.services.root_publication import RootPublicationService
+
+    root = Path(os.environ["CLEARPROOF_PILOT_TEST_ARTIFACTS"])
+    artifacts = inspect_artifacts(root, trusted_digest=(root / "development-manifest-pin.txt").read_text().strip())
+    helper = runpy.run_path(str(Path(__file__).parents[1] / "unit/test_pilot_compliance.py"))["synthetic_case"]
+    _, _, inputs = helper(artifact_manifest_digest=artifacts.manifest.digest, with_trust=True)
+    credential, now = inputs.pop("credential"), inputs.pop("now")
+    configuration = CurrentStatementConfiguration(**inputs)
+    principal = Principal(
+        tenant_id=credential.tenant_id, actor_id="simulator", roles=ROLES, issuer_dids=(credential.issuer_did,)
+    )
+    wallet = Account.from_key(bytes([8]) * 32)  # Public synthetic-only signer.
+    consent = EnrollmentConsent(
+        credential=credential,
+        chain_id=configuration.root_pins.chain_id,
+        registry_address=configuration.root_pins.registry_address,
+        consent_expires_at=min(credential.issued_at + 600, credential.expires_at),
+    )
+    enrollment = EnrollmentService(
+        db, cipher(), principal, chain_id=consent.chain_id, registry_address=consent.registry_address
+    )
+    await enrollment.enroll(
+        consent,
+        "0x" + wallet.sign_message(consent.signing_message()).signature.hex(),
+        idempotency_key="synthetic-enroll",
+        now=credential.issued_at,
+    )
+    publication = RootPublicationService(db, cipher(), principal, configuration.root_trust)
+    for name in ("issuance", "issuers", "sanctions"):
+        await publication.publish(getattr(configuration, name), idempotency_key="root-" + name, now=now)
+    runtime = Path(__file__).parents[2] / "node_modules/snarkjs/build/snarkjs.min.js"
+    verifier = PilotPairingVerifier.load(
+        artifacts,
+        bundle_path=runtime,
+        bundle_sha256=hashlib.sha256(runtime.read_bytes()).hexdigest(),
+        node=Path(shutil.which("node")),
+    )
+    proof = (root / "proof.json").read_bytes()
+    signals = json.loads((root / "public.json").read_text())
+
+    def service(who=principal):
+        return ProofInspectionService(db, cipher(), who, verifier, configuration)
+
+    async with db.connection() as conn:
+        before = (await (await conn.execute("SELECT count(*) FROM pilot_records")).fetchone())[0]
+    assert (await service().inspect(credential.credential_nonce, proof, signals, now=now)).cryptographic_valid
+    await db.close()
+    await db.connect()
+    assert (await service().inspect(credential.credential_nonce, proof, signals, now=now)).cryptographic_valid
+    with pytest.raises(ValueError, match="tenant"):
+        service(Principal.model_validate({**principal.model_dump(), "tenant_id": "foreign"}))
+    reader = Principal.model_validate({**principal.model_dump(), "roles": ("evidence:decrypt",)})
+    with pytest.raises(HTTPException) as error:
+        await service(reader).inspect(credential.credential_nonce, proof, signals, now=now)
+    assert error.value.status_code == 403
+    wrong = [str(int(signals[0]) + 1), *signals[1:]]
+    with pytest.raises(ProofInspectionError, match="public_signal_context_mismatch"):
+        await service().inspect(credential.credential_nonce, proof, wrong, now=now)
+    async with db.connection() as conn:
+        assert before == (await (await conn.execute("SELECT count(*) FROM pilot_records")).fetchone())[0]
+        assert (await (await conn.execute("SELECT count(*) FROM pilot_consumptions")).fetchone())[0] == 0
+
+    # A newly published head invalidates the service's older current pin.
+    from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
+
+    old = configuration.issuers.snapshot
+    replacement = RootSnapshot.model_validate({**old.model_dump(), "revision": 2, "previous_digest": old.digest})
+    await publication.publish(
+        sign_root(replacement, Ed25519PrivateKey.from_private_bytes(bytes([7]) * 32)),
+        idempotency_key="new-issuer-root",
+        now=now,
+    )
+    with pytest.raises(RootTrustError, match="head differs"):
+        await service().inspect(credential.credential_nonce, proof, signals, now=now)
+    await enrollment.revoke(
+        RevocationRequest(
+            credential_id=credential.credential_nonce, idempotency_key="revoke-simulator", reason_code="withdrawn"
+        ),
+        now=now,
+    )
+    with pytest.raises(EnrollmentIneligible, match="revoked"):
+        await service().inspect(credential.credential_nonce, proof, signals, now=now)

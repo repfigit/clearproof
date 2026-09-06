@@ -136,6 +136,20 @@ jobs:
     runs-on: ubuntu-latest
     # Phase-2 preparation alone exceeded 30 minutes on the hosted runner.
     timeout-minutes: 150
+    services:
+      postgres:
+        image: postgres:18
+        env:
+          POSTGRES_DB: clearproof_test
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: local-ci-only
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d clearproof_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 12
     steps:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v4
@@ -152,6 +166,11 @@ jobs:
           sudo install /tmp/pilot-circom /usr/local/bin/circom
       - name: Isolated development setup and real proofs for both profiles
         run: uv run python scripts/test_development_circuits.py "$RUNNER_TEMP/clearproof-development-circuits"
+      - name: Durable current inspection with the fresh real proof
+        env:
+          DATABASE_URL: postgresql://postgres:local-ci-only@localhost:5432/clearproof_test
+          CLEARPROOF_PILOT_TEST_ARTIFACTS: ${{ runner.temp }}/clearproof-development-circuits/pilot
+        run: uv run python -m pytest tests/integration/test_pilot_storage.py::test_durable_current_inspection_real_pairing_and_revocation -q
       - name: Upload unapproved development artifacts
         uses: actions/upload-artifact@v4
         with:

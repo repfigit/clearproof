@@ -8,6 +8,7 @@ from pathlib import Path
 
 import pytest
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
+from eth_account import Account
 
 from src.policy.model import PilotPolicy, PolicySource, PolicyTrustStore
 from src.protocol.credential import PilotCredential, holder_commitment
@@ -25,6 +26,15 @@ ROOT = Path(__file__).resolve().parents[2]
 def synthetic_case(*, artifact_manifest_digest=None, alternate_credential=False, with_trust=False):
     fixture = json.loads((ROOT / "specs/fixtures/transfer-v1.json").read_text())
     transfer = Transfer.model_validate(fixture["records"][0]["value"])
+    if with_trust:
+        # Public EOA simulator key so the durable enrollment service can verify consent.
+        wallet = Account.from_key(bytes([8]) * 32)
+        transfer = Transfer.model_validate(
+            {
+                **transfer.model_dump(),
+                "originator": {**transfer.originator.model_dump(), "wallet": wallet.address.lower()},
+            }
+        )
     context = VerificationContext.model_validate(
         {**fixture["records"][1]["value"], "proof_profile": "pilot-transfer-v2"}
     )
