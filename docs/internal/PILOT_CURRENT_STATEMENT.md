@@ -59,3 +59,17 @@ The circuit CI job runs this test with its own fresh artifacts and PostgreSQL
 service. Standalone database tests without an artifact directory skip this gate;
 set `CLEARPROOF_PILOT_TEST_ARTIFACTS` to a fresh generated pilot directory to enable
 it. An enabled gate fails on missing or incompatible files.
+
+The same real-proof database gate now exercises concurrent revocation. It pauses
+inspection at the pairing-call boundary while the tenant transaction is held,
+starts the normal revocation service, and observes an actual ungranted PostgreSQL
+advisory lock for that tenant in the test database. Completion releases the lock,
+allows revocation to commit, and makes the next inspection reject. Cancellation
+at that boundary also releases the transaction and permits revocation. The
+successful branch still performs actual pairing; no cryptographic result is
+mocked. The cancellation branch does not claim to cancel a running prover process.
+
+Exact record counts by kind show only the revocation and its idempotency receipt
+were written; no authorization was consumed. This establishes the tested local
+transaction ordering, not a guarantee that a credential remains unrevoked after
+an inspection result is returned, and not an atomic authorization decision.

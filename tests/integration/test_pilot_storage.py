@@ -1486,7 +1486,8 @@ async def exercise_investigation_cli(app, token, scope, expected_queue, expected
 
 
 @pytest.mark.skipif(not os.getenv("CLEARPROOF_PILOT_TEST_ARTIFACTS"), reason="requires fresh synthetic pilot artifacts")
-async def test_durable_current_inspection_real_pairing_and_revocation(db):
+@pytest.mark.parametrize("mutation", ["root", "revocation", "cancel"])
+async def test_durable_current_inspection_real_pairing_and_revocation(db, monkeypatch, mutation):
     import hashlib
     import json
     import runpy
@@ -1562,6 +1563,83 @@ async def test_durable_current_inspection_real_pairing_and_revocation(db):
     async with db.connection() as conn:
         assert before == (await (await conn.execute("SELECT count(*) FROM pilot_records")).fetchone())[0]
         assert (await (await conn.execute("SELECT count(*) FROM pilot_consumptions")).fetchone())[0] == 0
+
+    if mutation != "root":
+        async with db.connection() as conn:
+            before_kinds = dict(
+                await (await conn.execute("SELECT kind, count(*) FROM pilot_records GROUP BY kind")).fetchall()
+            )
+        # Pause at the real pairing boundary with the tenant transaction held.
+        # Signature/root checks and the eventual pairing are never replaced.
+        from src.services import proof_inspection as inspection_module
+
+        entered, release = asyncio.Event(), asyncio.Event()
+        real_inspect = inspection_module.inspect_current_statement
+
+        async def paused(*args, **kwargs):
+            entered.set()
+            await release.wait()
+            return await real_inspect(*args, **kwargs)
+
+        monkeypatch.setattr(inspection_module, "inspect_current_statement", paused)
+        inspecting = asyncio.create_task(service().inspect(credential.credential_nonce, proof, signals, now=now))
+        revoking = None
+        try:
+            await asyncio.wait_for(entered.wait(), 5)
+            revoking = asyncio.create_task(
+                enrollment.revoke(
+                    RevocationRequest(
+                        credential_id=credential.credential_nonce,
+                        idempotency_key="concurrent-revoke",
+                        reason_code="withdrawn",
+                    ),
+                    now=now,
+                )
+            )
+            # Observe an actual PostgreSQL lock wait, not a scheduling delay.
+            lock = int.from_bytes(
+                hashlib.sha256(("clearproof/pilot/" + principal.tenant_id).encode()).digest()[:8], "big"
+            )
+            async with asyncio.timeout(5):
+                while True:
+                    async with db.connection() as conn:
+                        waiting = await (
+                            await conn.execute(
+                                    "SELECT EXISTS (SELECT 1 FROM pg_locks WHERE locktype='advisory' "
+                                    "AND classid=%s AND objid=%s AND objsubid=1 AND NOT granted "
+                                    "AND database=(SELECT oid FROM pg_database WHERE datname=current_database()))",
+                                (lock >> 32, lock & 0xFFFFFFFF),
+                            )
+                        ).fetchone()
+                    if waiting[0]:
+                        break
+                    await asyncio.sleep(0.02)
+            assert not revoking.done()
+            if mutation == "cancel":
+                inspecting.cancel()
+                with pytest.raises(asyncio.CancelledError):
+                    await inspecting
+            else:
+                release.set()
+                assert (await asyncio.wait_for(inspecting, 10)).cryptographic_valid
+            assert (await asyncio.wait_for(revoking, 5))["status"] == "revoked"
+        finally:
+            release.set()
+            pending = [task for task in (inspecting, revoking) if task is not None]
+            for task in pending:
+                if not task.done():
+                    task.cancel()
+            await asyncio.gather(*pending, return_exceptions=True)
+        with pytest.raises(EnrollmentIneligible, match="revoked"):
+            await service().inspect(credential.credential_nonce, proof, signals, now=now)
+        async with db.connection() as conn:
+            expected_kinds = {**before_kinds, "revocation": 1, "idempotency": before_kinds["idempotency"] + 1}
+            after_kinds = dict(
+                await (await conn.execute("SELECT kind, count(*) FROM pilot_records GROUP BY kind")).fetchall()
+            )
+            assert after_kinds == expected_kinds
+            assert (await (await conn.execute("SELECT count(*) FROM pilot_consumptions")).fetchone())[0] == 0
+        return
 
     # A newly published head invalidates the service's older current pin.
     from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
