@@ -56,3 +56,46 @@ Local validation on September 5, 2026 inspected the actual composed WASM,
 R1CS, development zkey and exported verification key from ADR 0006. The local
 manifest used an all-zero synthetic policy-schema marker, so it cannot serve as
 an approved policy binding. No generated artifacts or manifest were committed.
+
+## Read-only pairing inspection
+
+`src.prover.pilot_verifier.PilotPairingVerifier.load()` accepts the inspected
+artifacts, an absolute operator-owned Node executable, and the independently
+pinned SHA-256 of the self-contained `snarkjs/build/snarkjs.min.js` IIFE bundle.
+The bundle is opened without following symlinks, bounded to 2 MiB and copied into
+an immutable byte snapshot. No npx or package resolution runs during verification.
+The Node binary and operating-system libraries remain trusted host components;
+they are not covered by the artifact manifest or JS bundle pin.
+
+`inspect(proof_bytes, signals, expected_signals=...)` requires the exact eight
+canonical scalar strings. The expected vector must come from the trusted caller;
+copying the submitted vector into it is not context authentication. Proof JSON
+is bounded to 8 KiB, rejects duplicate/unknown keys, uses the exact Groth16/BN128
+shape and finite affine encodings, and rejects coordinate aliases modulo the
+BN254 base field. Pairing verification still checks whether points are valid.
+
+Only the snapshotted public verification key, signals and proof are sent through
+stdin. No customer input is written into the temporary runtime directory. The
+child receives a minimal environment without NODE_OPTIONS or inherited secrets,
+a bounded Node heap and a 1–60 second caller-selected timeout. Timeout and task
+cancellation kill and reap the owned process group. Runtime failures raise stable
+codes distinct from a failed pairing. A successful return exposes
+`cryptographic_valid`, the manifest digest and profile, never a compliance or
+authorization result. Trusted current roots, enrollment, quote/policy authority,
+revocation and atomic consumption still belong to the authorization layer.
+
+Run the opt-in real integration after the local proof and development manifest
+have been created (the manifest pin file is a synthetic test convention only):
+
+```bash
+CLEARPROOF_PILOT_TEST_ARTIFACTS=/path/to/local-development-artifacts \
+  .venv/bin/python -m pytest tests/integration/test_pilot_pairing.py -q
+```
+
+The integration reads `proof.json`, `public.json`, `expected-public.json`,
+`manifest.json` and `development-manifest-pin.txt` from that directory. It checks
+the real pairing, rejects an altered proof coordinate, rejects a context mismatch
+before the pairing, and rejects altered public signals even when a test caller
+intentionally supplies the same incorrect expected vector. This opt-in fixture
+reads its own development pin and bundle hash for reproducibility; that is not
+an independent production trust bootstrap.
