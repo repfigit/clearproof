@@ -21,6 +21,7 @@ Role = Literal[
     "evidence:read",
     "evidence:decrypt",
     "events:ingest",
+    "facts:ingest",
     "policy:read",
     "policy:approve",
     "tenant:admin",

@@ -60,3 +60,12 @@ ALTER TABLE pilot_records ADD CONSTRAINT pilot_records_kind_check
 CHECK (kind IN ('credential','proof','transfer','receipt','event','policy','revocation',
                'issuance-root','issuer-root','sanctions-root','idempotency','root-source','provider-evidence'));
 """
+
+
+FACT_EVIDENCE_MIGRATION = """
+ALTER TABLE pilot_records DROP CONSTRAINT pilot_records_kind_check;
+ALTER TABLE pilot_records ADD CONSTRAINT pilot_records_kind_check
+CHECK (kind IN ('credential','proof','transfer','receipt','event','policy','revocation',
+               'issuance-root','issuer-root','sanctions-root','idempotency','root-source',
+               'provider-evidence','fact-evidence'));
+"""

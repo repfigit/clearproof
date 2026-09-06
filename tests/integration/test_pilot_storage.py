@@ -1605,9 +1605,9 @@ async def test_durable_current_inspection_real_pairing_and_revocation(db, monkey
                     async with db.connection() as conn:
                         waiting = await (
                             await conn.execute(
-                                    "SELECT EXISTS (SELECT 1 FROM pg_locks WHERE locktype='advisory' "
-                                    "AND classid=%s AND objid=%s AND objsubid=1 AND NOT granted "
-                                    "AND database=(SELECT oid FROM pg_database WHERE datname=current_database()))",
+                                "SELECT EXISTS (SELECT 1 FROM pg_locks WHERE locktype='advisory' "
+                                "AND classid=%s AND objid=%s AND objsubid=1 AND NOT granted "
+                                "AND database=(SELECT oid FROM pg_database WHERE datname=current_database()))",
                                 (lock >> 32, lock & 0xFFFFFFFF),
                             )
                         ).fetchone()
@@ -1661,3 +1661,78 @@ async def test_durable_current_inspection_real_pairing_and_revocation(db, monkey
     )
     with pytest.raises(EnrollmentIneligible, match="revoked"):
         await service().inspect(credential.credential_nonce, proof, signals, now=now)
+
+
+async def test_signed_fact_retention_atomic_retry_reconnect_and_current_trust(db, monkeypatch):
+    import runpy
+    from pathlib import Path
+
+    from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
+
+    from src.policy.fact_approval import FactAuthority, FactTrustError, FactTrustStore, SignedFactApproval
+    from src.services.fact_evidence import FactEvidenceService
+    from src.storage.pilot import PilotTransaction
+
+    _, authority, approvals, args, _ = runpy.run_path(str(Path(__file__).parents[1] / "unit/test_fact_approval.py"))[
+        "case"
+    ].__wrapped__()
+    trust = FactTrustStore([authority])
+    principal = Principal(
+        tenant_id=args["tenant_id"], actor_id="fact-operator", roles=("facts:ingest", "policy:read", "evidence:decrypt")
+    )
+    operation = {key: args[key] for key in ("transfer", "context", "now")}
+
+    def service(who=principal, inventory=trust):
+        return FactEvidenceService(db, cipher(), who, inventory)
+
+    # A write failure halfway through a verified batch rolls all new evidence back.
+    original_put = PilotTransaction.put
+    writes = 0
+
+    async def fail_second(tx, kind, *values, **kwargs):
+        nonlocal writes
+        writes += 1
+        if writes == 2:
+            raise RuntimeError("injected failure")
+        return await original_put(tx, kind, *values, **kwargs)
+
+    with monkeypatch.context() as patch:
+        patch.setattr(PilotTransaction, "put", fail_second)
+        with pytest.raises(RuntimeError, match="injected"):
+            await service().retain(approvals, **operation)
+    async with db.connection() as conn:
+        assert (await (await conn.execute("SELECT count(*) FROM pilot_records")).fetchone())[0] == 0
+    deliveries = await asyncio.gather(*(service().retain(approvals, **operation) for _ in range(4)))
+    refs = deliveries[0]
+    assert all(result == refs for result in deliveries)
+    assert len(refs) == len(approvals)
+    stored = PilotStore(db, cipher(), principal)
+    original = [await stored.get("fact-evidence", ref) for ref in refs]
+    await db.close()
+    await db.connect()
+    assert await service().retain(tuple(reversed(approvals)), **{**operation, "now": args["now"] + 1}) == refs
+    assert [await stored.get("fact-evidence", ref) for ref in refs] == original
+    assert await service().load_current(refs, **operation) == trust.verify_for_context(approvals, **args)
+    with pytest.raises(FactTrustError):
+        await service().load_current(refs, **{**operation, "now": args["transfer"].expires_at})
+    foreign = Principal.model_validate({**principal.model_dump(), "tenant_id": "foreign"})
+    with pytest.raises(FactTrustError):
+        await service(foreign).load_current(refs, **operation)
+    with pytest.raises(FactTrustError):
+        await service(foreign).retain(approvals, **operation)
+    reader = Principal.model_validate({**principal.model_dump(), "roles": ("policy:read", "evidence:decrypt")})
+    with pytest.raises(HTTPException):
+        await service(reader).retain(approvals, **operation)
+    replacement = FactAuthority.model_validate(
+        {**authority.model_dump(), "public_key": Ed25519PrivateKey.generate().public_key().public_bytes_raw().hex()}
+    )
+    with pytest.raises(FactTrustError):
+        await service(inventory=FactTrustStore([replacement])).load_current(refs, **operation)
+    invalid = SignedFactApproval(approval=approvals[0].approval, signature="00" * 64)
+    with pytest.raises(FactTrustError):
+        await service().retain((invalid,), **operation)
+    async with db.connection() as conn:
+        rows = await (await conn.execute("SELECT ciphertext FROM pilot_records WHERE kind='fact-evidence'")).fetchall()
+        assert len(rows) == len(refs)
+        assert all(b"business-source" not in bytes(row[0]) for row in rows)
+        assert (await (await conn.execute("SELECT count(*) FROM pilot_consumptions")).fetchone())[0] == 0
