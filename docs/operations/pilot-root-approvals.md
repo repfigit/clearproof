@@ -18,8 +18,9 @@ verification. Key IDs derive from public-key bytes, not configurable labels.
 must check the source tree, eligible enrolled credentials and issuer authorization
 before signing. Signing an arbitrary caller root would defeat issuance membership.
 `build_issuance_tree()` now constructs candidates from persisted eligible
-enrollment. Atomic coordination of construction, registrar signing and publication
-is still pending. No production signing key or default trusted registrar is bundled.
+enrollment. `PilotRegistrar.refresh()` now coordinates construction, local signing and
+persistence in one tenant transaction. Independent current-head publication and
+production registrar operations remain open. No production signing key or default trusted registrar is bundled.
 
 `RootPublicationService.publish()` requires a tenant admin, encrypted-record read
 access, and a valid scoped registrar signature. Issuance-root publication also
@@ -65,6 +66,32 @@ time, depth and sorted credential IDs/commitments. Its canonical digest is the
 snapshot's proposed `source_digest`; source records belong in encrypted evidence.
 The candidate is not a signed approval. Hold the tenant lock through validation
 and construction. Do not nest `RootPublicationService.publish()` inside that
-transaction: atomic construction/signing/publication coordination still needs a
-shared transaction implementation. Publication must recheck eligibility to prevent
-a revocation between construction and approval from producing a stale head.
+transaction. Use `PilotRegistrar.refresh()`, which calls the shared transaction
+persistence boundary after constructing and signing all roots.
+
+
+## Atomic local registrar refresh
+
+Provision `PilotRegistrar` with an authenticated tenant admin that also has exact
+issuance scopes and encrypted-read access, an operator-configured set of 1–16
+issuers, a local Ed25519 signer, and independently pinned verification authority.
+Do not supply the issuer set, key or trust configuration from an API request.
+`refresh(expected_revision=..., idempotency_key=..., now=...)` rebuilds every
+configured issuer from current enrollment/revocation state, signs each issuance
+root, constructs and signs the aggregate issuer root, and persists all revisions,
+source records and the retry receipt in one tenant transaction. The first expected
+aggregate revision is zero. Changed/stale expectations conflict. The configured
+issuer set determines the aggregate membership; removing an issuer removes it
+from the next aggregate even though its historical issuance approvals remain.
+
+Migration 10 adds the immutable `root-source` record kind. Source records stay
+encrypted and are addressed by their canonical digest. Any scope/signature,
+predecessor, source or database failure rolls back the entire refresh. A revoked
+credential cannot interleave between construction and commit. A revocation that
+commits afterward still requires the current verifier's revocation check and a
+subsequent refresh; this service does not broadcast chain updates automatically.
+
+Matching retries return the original publication receipt, not an assertion that
+its root is still current. The local refresh is not a production key-management
+service. It neither publishes an independently trusted head nor provides a new
+HTTP endpoint. Those integration gates and real composed proofs remain open.

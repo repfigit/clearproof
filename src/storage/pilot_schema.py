@@ -27,3 +27,10 @@ CREATE TABLE pilot_consumptions (
         REFERENCES pilot_records(tenant_id, kind, record_id, revision)
 );
 """
+
+ROOT_SOURCE_MIGRATION = """
+ALTER TABLE pilot_records DROP CONSTRAINT pilot_records_kind_check;
+ALTER TABLE pilot_records ADD CONSTRAINT pilot_records_kind_check
+CHECK (kind IN ('credential','proof','transfer','receipt','event','policy','revocation',
+               'issuance-root','issuer-root','sanctions-root','idempotency','root-source'));
+"""

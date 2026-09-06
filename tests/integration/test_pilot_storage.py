@@ -525,3 +525,162 @@ async def test_tenant_keyset_scan_and_issuance_capacity_fail_without_truncation(
             )
     async with store(db, "tenant-b").transaction() as tx:
         assert await tx.record_ids("credential") == []
+
+
+async def test_atomic_registrar_refresh_and_rollback(db, monkeypatch):
+    from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
+    from eth_account import Account
+
+    from src.protocol.credential import PilotCredential, holder_commitment
+    from src.protocol.enrollment import EnrollmentConsent
+    from src.protocol.root_snapshot import RootAuthority, RootTrustError, RootTrustStore, SignedRootSnapshot
+    from src.services.enrollment import EnrollmentService, RevocationRequest
+    from src.services.registrar import PilotRegistrar
+
+    principal = Principal(
+        tenant_id="tenant-a",
+        actor_id="registrar",
+        roles=("tenant:admin", "credential:issue", "credential:revoke", "evidence:decrypt"),
+        issuer_dids=("did:web:issuer.example", "did:web:second.example"),
+    )
+    key = Ed25519PrivateKey.generate()
+    authority = RootAuthority(
+        public_key=key.public_key().public_bytes_raw().hex(),
+        tenant_id="tenant-a",
+        chain_id=31337,
+        registry_address="0x" + "1" * 40,
+        kinds=("issuance-root", "issuer-root"),
+        issuer_dids=("did:web:issuer.example",),
+        not_before=1,
+        not_after=1000,
+    )
+    trust = RootTrustStore([authority])
+
+    def registrar(issuers=("did:web:issuer.example",)):
+        return PilotRegistrar(
+            db, cipher(), principal, trust, key, issuers=issuers, chain_id=31337, registry_address="0x" + "1" * 40
+        )
+
+    wallet = Account.create()
+    credential = PilotCredential(
+        tenant_id="tenant-a",
+        credential_nonce="a" * 64,
+        issuer_did="did:web:issuer.example",
+        subject_wallet=wallet.address.lower(),
+        holder_commitment=holder_commitment("123456"),
+        jurisdiction="US",
+        kyc_tier=2,
+        sanctions_clear=True,
+        issued_at=100,
+        expires_at=900,
+    )
+    consent = EnrollmentConsent(
+        credential=credential, chain_id=31337, registry_address="0x" + "1" * 40, consent_expires_at=200
+    )
+    enrollment = EnrollmentService(db, cipher(), principal, chain_id=31337, registry_address="0x" + "1" * 40)
+    await enrollment.enroll(
+        consent,
+        "0x" + wallet.sign_message(consent.signing_message()).signature.hex(),
+        idempotency_key="enroll",
+        now=110,
+    )
+    # The first issuer can be approved, but the signer lacks scope for the second.
+    # Neither that first approval nor any source or retry result may survive.
+    with pytest.raises(RootTrustError):
+        await registrar(("did:web:issuer.example", "did:web:second.example")).refresh(
+            expected_revision=0, idempotency_key="failed", now=120
+        )
+    reader = PilotStore(db, cipher(), principal)
+    async with reader.transaction() as tx:
+        assert await tx.record_ids("issuance-root") == []
+        assert await tx.record_ids("issuer-root") == []
+        assert await tx.record_ids("root-source") == []
+    first = await registrar().refresh(expected_revision=0, idempotency_key="refresh-1", now=120)
+    assert first["revision"] == 1
+    assert await registrar().refresh(expected_revision=0, idempotency_key="refresh-1", now=125) == first
+    async with reader.transaction() as tx:
+        head_id = (await tx.record_ids("issuer-root"))[0]
+        initial = SignedRootSnapshot.model_validate(await tx.get("issuer-root", head_id))
+        assert (
+            trust.verify_current(
+                initial,
+                now=125,
+                expected_digest=first["snapshot_digest"],
+                tenant_id="tenant-a",
+                chain_id=31337,
+                registry_address="0x" + "1" * 40,
+                kind="issuer-root",
+            ).root
+            == first["root"]
+        )
+        issuance_id = (await tx.record_ids("issuance-root"))[0]
+        issued = SignedRootSnapshot.model_validate(await tx.get("issuance-root", issuance_id))
+        evidence = await tx.get("root-source", issued.snapshot.source_digest)
+        assert evidence["entries"] == [{"credential_id": "a" * 64, "commitment": credential.commitment}]
+    await enrollment.revoke(
+        RevocationRequest(credential_id="a" * 64, idempotency_key="revoke", reason_code="withdrawn"), now=130
+    )
+    results = await asyncio.gather(
+        registrar().refresh(expected_revision=1, idempotency_key="refresh-2", now=140),
+        registrar().refresh(expected_revision=1, idempotency_key="refresh-fork", now=140),
+        return_exceptions=True,
+    )
+    assert sum(isinstance(item, RecordConflict) for item in results) == 1
+    second = next(item for item in results if type(item) is dict)
+    assert second["revision"] == 2 and second["root"] != first["root"]
+    await db.close()
+    await db.connect()
+    async with reader.transaction() as tx:
+        updated = SignedRootSnapshot.model_validate(await tx.get("issuance-root", issuance_id))
+        assert (await tx.get("root-source", updated.snapshot.source_digest))["entries"] == []
+        assert (await tx.read("issuer-root", head_id)).revision == 2
+        assert (await tx.read("issuer-root", head_id, revision=1)).value == initial.model_dump(mode="json")
+    # Pause after constructing a candidate and observe the competing revocation
+    # actually waiting on PostgreSQL's advisory lock, not merely an idle task.
+    from src.services import registrar as registrar_module
+
+    next_credential = PilotCredential.model_validate({**credential.model_dump(), "credential_nonce": "b" * 64})
+    next_consent = EnrollmentConsent.model_validate({**consent.model_dump(), "credential": next_credential})
+    await enrollment.enroll(
+        next_consent,
+        "0x" + wallet.sign_message(next_consent.signing_message()).signature.hex(),
+        idempotency_key="enroll-next",
+        now=150,
+    )
+    entered, release = asyncio.Event(), asyncio.Event()
+    original_builder = registrar_module.build_issuance_tree
+
+    async def paused_builder(*args, **kwargs):
+        result = await original_builder(*args, **kwargs)
+        entered.set()
+        await release.wait()
+        return result
+
+    monkeypatch.setattr(registrar_module, "build_issuance_tree", paused_builder)
+    refresh_task = asyncio.create_task(registrar().refresh(expected_revision=2, idempotency_key="refresh-3", now=160))
+    await asyncio.wait_for(entered.wait(), 5)
+    revoke_task = asyncio.create_task(
+        enrollment.revoke(
+            RevocationRequest(credential_id="b" * 64, idempotency_key="revoke-next", reason_code="withdrawn"),
+            now=165,
+        )
+    )
+    try:
+        async with asyncio.timeout(5):
+            while True:
+                async with db.connection() as conn:
+                    row = await (
+                        await conn.execute("SELECT count(*) FROM pg_stat_activity WHERE wait_event='advisory'")
+                    ).fetchone()
+                if row[0]:
+                    break
+                await asyncio.sleep(0.01)
+        assert not revoke_task.done()
+    finally:
+        release.set()
+        await asyncio.gather(refresh_task, revoke_task)
+    assert refresh_task.result()["revision"] == 3
+    assert revoke_task.result()["status"] == "revoked"
+    monkeypatch.setattr(registrar_module, "build_issuance_tree", original_builder)
+    final = await registrar().refresh(expected_revision=3, idempotency_key="refresh-4", now=170)
+    assert final["root"] == second["root"]

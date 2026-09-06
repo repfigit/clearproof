@@ -32,6 +32,7 @@ _WRITE_ROLES = {
     "revocation": "credential:revoke",
     "issuer-root": "tenant:admin",
     "sanctions-root": "tenant:admin",
+    "root-source": "tenant:admin",
 }
 _OPERATIONS = {
     "issue-credential": "credential:issue",
@@ -160,6 +161,10 @@ class PilotTransaction:
     def require_issuer(self, issuer_did: str) -> None:
         self._check_open()
         self._principal.require_issuer(issuer_did)
+
+    def require_admin(self) -> None:
+        self._check_open()
+        self._principal.require("tenant:admin")
 
     async def _row(self, kind: str, record_id: str, revision: int | None = None) -> dict | None:
         self._check_open()
