@@ -24,6 +24,7 @@ Role = Literal[
     "events:ingest",
     "facts:ingest",
     "observations:write",
+    "usage:read",
     "policy:read",
     "policy:approve",
     "policy:activate",

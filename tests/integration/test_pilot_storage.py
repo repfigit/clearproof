@@ -3651,3 +3651,87 @@ async def check_observation_cohort_http(app, headers, reports):
         assert (
             await client.post("/pilot/proof/observations/report", content=b"x" * 16385, headers=reader)
         ).status_code == 413
+
+
+async def test_usage_inventory_scope_idempotency_and_read_only_api(db, monkeypatch):
+    import time
+
+    import jwt
+    from cryptography.hazmat.primitives import serialization
+    from cryptography.hazmat.primitives.asymmetric import ec
+    from httpx import ASGITransport, AsyncClient
+
+    from src.api.main import create_app
+    from src.api.middleware import auth
+    from src.services.usage import usage_inventory
+
+    usage_reader = Principal(tenant_id="tenant-a", actor_id="usage-reader", roles=("usage:read",))
+    empty = await usage_inventory(db, usage_reader, now=1000)
+    assert all(value == 0 for value in empty.counters.model_dump().values())
+    assert empty.billing_status == "not-an-invoice"
+    writer = store(db)
+
+    async def event(tx):
+        await tx.put("event", "event-one", {"synthetic": True})
+        return {"event_id": "event-one"}
+
+    requests = await asyncio.gather(
+        *[writer.run_idempotent("ingest-event", "same-delivery", {"event_id": "event-one"}, event) for _ in range(2)]
+    )
+    assert requests[0] == requests[1]
+    own = await usage_inventory(db, usage_reader, now=1001)
+    assert own.counters.encrypted_records == 2 and own.counters.retained_events == 1
+    assert own.counters.ciphertext_bytes > 0 and own.counters.consumed_nullifiers == 0
+    assert own.counters.retained_observations == own.counters.retained_proofs == own.counters.retained_receipts == 0
+    with pytest.raises(RecordConflict):
+        await writer.run_idempotent("ingest-event", "same-delivery", {"event_id": "different"}, event)
+    async with store(db, tenant="foreign").transaction() as tx:
+        await tx.put("event", "foreign-event", {"marker": "PRIVATE-MARKER"})
+    await db.close()
+    await db.connect()
+    assert (await usage_inventory(db, usage_reader, now=1002)).counters == own.counters
+    no_scope = Principal(tenant_id="tenant-a", actor_id="reader", roles=("evidence:decrypt", "policy:read"))
+    with pytest.raises(HTTPException):
+        await usage_inventory(db, no_scope, now=1002)
+
+    key = ec.generate_private_key(ec.SECP256R1())
+    monkeypatch.setattr(auth, "AUTH_MODE", "jwt")
+    monkeypatch.setattr(
+        auth,
+        "JWT_PUBLIC_KEY",
+        key.public_key()
+        .public_bytes(serialization.Encoding.PEM, serialization.PublicFormat.SubjectPublicKeyInfo)
+        .decode(),
+    )
+    now = int(time.time())
+    claims = dict(
+        iss=auth.JWT_ISSUER,
+        aud=auth.JWT_AUDIENCE,
+        sub="operator",
+        iat=now,
+        exp=now + 300,
+        tenant_id="tenant-a",
+        actor_id="usage-reader",
+        roles=["usage:read"],
+    )
+
+    def headers(**changes):
+        return {"Authorization": "Bearer " + jwt.encode({**claims, **changes}, key, algorithm="ES256")}
+
+    app = create_app()
+    app.state.db = db
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        result = await client.get("/pilot/usage", headers=headers())
+        assert result.status_code == 200, result.text
+        assert result.json()["counters"] == own.counters.model_dump(mode="json")
+        assert result.json()["tenant_id"] == "tenant-a" and result.json()["billing_status"] == "not-an-invoice"
+        assert "PRIVATE-MARKER" not in result.text and "key_id" not in result.text
+        assert (await client.get("/pilot/usage")).status_code == 401
+        assert (await client.get("/pilot/usage", headers=headers(roles=["policy:read"]))).status_code == 403
+        assert (await client.get("/pilot/usage?tenant_id=foreign", headers=headers())).status_code == 422
+        foreign = await client.get("/pilot/usage", headers=headers(tenant_id="foreign"))
+        assert foreign.status_code == 200 and foreign.json()["counters"]["retained_events"] == 1
+        assert foreign.json()["counters"]["encrypted_records"] == 1
+        app.state.db = None
+        assert (await client.get("/pilot/usage", headers=headers())).status_code == 503
+    assert (await usage_inventory(db, usage_reader, now=1003)).counters == own.counters

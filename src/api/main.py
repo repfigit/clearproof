@@ -22,6 +22,7 @@ from src.api.routes.health import router as health_router
 from src.api.routes.pilot_proof import router as pilot_proof_router
 from src.api.routes.policy import router as policy_router
 from src.api.routes.proof import router as proof_router
+from src.api.routes.usage import router as usage_router
 from src.storage.database import Database
 
 logger = logging.getLogger(__name__)
@@ -112,6 +113,7 @@ def create_app() -> FastAPI:
     app.include_router(enrollment_router)
     app.include_router(policy_router)
     app.include_router(pilot_proof_router)
+    app.include_router(usage_router)
     app.include_router(events_router)
     app.include_router(fireblocks_router)
 
