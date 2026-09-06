@@ -80,7 +80,8 @@ open CP-013 work.
 operator-configured `EventIngestionService`. It verifies the exact bytes and
 binding first, then retains evidence and the normalized event in the same tenant
 transaction. The internal event service still checks its source/actor grant.
-There is no public Fireblocks webhook route or live account connection yet.
+The authenticated relay route below is implemented. A direct provider listener
+and live account connection remain separate integration work.
 
 Migration 12 permits the encrypted `provider-evidence` record kind, writable
 only by `events:ingest`. Raw bodies are split into 2,048-byte base64 chunks so
@@ -106,5 +107,39 @@ The PostgreSQL test verifies multi-chunk Unicode byte reconstruction after
 reconnect, signature revalidation using independently retained test trust,
 tenant isolation, ciphertext privacy, no chain-finality inference, retry
 semantics and evidence rollback on a post-insert sequence conflict. This is a
-local signed simulator flow; provider HTTP intake, JWKS refresh, historical
-authority receipts and live interoperability still require separate work.
+local signed simulator flow. Authenticated relay intake is described below;
+JWKS refresh, historical authority receipts and live interoperability remain
+separate work.
+
+## Authenticated relay endpoint
+
+`POST /pilot/fireblocks/{integration_id}` accepts the original provider body and
+exactly one `Fireblocks-Webhook-Signature` header. It also requires a Clearproof
+JWT with `events:ingest` and `evidence:decrypt`. This is an internal relay endpoint:
+Fireblocks itself does not provide that JWT, so a direct external webhook
+listener still needs its own deployment and trust design. A relay must preserve
+the original body bytes and signature; it cannot normalize JSON first.
+
+The operator sets `PILOT_FIREBLOCKS_INTEGRATIONS` to a bounded JSON object with
+an `integrations` array (at most sixteen entries, 64 KiB configuration). Each
+entry contains `integration_id`, `binding` (`FireblocksBinding`), `jwks`,
+`key_valid_from_ms`, `key_valid_until_ms` and `max_age_ms`. Bindings and public
+keys come solely from this configuration. The selected integration must belong
+to the authenticated tenant; unknown and other-tenant integration IDs both
+return 404. The existing `PILOT_EVENT_AUTHORITIES` must separately authorize the
+relay actor/source/deployment/custody dimension at ingestion time.
+
+The endpoint bounds body uploads to 64 KiB and ten seconds, rejects multiple or
+legacy-only signature headers, and supplies its current millisecond clock to
+the verifier. No provider URL is fetched. Missing configuration returns 503;
+ungranted source actors return 403; signature/binding/payload rejection returns
+422; immutable event conflicts return 409. All errors omit input values and
+provider response content. A successful response is a minimized durable event
+receipt; it does not indicate compliance or settlement acceptance.
+
+Real signed-JWT/PostgreSQL tests verify accepted/retried exact-byte notifications
+after reconnect, absent/insufficient roles, foreign integrations, invalid signed
+workspace binding, body mutation, duplicate headers, legacy fallback rejection,
+size limits and disabled configuration. Rejected requests add no event/evidence
+records or authorization consumptions. These tests use the local RSA simulator,
+not a live provider connection.

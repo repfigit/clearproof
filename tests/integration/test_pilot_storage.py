@@ -1189,3 +1189,100 @@ async def test_fireblocks_verified_bytes_retained_atomically_and_private(db):
         await intake.ingest(conflict, fixture["sign"](conflict, key), binding, now_ms=now)
     async with db.connection() as conn:
         assert before == (await (await conn.execute("SELECT count(*) FROM pilot_records")).fetchone())[0]
+
+
+async def test_fireblocks_relay_requires_jwt_signature_and_operator_binding(db, monkeypatch):
+    import json
+    import runpy
+    from pathlib import Path
+    from types import SimpleNamespace
+
+    from httpx import ASGITransport, AsyncClient
+
+    from src.api.routes import fireblocks as routes
+    from src.services.event_ingestion import EventAuthority
+
+    root = Path(__file__).resolve().parents[1]
+    fixtures = runpy.run_path(str(root / "unit/test_fireblocks.py"))
+    _, key, binding, jwks = fixtures["setup"].__wrapped__()
+    auth_fixture = runpy.run_path(str(root / "unit/test_policy_diff.py"))
+    app, token = auth_fixture["authenticated_app"].__wrapped__(monkeypatch)
+    app.include_router(routes.router)
+    app.state.db = db
+    now, raw = fixtures["NOW"], fixtures["FIXTURE"].read_bytes()
+    signature = fixtures["sign"](raw, key)
+    config = {
+        "integrations": [
+            {
+                "integration_id": "simulator-a",
+                "binding": binding.model_dump(mode="json"),
+                "jwks": json.loads(jwks),
+                "key_valid_from_ms": now - 100000,
+                "key_valid_until_ms": now + 100000,
+                "max_age_ms": 86400000,
+            }
+        ]
+    }
+    authority = EventAuthority(
+        tenant_id="tenant-a",
+        chain_id=binding.scope.chain_id,
+        registry_address=binding.scope.registry_address,
+        source_id=binding.source_id,
+        actors=("actor-a",),
+        dimensions=("custody",),
+        valid_from=0,
+        valid_until=now // 1000 + 1000,
+    )
+    monkeypatch.setenv("PILOT_FIREBLOCKS_INTEGRATIONS", json.dumps(config))
+    monkeypatch.setenv("PILOT_EVENT_AUTHORITIES", json.dumps({"authorities": [authority.model_dump(mode="json")]}))
+    monkeypatch.setenv("PII_MASTER_KEY", "61" * 32)
+    monkeypatch.setattr(routes, "time", SimpleNamespace(time_ns=lambda: now * 1000000))
+    headers = {
+        "Authorization": "Bearer " + token(roles=("events:ingest", "evidence:decrypt")),
+        "Fireblocks-Webhook-Signature": signature,
+    }
+    url = "/pilot/fireblocks/simulator-a"
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        good = await client.post(url, content=raw, headers=headers)
+        assert good.status_code == 200 and not good.json()["duplicate"], good.text
+        assert "synthetic-private-marker" not in good.text
+        await db.close()
+        await db.connect()
+        retry = await client.post(url, content=raw, headers=headers)
+        assert retry.status_code == 200 and retry.json()["duplicate"]
+        async with db.connection() as conn:
+            count = (await (await conn.execute("SELECT count(*) FROM pilot_records")).fetchone())[0]
+        no_jwt = {"Fireblocks-Webhook-Signature": signature}
+        assert (await client.post(url, content=raw, headers=no_jwt)).status_code == 401
+        read_only = {**headers, "Authorization": "Bearer " + token()}
+        assert (await client.post(url, content=raw, headers=read_only)).status_code == 403
+        foreign = {
+            **headers,
+            "Authorization": "Bearer " + token(tenant="tenant-b", roles=("events:ingest", "evidence:decrypt")),
+        }
+        assert (await client.post(url, content=raw, headers=foreign)).status_code == 404
+        assert (await client.post("/pilot/fireblocks/unknown", content=raw, headers=headers)).status_code == 404
+        legacy = {"Authorization": headers["Authorization"], "Fireblocks-Signature": signature}
+        assert (await client.post(url, content=raw, headers=legacy)).status_code == 401
+        duplicates = list(headers.items()) + [("Fireblocks-Webhook-Signature", signature)]
+        assert (await client.post(url, content=raw, headers=duplicates)).status_code == 401
+        tampered = await client.post(url, content=raw + b" ", headers=headers)
+        assert tampered.status_code == 422 and "synthetic-private-marker" not in tampered.text
+        assert (await client.post(url, content=b"x" * 65537, headers=headers)).status_code == 413
+        payload = json.loads(raw)
+        payload["workspaceId"] = "other-workspace"
+        wrong_scope = json.dumps(payload).encode()
+        assert (
+            await client.post(
+                url,
+                content=wrong_scope,
+                headers={**headers, "Fireblocks-Webhook-Signature": fixtures["sign"](wrong_scope, key)},
+            )
+        ).status_code == 422
+        monkeypatch.setenv("PILOT_EVENT_AUTHORITIES", '{"authorities":[]}')
+        assert (await client.post(url, content=raw, headers=headers)).status_code == 403
+        monkeypatch.delenv("PILOT_FIREBLOCKS_INTEGRATIONS")
+        assert (await client.post(url, content=raw, headers=headers)).status_code == 503
+        async with db.connection() as conn:
+            assert count == (await (await conn.execute("SELECT count(*) FROM pilot_records")).fetchone())[0]
+            assert (await (await conn.execute("SELECT count(*) FROM pilot_consumptions")).fetchone())[0] == 0
