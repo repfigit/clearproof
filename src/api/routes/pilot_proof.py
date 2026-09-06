@@ -8,7 +8,8 @@ from pydantic import Field
 
 from src.api.request_body import read_private_body
 from src.auth.principal import Principal, TenantPrincipalDependency
-from src.protocol.transfer import OpaqueId, Record
+from src.policy.fact_approval import FactTrustStore
+from src.protocol.transfer import Hex32, OpaqueId, Record
 from src.prover.pilot_artifacts import strict_json
 from src.prover.pilot_verifier import PilotPairingVerifier, PilotProof, public_signals
 from src.services.enrollment import EnrollmentNotFound
@@ -29,6 +30,7 @@ class InspectionTarget:
 
     configuration: CurrentStatementConfiguration
     verifier: PilotPairingVerifier
+    fact_trust: FactTrustStore | None = None
 
 
 class InspectionBody(Record):
@@ -38,18 +40,19 @@ class InspectionBody(Record):
     public_signals: list[str] = Field(min_length=8, max_length=8)
 
 
+class EvaluationBody(InspectionBody):
+    fact_ids: tuple[Hex32, ...] = Field(max_length=64)
+
+
 def inspection_time() -> int:
     return int(time.time())
 
 
-@router.post("/inspect", summary="Inspect a current pilot proof without authorizing or consuming it")
-async def inspect_proof(request: Request, principal: Principal = Depends(TenantPrincipalDependency)):
-    principal.require("proof:inspect")
-    principal.require("evidence:decrypt")
+async def prepare_inspection(request: Request, principal: Principal, model: type[InspectionBody]):
     raw = await read_private_body(request, limit=16384)
     try:
         strict_json(raw, limit=16384)
-        body = InspectionBody.model_validate_json(raw)
+        body = model.model_validate_json(raw)
         proof = body.proof_json.encode("utf-8")
         PilotProof.parse(proof)
         signals = public_signals(body.public_signals)
@@ -72,6 +75,14 @@ async def inspect_proof(request: Request, principal: Principal = Depends(TenantP
         )
     except (ValueError, TypeError, KeyError, RuntimeError):
         raise HTTPException(status_code=503, detail="Pilot inspection configuration is unavailable") from None
+    return service, target, body, proof, signals
+
+
+@router.post("/inspect", summary="Inspect a current pilot proof without authorizing or consuming it")
+async def inspect_proof(request: Request, principal: Principal = Depends(TenantPrincipalDependency)):
+    principal.require("proof:inspect")
+    principal.require("evidence:decrypt")
+    service, target, body, proof, signals = await prepare_inspection(request, principal, InspectionBody)
     try:
         result = await service.inspect(body.credential_id, proof, signals, now=inspection_time())
     except EnrollmentNotFound:
@@ -84,4 +95,34 @@ async def inspect_proof(request: Request, principal: Principal = Depends(TenantP
         "authorization_consumed": False,
         "assurance": target.verifier.artifacts.manifest.assurance,
         **asdict(result),
+    }
+
+
+@router.post("/evaluate", summary="Evaluate current proof and retained facts without consuming authorization")
+async def evaluate_proof(request: Request, principal: Principal = Depends(TenantPrincipalDependency)):
+    for role in ("proof:inspect", "policy:read", "evidence:decrypt"):
+        principal.require(role)
+    service, target, body, proof, signals = await prepare_inspection(request, principal, EvaluationBody)
+    if not isinstance(target.fact_trust, FactTrustStore):
+        raise HTTPException(status_code=503, detail="Pilot fact authority configuration is unavailable")
+    try:
+        inspection, policy = await service.evaluate(
+            body.credential_id,
+            proof,
+            signals,
+            body.fact_ids,
+            fact_trust=target.fact_trust,
+            now=inspection_time(),
+        )
+    except EnrollmentNotFound:
+        raise HTTPException(status_code=404, detail="Pilot enrollment is unavailable") from None
+    except (ValueError, TypeError, RuntimeError):
+        raise HTTPException(status_code=422, detail="Current pilot proof, facts or trust checks rejected") from None
+    return {
+        "schema_version": "clearproof-current-evaluation-v1",
+        "scope": "current-policy-evaluation",
+        "authorization_consumed": False,
+        "assurance": target.verifier.artifacts.manifest.assurance,
+        "inspection": asdict(inspection),
+        "policy": policy.model_dump(mode="json") if policy is not None else None,
     }

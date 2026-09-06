@@ -96,3 +96,40 @@ current service/pairing, covering success, failed pairing, tenant/role rejection
 and input-error redaction. The isolated development-artifact CI job enables this
 gate. Other current authorization, contract parity and observation work remains
 open.
+
+## Read-only current policy evaluation
+
+`POST /pilot/proof/evaluate` uses the same target, proof parser and current-state
+service. It additionally requires `policy:read` and an operator-configured
+`InspectionTarget.fact_trust` (`FactTrustStore`). An absent fact authority returns
+503; requests cannot provide or override that authority.
+
+The request extends the inspection body with required `fact_ids`, an array of at
+most 64 distinct retained fact-evidence digests. An empty array is allowed and
+lets the policy report explain missing facts. References are loaded only in the
+authenticated tenant; each signature, transfer/context binding, source authority,
+validity interval and known compromise is checked under the configured trust.
+Malformed, duplicate, unavailable or untrusted references return 422. Facts are
+not accepted as request-body assertions.
+
+The response is `clearproof-current-evaluation-v1`, scope
+`current-policy-evaluation`, with `authorization_consumed: false`, manifest
+`assurance`, nested `inspection` and nullable `policy`. Successful pairing enables
+the normal minimized policy report: ALLOW, DENY, REVIEW or INDETERMINATE, with
+policy/transfer digests, server evaluation time, matched rules, missing predicates
+and reasons. `zk_coverage: not-established` preserves the distinction between the
+circuit statement and Python policy evaluation. Failed pairing returns
+`policy: null`; it must not be interpreted as ALLOW or as missing-fact evaluation.
+
+This evaluates the selected retained evidence at the server clock. It does not
+assert that those references exhaust all source observations or discover newer
+external facts. The caller can compare eligible retained fact sets, but cannot
+change their signatures or the operator's authorities. The synthetic integration
+scenario uses explicitly signed alternative fact sets to exercise all four
+outcomes; it does not validate external data truth or regulatory sufficiency.
+
+Neither endpoint writes an observation record, signs a decision receipt, consumes
+a nullifier, sends a Travel Rule payload or executes a transfer. Durable observation
+mode and authorization use separate services and remain integration work. The
+current source SDK/CLI adapter described above exposes inspection only; evaluation
+client support is not implied by this API addition.

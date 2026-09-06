@@ -105,6 +105,13 @@ def synthetic_case(
                         effect="ALLOW",
                         source_ids=("synthetic-rules",),
                     ),
+                    PolicyRule(
+                        rule_id="synthetic-deny-counterparty",
+                        predicate="counterparty_trusted",
+                        operator="is_false",
+                        effect="DENY",
+                        source_ids=("synthetic-rules",),
+                    ),
                 ),
             }
         )

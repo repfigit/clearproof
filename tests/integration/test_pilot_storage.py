@@ -1681,7 +1681,7 @@ async def test_durable_current_inspection_real_pairing_and_revocation(db, monkey
         trust = FactTrustStore([authority])
         evidence = FactEvidenceService(db, cipher(), principal, trust)
 
-        async def retain(counterparty):
+        async def retain(counterparty, *, information=True):
             approvals = tuple(
                 sign_fact(
                     FactApproval(
@@ -1693,7 +1693,9 @@ async def test_durable_current_inspection_real_pairing_and_revocation(db, monkey
                         key_id=authority.key_id,
                         fact=PolicyFact(
                             predicate=p,
-                            value=counterparty if p == "counterparty_trusted" else True,
+                            value=counterparty
+                            if p == "counterparty_trusted"
+                            else (information if p == "required_information_complete" else True),
                             observed_at=now,
                             expires_at=credential.expires_at,
                             evidence_digest="ab" * 32,
@@ -1715,6 +1717,24 @@ async def test_durable_current_inspection_real_pairing_and_revocation(db, monkey
         valid, complete = await service().evaluate(credential.credential_nonce, proof, signals, refs, **args)
         assert valid.cryptographic_valid and complete.missing_predicates == ()
         if mutation == "authorization":
+            await check_current_evaluation_http(
+                db,
+                monkeypatch,
+                principal,
+                configuration,
+                verifier,
+                proof,
+                signals,
+                credential.credential_nonce,
+                trust,
+                authority,
+                {
+                    "ALLOW": refs,
+                    "DENY": await retain(False),
+                    "REVIEW": await retain(True, information=False),
+                    "INDETERMINATE": (),
+                },
+            )
             import base64
 
             from src.protocol.canonical import record_digest
@@ -3041,3 +3061,127 @@ async def exercise_current_inspection_cli(app, body, headers, expected):
             await asyncio.wait_for(task, 10)
         finally:
             sock.close()
+
+
+async def check_current_evaluation_http(
+    db, monkeypatch, principal, configuration, verifier, proof, signals, credential_id, trust, authority, cases
+):
+    """Four synthetic policy outcomes through real JWT, retained facts and pairing."""
+    import json
+    import time
+
+    import jwt
+    from cryptography.hazmat.primitives import serialization
+    from cryptography.hazmat.primitives.asymmetric import ec
+    from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
+    from httpx import ASGITransport, AsyncClient
+
+    from src.api.main import create_app
+    from src.api.middleware import auth
+    from src.api.routes.pilot_proof import InspectionTarget
+    from src.policy.fact_approval import FactAuthority, FactTrustStore
+
+    key = ec.generate_private_key(ec.SECP256R1())
+    monkeypatch.setattr(auth, "AUTH_MODE", "jwt")
+    monkeypatch.setattr(
+        auth,
+        "JWT_PUBLIC_KEY",
+        key.public_key()
+        .public_bytes(serialization.Encoding.PEM, serialization.PublicFormat.SubjectPublicKeyInfo)
+        .decode(),
+    )
+    monkeypatch.setenv("PII_MASTER_KEY", (b"a" * 32).hex())
+    now = int(time.time())
+    roles = ["proof:inspect", "policy:read", "evidence:decrypt"]
+    claims = dict(
+        iss=auth.JWT_ISSUER,
+        aud=auth.JWT_AUDIENCE,
+        sub="simulator",
+        iat=now,
+        exp=now + 300,
+        tenant_id=principal.tenant_id,
+        actor_id=principal.actor_id,
+        roles=roles,
+    )
+
+    def headers(**changes):
+        return {"Authorization": "Bearer " + jwt.encode({**claims, **changes}, key, algorithm="ES256")}
+
+    body = dict(
+        target_id="synthetic-transfer",
+        credential_id=credential_id,
+        proof_json=proof.decode(),
+        public_signals=signals,
+        fact_ids=list(cases["ALLOW"]),
+    )
+    app = create_app()
+    app.state.db = db
+    selector = (principal.tenant_id, "synthetic-transfer")
+    targets = {selector: InspectionTarget(configuration, verifier, trust)}
+    app.state.pilot_inspection_targets = targets
+    async with db.connection() as conn:
+        count = (await (await conn.execute("SELECT count(*) FROM pilot_records")).fetchone())[0]
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        for outcome, references in cases.items():
+            result = await client.post("/pilot/proof/evaluate", json=dict(body, fact_ids=references), headers=headers())
+            assert result.status_code == 200, result.text
+            report = result.json()
+            assert report["schema_version"] == "clearproof-current-evaluation-v1"
+            assert report["scope"] == "current-policy-evaluation" and report["authorization_consumed"] is False
+            assert report["assurance"] == "development-unapproved"
+            assert report["inspection"]["cryptographic_valid"] is True
+            assert report["policy"]["outcome"] == outcome
+            assert report["policy"]["zk_coverage"] == "not-established"
+            assert report["policy"]["policy_digest"] == configuration.context.policy_digest
+            assert now <= report["policy"]["evaluated_at"] <= int(time.time())
+            assert configuration.transfer.originator.wallet not in result.text
+            assert "business" not in result.text
+        changed = json.loads(proof)
+        changed["pi_a"] = changed["pi_c"]
+        invalid = await client.post(
+            "/pilot/proof/evaluate", json=dict(body, proof_json=json.dumps(changed)), headers=headers()
+        )
+        assert invalid.status_code == 200 and invalid.json()["inspection"]["cryptographic_valid"] is False
+        assert invalid.json()["policy"] is None
+        assert (await client.post("/pilot/proof/evaluate", json=body)).status_code == 401
+        for omitted in roles:
+            assert (
+                await client.post(
+                    "/pilot/proof/evaluate", json=body, headers=headers(roles=[r for r in roles if r != omitted])
+                )
+            ).status_code == 403
+        assert (
+            await client.post("/pilot/proof/evaluate", json=body, headers=headers(tenant_id="foreign"))
+        ).status_code == 404
+        for altered in [
+            dict(body, fact_ids=list(cases["ALLOW"]) * 2),
+            dict(body, fact_ids=["00" * 32]),
+            dict(body, fact_trust="PRIVATE-MARKER"),
+            dict(body, now=now),
+            dict(body, fact_ids=["PRIVATE-MARKER"]),
+        ]:
+            rejected = await client.post("/pilot/proof/evaluate", json=altered, headers=headers())
+            assert rejected.status_code == 422, rejected.text
+            assert "PRIVATE-MARKER" not in rejected.text
+        targets[selector] = InspectionTarget(configuration, verifier)
+        assert (await client.post("/pilot/proof/evaluate", json=body, headers=headers())).status_code == 503
+        other_authority = FactAuthority.model_validate(
+            {
+                **authority.model_dump(),
+                "public_key": Ed25519PrivateKey.generate().public_key().public_bytes_raw().hex(),
+            }
+        )
+        targets[selector] = InspectionTarget(configuration, verifier, FactTrustStore([other_authority]))
+        assert (await client.post("/pilot/proof/evaluate", json=body, headers=headers())).status_code == 422
+        targets[selector] = InspectionTarget(configuration, verifier, trust)
+    await db.close()
+    await db.connect()
+    restarted = create_app()
+    restarted.state.db = db
+    restarted.state.pilot_inspection_targets = targets
+    async with AsyncClient(transport=ASGITransport(app=restarted), base_url="http://test") as client:
+        result = await client.post("/pilot/proof/evaluate", json=body, headers=headers())
+        assert result.status_code == 200 and result.json()["policy"]["outcome"] == "ALLOW"
+    async with db.connection() as conn:
+        assert (await (await conn.execute("SELECT count(*) FROM pilot_records")).fetchone())[0] == count
+        assert (await (await conn.execute("SELECT count(*) FROM pilot_consumptions")).fetchone())[0] == 0
