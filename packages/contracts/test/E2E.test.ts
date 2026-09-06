@@ -1,3 +1,4 @@
+import { routeVerifier } from "./helpers/verifier";
 /**
  * End-to-end integration test: generate proof (snarkjs) -> submit on-chain -> verify.
  *
@@ -53,9 +54,11 @@ describe("E2E: Prove -> Submit On-Chain -> Verify", function () {
     const sanctionsOracle = await SanctionsOracle.deploy(admin.address, sanctionsRoot, 10);
     await sanctionsOracle.waitForDeployment();
 
+    const { router, selector } = await routeVerifier(await verifier.getAddress());
     const Registry = await ethers.getContractFactory("ComplianceRegistry");
     const registry = await Registry.deploy(
-      await verifier.getAddress(),
+      await router.getAddress(),
+      selector,
       await vaspRegistry.getAddress(),
       await sanctionsOracle.getAddress(),
       250,
@@ -63,6 +66,9 @@ describe("E2E: Prove -> Submit On-Chain -> Verify", function () {
       10000
     );
     await registry.waitForDeployment();
+
+    // Match the explicit USD-cent witness thresholds; this is a synthetic policy.
+    await registry.setJurisdictionThresholds(0x5553, 25000, 300000, 1000000);
 
     // Register a VASP (admin is the VASP wallet)
     const vaspDid = ethers.keccak256(ethers.toUtf8Bytes("did:web:e2e-vasp.example"));
