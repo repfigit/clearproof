@@ -2029,6 +2029,56 @@ async def test_durable_current_inspection_real_pairing_and_revocation(db, monkey
             assert historical.outcome == "indeterminate"
             assert "independent_timing_evidence_missing" in historical.reasons
             assert "historical_revocation_evidence_missing" in historical.reasons
+            from dataclasses import replace
+
+            from src.policy.model import PolicyTrustStore
+            from src.prover.history_statement import HistoryStatementTrust
+            from src.prover.pilot_roots import CurrentRootPins
+
+            historical_trust = HistoryStatementTrust(
+                policy_trust=configuration.policy_trust,
+                valuation_trust=configuration.valuation_trust,
+                root_trust=configuration.root_trust,
+                root_pins=configuration.root_pins,
+            )
+            reconstructed = await inspect_history_bundle(
+                bundle, verifier, statement_trust=historical_trust, **history_args
+            )
+            assert reconstructed.integrity_valid and reconstructed.cryptographic_valid and reconstructed.statement_valid
+            assert (
+                reconstructed.outcome == "indeterminate"
+                and "statement_semantics_unverified" not in reconstructed.reasons
+            )
+            wrong_pins = CurrentRootPins.model_validate(
+                {**configuration.root_pins.model_dump(), "issuer_digest": "ef" * 32}
+            )
+            untrusted = await inspect_history_bundle(
+                bundle, verifier, statement_trust=replace(historical_trust, root_pins=wrong_pins), **history_args
+            )
+            assert untrusted.outcome == "indeterminate" and not untrusted.statement_valid
+            assert untrusted.reasons == ("statement_trust_unavailable",)
+            latest_policy = PolicyTrustStore([policy, successor], current_digests=(successor.digest,))
+            changed_selection = await inspect_history_bundle(
+                bundle,
+                verifier,
+                statement_trust=replace(historical_trust, policy_trust=latest_policy),
+                **history_args,
+            )
+            assert changed_selection.outcome == "indeterminate" and not changed_selection.statement_valid
+
+            async def unavailable_pairing(*values, **options):
+                raise ValueError("synthetic runtime unavailable")
+
+            with monkeypatch.context() as patch:
+                patch.setattr(PilotPairingVerifier, "inspect", unavailable_pairing)
+                unavailable = await inspect_history_bundle(
+                    bundle,
+                    verifier,
+                    statement_trust=historical_trust,
+                    **history_args,
+                )
+            assert unavailable.statement_valid and unavailable.cryptographic_valid is None
+            assert unavailable.outcome == "indeterminate" and unavailable.reasons == ("pairing_unavailable",)
             for mutation_kind in ("receipt", "root", "key", "policy", "envelope", "signal", "extra_record"):
                 changed_bundle = deepcopy(bundle)
                 if mutation_kind == "receipt":

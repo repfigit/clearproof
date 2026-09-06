@@ -13,18 +13,29 @@ binding, information-signature digest, proof identity, unique record references
 and pinned record hashes. Captured configuration must match its recorded bytes
 and the independently supplied artifact manifest and verification key.
 
-After those checks, the existing pinned verifier performs real Groth16 pairing
-over the captured public vector. This is not full reconstruction of the private
-statement or verification of historical policy/source authority. The report keeps
+With reviewer-supplied `HistoryStatementTrust`, inspection also reconstructs the
+v2 expected public vector at the claimed authorization time. It revalidates the
+captured wallet consent and credential/audience binding, compares captured root
+pins with independently approved historical pins, verifies signed root and
+valuation approvals, rebuilds the catalog, and uses independently selected policy
+thresholds. The same current-statement implementation performs the projection,
+credential/root binding, integer valuation and lifetime checks. Reviewer time is
+not substituted for the claimed historical evaluation time.
+
+The pinned verifier then performs real Groth16 pairing against those expectations.
+Without statement trust it checks only the captured vector. The report keeps
 `integrity_valid` and `cryptographic_valid` separate from its historical outcome:
 
 - Altered linked evidence or failed pairing yields `contradicted`, with a scoped
   integrity/pairing reason. This contradicts the artifact's claim; it is not a
   regulatory policy DENY decision.
 - Missing referenced evidence or unavailable pairing yields `indeterminate`.
-- Successful integrity and pairing also yields `indeterminate`, explicitly naming
-  unverified statement semantics, decision authority, historical revocation and
-  independent timing evidence. This implementation cannot yet return `supported`.
+- Successful reconstruction sets `statement_valid`; unavailable historical trust
+  stays indeterminate, and a reconstructed-vector mismatch contradicts the claim.
+- Successful pairing still yields `indeterminate`, naming decision authority,
+  historical revocation and independent timing evidence gaps. If reconstruction
+  was omitted, unverified semantics is also reported. This implementation cannot
+  yet return `supported`.
 
 Proof expiry at the reviewer's time does not itself prevent historical pairing.
 `verified_at` is recorded separately; embedded decision/capture times remain
@@ -38,6 +49,11 @@ remain indeterminate. A fresh process decrypts and pairs with database access
 closed and Python socket connections disabled, using independently supplied
 artifact and runtime pins. Reports contain codes and booleans, not personal fields.
 
-Required next layers are authenticated statement/source/policy reconstruction,
+Tests also reconstruct the expired historical proof with independent original
+pins and reject a replacement root pin or the latest policy selection. Accepting
+historical pins is an explicit reviewer configuration decision; the bundle does
+not establish those pins' authority or prove absence of intervening compromise.
+
+Required next layers are historical business-fact and policy-decision replay,
 historical status and compromise handling, decision/timing authority, the
 `supported` path and `verify-history` CLI. This stage does not complete CP-015.

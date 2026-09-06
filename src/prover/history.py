@@ -8,6 +8,7 @@ from typing import Literal
 
 from src.protocol.canonical import canonical_bytes, record_digest
 from src.protocol.transfer import Transfer, VerificationContext
+from src.prover.history_statement import HistoryStatementTrust, reconstruct_history_statement
 from src.prover.pilot_verifier import PilotPairingVerifier, PilotProof, public_signals
 
 
@@ -18,6 +19,7 @@ class HistoryInspection:
     cryptographic_valid: bool | None
     verified_at: int
     reasons: tuple[str, ...]
+    statement_valid: bool | None = None
 
 
 class MissingHistoryEvidence(ValueError):
@@ -134,12 +136,13 @@ async def inspect_history_bundle(
     expected_receipt_id: str,
     expected_tenant: str,
     verified_at: int,
+    statement_trust: HistoryStatementTrust | None = None,
 ) -> HistoryInspection:
     """Pins and verifier come from the reviewer, never from the exported bundle.
 
-    A valid pairing over this vector does not reconstruct all statement semantics,
-    authenticate decisions or establish historical non-revocation/timing. Those
-    missing checks prevent a supported outcome. This function cannot consume.
+    Optional independent statement trust enables reconstruction at the claimed
+    authorization time. Decision authority and historical non-revocation/timing
+    still require evidence before a supported outcome. This function cannot consume.
     """
     if type(verified_at) is not int or not 0 <= verified_at < 2**53:
         raise ValueError("Invalid history verification clock")
@@ -149,21 +152,32 @@ async def inspect_history_bundle(
         return HistoryInspection("indeterminate", False, None, verified_at, ("missing_evidence",))
     except (ValueError, TypeError, OverflowError, RecursionError):
         return HistoryInspection("contradicted", False, None, verified_at, ("bundle_integrity_mismatch",))
+    expected = signals
+    statement_valid = None
+    if statement_trust is not None:
+        try:
+            expected = reconstruct_history_statement(bundle, verifier, statement_trust, signals)
+        except (ValueError, KeyError, TypeError):
+            return HistoryInspection("indeterminate", True, None, verified_at, ("statement_trust_unavailable",), False)
+        if expected != signals:
+            return HistoryInspection("contradicted", True, None, verified_at, ("statement_signal_mismatch",), False)
+        statement_valid = True
     try:
-        inspection = await verifier.inspect(raw_proof, signals, expected_signals=signals)
+        inspection = await verifier.inspect(raw_proof, signals, expected_signals=expected)
     except (ValueError, OSError):
-        return HistoryInspection("indeterminate", True, None, verified_at, ("pairing_unavailable",))
+        return HistoryInspection("indeterminate", True, None, verified_at, ("pairing_unavailable",), statement_valid)
     if not inspection.cryptographic_valid:
-        return HistoryInspection("contradicted", True, False, verified_at, ("invalid_pairing",))
+        return HistoryInspection("contradicted", True, False, verified_at, ("invalid_pairing",), statement_valid)
     return HistoryInspection(
         "indeterminate",
         True,
         True,
         verified_at,
         (
-            "statement_semantics_unverified",
+            *(("statement_semantics_unverified",) if statement_valid is None else ()),
             "decision_authority_unverified",
             "historical_revocation_evidence_missing",
             "independent_timing_evidence_missing",
         ),
+        statement_valid,
     )
