@@ -71,6 +71,37 @@ key rejection, transaction rollback, scope isolation, encrypted rows and exact
 retrieval after restart/expiry/authority replacement. Development proving keys
 remain outside the source package.
 
-Observation API/CLI orchestration, deterministic counterparty scenarios,
+Observation CLI orchestration, deterministic counterparty scenarios,
 coverage/disagreement/latency reports, integrated clean setup and paid-pilot usage
 reporting remain CP-016–018 work. This service alone does not close those gates.
+
+## Authenticated API
+
+The source API now exposes `POST /pilot/proof/observe`. Its private JSON body
+extends `/pilot/proof/evaluate` with `idempotency_key`. The same 16 KiB upload
+limit, exact proof parsing, eight-signal profile, tenant-scoped operator target
+and server-selected fact trust apply. Roles are `observations:write`,
+`proof:inspect`, `policy:read` and `evidence:decrypt`; neither proof generation nor
+consumption permission is needed. Caller-supplied mode, clock, consumption flag or
+trust configuration rejects. The response is the retained observation report.
+
+Concurrent exact requests return the same report. A changed request or actor
+under the same key returns 409. Missing current configuration returns 503,
+unknown tenant target/enrollment 404, missing roles 403, and malformed input or
+current trust rejection 422. Observation does not activate enforcement.
+
+`POST /pilot/proof/observations/read` accepts only `observation_id` in a bounded
+1 KiB JSON body and requires `policy:read` plus `evidence:decrypt`. References stay
+in the private body rather than a URL path. It returns the retained report or a
+scoped 404, with generic input/configuration/integrity errors. This read endpoint
+requires storage and encryption configuration but no current inspection target,
+root configuration or available proving runtime. Reads after restart therefore
+remain possible even when the current target is removed.
+
+The real-proof JWT/PostgreSQL gate covers four HTTP policy outcomes, concurrent
+idempotent creation, changed-request conflict, role/tenant isolation, rejected
+mode/clock/trust overrides, minimized errors, bounded reads and retrieval in a
+replacement app without current targets. Exactly four logical HTTP observations
+add eight encrypted observation/idempotency records and zero consumptions.
+SDK/CLI orchestration, observation pagination/reporting and the complete onboarding
+scenario remain open; these API routes do not close CP-016–018 by themselves.

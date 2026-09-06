@@ -3198,6 +3198,7 @@ async def check_current_evaluation_http(
         cases,
         FactTrustStore([other_authority]),
     )
+    await check_observation_http(app, db, headers, body, cases)
 
 
 async def check_durable_observations(
@@ -3329,4 +3330,88 @@ async def check_durable_observations(
         ).fetchall()
         assert len(rows) == 6
         assert all("observe-allow" not in row[0] and '"outcome"' not in row[0] for row in rows)
+        assert (await (await conn.execute("SELECT count(*) FROM pilot_consumptions")).fetchone())[0] == 0
+
+
+async def check_observation_http(app, db, headers, evaluation_body, cases):
+    """Real authenticated observation creation, deduplicated retries and retained reads."""
+    from httpx import ASGITransport, AsyncClient
+
+    from src.api.main import create_app
+
+    writer_headers = headers(roles=["observations:write", "proof:inspect", "policy:read", "evidence:decrypt"])
+    reader_headers = headers(roles=["policy:read", "evidence:decrypt"])
+    body = dict(evaluation_body, idempotency_key="http-observe-allow")
+    reports = []
+    async with db.connection() as conn:
+        baseline = (await (await conn.execute("SELECT count(*) FROM pilot_records")).fetchone())[0]
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        first, repeat = await asyncio.gather(
+            *[client.post("/pilot/proof/observe", json=body, headers=writer_headers) for _ in range(2)]
+        )
+        assert first.status_code == repeat.status_code == 200, first.text
+        assert first.json() == repeat.json()
+        reports.append(first.json())
+        assert first.json()["policy"]["outcome"] == "ALLOW"
+        for outcome in ("DENY", "REVIEW", "INDETERMINATE"):
+            response = await client.post(
+                "/pilot/proof/observe",
+                json=dict(body, fact_ids=cases[outcome], idempotency_key="http-observe-" + outcome.lower()),
+                headers=writer_headers,
+            )
+            assert response.status_code == 200, response.text
+            assert response.json()["policy"]["outcome"] == outcome
+            assert response.json()["mode"] == "observation" and response.json()["authorization_consumed"] is False
+            reports.append(response.json())
+        assert (await client.post("/pilot/proof/observe", json=body)).status_code == 401
+        assert (await client.post("/pilot/proof/observe", json=body, headers=headers())).status_code == 403
+        foreign = headers(
+            tenant_id="foreign", roles=["observations:write", "proof:inspect", "policy:read", "evidence:decrypt"]
+        )
+        assert (await client.post("/pilot/proof/observe", json=body, headers=foreign)).status_code == 404
+        conflict = await client.post("/pilot/proof/observe", json=dict(body, fact_ids=[]), headers=writer_headers)
+        assert conflict.status_code == 409
+        for extra in (
+            {"mode": "enforcement"},
+            {"now": 0},
+            {"authorization_consumed": True},
+            {"fact_trust": "PRIVATE-MARKER"},
+        ):
+            rejected = await client.post("/pilot/proof/observe", json={**body, **extra}, headers=writer_headers)
+            assert rejected.status_code == 422 and "PRIVATE-MARKER" not in rejected.text
+        reference = {"observation_id": reports[0]["observation_id"]}
+        assert (await client.post("/pilot/proof/observations/read", json=reference)).status_code == 401
+        assert (
+            await client.post(
+                "/pilot/proof/observations/read", json=reference, headers=headers(roles=["evidence:decrypt"])
+            )
+        ).status_code == 403
+        assert (await client.post("/pilot/proof/observations/read", json=reference, headers=foreign)).status_code == 404
+        assert (
+            await client.post(
+                "/pilot/proof/observations/read", json={"observation_id": "00" * 32}, headers=reader_headers
+            )
+        ).status_code == 404
+        for altered in ({"observation_id": "PRIVATE-MARKER"}, {**reference, "tenant_id": "foreign"}):
+            rejected = await client.post("/pilot/proof/observations/read", json=altered, headers=reader_headers)
+            assert rejected.status_code == 422 and "PRIVATE-MARKER" not in rejected.text
+        assert (
+            await client.post("/pilot/proof/observations/read", content=b"x" * 1025, headers=reader_headers)
+        ).status_code == 413
+    await db.close()
+    await db.connect()
+    restarted = create_app()
+    restarted.state.db = db
+    # No current targets are configured in the replacement app.
+    async with AsyncClient(transport=ASGITransport(app=restarted), base_url="http://test") as client:
+        assert (await client.post("/pilot/proof/observe", json=body, headers=writer_headers)).status_code == 503
+        for report in reports:
+            loaded = await client.post(
+                "/pilot/proof/observations/read",
+                json={"observation_id": report["observation_id"]},
+                headers=reader_headers,
+            )
+            assert loaded.status_code == 200 and loaded.json() == report
+    async with db.connection() as conn:
+        assert (await (await conn.execute("SELECT count(*) FROM pilot_records")).fetchone())[0] == baseline + 8
         assert (await (await conn.execute("SELECT count(*) FROM pilot_consumptions")).fetchone())[0] == 0

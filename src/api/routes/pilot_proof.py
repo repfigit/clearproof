@@ -14,8 +14,10 @@ from src.prover.pilot_artifacts import strict_json
 from src.prover.pilot_verifier import PilotPairingVerifier, PilotProof, public_signals
 from src.services.enrollment import EnrollmentNotFound
 from src.services.proof_inspection import CurrentStatementConfiguration, ProofInspectionService
+from src.services.proof_observation import ProofObservationService, read_observation
 from src.storage.keyring import load_keyring
-from src.storage.pilot_cipher import RecordCipher
+from src.storage.pilot import RecordConflict
+from src.storage.pilot_cipher import RecordCipher, RecordIntegrityError
 
 router = APIRouter(prefix="/pilot/proof", tags=["pilot-proof"])
 
@@ -44,11 +46,24 @@ class EvaluationBody(InspectionBody):
     fact_ids: tuple[Hex32, ...] = Field(max_length=64)
 
 
+class ObservationBody(EvaluationBody):
+    idempotency_key: OpaqueId
+
+
+class ObservationReadBody(Record):
+    observation_id: Hex32
+
+
 def inspection_time() -> int:
     return int(time.time())
 
 
-async def prepare_inspection(request: Request, principal: Principal, model: type[InspectionBody]):
+async def prepare_inspection(
+    request: Request,
+    principal: Principal,
+    model: type[InspectionBody],
+    service_type: type[ProofInspectionService] = ProofInspectionService,
+):
     raw = await read_private_body(request, limit=16384)
     try:
         strict_json(raw, limit=16384)
@@ -70,9 +85,7 @@ async def prepare_inspection(request: Request, principal: Principal, model: type
     if db is None or not db.is_ready:
         raise HTTPException(status_code=503, detail="Pilot database is unavailable")
     try:
-        service = ProofInspectionService(
-            db, RecordCipher(load_keyring()), principal, target.verifier, target.configuration
-        )
+        service = service_type(db, RecordCipher(load_keyring()), principal, target.verifier, target.configuration)
     except (ValueError, TypeError, KeyError, RuntimeError):
         raise HTTPException(status_code=503, detail="Pilot inspection configuration is unavailable") from None
     return service, target, body, proof, signals
@@ -126,3 +139,56 @@ async def evaluate_proof(request: Request, principal: Principal = Depends(Tenant
         "inspection": asdict(inspection),
         "policy": policy.model_dump(mode="json") if policy is not None else None,
     }
+
+
+@router.post("/observe", summary="Retain a non-enforcing proof observation with idempotent retries")
+async def observe_proof(request: Request, principal: Principal = Depends(TenantPrincipalDependency)):
+    for role in ("observations:write", "proof:inspect", "policy:read", "evidence:decrypt"):
+        principal.require(role)
+    service, target, body, proof, signals = await prepare_inspection(
+        request, principal, ObservationBody, ProofObservationService
+    )
+    if not isinstance(target.fact_trust, FactTrustStore):
+        raise HTTPException(status_code=503, detail="Pilot fact authority configuration is unavailable")
+    try:
+        return await service.observe(
+            body.credential_id,
+            proof,
+            signals,
+            body.fact_ids,
+            fact_trust=target.fact_trust,
+            idempotency_key=body.idempotency_key,
+            now=inspection_time(),
+        )
+    except RecordConflict:
+        raise HTTPException(status_code=409, detail="Observation request or idempotency conflict") from None
+    except EnrollmentNotFound:
+        raise HTTPException(status_code=404, detail="Pilot enrollment is unavailable") from None
+    except (ValueError, TypeError, RuntimeError):
+        raise HTTPException(status_code=422, detail="Current observation input or trust checks rejected") from None
+
+
+@router.post("/observations/read", summary="Read a retained tenant observation without current reevaluation")
+async def get_observation(request: Request, principal: Principal = Depends(TenantPrincipalDependency)):
+    for role in ("policy:read", "evidence:decrypt"):
+        principal.require(role)
+    raw = await read_private_body(request, limit=1024)
+    try:
+        strict_json(raw, limit=1024)
+        body = ObservationReadBody.model_validate_json(raw)
+    except (ValueError, TypeError, RecursionError):
+        raise HTTPException(status_code=422, detail="Invalid observation reference") from None
+    db = getattr(request.app.state, "db", None)
+    if db is None or not db.is_ready:
+        raise HTTPException(status_code=503, detail="Pilot database is unavailable")
+    try:
+        cipher = RecordCipher(load_keyring())
+    except (KeyError, ValueError, RuntimeError):
+        raise HTTPException(status_code=503, detail="Pilot encryption configuration is unavailable") from None
+    try:
+        report = await read_observation(db, cipher, principal, body.observation_id)
+    except (ValueError, TypeError, RecordIntegrityError):
+        raise HTTPException(status_code=503, detail="Stored observation cannot be read") from None
+    if report is None:
+        raise HTTPException(status_code=404, detail="Observation is unavailable")
+    return report
