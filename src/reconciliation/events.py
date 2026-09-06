@@ -140,6 +140,54 @@ def reconcile(scope: TransferScope, events: tuple[TransferEvent, ...], *, now: i
         states[dimension] = "unknown" if not values else selected[0].state if len(values) == 1 else "conflict"
         if len(values) > 1:
             finding("source-conflict-" + dimension, "operations", "review-source-evidence", selected)
+    adverse = {
+        ("compliance", "denied"): ("compliance-denied", "compliance", "review-denial-evidence"),
+        ("compliance", "review"): ("compliance-review-required", "compliance", "review-policy-findings"),
+        ("proof", "invalid"): ("proof-invalid", "compliance", "inspect-proof-verification"),
+        ("counterparty", "rejected"): ("counterparty-rejected", "compliance", "review-counterparty-response"),
+        ("counterparty", "information-requested"): (
+            "counterparty-information-requested",
+            "compliance",
+            "review-required-information",
+        ),
+        ("custody", "cancelled"): ("custody-cancelled", "operations", "review-cancellation"),
+        ("evidence", "incomplete"): ("evidence-incomplete", "compliance", "review-missing-evidence"),
+    }
+    for (dimension, state), (reason, owner, action) in adverse.items():
+        if states[dimension] == state:
+            finding(reason, owner, action, [e for e in latest.values() if e.dimension == dimension])
+    if states["custody"] == "completed" and states["chain"] in {"unknown", "pending", "confirmed"}:
+        finding(
+            "custody-completed-without-finality",
+            "operations",
+            "obtain-chain-observation",
+            [e for e in latest.values() if e.dimension == "custody"],
+        )
+    changed_heads = []
+    for (dimension, source), head in latest.items():
+        if dimension != "chain" or head.state not in {"confirmed", "finalized"}:
+            continue
+        observations = [
+            old
+            for old in timeline
+            if old.dimension == "chain" and old.source_id == source and old.state in {"confirmed", "finalized"}
+        ]
+        different = [
+            old
+            for old in observations
+            if old.source_sequence < head.source_sequence
+            and (old.block_number, old.block_hash) != (head.block_number, head.block_hash)
+        ]
+        if different:
+            last_different = max(old.source_sequence for old in different)
+            changed_heads.append(
+                min(
+                    (old for old in observations if old.source_sequence > last_different),
+                    key=lambda old: old.source_sequence,
+                )
+            )
+    if changed_heads:
+        finding("canonical-block-observation-changed", "operations", "review-chain-history", changed_heads)
     if states["compliance"] == "approved" and states["custody"] in {"unknown", "created"}:
         finding(
             "approval-without-submission",

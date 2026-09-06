@@ -48,10 +48,11 @@ with no findings does not authorize a transfer or establish full compliance.
 Unit tests enumerate all permutations of a multi-event lifecycle, replay
 retries, reject conflicting duplicate identities/sequences, exercise tenant and
 clock substitution, and distinguish complete, failed, timed-out and reorganized
-observations. Durable internal ingestion is described below. Authenticated
-provider adapters, provider links, full queue policy and CLI reports remain
-open CP-012–CP-014 integration. No provider interoperability or
-live account integration is claimed by these local replay tests.
+observations. Durable ingestion, queue reports and CLI/API validation are
+described below. The locally tested Fireblocks signature profile and encrypted
+intake are documented in `PILOT_FIREBLOCKS_ADAPTER.md`. Provider links, full
+workflow event coverage and the bilateral scenario remain open CP-012–CP-014
+integration. No live account integration is claimed by these local tests.
 
 ## Durable internal ingestion
 
@@ -180,3 +181,27 @@ with `CLEARPROOF_POLICY_CLI_TEST=1` when running
 `tests/integration/test_pilot_storage.py`; the database CI job already builds
 the CLI and enables this flag. Provider links and upstream workflow coverage
 remain open integration work.
+
+## Adverse observations and changed chain evidence
+
+Queue findings now explicitly cover compliance denial/review, invalid proof,
+counterparty rejection/information requests, custody cancellation and incomplete
+evidence. These states remain visible even before a chain-finality observation
+exists. A custody `completed` observation with unknown/pending/confirmed chain
+state adds `custody-completed-without-finality`; it does not upgrade chain state.
+A later finalized observation replaces that prompt with any applicable evidence
+review findings rather than implying the remaining checks passed.
+
+A single chain source can revise a previously confirmed/finalized block identity
+without emitting a separate `reorged` status. Replay now detects this as
+`canonical-block-observation-changed`, retaining the latest reported state while
+flagging its changed evidence for review. The age starts at the first observation
+of the current block identity after the last different identity. Repeated
+observations of that block do not reset the change age. Explicit operator
+resolution/acknowledgment is not modeled yet, so the historical discrepancy
+remains visible; it is not silently declared resolved by another finality claim.
+
+These rules are operational review prompts, not jurisdictional legal policy or
+independent validation of provider/chain assertions. Tests cover all added
+adverse states, custody/finality separation, changed block hash/height under one
+source, reversed delivery and stable change age across repeated observations.

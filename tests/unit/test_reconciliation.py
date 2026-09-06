@@ -127,3 +127,56 @@ def test_unknown_states_future_observations_and_scope_substitution_reject(scope)
     with pytest.raises(ValueError, match="256"):
         reconcile(scope, (event(scope, "proof", "valid"),) * 257, now=200)
     assert all(state == "unknown" for state in reconcile(scope, (), now=200).states.values())
+
+
+@pytest.mark.parametrize(
+    "dimension,state,reason",
+    [
+        ("compliance", "denied", "compliance-denied"),
+        ("compliance", "review", "compliance-review-required"),
+        ("proof", "invalid", "proof-invalid"),
+        ("counterparty", "rejected", "counterparty-rejected"),
+        ("counterparty", "information-requested", "counterparty-information-requested"),
+        ("custody", "cancelled", "custody-cancelled"),
+        ("evidence", "incomplete", "evidence-incomplete"),
+    ],
+)
+def test_adverse_observations_stay_in_queue(scope, dimension, state, reason):
+    report = reconcile(scope, (event(scope, dimension, state),), now=200)
+    assert [finding.reason for finding in report.findings] == [reason]
+    assert report.findings[0].age_seconds == 99
+    assert report.findings[0].owner and report.findings[0].next_action
+
+
+def test_custody_completion_requires_separate_finality_observation(scope):
+    completed = event(scope, "custody", "completed")
+    report = reconcile(scope, (completed,), now=200)
+    assert report.states["chain"] == "unknown"
+    assert [f.reason for f in report.findings] == ["custody-completed-without-finality"]
+    report = reconcile(scope, (completed, event(scope, "chain", "finalized")), now=200)
+    assert "custody-completed-without-finality" not in {f.reason for f in report.findings}
+    assert "settled-with-unresolved-evidence" in {f.reason for f in report.findings}
+
+
+def test_same_source_block_replacement_cannot_silently_keep_finality(scope):
+    original = event(scope, "chain", "finalized")
+    replaced = event(scope, "chain", "finalized", 2, block_hash="ef" * 32, block_number=43)
+    forward = reconcile(scope, (original, replaced), now=200)
+    backward = reconcile(scope, (replaced, original), now=200)
+    assert forward == backward
+    assert "canonical-block-observation-changed" in {f.reason for f in forward.findings}
+    changed = next(f for f in forward.findings if f.reason == "canonical-block-observation-changed")
+    assert changed.since == 102 and changed.age_seconds == 98
+    unchanged = event(scope, "chain", "finalized", 2)
+    assert "canonical-block-observation-changed" not in {
+        f.reason for f in reconcile(scope, (original, unchanged), now=200).findings
+    }
+
+
+def test_repeated_observation_does_not_reset_block_change_age(scope):
+    original = event(scope, "chain", "finalized")
+    replaced = event(scope, "chain", "confirmed", 2, block_hash="ef" * 32)
+    repeated = event(scope, "chain", "finalized", 3, block_hash="ef" * 32)
+    report = reconcile(scope, (repeated, original, replaced), now=200)
+    changed = next(f for f in report.findings if f.reason == "canonical-block-observation-changed")
+    assert changed.since == 102
