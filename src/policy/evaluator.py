@@ -64,6 +64,29 @@ class PolicyEvaluation(Record):
     zk_coverage: Literal["not-established"] = "not-established"
 
 
+def with_verified_statement_facts(
+    external: PolicyFacts, *, proof_digest: str, expires_at: int, observed_at: int
+) -> PolicyFacts:
+    """Caller establishes statement/status preconditions; this helper grants no authority."""
+    return PolicyFacts(
+        tenant_id=external.tenant_id,
+        transfer_digest=external.transfer_digest,
+        facts=(
+            *external.facts,
+            *(
+                PolicyFact(
+                    predicate=predicate,
+                    value=True,
+                    observed_at=observed_at,
+                    expires_at=expires_at,
+                    evidence_digest=proof_digest,
+                )
+                for predicate in ("credential_valid", "sanctions_clear", "valuation_authenticated", "proof_valid")
+            ),
+        ),
+    )
+
+
 def evaluate_policy(
     policy: PilotPolicy,
     transfer: Transfer,

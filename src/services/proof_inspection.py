@@ -4,7 +4,7 @@ import hashlib
 from dataclasses import dataclass, fields
 
 from src.auth.principal import Principal
-from src.policy.evaluator import PolicyEvaluation, PolicyFact, PolicyFacts, evaluate_policy
+from src.policy.evaluator import PolicyEvaluation, evaluate_policy, with_verified_statement_facts
 from src.policy.fact_approval import FactTrustStore
 from src.policy.model import PolicyTrustError, PolicyTrustStore
 from src.protocol.root_snapshot import RootTrustError, RootTrustStore, SignedRootSnapshot, root_scope_id
@@ -134,20 +134,11 @@ class ProofInspectionService:
         inspection = await self._inspect_transaction(tx, credential_id, proof, signals, now=now)
         if not inspection.cryptographic_valid:
             return inspection, None
-        derived = tuple(
-            PolicyFact(
-                predicate=predicate,
-                value=True,
-                observed_at=now,
-                expires_at=int(signals[5]),
-                evidence_digest=hashlib.sha256(proof).hexdigest(),
-            )
-            for predicate in ("credential_valid", "sanctions_clear", "valuation_authenticated", "proof_valid")
-        )
-        facts = PolicyFacts(
-            tenant_id=self._principal.tenant_id,
-            transfer_digest=self._context.transfer_digest,
-            facts=(*external.facts, *derived),
+        facts = with_verified_statement_facts(
+            external,
+            proof_digest=hashlib.sha256(proof).hexdigest(),
+            expires_at=int(signals[5]),
+            observed_at=now,
         )
         policy = self._inputs["policy_trust"].for_transfer(
             self._inputs["transfer"],

@@ -6,8 +6,10 @@ import json
 from dataclasses import dataclass
 from typing import Literal
 
+from src.policy.fact_approval import FactTrustStore
 from src.protocol.canonical import canonical_bytes, record_digest
 from src.protocol.transfer import Transfer, VerificationContext
+from src.prover.history_policy import replay_history_policy
 from src.prover.history_statement import HistoryStatementTrust, reconstruct_history_statement
 from src.prover.pilot_verifier import PilotPairingVerifier, PilotProof, public_signals
 
@@ -20,6 +22,7 @@ class HistoryInspection:
     verified_at: int
     reasons: tuple[str, ...]
     statement_valid: bool | None = None
+    policy_reproduced: bool | None = None
 
 
 class MissingHistoryEvidence(ValueError):
@@ -137,6 +140,7 @@ async def inspect_history_bundle(
     expected_tenant: str,
     verified_at: int,
     statement_trust: HistoryStatementTrust | None = None,
+    fact_trust: FactTrustStore | None = None,
 ) -> HistoryInspection:
     """Pins and verifier come from the reviewer, never from the exported bundle.
 
@@ -168,6 +172,18 @@ async def inspect_history_bundle(
         return HistoryInspection("indeterminate", True, None, verified_at, ("pairing_unavailable",), statement_valid)
     if not inspection.cryptographic_valid:
         return HistoryInspection("contradicted", True, False, verified_at, ("invalid_pairing",), statement_valid)
+    policy_reproduced = None
+    if statement_valid and fact_trust is not None:
+        try:
+            policy_reproduced = replay_history_policy(bundle, statement_trust, fact_trust, signals)
+        except (ValueError, KeyError, TypeError):
+            return HistoryInspection(
+                "indeterminate", True, True, verified_at, ("policy_evidence_untrusted",), True, False
+            )
+        if not policy_reproduced:
+            return HistoryInspection(
+                "contradicted", True, True, verified_at, ("policy_decision_mismatch",), True, False
+            )
     return HistoryInspection(
         "indeterminate",
         True,
@@ -175,9 +191,11 @@ async def inspect_history_bundle(
         verified_at,
         (
             *(("statement_semantics_unverified",) if statement_valid is None else ()),
+            *(("policy_replay_unverified",) if policy_reproduced is None else ()),
             "decision_authority_unverified",
             "historical_revocation_evidence_missing",
             "independent_timing_evidence_missing",
         ),
         statement_valid,
+        policy_reproduced,
     )

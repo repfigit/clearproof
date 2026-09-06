@@ -2049,6 +2049,39 @@ async def test_durable_current_inspection_real_pairing_and_revocation(db, monkey
                 reconstructed.outcome == "indeterminate"
                 and "statement_semantics_unverified" not in reconstructed.reasons
             )
+            replayed = await inspect_history_bundle(
+                bundle,
+                verifier,
+                statement_trust=historical_trust,
+                fact_trust=trust,
+                **history_args,
+            )
+            assert replayed.statement_valid and replayed.cryptographic_valid and replayed.policy_reproduced
+            assert replayed.outcome == "indeterminate" and "policy_replay_unverified" not in replayed.reasons
+            assert "historical_revocation_evidence_missing" in replayed.reasons
+            forged_decision = deepcopy(bundle)
+            forged_decision["proof"]["policy_evaluation"]["reasons"] = ["fabricated_reason"]
+            disagreement = await inspect_history_bundle(
+                forged_decision,
+                verifier,
+                statement_trust=historical_trust,
+                fact_trust=trust,
+                **history_args,
+            )
+            assert disagreement.outcome == "contradicted" and disagreement.reasons == ("policy_decision_mismatch",)
+            assert disagreement.cryptographic_valid and not disagreement.policy_reproduced
+            restricted_facts = FactTrustStore(
+                [FactAuthority.model_validate({**authority.model_dump(), "source_ids": ("other-source",)})]
+            )
+            untrusted_policy = await inspect_history_bundle(
+                bundle,
+                verifier,
+                statement_trust=historical_trust,
+                fact_trust=restricted_facts,
+                **history_args,
+            )
+            assert untrusted_policy.outcome == "indeterminate" and not untrusted_policy.policy_reproduced
+            assert untrusted_policy.reasons == ("policy_evidence_untrusted",)
             wrong_pins = CurrentRootPins.model_validate(
                 {**configuration.root_pins.model_dump(), "issuer_digest": "ef" * 32}
             )

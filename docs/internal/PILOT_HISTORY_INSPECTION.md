@@ -37,6 +37,20 @@ Without statement trust it checks only the captured vector. The report keeps
   was omitted, unverified semantics is also reported. This implementation cannot
   yet return `supported`.
 
+Supplying independent `fact_trust` as well as statement trust enables conditional
+policy replay after successful reconstruction and pairing. Exact retained fact
+IDs and signatures, source/tenant/context scope and historical validity are checked
+at the claimed authorization time. The same derived-fact helper used in current
+authorization combines the facts, and the policy evaluator must reproduce the
+entire retained report, including its reasons and matched rules.
+
+`policy_reproduced` describes that conditional equality. The replay explicitly
+requires the captured local non-revocation observation at the decision time; it
+does not authenticate that observation. Missing or untrusted fact authority stays
+indeterminate. A report that differs from the replay is contradicted even when
+the underlying Groth16 proof is valid. No policy replay runs on failed pairing or
+without reconstructed statement semantics.
+
 Proof expiry at the reviewer's time does not itself prevent historical pairing.
 `verified_at` is recorded separately; embedded decision/capture times remain
 claims to authenticate. A locally observed absence of revocation is not upgraded
@@ -54,6 +68,9 @@ pins and reject a replacement root pin or the latest policy selection. Accepting
 historical pins is an explicit reviewer configuration decision; the bundle does
 not establish those pins' authority or prove absence of intervening compromise.
 
-Required next layers are historical business-fact and policy-decision replay,
-historical status and compromise handling, decision/timing authority, the
+Tests reproduce the original policy report, detect a fabricated report reason,
+and refuse a fact source excluded by reviewer trust. Successful replay still
+retains missing decision authority, status history and independent timing reasons.
+
+Required next layers are historical status and compromise handling, decision/timing authority, the
 `supported` path and `verify-history` CLI. This stage does not complete CP-015.
