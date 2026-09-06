@@ -73,7 +73,7 @@ and refuse a fact source excluded by reviewer trust. Successful replay still
 retains status history and independent timing reasons, plus decision authority
 when its independent check is omitted.
 
-Required next layers are historical information/source authority and broader compromise handling, the
+Required next layers are broader historical source compromise handling, the
 `supported` path and `verify-history` CLI. This stage does not complete CP-015.
 
 Reviewer-supplied `decision_trust` verifies the retained
@@ -97,5 +97,12 @@ Reviewer-supplied `timing_trust` authenticates the exported
 `timing_authenticated` and its accuracy interval from operator times. Missing
 or invalid timing stays indeterminate. Even when reconstruction, pairing, policy,
 decision, status and timing pass, `historical_source_authority_review_incomplete`
-remains until retained information/source authority and broader compromise checks
-are independently verified; this version still cannot return `supported`.
+remains until broader historical source compromise checks are independently verified; this version still cannot return `supported`.
+
+Optional `information_trust` authenticates the retained
+[information approval](PILOT_INFORMATION_APPROVAL.md) at the historical decision
+time using independently configured source keys. It sets
+`information_authenticated`, with no payload decryption or underlying-document
+verification. Invalid signatures contradict the retained claim; missing, excluded
+or compromised source authority stays indeterminate. Without this check,
+`information_authority_unverified` remains explicit.

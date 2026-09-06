@@ -2167,6 +2167,7 @@ async def test_durable_current_inspection_real_pairing_and_revocation(db, monkey
             assert with_status.outcome == "indeterminate"
             assert with_status.reasons == (
                 "independent_timing_evidence_missing",
+                "information_authority_unverified",
                 "historical_source_authority_review_incomplete",
             )
             timed = await inspect_history_bundle(
@@ -2181,7 +2182,46 @@ async def test_durable_current_inspection_real_pairing_and_revocation(db, monkey
             )
             assert timed.timing_authenticated and timed.status_authenticated and timed.policy_reproduced
             assert timed.timestamp_observation.accuracy_us == 1000000
-            assert timed.reasons == ("historical_source_authority_review_incomplete",)
+            assert timed.reasons == (
+                "information_authority_unverified",
+                "historical_source_authority_review_incomplete",
+            )
+            historical_information = InformationTrustStore([information_authority])
+            informed = await inspect_history_bundle(
+                bundle,
+                verifier,
+                statement_trust=historical_trust,
+                fact_trust=trust,
+                decision_trust=decision_trust,
+                status_trust=status_trust,
+                timing_trust=timing_trust,
+                information_trust=historical_information,
+                **history_args,
+            )
+            assert informed.information_authenticated and informed.timing_authenticated
+            assert informed.reasons == ("historical_source_authority_review_incomplete",)
+            changed_information_claim = deepcopy(bundle)
+            changed_information_claim["proof"]["information_approval"]["approval"]["source_evidence_digest"] = "ef" * 32
+            invalid_information = await inspect_history_bundle(
+                changed_information_claim,
+                verifier,
+                information_trust=historical_information,
+                **history_args,
+            )
+            assert invalid_information.outcome == "contradicted"
+            assert invalid_information.reasons == ("information_signature_invalid",)
+            for field, value in (("source_ids", ("another-source",)), ("compromised_at", now + 1)):
+                excluded = InformationTrustStore(
+                    [InformationAuthority.model_validate({**information_authority.model_dump(), field: value})]
+                )
+                unavailable_information = await inspect_history_bundle(
+                    bundle,
+                    verifier,
+                    information_trust=excluded,
+                    **history_args,
+                )
+                assert unavailable_information.outcome == "indeterminate"
+                assert unavailable_information.reasons == ("information_authority_unavailable",)
             no_timestamp = deepcopy(bundle)
             del no_timestamp["decision_timestamp"]
             missing_timing = await inspect_history_bundle(

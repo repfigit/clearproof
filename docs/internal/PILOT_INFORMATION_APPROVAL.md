@@ -42,3 +42,28 @@ and credential changes, key overlap/removal, source-reference tampering and
 cross-purpose signatures. The PostgreSQL authorization test rejects a structurally
 valid but unapproved name and an invalid signature, then verifies encrypted
 approval retention and receipt binding after a real proof/authorization/restart.
+
+## Historical source authentication
+
+`InformationTrustStore.verify_attestation` verifies the source signature and exact
+transfer/context/credential scope without accepting or decrypting private payload
+bytes. The claimed decision time selects the original approval and key validity;
+the separate reviewer time checks known key compromise. Ordinary expiration does
+not invalidate a signature that was valid at the decision time. A removed key,
+excluded source or compromise known by review time leaves authority unavailable;
+a claimed earlier signing time does not bypass compromise.
+
+Current `verify` still validates the exact payload hash and bounds before calling
+the same attestation checks. Historical attestation verification cannot substitute
+for current payload validation. The source evidence digest remains a signed
+reference, not proof that the underlying documents were correct or retained.
+
+Offline inspection accepts independent `information_trust` and reports
+`information_authenticated`. Changing a signed source claim without updating its
+signature contradicts the claim. The historical reviewer does not need the
+beneficiary's decryption key and does not log payload fields or hashes. This
+check authenticates the retained source assertion; it does not independently
+prove that ciphertext decrypts to the approved payload. The authenticated
+operator receipt binds the approved signature and recipient envelope together.
+Broader historical source compromise review remains required before supported
+historical outcomes are enabled.

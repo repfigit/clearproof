@@ -136,3 +136,52 @@ def test_tampering_and_purpose_separation(case):
         verify(case, signed=SignedInformationApproval(approval=approval, signature=wrong_purpose))
     with pytest.raises(ValueError, match="key mismatch"):
         sign_information(approval, Ed25519PrivateKey.generate())
+
+
+def test_historical_attestation_survives_expiry_without_payload(case):
+    transfer, context, now, key, authority, _, approval = case
+    signed = sign_information(approval, key)
+    trust = InformationTrustStore([authority])
+    trust.verify_attestation(
+        signed,
+        transfer,
+        context,
+        credential_id=approval.credential_id,
+        decision_at=now,
+        verified_at=now + 120,
+    )
+    with pytest.raises(ValueError):
+        verify(case, now=now + 120)
+
+
+def test_historical_compromise_cannot_use_claimed_earlier_time(case):
+    transfer, context, now, key, authority, _, approval = case
+    compromised = InformationAuthority.model_validate({**authority.model_dump(), "compromised_at": now + 1})
+    trust = InformationTrustStore([compromised])
+    with pytest.raises(ValueError, match="authority"):
+        trust.verify_attestation(
+            sign_information(approval, key),
+            transfer,
+            context,
+            credential_id=approval.credential_id,
+            decision_at=now,
+            verified_at=now + 120,
+        )
+    # A compromise already known at current authorization time also rejects.
+    compromised = InformationAuthority.model_validate({**authority.model_dump(), "compromised_at": now})
+    with pytest.raises(ValueError, match="authority"):
+        verify(case, authority=compromised)
+
+
+@pytest.mark.parametrize("review_at", [True, -1, 2**53])
+def test_historical_review_clock_is_strict(case, review_at):
+    transfer, context, now, key, authority, _, approval = case
+    with pytest.raises(ValueError):
+        InformationTrustStore([authority]).verify_attestation(
+            sign_information(approval, key),
+            transfer,
+            context,
+            credential_id=approval.credential_id,
+            decision_at=now,
+            verified_at=review_at,
+        )

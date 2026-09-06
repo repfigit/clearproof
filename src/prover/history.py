@@ -9,6 +9,11 @@ from typing import Literal
 from src.policy.fact_approval import FactTrustStore
 from src.protocol.canonical import canonical_bytes, record_digest
 from src.protocol.decision_attestation import DecisionSignatureError, DecisionTrustStore, SignedDecision
+from src.protocol.information_approval import (
+    InformationSignatureError,
+    InformationTrustStore,
+    SignedInformationApproval,
+)
 from src.protocol.transfer import Transfer, VerificationContext
 from src.prover.history_policy import replay_history_policy
 from src.prover.history_statement import HistoryStatementTrust, reconstruct_history_statement
@@ -31,6 +36,7 @@ class HistoryInspection:
     status_authenticated: bool | None = None
     timing_authenticated: bool | None = None
     timestamp_observation: TimestampObservation | None = None
+    information_authenticated: bool | None = None
 
 
 class MissingHistoryEvidence(ValueError):
@@ -152,6 +158,7 @@ async def inspect_history_bundle(
     decision_trust: DecisionTrustStore | None = None,
     status_trust: HistoryStatusTrust | None = None,
     timing_trust: TimestampTrust | None = None,
+    information_trust: InformationTrustStore | None = None,
 ) -> HistoryInspection:
     """Pins and verifier come from the reviewer, never from the exported bundle.
 
@@ -271,6 +278,48 @@ async def inspect_history_bundle(
                 status_authenticated,
                 False,
             )
+    information_authenticated = None
+    if information_trust is not None:
+        try:
+            information_trust.verify_attestation(
+                SignedInformationApproval.model_validate_json(json.dumps(bundle["proof"]["information_approval"])),
+                Transfer.model_validate_json(json.dumps(bundle["proof"]["transfer"])),
+                VerificationContext.model_validate_json(json.dumps(bundle["proof"]["context"])),
+                credential_id=bundle["proof"]["credential_id"],
+                decision_at=bundle["receipt"]["authorized_at"],
+                verified_at=verified_at,
+            )
+            information_authenticated = True
+        except InformationSignatureError:
+            return HistoryInspection(
+                "contradicted",
+                True,
+                True,
+                verified_at,
+                ("information_signature_invalid",),
+                statement_valid,
+                policy_reproduced,
+                decision_authenticated,
+                status_authenticated,
+                timing_authenticated,
+                timestamp_observation,
+                False,
+            )
+        except (ValueError, KeyError, TypeError):
+            return HistoryInspection(
+                "indeterminate",
+                True,
+                True,
+                verified_at,
+                ("information_authority_unavailable",),
+                statement_valid,
+                policy_reproduced,
+                decision_authenticated,
+                status_authenticated,
+                timing_authenticated,
+                timestamp_observation,
+                False,
+            )
     return HistoryInspection(
         "indeterminate",
         True,
@@ -282,6 +331,7 @@ async def inspect_history_bundle(
             *(("decision_authority_unverified",) if decision_authenticated is None else ()),
             *(("historical_revocation_evidence_missing",) if status_authenticated is None else ()),
             *(("independent_timing_evidence_missing",) if timing_authenticated is None else ()),
+            *(("information_authority_unverified",) if information_authenticated is None else ()),
             "historical_source_authority_review_incomplete",
         ),
         statement_valid,
@@ -290,4 +340,5 @@ async def inspect_history_bundle(
         status_authenticated,
         timing_authenticated,
         timestamp_observation,
+        information_authenticated,
     )
