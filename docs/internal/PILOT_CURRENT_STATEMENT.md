@@ -73,3 +73,32 @@ Exact record counts by kind show only the revocation and its idempotency receipt
 were written; no authorization was consumed. This establishes the tested local
 transaction ordering, not a guarantee that a credential remains unrevoked after
 an inspection result is returned, and not an atomic authorization decision.
+
+## Policy evaluation in the inspection transaction
+
+`ProofInspectionService.evaluate` requires proof inspection, policy read and
+evidence decryption roles. Server-configured fact trust authenticates the selected
+retained attestations inside the same tenant transaction as credential/revocation,
+root and proof checks. The shared `load_current_facts` helper avoids opening a
+second transaction or moving evidence reads outside that boundary.
+
+Only a successful proof inspection contributes derived credential-valid,
+sanctions-clear, valuation-authenticated and proof-valid facts. Their reference is
+the inspected proof digest, with a validity interval ending at its checked expiry.
+External attestors cannot supply these predicates. The selected current policy
+is evaluated over the combined facts, returning a separate policy report. A failed
+pairing returns no policy report; malformed or untrusted evidence rejects. The
+method does not persist a decision, activate policy or consume a nullifier.
+
+Real-proof PostgreSQL tests require missing external facts to remain indeterminate,
+complete evidence under a policy without a decisive rule to remain indeterminate,
+and a signed false counterparty claim to require review. Tampered proof material
+cannot produce a policy report. Exact storage/consumption counts remain unchanged
+apart from separately authorized fact retention. This tests composition, not a
+complete ALLOW/enforce/consume workflow or historical authenticity of the derived
+fact reference.
+
+Inspection/evaluation normalize the supplied public signals to an immutable tuple
+before awaiting database or pairing work. A regression mutates the caller's expiry
+entry after real pairing and confirms the policy report still uses the checked
+snapshot, preventing a post-verification change from altering derived fact expiry.

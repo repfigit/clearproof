@@ -6,7 +6,7 @@ from src.policy.fact_approval import FactTrustError, FactTrustStore, SignedFactA
 from src.protocol.canonical import record_digest
 from src.protocol.transfer import Transfer, VerificationContext
 from src.storage.database import Database
-from src.storage.pilot import PilotStore
+from src.storage.pilot import PilotStore, PilotTransaction
 from src.storage.pilot_cipher import RecordCipher
 
 
@@ -65,18 +65,31 @@ class FactEvidenceService:
     ) -> PolicyFacts:
         self._principal.require("policy:read")
         self._principal.require("evidence:decrypt")
-        if type(identifiers) is not tuple or len(identifiers) > 64 or len(set(identifiers)) != len(identifiers):
-            raise FactTrustError("Expected at most 64 distinct fact references")
         async with self._store.transaction() as tx:
-            approvals = []
-            for identifier in identifiers:
-                record = await tx.get("fact-evidence", identifier)
-                if record is None:
-                    raise FactTrustError("Fact evidence unavailable in this tenant")
-                signed = SignedFactApproval.model_validate(record["signed"])
-                if fact_evidence_id(signed) != identifier:
-                    raise FactTrustError("Retained fact evidence identity mismatch")
-                approvals.append(signed)
-            return self._trust.verify_for_context(
-                tuple(approvals), transfer=transfer, context=context, tenant_id=self._principal.tenant_id, now=now
-            )
+            return await load_current_facts(tx, self._trust, identifiers, transfer=transfer, context=context, now=now)
+
+
+async def load_current_facts(
+    tx: PilotTransaction,
+    trust: FactTrustStore,
+    identifiers: tuple[str, ...],
+    *,
+    transfer: Transfer,
+    context: VerificationContext,
+    now: int,
+) -> PolicyFacts:
+    """Load within the caller's tenant transaction; caller enforces policy:read."""
+    if type(identifiers) is not tuple or len(identifiers) > 64 or len(set(identifiers)) != len(identifiers):
+        raise FactTrustError("Expected at most 64 distinct fact references")
+    approvals = []
+    for identifier in identifiers:
+        record = await tx.get("fact-evidence", identifier)
+        if record is None:
+            raise FactTrustError("Fact evidence unavailable in this tenant")
+        signed = SignedFactApproval.model_validate(record["signed"])
+        if fact_evidence_id(signed) != identifier:
+            raise FactTrustError("Retained fact evidence identity mismatch")
+        approvals.append(signed)
+    return trust.verify_for_context(
+        tuple(approvals), transfer=transfer, context=context, tenant_id=tx.tenant_id, now=now
+    )

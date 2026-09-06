@@ -1486,7 +1486,7 @@ async def exercise_investigation_cli(app, token, scope, expected_queue, expected
 
 
 @pytest.mark.skipif(not os.getenv("CLEARPROOF_PILOT_TEST_ARTIFACTS"), reason="requires fresh synthetic pilot artifacts")
-@pytest.mark.parametrize("mutation", ["root", "revocation", "cancel"])
+@pytest.mark.parametrize("mutation", ["root", "revocation", "cancel", "policy"])
 async def test_durable_current_inspection_real_pairing_and_revocation(db, monkeypatch, mutation):
     import hashlib
     import json
@@ -1511,7 +1511,10 @@ async def test_durable_current_inspection_real_pairing_and_revocation(db, monkey
     credential, now = inputs.pop("credential"), inputs.pop("now")
     configuration = CurrentStatementConfiguration(**inputs)
     principal = Principal(
-        tenant_id=credential.tenant_id, actor_id="simulator", roles=ROLES, issuer_dids=(credential.issuer_did,)
+        tenant_id=credential.tenant_id,
+        actor_id="simulator",
+        roles=(*ROLES, "policy:read", "facts:ingest") if mutation == "policy" else ROLES,
+        issuer_dids=(credential.issuer_did,),
     )
     wallet = Account.from_key(bytes([8]) * 32)  # Public synthetic-only signer.
     consent = EnrollmentConsent(
@@ -1563,6 +1566,89 @@ async def test_durable_current_inspection_real_pairing_and_revocation(db, monkey
     async with db.connection() as conn:
         assert before == (await (await conn.execute("SELECT count(*) FROM pilot_records")).fetchone())[0]
         assert (await (await conn.execute("SELECT count(*) FROM pilot_consumptions")).fetchone())[0] == 0
+
+    if mutation == "policy":
+        from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
+
+        from src.policy.evaluator import PolicyFact
+        from src.policy.fact_approval import FactApproval, FactAuthority, FactTrustStore, sign_fact
+        from src.services.fact_evidence import FactEvidenceService
+
+        key = Ed25519PrivateKey.generate()
+        authority = FactAuthority(
+            public_key=key.public_key().public_bytes_raw().hex(),
+            tenant_id=principal.tenant_id,
+            chain_id=configuration.root_pins.chain_id,
+            registry_address=configuration.root_pins.registry_address,
+            source_ids=("business",),
+            predicates=("applicability_resolved", "counterparty_trusted", "required_information_complete"),
+            not_before=now,
+            not_after=credential.expires_at,
+            max_lifetime_seconds=86400,
+            max_observation_age_seconds=86400,
+        )
+        trust = FactTrustStore([authority])
+        evidence = FactEvidenceService(db, cipher(), principal, trust)
+
+        async def retain(counterparty):
+            approvals = tuple(
+                sign_fact(
+                    FactApproval(
+                        tenant_id=principal.tenant_id,
+                        transfer_digest=configuration.transfer.digest,
+                        context_digest=configuration.context.digest,
+                        source_id="business",
+                        signed_at=now,
+                        key_id=authority.key_id,
+                        fact=PolicyFact(
+                            predicate=p,
+                            value=counterparty if p == "counterparty_trusted" else True,
+                            observed_at=now,
+                            expires_at=credential.expires_at,
+                            evidence_digest="ab" * 32,
+                        ),
+                    ),
+                    key,
+                )
+                for p in authority.predicates
+            )
+            return await evidence.retain(
+                approvals, transfer=configuration.transfer, context=configuration.context, now=now
+            )
+
+        args = dict(fact_trust=trust, now=now)
+        valid, missing = await service().evaluate(credential.credential_nonce, proof, signals, (), **args)
+        assert valid.cryptographic_valid and missing.outcome == "INDETERMINATE"
+        assert set(missing.missing_predicates) == set(authority.predicates)
+        refs = await retain(True)
+        valid, complete = await service().evaluate(credential.credential_nonce, proof, signals, refs, **args)
+        assert valid.cryptographic_valid and complete.missing_predicates == ()
+        assert complete.outcome == "INDETERMINATE" and complete.reasons == ("no_decisive_rule",)
+        provided = signals.copy()
+        evaluator = service()
+        real_transaction = evaluator._inspect_transaction
+
+        async def mutate_after_pairing(*values, **options):
+            checked = await real_transaction(*values, **options)
+            provided[5] = "0"
+            return checked
+
+        monkeypatch.setattr(evaluator, "_inspect_transaction", mutate_after_pairing)
+        _, stable = await evaluator.evaluate(credential.credential_nonce, proof, provided, refs, **args)
+        assert provided[5] == "0" and stable == complete
+        false_refs = await retain(False)
+        _, review = await service().evaluate(credential.credential_nonce, proof, signals, false_refs, **args)
+        assert review.outcome == "REVIEW" and "required_checks_incomplete" in review.reasons
+        changed = json.loads(proof)
+        changed["pi_c"][0] = str(int(changed["pi_c"][0]) + 1)
+        invalid, absent = await service().evaluate(
+            credential.credential_nonce, json.dumps(changed).encode(), signals, refs, **args
+        )
+        assert not invalid.cryptographic_valid and absent is None
+        async with db.connection() as conn:
+            assert (await (await conn.execute("SELECT count(*) FROM pilot_records")).fetchone())[0] == before + 4
+            assert (await (await conn.execute("SELECT count(*) FROM pilot_consumptions")).fetchone())[0] == 0
+        return
 
     if mutation != "root":
         async with db.connection() as conn:
