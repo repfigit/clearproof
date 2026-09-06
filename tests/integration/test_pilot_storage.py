@@ -1900,8 +1900,74 @@ async def test_durable_current_inspection_real_pairing_and_revocation(db, monkey
             assert (await retained.get("receipt", receipt["receipt_id"]))["authorized_at"] == now
             assert (await service().inspect(credential.credential_nonce, proof, signals, now=now)).cryptographic_valid
             async with db.connection() as conn:
-                assert (await (await conn.execute("SELECT count(*) FROM pilot_records")).fetchone())[0] == baseline + 3
+                assert (await (await conn.execute("SELECT count(*) FROM pilot_records")).fetchone())[0] == baseline + 9
                 assert (await (await conn.execute("SELECT count(*) FROM pilot_consumptions")).fetchone())[0] == 1
+            evidence_manifest = await retained.get("authorization-evidence", receipt["evidence_id"])
+            assert record_digest("clearproof/authorization-evidence/v1", evidence_manifest) == receipt["evidence_id"]
+            assert evidence_manifest["timing_authority"] == "operator-clock-only"
+            assert evidence_manifest["credential_status"]["revocation"] == "not-present-in-local-store"
+            from src.protocol.canonical import canonical_bytes
+
+            for reference in evidence_manifest["records"]:
+                original = await retained.read(
+                    reference["kind"], reference["record_id"], revision=reference["revision"]
+                )
+                assert hashlib.sha256(canonical_bytes(original.value)).hexdigest() == reference["sha256"]
+            expected_config = {
+                "artifact_manifest": canonical_bytes(artifacts.manifest.model_dump(mode="json")),
+                "verification_key": artifacts.verification_key_bytes,
+                "asset_registry": canonical_bytes(
+                    [a.model_dump(mode="json") for a in configuration.registry.definitions]
+                ),
+                "valuation_approval": canonical_bytes(configuration.valuation_approval.model_dump(mode="json")),
+                "root_pins": canonical_bytes(configuration.root_pins.model_dump(mode="json")),
+            }
+            for name, descriptor in evidence_manifest["configuration"].items():
+                content = b""
+                for chunk_id in descriptor["chunks"]:
+                    chunk = await retained.get("authorization-evidence", chunk_id)
+                    assert record_digest("clearproof/evidence-chunk/v1", chunk) == chunk_id
+                    content += base64.b64decode("".join(chunk["data"]), validate=True)
+                assert content == expected_config[name]
+                assert len(content) == descriptor["size"]
+                assert hashlib.sha256(content).hexdigest() == descriptor["sha256"]
+            # Later activation and revocation must not rewrite the captured observation.
+            successor = PilotPolicy.model_validate(
+                {**policy.model_dump(), "revision": 2, "previous_digest": policy.digest}
+            )
+            await review_service.approve(
+                PolicyReviewRequest(policy=successor, cases=reviewed), idempotency_key="later-review", now=now + 1
+            )
+            await activation.activate(
+                PolicyActivationRequest(policy_digest=successor.digest, expected_revision=1),
+                idempotency_key="later-activation",
+                now=now + 1,
+            )
+            await enrollment.revoke(
+                RevocationRequest(
+                    credential_id=credential.credential_nonce,
+                    idempotency_key="later-revocation",
+                    reason_code="superseded",
+                ),
+                now=now + 1,
+            )
+            await db.close()
+            await db.connect()
+            assert await retained.get("authorization-evidence", receipt["evidence_id"]) == evidence_manifest
+            selection = next(r for r in evidence_manifest["records"] if r["kind"] == "policy-activation")
+            assert (await retained.read("policy-activation", selection["record_id"])).revision == 2
+            assert (
+                await retained.read("policy-activation", selection["record_id"], revision=selection["revision"])
+            ).value["policy_digest"] == policy.digest
+            foreign = PilotStore(
+                db, cipher(), Principal.model_validate({**principal.model_dump(), "tenant_id": "foreign"})
+            )
+            assert await foreign.get("authorization-evidence", receipt["evidence_id"]) is None
+            with pytest.raises(RecordConflict):
+                async with retained.transaction() as tx:
+                    await tx.put(
+                        "authorization-evidence", receipt["evidence_id"], evidence_manifest, expected_revision=1
+                    )
             return
 
         assert complete.outcome == "INDETERMINATE" and complete.reasons == ("no_decisive_rule",)

@@ -83,6 +83,10 @@ class AssetRegistry:
         except KeyError:
             raise ValueError("Unknown asset identity") from None
 
+    @property
+    def definitions(self) -> tuple[AssetDefinition, ...]:
+        return tuple(self._assets[key] for key in sorted(self._assets))
+
     def parse_amount(self, asset_id: str, amount: str) -> str:
         asset = self.get(asset_id)
         if type(amount) is not str or len(amount) > 58 or not re.fullmatch(r"(0|[1-9][0-9]{0,38})(\.[0-9]+)?", amount):

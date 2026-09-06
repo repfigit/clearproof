@@ -26,6 +26,7 @@ _WRITE_ROLES = {
     "credential": "credential:issue",
     "issuance-root": "credential:issue",
     "proof": "proof:generate",
+    "authorization-evidence": "proof:generate",
     "transfer": "proof:generate",
     "receipt": "proof:generate",
     "event": "events:ingest",

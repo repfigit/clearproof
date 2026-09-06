@@ -9,6 +9,7 @@ from src.protocol.information_approval import InformationTrustStore, SignedInfor
 from src.protocol.transfer_information import validate_transfer_information
 from src.prover.pilot_verifier import PilotProof, public_signals
 from src.sar.pilot_envelope import MAX_PAYLOAD_BYTES, RecipientTrustStore, seal_pilot_envelope
+from src.services.authorization_evidence import retain_authorization_evidence
 from src.services.proof_inspection import ProofInspectionService
 from src.storage.pilot import ReplayConflict
 
@@ -78,6 +79,18 @@ class ProofAuthorizationService(ProofInspectionService):
             )
             if not inspection.cryptographic_valid or decision is None or decision.outcome != "ALLOW":
                 raise AuthorizationRejected("Current proof and policy must yield ALLOW")
+            policy = self._inputs["policy_trust"].for_transfer(
+                self._inputs["transfer"], self._context, tenant_id=self._principal.tenant_id, now=now
+            )
+            evidence_id = await retain_authorization_evidence(
+                tx,
+                inputs=self._inputs,
+                verifier=self._verifier,
+                credential_id=credential_id,
+                fact_ids=fact_ids,
+                policy=policy,
+                now=now,
+            )
             envelope = seal_pilot_envelope(
                 pii,
                 recipient_trust,
@@ -107,6 +120,7 @@ class ProofAuthorizationService(ProofInspectionService):
                 "envelope_digest": envelope_digest,
                 "recipient_key_id": recipient_key_id,
                 "information_signature_digest": request["information_signature_digest"],
+                "evidence_id": evidence_id,
             }
             receipt_id = record_digest("clearproof/local-authorization/v1", receipt)
             await tx.put(

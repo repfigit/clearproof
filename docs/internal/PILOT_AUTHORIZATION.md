@@ -33,6 +33,8 @@ policy/root/revocation writers. After `ALLOW`, it retains:
   execution state is `not-requested`.
 - A unique tenant/nullifier consumption linked to that proof record, plus the
   existing actor-bound encrypted idempotency result.
+- An [evidence manifest and configuration capture](PILOT_AUTHORIZATION_EVIDENCE.md)
+  that pins the exact retained revisions and verifier inputs used for the decision.
 
 All writes commit or roll back together. Different keys cannot consume the same
 authorization twice. An exact same-key retry returns the original receipt,
@@ -46,7 +48,8 @@ using the independently inspected development artifact set. It checks successful
 `ALLOW`, missing/negative facts, invalid pairing, missing permissions, rollback
 after consumption was inserted, competing request keys, concurrent exact retries,
 changed-request rejection, reconnect/expired retry, exact proof-byte retention,
-and one consumption with exactly three additional encrypted records.
+and one consumption with the expected proof/receipt/idempotency records plus
+evidence manifest and configuration chunks.
 
 This service records a local policy authorization. It has no public API endpoint,
 recipient envelope delivery, payment execution or on-chain consumption adapter.
