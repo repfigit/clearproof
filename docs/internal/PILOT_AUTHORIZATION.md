@@ -14,15 +14,20 @@ activation, enrollment/revocation, root head and signed fact checks, and perform
 real pairing. `DENY`, `REVIEW`, `INDETERMINATE`, invalid pairing and invalid trust
 cannot consume or create authorization records.
 
+Authorization also requires a [trusted recipient envelope](PILOT_RECIPIENT_ENVELOPE.md).
+After ALLOW it seals the supplied bytes to a currently approved beneficiary VASP
+key. Encryption failure rejects the operation before any consumption commits.
+
 The existing tenant transaction serializes inspection and writes with supported
 policy/root/revocation writers. After `ALLOW`, it retains:
 
 - An immutable encrypted proof record containing exact original proof bytes as
   base64, their SHA-256 digest, public signals, transfer/context, credential and
-  fact references, and the policy evaluation.
+  fact references, the policy evaluation and recipient-encrypted payload.
 - An immutable encrypted `clearproof-local-authorization-v1` receipt binding the
   proof record, tenant/actor, transfer/context/policy, artifact/profile, nullifier,
-  authorization time and proof expiry. Its execution state is `not-requested`.
+  authorization time, proof expiry and exact randomized envelope digest. Its
+  execution state is `not-requested`.
 - A unique tenant/nullifier consumption linked to that proof record, plus the
   existing actor-bound encrypted idempotency result.
 

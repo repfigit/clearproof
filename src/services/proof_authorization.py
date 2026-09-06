@@ -6,6 +6,7 @@ import hashlib
 from src.policy.fact_approval import FactTrustStore
 from src.protocol.canonical import record_digest
 from src.prover.pilot_verifier import PilotProof, public_signals
+from src.sar.pilot_envelope import MAX_PAYLOAD_BYTES, RecipientTrustStore, seal_pilot_envelope
 from src.services.proof_inspection import ProofInspectionService
 from src.storage.pilot import ReplayConflict
 
@@ -23,6 +24,9 @@ class ProofAuthorizationService(ProofInspectionService):
         fact_ids: tuple[str, ...],
         *,
         fact_trust: FactTrustStore,
+        pii: bytes,
+        recipient_trust: RecipientTrustStore,
+        recipient_key_id: str,
         idempotency_key: str,
         now: int,
     ) -> dict:
@@ -37,6 +41,8 @@ class ProofAuthorizationService(ProofInspectionService):
             self._principal.require(role)
         if type(now) is not int or not 0 <= now < 2**53:
             raise ValueError("Invalid authorization clock")
+        if type(pii) is not bytes or not 1 <= len(pii) <= MAX_PAYLOAD_BYTES:
+            raise ValueError("Expected 1–32768 payload bytes")
         PilotProof.parse(proof)
         signals = public_signals(signals)
         fact_ids = tuple(fact_ids)
@@ -50,8 +56,8 @@ class ProofAuthorizationService(ProofInspectionService):
             "fact_ids": list(fact_ids),
             "transfer_digest": self._context.transfer_digest,
             "context_digest": self._context.digest,
+            "recipient_key_id": recipient_key_id,
         }
-        proof_id = record_digest("clearproof/authorized-proof/v1", request)
         nullifier = format(int(signals[3]), "064x")
 
         async def persist(tx):
@@ -62,6 +68,17 @@ class ProofAuthorizationService(ProofInspectionService):
             )
             if not inspection.cryptographic_valid or decision is None or decision.outcome != "ALLOW":
                 raise AuthorizationRejected("Current proof and policy must yield ALLOW")
+            envelope = seal_pilot_envelope(
+                pii,
+                recipient_trust,
+                recipient_key_id,
+                self._inputs["transfer"],
+                self._context,
+                proof_digest=request["proof_digest"],
+                now=now,
+            )
+            envelope_digest = record_digest("clearproof/pilot-envelope/v1", envelope)
+            proof_id = record_digest("clearproof/authorized-proof/v1", {**request, "envelope_digest": envelope_digest})
             receipt = {
                 "schema_version": "clearproof-local-authorization-v1",
                 "tenant_id": self._principal.tenant_id,
@@ -77,6 +94,8 @@ class ProofAuthorizationService(ProofInspectionService):
                 "expires_at": int(signals[5]),
                 "outcome": "ALLOW",
                 "execution": "not-requested",
+                "envelope_digest": envelope_digest,
+                "recipient_key_id": recipient_key_id,
             }
             receipt_id = record_digest("clearproof/local-authorization/v1", receipt)
             await tx.put(
@@ -89,10 +108,15 @@ class ProofAuthorizationService(ProofInspectionService):
                     "context": self._context.model_dump(mode="json"),
                     "transfer": self._inputs["transfer"].model_dump(mode="json"),
                     "policy_evaluation": decision.model_dump(mode="json"),
+                    "recipient_envelope": envelope,
                 },
             )
             await tx.put("receipt", receipt_id, receipt)
             await tx.consume(nullifier, proof_id)
             return {"receipt_id": receipt_id, **receipt}
 
-        return await self._store.run_idempotent("consume-proof", idempotency_key, request, persist)
+        # Payload fingerprints stay inside the encrypted idempotency request digest;
+        # public identifiers bind randomized ciphertext, never a guessable PII hash.
+        return await self._store.run_idempotent(
+            "consume-proof", idempotency_key, {**request, "payload_digest": hashlib.sha256(pii).hexdigest()}, persist
+        )

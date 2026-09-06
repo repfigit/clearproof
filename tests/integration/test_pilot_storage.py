@@ -1708,15 +1708,39 @@ async def test_durable_current_inspection_real_pairing_and_revocation(db, monkey
         if mutation == "authorization":
             import base64
 
+            from src.protocol.canonical import record_digest
+            from src.sar.hpke_envelope import generate_keypair
+            from src.sar.pilot_envelope import RecipientAuthority, RecipientTrustStore, open_pilot_envelope
             from src.services.proof_authorization import AuthorizationRejected, ProofAuthorizationService
             from src.storage.pilot import PilotTransaction
 
             assert complete.outcome == "ALLOW"
             authorizer = ProofAuthorizationService(db, cipher(), principal, verifier, configuration)
+            private, public = generate_keypair()
+            recipient = RecipientAuthority(
+                tenant_id=principal.tenant_id,
+                chain_id=int(configuration.context.deployment_chain_id),
+                registry_address=configuration.context.deployment_address,
+                recipient_did=configuration.transfer.beneficiary.vasp_did,
+                public_key=public.hex(),
+                not_before=now,
+                not_after=credential.expires_at,
+            )
+            payload_args = dict(
+                pii=(b"synthetic-information-only" * 1400)[:32768],
+                recipient_key_id=recipient.key_id,
+                recipient_trust=RecipientTrustStore([recipient]),
+            )
 
-            async def authorize(key="consume-once", references=refs, who=authorizer, body=proof):
+            async def authorize(key="consume-once", references=refs, who=authorizer, body=proof, **changes):
                 return await who.authorize(
-                    credential.credential_nonce, body, signals, references, idempotency_key=key, **args
+                    credential.credential_nonce,
+                    body,
+                    signals,
+                    references,
+                    idempotency_key=key,
+                    **args,
+                    **{**payload_args, **changes},
                 )
 
             for references in ((), await retain(False)):
@@ -1731,6 +1755,17 @@ async def test_durable_current_inspection_real_pairing_and_revocation(db, monkey
                 await authorize(who=ProofAuthorizationService(db, cipher(), restricted, verifier, configuration))
             async with db.connection() as conn:
                 baseline = (await (await conn.execute("SELECT count(*) FROM pilot_records")).fetchone())[0]
+            with pytest.raises(ValueError, match="Recipient key"):
+                await authorize(recipient_key_id="unknown")
+            from src.services import proof_authorization as authorization_module
+
+            def fail_encryption(*values, **options):
+                raise RuntimeError("synthetic encryption failure")
+
+            with monkeypatch.context() as patch:
+                patch.setattr(authorization_module, "seal_pilot_envelope", fail_encryption)
+                with pytest.raises(RuntimeError, match="synthetic encryption"):
+                    await authorize()
             original_consume = PilotTransaction.consume
 
             async def fail_after_consume(tx, *values):
@@ -1758,6 +1793,8 @@ async def test_durable_current_inspection_real_pairing_and_revocation(db, monkey
                 await authorize(key="second-spend")
             with pytest.raises(RecordConflict):
                 await authorize(key=winning_key, references=())
+            with pytest.raises(RecordConflict):
+                await authorize(key=winning_key, pii=b"changed-synthetic-information")
             await db.close()
             await db.connect()
             assert (
@@ -1769,6 +1806,7 @@ async def test_durable_current_inspection_real_pairing_and_revocation(db, monkey
                     fact_trust=trust,
                     idempotency_key=winning_key,
                     now=credential.expires_at + 1,
+                    **payload_args,
                 )
                 == receipt
             )
@@ -1778,6 +1816,20 @@ async def test_durable_current_inspection_real_pairing_and_revocation(db, monkey
             assert hashlib.sha256(proof).hexdigest() == record["proof_digest"]
             assert record["policy_evaluation"]["outcome"] == "ALLOW"
             assert record["context"] == configuration.context.model_dump(mode="json")
+            envelope = record["recipient_envelope"]
+            expected_binding = {
+                "tenant_id": principal.tenant_id,
+                "transfer_digest": configuration.transfer.digest,
+                "context_digest": configuration.context.digest,
+                "proof_digest": hashlib.sha256(proof).hexdigest(),
+                "recipient_did": recipient.recipient_did,
+                "recipient_key_id": recipient.key_id,
+                "sealed_at": now,
+            }
+            assert open_pilot_envelope(envelope, private, expected_binding=expected_binding) == payload_args["pii"]
+            assert record_digest("clearproof/pilot-envelope/v1", envelope) == receipt["envelope_digest"]
+            assert payload_args["pii"].decode() not in json.dumps(record)
+            assert "payload_digest" not in record and "payload_digest" not in receipt
             assert (await retained.get("receipt", receipt["receipt_id"]))["authorized_at"] == now
             assert (await service().inspect(credential.credential_nonce, proof, signals, now=now)).cryptographic_valid
             async with db.connection() as conn:

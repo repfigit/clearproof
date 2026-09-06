@@ -26,6 +26,17 @@ ROOT = Path(__file__).resolve().parents[2]
 def synthetic_case(*, artifact_manifest_digest=None, alternate_credential=False, with_trust=False, authorization=False):
     fixture = json.loads((ROOT / "specs/fixtures/transfer-v1.json").read_text())
     transfer = Transfer.model_validate(fixture["records"][0]["value"])
+    if authorization:
+        transfer = Transfer.model_validate(
+            {
+                **transfer.model_dump(),
+                "beneficiary": {
+                    **transfer.beneficiary.model_dump(),
+                    "kind": "vasp",
+                    "vasp_did": "did:web:recipient.example",
+                },
+            }
+        )
     if with_trust:
         # Public EOA simulator key so the durable enrollment service can verify consent.
         wallet = Account.from_key(bytes([8]) * 32)
