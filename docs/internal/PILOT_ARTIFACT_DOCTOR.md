@@ -99,3 +99,32 @@ before the pairing, and rejects altered public signals even when a test caller
 intentionally supplies the same incorrect expected vector. This opt-in fixture
 reads its own development pin and bundle hash for reproducibility; that is not
 an independent production trust bootstrap.
+
+## CI development setup
+
+`scripts/test_development_circuits.py OUTPUT_DIRECTORY` creates a new local
+2^16 Powers of Tau transcript (enough for both unchanged circuits), adds a development contribution, prepares phase
+two, and compiles both the legacy and composed circuits into separate output
+subdirectories. Each gets a fresh Groth16 setup, development contribution,
+verification key and generated Solidity verifier. Generated circuit files stay
+in the supplied new directory; tracked contracts and committed vectors are not
+replaced. The required Node, Circom and repository dependencies must already be
+installed. The script builds the TypeScript workspaces needed for the CLI smoke
+test, which writes their normal ignored `dist` files.
+
+CI uses this explicitly local development setup instead of downloading the
+unavailable Hermez URL. It preserves the legacy CLI proof smoke test and adds
+the composed proof round trip, artifact inspection and adversarial pairing test.
+It does not downgrade a production setup: there is no production approval path
+in this job. Setup entropy, fresh proving keys and verification keys can differ
+between runs; reproducibility here means repeating the tested workflow, not
+byte-identical keys. A locally generated Powers of Tau transcript is not a
+multi-party ceremony, independent audit, or production provenance evidence.
+
+For local debugging only, `--prepared-ptau PATH` copies an explicitly selected
+prepared development input into the isolated output directory. The input's
+SHA-256 and a circuit/source-dependency hash inventory are recorded. No download
+fallback is used and no file-existence check is treated as production approval.
+The output marker and CI upload name both say `UNAPPROVED`. The CI upload excludes
+the large phase-one transcript; it retains the per-profile development artifacts
+for seven days. The production ceremony remains a separate follow-on gate.

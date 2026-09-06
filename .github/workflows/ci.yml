@@ -121,156 +121,33 @@ jobs:
 
   circuits:
     runs-on: ubuntu-latest
+    timeout-minutes: 60
     steps:
       - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v4
       - uses: actions/setup-node@v4
         with:
           node-version: 20
       - run: npm install
-      - name: Cache Powers of Tau
-        id: ptau-cache
-        uses: actions/cache@v4
-        with:
-          path: artifacts/pot18_final.ptau
-          key: ptau-hez-2pow18-v1
-      - name: Download audited Powers of Tau (Hermez)
-        if: steps.ptau-cache.outputs.cache-hit != 'true'
+      - run: uv sync --extra dev
+      - name: Install pinned Circom
         run: |
           set -euo pipefail
-          mkdir -p artifacts
-          curl -L --fail --max-time 600 \
-            https://storage.googleapis.com/zkevm/ptau/powersOfTau28_hez_final_18.ptau \
-            -o artifacts/pot18_final.ptau
-          EXPECTED="e970efa7774da80101e0ac336d083ef3339855c98112539338d706b2b89ac694"
-          ACTUAL=$(sha256sum artifacts/pot18_final.ptau | awk '{print $1}')
-          echo "Expected: ${EXPECTED}"
-          echo "Actual:   ${ACTUAL}"
-          if [ "${ACTUAL}" != "${EXPECTED}" ]; then
-            echo "ERROR: ptau SHA256 mismatch!"
-            exit 1
-          fi
-      - name: Install circom
-        run: |
-          curl -L https://github.com/iden3/circom/releases/download/v2.2.2/circom-linux-amd64 -o /usr/local/bin/circom
-          chmod +x /usr/local/bin/circom
-      - name: Verify circom checksum
-        run: |
-          EXPECTED_SHA256="f3d8d1fdbc123779b80e210c909ee941d7a1e130c70365524646b48b8b0fe9d5"
-          ACTUAL_SHA256=$(sha256sum /usr/local/bin/circom | awk '{print $1}')
-          echo "Expected: ${EXPECTED_SHA256}"
-          echo "Actual:   ${ACTUAL_SHA256}"
-          if [ "${ACTUAL_SHA256}" != "${EXPECTED_SHA256}" ]; then
-            echo "ERROR: circom binary SHA256 mismatch!"
-            exit 1
-          fi
-      - name: Full circuit compilation (WASM + R1CS + zKey + Verifier)
-        run: |
-          set -euo pipefail
-          
-          CIRCUITS_DIR="circuits"
-          BUILD_DIR="artifacts"
-          PTAU_POWER=18
-          PTAU_FILE="$BUILD_DIR/pot${PTAU_POWER}_final.ptau"
-          
-          echo "=== Circom version ==="
-          circom --version
-          
-          echo "=== snarkjs version ==="
-          node -e "console.log(JSON.parse(require('fs').readFileSync('node_modules/snarkjs/package.json')).version)"
-          
-          echo "=== Creating build directory ==="
-          mkdir -p "$BUILD_DIR"
-
-          # Powers of Tau is downloaded in a prior step (audited Hermez 2^18).
-          # Verify it is present before proceeding.
-          if [ ! -f "$PTAU_FILE" ]; then
-            echo "ERROR: expected ptau file not found at $PTAU_FILE"
-            exit 1
-          fi
-          echo "Using audited Hermez powers of tau: $PTAU_FILE"
-          
-          # Step 2: Compile compliance circuit
-          echo ""
-          echo "=== Compiling compliance circuit ==="
-          circom "$CIRCUITS_DIR/compliance.circom" \
-              --r1cs --wasm --sym \
-              -l node_modules \
-              -o "$BUILD_DIR"
-          
-          echo ""
-          echo "=== Circuit info ==="
-          npx snarkjs r1cs info "$BUILD_DIR/compliance.r1cs"
-          
-          # Step 3: Groth16 trusted setup (phase 2)
-          echo ""
-          echo "=== Groth16 trusted setup ==="
-          npx snarkjs groth16 setup \
-              "$BUILD_DIR/compliance.r1cs" \
-              "$PTAU_FILE" \
-              "$BUILD_DIR/compliance_0000.zkey"
-          
-          npx snarkjs zkey contribute \
-              "$BUILD_DIR/compliance_0000.zkey" \
-              "$BUILD_DIR/compliance_final.zkey" \
-              --name="CI Dev contribution" \
-              -e="$(head -c 32 /dev/urandom | xxd -p)"
-          
-          rm -f "$BUILD_DIR/compliance_0000.zkey"
-          
-          # Step 4: Export verification key
-          echo ""
-          echo "=== Exporting verification key ==="
-          npx snarkjs zkey export verificationkey \
-              "$BUILD_DIR/compliance_final.zkey" \
-              "$BUILD_DIR/verification_key.json"
-          
-          # Step 5: Generate Solidity verifier
-          echo ""
-          echo "=== Generating Solidity verifier ==="
-          # clearproof Apache-2.0 generator, not the GPL-3.0 snarkjs exporter
-          node scripts/generate_verifier.mjs \
-              "$BUILD_DIR/verification_key.json" \
-              packages/contracts/contracts/Groth16Verifier.sol
-          
-          # Step 6: Verify artifacts exist
-          echo ""
-          echo "=== Build artifacts ==="
-          echo "  WASM: $BUILD_DIR/compliance_js/compliance.wasm"
-          echo "  R1CS: $BUILD_DIR/compliance.r1cs"
-          echo "  zKey: $BUILD_DIR/compliance_final.zkey"
-          echo "  VKey: $BUILD_DIR/verification_key.json"
-          echo "  Solidity: packages/contracts/contracts/Groth16Verifier.sol"
-          
-          # Verify all required artifacts exist
-          [ -f "$BUILD_DIR/compliance_js/compliance.wasm" ]
-          [ -f "$BUILD_DIR/compliance.r1cs" ]
-          [ -f "$BUILD_DIR/compliance_final.zkey" ]
-          [ -f "$BUILD_DIR/verification_key.json" ]
-          [ -f "packages/contracts/contracts/Groth16Verifier.sol" ]
-          
-          echo ""
-          echo "=== Compilation successful ==="
-          
-      - name: Smoke test — fresh artifacts produce a valid proof
-        run: |
-          # Proves the full pipeline (compile → setup → prove → verify) still
-          # works after any circuit/toolchain change. Consistency of the
-          # committed key set is enforced by hardhat-tests (on-chain) and the
-          # TypeScript parity tests (off-chain) against tests/vectors/.
-          set -euo pipefail
-          cd packages/content && npx tsc && cd ../proof && npx tsc && cd ../cli && npx tsc && cd ../..
-          node packages/cli/dist/index.js demo --artifacts artifacts
-
-      - name: Upload artifacts
+          curl --fail --location --max-time 120 https://github.com/iden3/circom/releases/download/v2.2.2/circom-linux-amd64 -o /tmp/pilot-circom
+          echo 'f3d8d1fdbc123779b80e210c909ee941d7a1e130c70365524646b48b8b0fe9d5  /tmp/pilot-circom' | sha256sum --check
+          sudo install /tmp/pilot-circom /usr/local/bin/circom
+      - name: Isolated development setup and real proofs for both profiles
+        run: uv run python scripts/test_development_circuits.py "$RUNNER_TEMP/clearproof-development-circuits"
+      - name: Upload unapproved development artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: circuit-artifacts
+          name: UNAPPROVED-development-circuit-artifacts
           path: |
-            artifacts/compliance_js/compliance.wasm
-            artifacts/compliance.r1cs
-            artifacts/compliance.sym
-            artifacts/compliance_final.zkey
-            artifacts/verification_key.json
+            ${{ runner.temp }}/clearproof-development-circuits/DEVELOPMENT-ONLY.txt
+            ${{ runner.temp }}/clearproof-development-circuits/ptau-sha256.txt
+            ${{ runner.temp }}/clearproof-development-circuits/source-inventory.json
+            ${{ runner.temp }}/clearproof-development-circuits/legacy/
+            ${{ runner.temp }}/clearproof-development-circuits/pilot/
           retention-days: 7
 
   circuit-lint:

@@ -77,3 +77,10 @@ and 22,394 linear constraints, eight public inputs and zero outputs. Nineteen
 focused tests passed. A real Groth16 proof verified, its public signal order
 matched Python, and altering the projection commitment rejected the same proof.
 No key contribution or production ceremony assurance is implied by this setup.
+
+For a complete isolated development build with a newly generated local phase-one
+transcript, use `scripts/test_development_circuits.py NEW_OUTPUT_DIRECTORY`.
+It exercises both circuit profiles and creates the development manifest and
+files needed by the opt-in pairing integration test. See the CI development
+setup section in `docs/internal/PILOT_ARTIFACT_DOCTOR.md`. The script does not
+approve its self-generated trust pins for any production or customer workflow.
