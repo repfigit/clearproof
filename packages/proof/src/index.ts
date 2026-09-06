@@ -17,3 +17,6 @@ export { reportEndpoint, requestReport } from './api-client.js';
 export type { ReportPath } from './api-client.js';
 export { inspectCurrentProof } from './current-inspection.js';
 export type { CurrentInspectionRequest, CurrentInspectionReport } from './current-inspection.js';
+
+export { createObservation, readObservation } from './observation.js';
+export type { ObservationRequest, ObservationReport, ObservedPolicy } from './observation.js';

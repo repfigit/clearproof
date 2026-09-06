@@ -71,7 +71,7 @@ key rejection, transaction rollback, scope isolation, encrypted rows and exact
 retrieval after restart/expiry/authority replacement. Development proving keys
 remain outside the source package.
 
-Observation CLI orchestration, deterministic counterparty scenarios,
+Deterministic counterparty scenarios,
 coverage/disagreement/latency reports, integrated clean setup and paid-pilot usage
 reporting remain CP-016–018 work. This service alone does not close those gates.
 
@@ -103,5 +103,44 @@ idempotent creation, changed-request conflict, role/tenant isolation, rejected
 mode/clock/trust overrides, minimized errors, bounded reads and retrieval in a
 replacement app without current targets. Exactly four logical HTTP observations
 add eight encrypted observation/idempotency records and zero consumptions.
-SDK/CLI orchestration, observation pagination/reporting and the complete onboarding
+Observation pagination/reporting and the complete onboarding
 scenario remain open; these API routes do not close CP-016–018 by themselves.
+
+## Source SDK and CLI clients
+
+Build the source proof and CLI workspaces before using these commands. They are
+not included in published npm 0.3.0.
+
+```bash
+npm run build --workspace=@clearproof/proof
+npm run build --workspace=@clearproof/cli
+node packages/cli/dist/index.js observation create --api-url http://127.0.0.1:8000
+node packages/cli/dist/index.js observation read --api-url http://127.0.0.1:8000
+```
+
+Supply the corresponding private JSON body on stdin and the bearer token through
+`CLEARPROOF_API_TOKEN`. `create` accepts the observation API request; `read` accepts
+only an observation ID. Successful operations print one validated JSON report and
+exit 0 regardless of ALLOW/DENY/REVIEW/INDETERMINATE or failed pairing. Exit 2 and a
+generic stderr diagnostic mean the request or returned report was rejected.
+These exit codes describe storage/retrieval success, never authorization.
+
+The source SDK exports `createObservation(origin, token, requestBytes)` and
+`readObservation(origin, token, requestBytes)`, plus `ObservationRequest`,
+`ObservationReport` and `ObservedPolicy` types. Input bytes are preserved for the
+server to validate. Both use the shared bounded, non-redirecting authenticated
+transport with operator-selected HTTPS or explicit loopback HTTP.
+
+The clients require the exact observation profile, non-enforcement flags and
+development assurance. They check policy/transfer/time consistency, sorted unique
+references, the relationship between pairing and nullable policy, and the
+canonical full-record digest. A read response must match the requested ID.
+Unexpected or private extra fields reject. These checks detect record inconsistency;
+they do not authenticate an independent historical authority or prove API claims.
+The configured API remains the trust boundary.
+
+The real PostgreSQL gate exercises built CLI creation of a fresh DENY observation,
+exact retries, reads across all four outcomes, request/role/tenant rejection and
+redacted errors. The SDK recomputes Python-generated observation digests. Creating
+a DENY observation successfully returns exit 0 and leaves consumption empty.
+Pagination, aggregate reports, counterparties and clean onboarding remain open.

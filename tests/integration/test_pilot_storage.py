@@ -3398,6 +3398,8 @@ async def check_observation_http(app, db, headers, evaluation_body, cases):
         assert (
             await client.post("/pilot/proof/observations/read", content=b"x" * 1025, headers=reader_headers)
         ).status_code == 413
+    if os.getenv("CLEARPROOF_POLICY_CLI_TEST") == "1":
+        await exercise_observation_cli(app, headers, body, reports)
     await db.close()
     await db.connect()
     restarted = create_app()
@@ -3413,5 +3415,92 @@ async def check_observation_http(app, db, headers, evaluation_body, cases):
             )
             assert loaded.status_code == 200 and loaded.json() == report
     async with db.connection() as conn:
-        assert (await (await conn.execute("SELECT count(*) FROM pilot_records")).fetchone())[0] == baseline + 8
+        assert (await (await conn.execute("SELECT count(*) FROM pilot_records")).fetchone())[0] == baseline + 2 * len(
+            reports
+        )
         assert (await (await conn.execute("SELECT count(*) FROM pilot_consumptions")).fetchone())[0] == 0
+
+
+async def exercise_observation_cli(app, headers, body, reports):
+    """Built CLI/SDK validates Python record digests through real authenticated HTTP."""
+    import json
+    import shutil
+    import socket
+    from pathlib import Path
+
+    import uvicorn
+
+    node = shutil.which("node")
+    cli = Path(__file__).resolve().parents[2] / "packages/cli/dist/index.js"
+    assert node and cli.is_file()
+    sock = socket.socket()
+    sock.bind(("127.0.0.1", 0))
+    origin = f"http://127.0.0.1:{sock.getsockname()[1]}"
+    server = uvicorn.Server(uvicorn.Config(app, lifespan="off", access_log=False, log_level="error"))
+    task = asyncio.create_task(server.serve(sockets=[sock]))
+    roles = ["observations:write", "proof:inspect", "policy:read", "evidence:decrypt"]
+
+    async def invoke(operation, payload, **claims):
+        bearer = headers(**{"roles": roles, **claims})["Authorization"].removeprefix("Bearer ")
+        process = await asyncio.create_subprocess_exec(
+            node,
+            str(cli),
+            "observation",
+            operation,
+            "--api-url",
+            origin,
+            env={"PATH": os.environ.get("PATH", ""), "CLEARPROOF_API_TOKEN": bearer},
+            stdin=asyncio.subprocess.PIPE,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+        )
+        try:
+            stdout, stderr = await asyncio.wait_for(process.communicate(json.dumps(payload).encode()), 30)
+            return process.returncode, stdout, stderr
+        finally:
+            if process.returncode is None:
+                process.kill()
+            await process.wait()
+
+    try:
+        async with asyncio.timeout(10):
+            while not server.started:
+                if task.done():
+                    await task
+                    raise AssertionError("API stopped before startup")
+                await asyncio.sleep(0.01)
+        code, stdout, stderr = await invoke("create", body)
+        assert code == 0 and json.loads(stdout) == reports[0], stderr.decode()
+        assert stderr == b""
+        fresh_body = dict(body, idempotency_key="cli-create-observation", fact_ids=reports[1]["fact_ids"])
+        code, stdout, stderr = await invoke("create", fresh_body)
+        assert code == 0 and stderr == b"", stderr.decode()
+        fresh = json.loads(stdout)
+        assert fresh["policy"]["outcome"] == "DENY" and fresh["mode"] == "observation"
+        assert fresh["authorization_consumed"] is False
+        assert fresh["observation_id"] not in {r["observation_id"] for r in reports}
+        code, stdout, stderr = await invoke("create", fresh_body)
+        assert code == 0 and json.loads(stdout) == fresh and stderr == b""
+        reports.append(fresh)
+        for report in reports:
+            code, stdout, stderr = await invoke(
+                "read", {"observation_id": report["observation_id"]}, roles=["policy:read", "evidence:decrypt"]
+            )
+            assert code == 0 and json.loads(stdout) == report, stderr.decode()
+            assert stderr == b""
+        for operation, payload, claims in [
+            ("create", dict(body, fact_ids=[]), {}),
+            ("create", body, {"roles": ["policy:read", "evidence:decrypt"]}),
+            ("read", {"observation_id": reports[0]["observation_id"]}, {"tenant_id": "foreign"}),
+            ("read", {"observation_id": "PRIVATE-MARKER"}, {}),
+        ]:
+            code, stdout, stderr = await invoke(operation, payload, **claims)
+            assert code == 2 and stdout == b""
+            assert b"Observation request failed" in stderr and b"PRIVATE-MARKER" not in stderr
+            assert origin.encode() not in stderr
+    finally:
+        server.should_exit = True
+        try:
+            await asyncio.wait_for(task, 10)
+        finally:
+            sock.close()
