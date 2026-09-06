@@ -1,6 +1,7 @@
 """Durable local observation of current proof/policy evaluation, never enforcement."""
 
 import hashlib
+import time
 from typing import Literal
 
 from pydantic import Field, model_validator
@@ -61,6 +62,28 @@ class ObservationRecord(Record):
         return {"observation_id": self.digest, **self.model_dump(mode="json")}
 
 
+class TimedObservationRecord(ObservationRecord):
+    schema_version: Literal["clearproof-proof-observation-v2"] = "clearproof-proof-observation-v2"
+    latency_scope: Literal["current-evaluation-only"] = "current-evaluation-only"
+    evaluation_duration_ns: int = Field(ge=0, le=60_000_000_000)
+
+    @property
+    def digest(self) -> str:
+        return record_digest("clearproof/proof-observation/v2", self.model_dump(mode="json"))
+
+
+def parse_observation(value: dict) -> ObservationRecord:
+    import json
+
+    model = {
+        "clearproof-proof-observation-v1": ObservationRecord,
+        "clearproof-proof-observation-v2": TimedObservationRecord,
+    }.get(value.get("schema_version"))
+    if model is None:
+        raise ValueError("Unsupported observation version")
+    return model.model_validate_json(json.dumps(value))
+
+
 class ProofObservationService(ProofInspectionService):
     async def observe(
         self,
@@ -107,10 +130,13 @@ class ProofObservationService(ProofInspectionService):
         )
 
         async def persist(tx):
+            started = time.monotonic_ns()
             inspection, decision = await self._evaluate_transaction(
                 tx, credential_id, proof, signals, references, fact_trust=fact_trust, now=now
             )
-            record = ObservationRecord(
+            duration = time.monotonic_ns() - started
+            record = TimedObservationRecord(
+                evaluation_duration_ns=duration,
                 **{**request, "fact_ids": references},
                 tenant_id=self._principal.tenant_id,
                 actor_id=self._principal.actor_id,
@@ -146,10 +172,7 @@ async def read_observation(
 
 
 def decode_observation(value: dict, *, tenant_id: str, observation_id: str) -> ObservationRecord:
-    # JSON storage converts tuples to arrays; validate using the JSON boundary.
-    import json
-
-    record = ObservationRecord.model_validate_json(json.dumps(value))
+    record = parse_observation(value)
     if record.tenant_id != tenant_id or record.digest != observation_id:
         raise ValueError("Observation scope or identity mismatch")
     return record

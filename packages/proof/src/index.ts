@@ -19,4 +19,4 @@ export { inspectCurrentProof } from './current-inspection.js';
 export type { CurrentInspectionRequest, CurrentInspectionReport } from './current-inspection.js';
 
 export { createObservation, readObservation } from './observation.js';
-export type { ObservationRequest, ObservationReport, ObservedPolicy } from './observation.js';
+export type { ObservationRequest, ObservationReport, ObservationReportV1, ObservationReportV2, ObservedPolicy } from './observation.js';

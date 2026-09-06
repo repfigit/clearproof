@@ -3238,6 +3238,9 @@ async def check_durable_observations(
     assert first["mode"] == "observation" and first["authorization_consumed"] is False
     assert first["execution"] == "not-requested" and first["assurance"] == "development-unapproved"
     assert first["policy"]["outcome"] == "ALLOW"
+    assert first["schema_version"] == "clearproof-proof-observation-v2"
+    assert first["latency_scope"] == "current-evaluation-only"
+    assert 0 < first["evaluation_duration_ns"] <= 60_000_000_000
     reports = [first]
     for outcome in ("DENY", "REVIEW", "INDETERMINATE"):
         report = await observe(key="observe-" + outcome.lower(), refs=cases[outcome])
@@ -3259,6 +3262,57 @@ async def check_durable_observations(
     fresh = await observe(key="observe-again", now=now + 1)
     assert fresh["observation_id"] != first["observation_id"]
     reports.append(fresh)
+    # Seed the exact v1 cache/storage shape to exercise upgrade-compatible retries.
+    from src.protocol.canonical import record_digest
+    from src.services.observation_report import ObservationCase, ObservationCohort, observation_cohort_report
+
+    legacy_request = {
+        name: first[name]
+        for name in ("credential_id", "proof_digest", "signals_digest", "fact_ids", "transfer_digest", "context_digest")
+    }
+    legacy_value = {
+        name: value
+        for name, value in first.items()
+        if name not in ("observation_id", "latency_scope", "evaluation_duration_ns")
+    }
+    legacy_value["schema_version"] = "clearproof-proof-observation-v1"
+    legacy_value["request_digest"] = record_digest(
+        "clearproof/observation-request/v1",
+        {
+            "tenant_id": observer.tenant_id,
+            "actor_id": observer.actor_id,
+            "idempotency_key": "legacy-observation",
+            **legacy_request,
+        },
+    )
+    legacy = ObservationRecord.model_validate_json(json.dumps(legacy_value))
+
+    async def retain_legacy(tx):
+        await tx.put("observation", legacy.digest, legacy.model_dump(mode="json"))
+        return legacy.report()
+
+    await PilotStore(db, cipher(), observer).run_idempotent(
+        "observe-proof", "legacy-observation", legacy_request, retain_legacy
+    )
+    reports.append(legacy.report())
+    assert (
+        await observe(key="legacy-observation", now=int(signals[5]) + 1, fact_trust=excluded_trust) == legacy.report()
+    )
+    mixed = await observation_cohort_report(
+        db,
+        cipher(),
+        observer,
+        ObservationCohort(
+            cohort_id="mixed",
+            cases=(
+                ObservationCase(case_id="old", observation_id=legacy.digest),
+                ObservationCase(case_id="new", observation_id=first["observation_id"]),
+            ),
+        ),
+    )
+    assert mixed["latency_status"] == "partial"
+    assert mixed["latency"]["measured_count"] == mixed["latency"]["unmeasured_observed_count"] == 1
+    assert mixed["latency"]["total_duration_ns"] == first["evaluation_duration_ns"]
     assert configuration.transfer.originator.wallet not in json.dumps(reports)
     with pytest.raises(ValueError):
         ObservationRecord.model_validate_json(
@@ -3324,11 +3378,11 @@ async def check_durable_observations(
     with pytest.raises(HTTPException):
         await read_observation(db, cipher(), restricted, first["observation_id"])
     async with db.connection() as conn:
-        assert (await (await conn.execute("SELECT count(*) FROM pilot_records")).fetchone())[0] == baseline + 12
+        assert (await (await conn.execute("SELECT count(*) FROM pilot_records")).fetchone())[0] == baseline + 14
         rows = await (
             await conn.execute("SELECT row_to_json(r)::text FROM pilot_records r WHERE kind='observation'")
         ).fetchall()
-        assert len(rows) == 6
+        assert len(rows) == 7
         assert all("observe-allow" not in row[0] and '"outcome"' not in row[0] for row in rows)
         assert (await (await conn.execute("SELECT count(*) FROM pilot_consumptions")).fetchone())[0] == 0
 
@@ -3537,6 +3591,10 @@ async def check_observation_cohort_http(app, headers, reports):
         assert report["case_count"] == 6 and report["observed_count"] == 4 and report["missing_count"] == 2
         assert report["distinct_observed_transfers"] == 1 and report["policy_count"] == 4
         assert report["determinate_count"] == 3 and report["failed_pairing_count"] == 0
+        assert report["latency_status"] == "partial"
+        assert report["latency"]["measured_count"] == 4 and report["latency"]["unmeasured_case_count"] == 2
+        assert report["latency"]["unmeasured_observed_count"] == 0
+        assert report["latency"]["total_duration_ns"] == sum(r["evaluation_duration_ns"] for r in reports[:4])
         assert report["outcome_counts"] == {"ALLOW": 1, "DENY": 1, "REVIEW": 1, "INDETERMINATE": 1}
         assert report["baseline_label_count"] == 5 and report["comparable_count"] == 3
         assert report["agreement_count"] == 2 and report["disagreement_count"] == 1

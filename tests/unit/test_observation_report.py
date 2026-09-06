@@ -88,3 +88,54 @@ def test_duplicate_cases_or_observations_cannot_bias_counts():
     record = observation("ALLOW")
     with pytest.raises(ValueError, match="reference mismatch"):
         summarize_observations(ObservationCohort(cohort_id="synthetic", cases=(case,)), {case.observation_id: record})
+
+
+def test_latency_coverage_preserves_legacy_records_and_exact_integer_totals():
+    from src.services.proof_observation import TimedObservationRecord, decode_observation
+
+    old = observation("ALLOW")
+    timed = TimedObservationRecord.model_validate(
+        {
+            **old.model_dump(),
+            "schema_version": "clearproof-proof-observation-v2",
+            "evaluation_duration_ns": 123456789,
+        }
+    )
+    assert (
+        decode_observation(old.model_dump(mode="json"), tenant_id=old.tenant_id, observation_id=old.digest).report()
+        == old.report()
+    )
+    assert (
+        decode_observation(timed.model_dump(mode="json"), tenant_id=old.tenant_id, observation_id=timed.digest).report()
+        == timed.report()
+    )
+    assert old.digest != timed.digest
+    cohort = ObservationCohort(
+        cohort_id="mixed",
+        cases=(
+            ObservationCase(case_id="legacy", observation_id=old.digest),
+            ObservationCase(case_id="measured", observation_id=timed.digest),
+            ObservationCase(case_id="missing", observation_id=None),
+        ),
+    )
+    report = summarize_observations(cohort, {old.digest: old, timed.digest: timed})
+    assert report["schema_version"] == "clearproof-observation-cohort-report-v2"
+    assert report["latency_status"] == "partial"
+    assert report["latency"] == dict(
+        scope="current-evaluation-only",
+        measured_count=1,
+        unmeasured_observed_count=1,
+        unmeasured_case_count=2,
+        total_duration_ns=123456789,
+        min_duration_ns=123456789,
+        max_duration_ns=123456789,
+    )
+    empty = summarize_observations(cohort, {old.digest: old})
+    assert empty["latency_status"] == "not-recorded" and empty["latency"]["total_duration_ns"] is None
+    only = ObservationCohort(cohort_id="measured", cases=(cohort.cases[1],))
+    assert summarize_observations(only, {timed.digest: timed})["latency_status"] == "complete"
+    for value in (-1, True, 1.5, 60_000_000_001):
+        with pytest.raises(ValueError):
+            TimedObservationRecord.model_validate({**timed.model_dump(), "evaluation_duration_ns": value})
+    with pytest.raises(ValueError):
+        decode_observation(timed.model_dump(mode="json"), tenant_id=old.tenant_id, observation_id=old.digest)

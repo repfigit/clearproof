@@ -12,11 +12,12 @@ The operator supplies the same trusted statement/verifier configuration and fact
 authority as current inspection. The input contains credential ID, exact proof
 bytes, eight signals, retained fact IDs, idempotency key and operator clock.
 
-Each immutable `clearproof-proof-observation-v1` record contains:
+New immutable `clearproof-proof-observation-v2` records contain:
 
 - Fixed `mode: observation`, `authorization_consumed: false`, and
   `execution: not-requested`.
 - Development assurance, actor/tenant scope, observation time and a request digest.
+- Integer `evaluation_duration_ns` with `latency_scope: current-evaluation-only`.
 - Credential reference, proof/signal digests, transfer/context/policy/artifact
   digests, proof profile and sorted distinct retained fact references.
 - Pairing result and the minimized nullable policy evaluation. Successful pairing
@@ -72,7 +73,7 @@ retrieval after restart/expiry/authority replacement. Development proving keys
 remain outside the source package.
 
 Deterministic counterparty scenarios,
-latency measurement, report client support, integrated clean setup and paid-pilot usage
+report client support, integrated clean setup and paid-pilot usage
 reporting remain CP-016–018 work. This service alone does not close those gates.
 
 ## Authenticated API
@@ -143,7 +144,7 @@ The real PostgreSQL gate exercises built CLI creation of a fresh DENY observatio
 exact retries, reads across all four outcomes, request/role/tenant rejection and
 redacted errors. The SDK recomputes Python-generated observation digests. Creating
 a DENY observation successfully returns exit 0 and leaves consumption empty.
-Pagination, latency reports, counterparties and clean onboarding remain open.
+Pagination, report clients, counterparties and clean onboarding remain open.
 
 ## Selected-cohort reporting
 
@@ -164,7 +165,7 @@ generic 422, oversized input 413, missing roles 403, and storage/configuration
 failure 503. A requested reference that cannot be read does not become a policy
 outcome.
 
-The deterministic `clearproof-observation-cohort-report-v1` response binds the
+The deterministic `clearproof-observation-cohort-report-v2` response binds the
 normalized selected cohort with `cohort_digest` and sorts case results by case ID.
 It reports case, observed, missing, failed-pairing, policy, determinate and
 per-outcome counts. `determinate_count` includes ALLOW/DENY/REVIEW; observed
@@ -186,9 +187,47 @@ determinate results. If only three observed results have baseline labels, only
 those three enter the agreement/disagreement denominator. Multiple observations
 of one transfer still count as one distinct observed transfer.
 
-No record or consumption is written. Cohort summaries currently expose
-`latency_status: not-recorded`; v1 observations have no evaluation-duration field,
-so timestamps are not converted into invented latency measurements. Latency
-instrumentation, report SDK/CLI support, broader cohort discovery/pagination and
-integrated onboarding remain open. Raw proof bytes, wallets, fact values and
+No record or consumption is written. Raw proof bytes, wallets, fact values and
 observation source references are omitted from the returned case summaries.
+Report SDK/CLI support, broader cohort discovery/pagination and integrated
+onboarding remain open.
+
+
+## Versioned evaluation duration
+
+New observations use record v2 and digest domain `clearproof/proof-observation/v2`.
+They measure `time.monotonic_ns()` immediately before and after current evaluation
+inside the tenant transaction. The interval includes retained-fact checks, current
+statement/pairing and policy evaluation. It excludes upload/authentication, request preflight, waiting
+for the tenant lock, observation/idempotency writes, response transfer and external
+custody or counterparty latency. The explicit scope is `current-evaluation-only`.
+Durations are integer nanoseconds from 0 to 60 billion; an out-of-profile result
+rejects retention. Existing transaction/runtime deadlines still apply.
+
+The timer runs only on a new logical observation. Exact retries return the retained
+duration and are not added as fast zero-duration samples. Completed failed pairing
+can have a duration without a policy result. Requests rejected before retention
+have no observation duration and are outside this measurement sample.
+
+Existing v1 records retain their original bytes, IDs and lack of duration. Version
+routing reads both v1 and v2; cached v1 results remain v1 when returned by the new
+writer, including after expiry. No migration or rewrite of encrypted records is
+needed. The updated SDK/CLI validates both versions and their respective digest
+domains. Older v1-only clients reject new v2 records, so update clients with writers.
+The observation record version is separate from the unchanged pilot-transfer-v2
+circuit profile and proving artifacts.
+
+Cohort report v2 adds a `latency` object with scope, measured count, unmeasured
+observed count, unmeasured case count, and integer total/minimum/maximum duration.
+The mean, when measured count is nonzero, is the total divided by that count.
+`latency_status` is complete only when every selected case is measured, partial
+when some are measured, and not-recorded when none are measured. Empty sample
+aggregates are null, not zero; old records and missing cases never enter timing
+aggregates. The maximum cohort and duration bounds keep totals within JavaScript's
+safe-integer range.
+
+Tests combine v1 and v2 records, preserve legacy cached results, validate measured
+real-proof records through the built CLI, and check exact cohort duration sums.
+These local development measurements describe the selected completed evaluations;
+they are not production performance claims, independent time attestations or an
+end-to-end service-level objective.

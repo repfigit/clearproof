@@ -8,7 +8,12 @@ from src.auth.principal import Principal
 from src.policy.evaluator import Outcome
 from src.protocol.canonical import record_digest
 from src.protocol.transfer import Hex32, OpaqueId, Record
-from src.services.proof_observation import ObservationRecord, decode_observation
+from src.services.proof_observation import (
+    ObservationRecord,
+    TimedObservationRecord,
+    decode_observation,
+    parse_observation,
+)
 from src.storage.database import Database
 from src.storage.pilot import PilotStore
 from src.storage.pilot_cipher import RecordCipher
@@ -60,13 +65,15 @@ def summarize_observations(cohort: ObservationCohort, records: dict[str, Observa
     Missing and failed-pairing observations never become a policy outcome.
     """
     cohort = ObservationCohort.model_validate(cohort)
-    cases, transfers = [], set()
+    cases, transfers, durations = [], set(), []
     counts = {outcome: 0 for outcome in ("ALLOW", "DENY", "REVIEW", "INDETERMINATE")}
     observed = failed = comparable = agreements = labelled = 0
     for case in sorted(cohort.cases, key=lambda item: item.case_id):
         record = records.get(case.observation_id) if case.observation_id is not None else None
         if record is not None:
-            record = ObservationRecord.model_validate(record)
+            record = parse_observation(record.model_dump(mode="json"))
+            if isinstance(record, TimedObservationRecord):
+                durations.append(record.evaluation_duration_ns)
             if record.digest != case.observation_id:
                 raise ValueError("Observation reference mismatch")
             observed += 1
@@ -92,7 +99,7 @@ def summarize_observations(cohort: ObservationCohort, records: dict[str, Observa
             ).model_dump(mode="json")
         )
     return {
-        "schema_version": "clearproof-observation-cohort-report-v1",
+        "schema_version": "clearproof-observation-cohort-report-v2",
         "mode": "observation",
         "scope": "selected-observation-cases",
         "assurance": "development-unapproved",
@@ -111,7 +118,16 @@ def summarize_observations(cohort: ObservationCohort, records: dict[str, Observa
         "comparable_count": comparable,
         "agreement_count": agreements,
         "disagreement_count": comparable - agreements,
-        "latency_status": "not-recorded",
+        "latency_status": "complete" if len(durations) == len(cases) else ("partial" if durations else "not-recorded"),
+        "latency": {
+            "scope": "current-evaluation-only",
+            "measured_count": len(durations),
+            "unmeasured_observed_count": observed - len(durations),
+            "unmeasured_case_count": len(cases) - len(durations),
+            "total_duration_ns": sum(durations) if durations else None,
+            "min_duration_ns": min(durations) if durations else None,
+            "max_duration_ns": max(durations) if durations else None,
+        },
         "cases": cases,
     }
 

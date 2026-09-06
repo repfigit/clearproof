@@ -47,3 +47,20 @@ describe('portable observation response checks', () => {
       .rejects.toThrow('Observation request unavailable or rejected');
   });
 });
+
+describe('versioned observation duration', () => {
+  it('accepts bounded v2 measurements while retaining v1 identity checks', () => {
+    expect(validateObservationReport(seal(record())).schema_version).toBe('clearproof-proof-observation-v1');
+    const body = { ...record(), schema_version: 'clearproof-proof-observation-v2',
+      latency_scope: 'current-evaluation-only', evaluation_duration_ns: 123456789 };
+    const report = { ...body, observation_id: recordDigest('clearproof/proof-observation/v2', body) };
+    expect(validateObservationReport(report)).toEqual(report);
+    expect(() => validateObservationReport(seal(body))).toThrow('identity mismatch');
+    for (const changes of [{ evaluation_duration_ns: -1 }, { evaluation_duration_ns: 60_000_000_001 },
+      { evaluation_duration_ns: true }, { latency_scope: 'end-to-end' }, { mode: 'enforcement' }]) {
+      const changed = { ...body, ...changes };
+      expect(() => validateObservationReport({ ...changed,
+        observation_id: recordDigest('clearproof/proof-observation/v2', changed) })).toThrow();
+    }
+  });
+});
