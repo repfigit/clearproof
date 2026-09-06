@@ -105,7 +105,9 @@ jobs:
       - name: Build @clearproof/proof (dependency of cli)
         run: cd packages/proof && npx tsc
       - run: cd packages/proof && npx tsc --noEmit
-      - run: cd packages/cli && npx tsc --noEmit
+      - run: cd packages/cli && npx tsc
+      - name: Policy CLI transport and built-command checks
+        run: cd packages/cli && npx vitest run test/policy.test.ts
       - name: Off-chain parity tests (committed vector)
         run: cd packages/proof && npx vitest run
 

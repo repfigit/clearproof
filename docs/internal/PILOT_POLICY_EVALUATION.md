@@ -81,8 +81,8 @@ the explanation flag even if its final decision is unchanged.
 This is a supplied-case simulation, not a workload forecast. It does not prove
 snapshot authenticity, activate policies, consume transfer authorization or
 alter original evidence. The service below retains reviewed expected outcomes
-and approvals. Source-document retention, activation history and a packaged
-TypeScript CLI command remain open CP-011 integration.
+and approvals. Source-document retention and activation history remain open
+CP-011 integration. The unreleased TypeScript CLI now calls these API endpoints.
 Tests exercise real stdin subprocesses and signed JWT requests, tenant and role
 rejection, bounded/malformed input, deterministic ordering, business-identity
 deduplication, reverse review counts and same-ID rule edits.
@@ -144,3 +144,17 @@ comparison and reject duplicate JSON keys. Reports still omit wallets and raw
 amounts. Cases come from authenticated retained review actions, whose source
 truth remains the reviewer's responsibility. Retained source documents and
 independent historical trust verification remain separate work.
+
+## Packaged CLI source command
+
+The unreleased 0.4.0 CLI implements `clearproof policy diff --api-url ORIGIN`
+with an optional `--stored` flag. It reads the corresponding JSON request from
+stdin and uses `CLEARPROOF_API_TOKEN` from the environment. It delegates to the
+Python API, preserving one evaluator for supplied and stored comparisons.
+HTTPS is required except loopback HTTP for local evaluation; origin credentials,
+paths, queries/fragments and redirects are rejected. Stdin and network reads
+are bounded, and failures omit input values, tokens and server response bodies.
+See `packages/cli/README.md` for exact usage. The command is implemented in source;
+it has not been published as a working public npm release. Built-command tests
+use a local HTTP simulator; the separate API tests use actual JWT/PostgreSQL.
+A single combined CLI-to-API pilot still requires integration evidence.
