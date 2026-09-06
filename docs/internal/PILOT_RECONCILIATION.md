@@ -171,5 +171,12 @@ No frozen global snapshot or complete traversal is inferred from a page budget.
 Transport and rendering tests exercise collection order, empty pages, partial
 budgets, duplicate/cursor rejection, terminal escape rejection and actual built
 CLI execution against a local HTTP simulator. The previous policy CLI transport
-checks pass after sharing the client. Combined investigation CLI-to-real-API
-validation and provider links remain open integration work.
+checks pass after sharing the client. The PostgreSQL integration gate now runs the built investigation commands
+against a real loopback Uvicorn server with signed JWTs after reconnect. Timeline
+JSON equals direct service output; a four-page queue equals the full API result,
+and a one-page budget remains explicitly partial. Text output, tenant/role
+rejection and unchanged record/consumption counts are checked too. Enable it
+with `CLEARPROOF_POLICY_CLI_TEST=1` when running
+`tests/integration/test_pilot_storage.py`; the database CI job already builds
+the CLI and enables this flag. Provider links and upstream workflow coverage
+remain open integration work.

@@ -1369,6 +1369,84 @@ async def test_ageing_queue_paginates_without_omissions_or_cross_tenant_reads(db
             {"minimum_age_seconds": -1},
         ):
             assert (await client.post("/pilot/events/queue", json=invalid, headers=headers)).status_code == 422
+    if os.getenv("CLEARPROOF_POLICY_CLI_TEST") == "1":
+        timeline = await service.investigate(scopes[0], now=200)
+        await exercise_investigation_cli(app, token, scopes[0], full, timeline)
     async with db.connection() as conn:
         assert count == (await (await conn.execute("SELECT count(*) FROM pilot_records")).fetchone())[0]
         assert (await (await conn.execute("SELECT count(*) FROM pilot_consumptions")).fetchone())[0] == 0
+
+
+async def exercise_investigation_cli(app, token, scope, expected_queue, expected_timeline):
+    import json
+    import shutil
+    import socket
+    from pathlib import Path
+
+    import uvicorn
+
+    node = shutil.which("node")
+    cli = Path(__file__).resolve().parents[2] / "packages/cli/dist/index.js"
+    assert node and cli.is_file(), "Build CLI before enabling the integration gate"
+    sock = socket.socket()
+    sock.bind(("127.0.0.1", 0))
+    origin = f"http://127.0.0.1:{sock.getsockname()[1]}"
+    server = uvicorn.Server(uvicorn.Config(app, lifespan="off", access_log=False, log_level="error"))
+    task = asyncio.create_task(server.serve(sockets=[sock]))
+
+    async def invoke(
+        command, payload, *, pages="1", output_json=True, roles=("evidence:read", "evidence:decrypt"), tenant="tenant-a"
+    ):
+        child = await asyncio.create_subprocess_exec(
+            node,
+            str(cli),
+            "investigation",
+            command,
+            "--api-url",
+            origin,
+            "--pages",
+            pages,
+            *(["--json"] if output_json else []),
+            env={"PATH": os.environ.get("PATH", ""), "CLEARPROOF_API_TOKEN": token(roles=roles, tenant=tenant)},
+            stdin=asyncio.subprocess.PIPE,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+        )
+        try:
+            stdout, stderr = await asyncio.wait_for(child.communicate(json.dumps(payload).encode()), 15)
+            return child.returncode, stdout, stderr
+        finally:
+            if child.returncode is None:
+                child.kill()
+            await child.wait()
+
+    try:
+        async with asyncio.timeout(10):
+            while not server.started:
+                if task.done():
+                    await task
+                    raise AssertionError("API server exited before startup")
+                await asyncio.sleep(0.01)
+        code, stdout, stderr = await invoke("timeline", scope.model_dump(mode="json"))
+        assert code == 0, stderr.decode()
+        assert json.loads(stdout) == expected_timeline.model_dump(mode="json")
+        code, stdout, stderr = await invoke("queue", {"limit": 1}, pages="4")
+        assert code == 0, stderr.decode()
+        report = json.loads(stdout)
+        assert report["complete_from_start"] and report["pages_fetched"] == report["scanned_transfers"] == 4
+        assert report["items"] == expected_queue.model_dump(mode="json")["items"]
+        code, stdout, stderr = await invoke("queue", {"limit": 1})
+        assert code == 0 and not json.loads(stdout)["complete_from_start"]
+        assert json.loads(stdout)["next_cursor"] is not None
+        code, stdout, stderr = await invoke("queue", {}, output_json=False)
+        assert code == 0 and b"settlement-failed" in stdout and b"owner operations" in stdout
+        code, stdout, stderr = await invoke("timeline", scope.model_dump(mode="json"), tenant="tenant-b")
+        assert code == 1 and not stdout and scope.transfer_id.encode() not in stderr
+        code, stdout, stderr = await invoke("queue", {}, roles=("evidence:decrypt",))
+        assert code == 1 and not stdout
+    finally:
+        server.should_exit = True
+        try:
+            await asyncio.wait_for(task, 10)
+        finally:
+            sock.close()
