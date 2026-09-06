@@ -119,7 +119,9 @@ async def test_pinned_snapshot_and_environment_isolation(tmp_path, artifacts, mo
 async def test_timeout_and_cancellation_reap_owned_process(tmp_path, artifacts, cancel):
     pid_file = tmp_path / "owned.pid"
     source = (
-        f"require('node:fs').writeFileSync({json.dumps(str(pid_file))},String(process.pid));\n"
+        "const fs=require('node:fs');"
+        f"fs.writeFileSync({json.dumps(str(pid_file) + '.tmp')},String(process.pid));"
+        f"fs.renameSync({json.dumps(str(pid_file) + '.tmp')},{json.dumps(str(pid_file))});\n"
         "const snarkjs={groth16:{verify:async()=>new Promise(()=>{setInterval(()=>{},1000)})}};"
     ).encode()
     verifier = runtime(tmp_path, artifacts, source)

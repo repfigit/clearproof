@@ -12,6 +12,7 @@ from src.protocol.canonical import canonical_bytes, record_digest
 from src.protocol.transfer import Epoch, Hex32, OpaqueId, Record
 from src.prover.pilot_artifacts import strict_json
 from src.sar.hpke_envelope import derive_key_id, open_envelope, seal_envelope
+from src.services.timestamp_evidence import timestamp_record_bytes, timestamp_record_id
 from src.storage.pilot import PilotStore
 
 MAX_BUNDLE_BYTES = 8 * 1024 * 1024
@@ -116,6 +117,10 @@ class EvidenceExportService:
                 "exported_by": self.principal.actor_id,
                 "timing_authority": "operator-clock-only",
             }
+            timestamp = await tx.get("authorization-evidence", timestamp_record_id(receipt_id))
+            if timestamp is not None:
+                timestamp_record_bytes(timestamp, tenant_id=tx.tenant_id, receipt_id=receipt_id)
+                bundle["decision_timestamp"] = timestamp
             raw = json.dumps(bundle, sort_keys=True, separators=(",", ":"), ensure_ascii=True).encode("ascii")
             if len(raw) > MAX_BUNDLE_BYTES:
                 raise ValueError("Evidence bundle exceeds export limit")

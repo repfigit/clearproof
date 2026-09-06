@@ -23,8 +23,25 @@ from src.registry.pilot_tree import PilotTree
 ROOT = Path(__file__).resolve().parents[2]
 
 
-def synthetic_case(*, artifact_manifest_digest=None, alternate_credential=False, with_trust=False, authorization=False):
+def synthetic_case(
+    *,
+    artifact_manifest_digest=None,
+    alternate_credential=False,
+    with_trust=False,
+    authorization=False,
+    evaluated_at=None,
+):
     fixture = json.loads((ROOT / "specs/fixtures/transfer-v1.json").read_text())
+    if evaluated_at is not None:
+        shift = evaluated_at - fixture["records"][1]["value"]["evaluated_at"]
+        for record in (
+            fixture["records"][0]["value"],
+            fixture["records"][0]["value"]["valuation"],
+            fixture["records"][1]["value"],
+        ):
+            for field in ("created_at", "observed_at", "evaluated_at", "expires_at"):
+                if field in record:
+                    record[field] += shift
     transfer = Transfer.model_validate(fixture["records"][0]["value"])
     if authorization:
         transfer = Transfer.model_validate(

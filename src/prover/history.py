@@ -13,7 +13,9 @@ from src.protocol.transfer import Transfer, VerificationContext
 from src.prover.history_policy import replay_history_policy
 from src.prover.history_statement import HistoryStatementTrust, reconstruct_history_statement
 from src.prover.history_status import HistoryStatusTrust
+from src.prover.history_timing import TimestampObservation, TimestampTrust
 from src.prover.pilot_verifier import PilotPairingVerifier, PilotProof, public_signals
+from src.services.timestamp_evidence import timestamp_record_bytes
 
 
 @dataclass(frozen=True)
@@ -27,6 +29,8 @@ class HistoryInspection:
     policy_reproduced: bool | None = None
     decision_authenticated: bool | None = None
     status_authenticated: bool | None = None
+    timing_authenticated: bool | None = None
+    timestamp_observation: TimestampObservation | None = None
 
 
 class MissingHistoryEvidence(ValueError):
@@ -147,6 +151,7 @@ async def inspect_history_bundle(
     fact_trust: FactTrustStore | None = None,
     decision_trust: DecisionTrustStore | None = None,
     status_trust: HistoryStatusTrust | None = None,
+    timing_trust: TimestampTrust | None = None,
 ) -> HistoryInspection:
     """Pins and verifier come from the reviewer, never from the exported bundle.
 
@@ -236,6 +241,36 @@ async def inspect_history_bundle(
                 decision_authenticated,
                 False,
             )
+    timing_authenticated = None
+    timestamp_observation = None
+    if timing_trust is not None:
+        try:
+            raw_timestamp = timestamp_record_bytes(
+                bundle["decision_timestamp"],
+                tenant_id=expected_tenant,
+                receipt_id=expected_receipt_id,
+            )
+            signed = SignedDecision.model_validate_json(json.dumps(bundle["proof"]["decision_attestation"]))
+            timestamp_observation = timing_trust.verify_decision_window(
+                raw_timestamp,
+                signed,
+                expires_at=bundle["receipt"]["expires_at"],
+                verified_at=verified_at,
+            )
+            timing_authenticated = True
+        except (ValueError, KeyError, TypeError):
+            return HistoryInspection(
+                "indeterminate",
+                True,
+                True,
+                verified_at,
+                ("timestamp_evidence_unavailable",),
+                statement_valid,
+                policy_reproduced,
+                decision_authenticated,
+                status_authenticated,
+                False,
+            )
     return HistoryInspection(
         "indeterminate",
         True,
@@ -246,10 +281,13 @@ async def inspect_history_bundle(
             *(("policy_replay_unverified",) if policy_reproduced is None else ()),
             *(("decision_authority_unverified",) if decision_authenticated is None else ()),
             *(("historical_revocation_evidence_missing",) if status_authenticated is None else ()),
-            "independent_timing_evidence_missing",
+            *(("independent_timing_evidence_missing",) if timing_authenticated is None else ()),
+            "historical_source_authority_review_incomplete",
         ),
         statement_valid,
         policy_reproduced,
         decision_authenticated,
         status_authenticated,
+        timing_authenticated,
+        timestamp_observation,
     )

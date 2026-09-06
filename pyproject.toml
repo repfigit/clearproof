@@ -20,6 +20,7 @@ dependencies = [
     "psycopg[binary,pool]>=3.2",
     "asyncpg>=0.30",
     "pyhpke>=0.6.5",
+    "rfc3161-client>=1.0.8,<2",
 ]
 
 [project.optional-dependencies]

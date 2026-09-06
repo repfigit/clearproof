@@ -73,7 +73,7 @@ and refuse a fact source excluded by reviewer trust. Successful replay still
 retains status history and independent timing reasons, plus decision authority
 when its independent check is omitted.
 
-Required next layers are broader source compromise handling, independent timing authority, the
+Required next layers are historical information/source authority and broader compromise handling, the
 `supported` path and `verify-history` CLI. This stage does not complete CP-015.
 
 Reviewer-supplied `decision_trust` verifies the retained
@@ -91,3 +91,11 @@ and records `status_authenticated`. Successful status authentication removes the
 missing-revocation-evidence reason for that configured pilot registry scope;
 independent timing remains unresolved. Current status is never queried or used
 as a replacement for the original observation.
+
+Reviewer-supplied `timing_trust` authenticates the exported
+[RFC 3161 timestamp](PILOT_HISTORY_TIMING.md). The report separates
+`timing_authenticated` and its accuracy interval from operator times. Missing
+or invalid timing stays indeterminate. Even when reconstruction, pairing, policy,
+decision, status and timing pass, `historical_source_authority_review_incomplete`
+remains until retained information/source authority and broader compromise checks
+are independently verified; this version still cannot return `supported`.

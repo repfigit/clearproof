@@ -27,9 +27,9 @@ configured pilot scope. It does not establish global revocation history, cover a
 external issuer's unconnected status service, or make a current absence into past
 status. A later recorded revocation does not replace the captured observation.
 Known signer compromise at review time remains indeterminate even if the claimed
-observation predates it. Independent timing is still required, and successful
-status authentication alone cannot produce a `supported` outcome or authorize
-replay.
+observation predates it. Independent [timing verification](PILOT_HISTORY_TIMING.md) is separately
+required, and successful status authentication alone cannot produce a `supported`
+outcome or authorize replay.
 
 The real-proof PostgreSQL scenario exports after an actual later revocation and
 policy change, verifies the original scoped observation with independent trust,

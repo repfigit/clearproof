@@ -1513,8 +1513,13 @@ async def test_durable_current_inspection_real_pairing_and_revocation(db, monkey
     root = Path(os.environ["CLEARPROOF_PILOT_TEST_ARTIFACTS"])
     artifacts = inspect_artifacts(root, trusted_digest=(root / "development-manifest-pin.txt").read_text().strip())
     helper = runpy.run_path(str(Path(__file__).parents[1] / "unit/test_pilot_compliance.py"))["synthetic_case"]
+    import time
+
     witness, _, inputs = helper(
-        artifact_manifest_digest=artifacts.manifest.digest, with_trust=True, authorization=mutation == "authorization"
+        artifact_manifest_digest=artifacts.manifest.digest,
+        with_trust=True,
+        authorization=mutation == "authorization",
+        evaluated_at=int(time.time()) - 2 if mutation == "authorization" else None,
     )
     credential, now = inputs.pop("credential"), inputs.pop("now")
     configuration = CurrentStatementConfiguration(**inputs)
@@ -1920,6 +1925,56 @@ async def test_durable_current_inspection_real_pairing_and_revocation(db, monkey
             async with db.connection() as conn:
                 assert (await (await conn.execute("SELECT count(*) FROM pilot_records")).fetchone())[0] == baseline + 9
                 assert (await (await conn.execute("SELECT count(*) FROM pilot_consumptions")).fetchone())[0] == 1
+            from cryptography.hazmat.primitives.serialization import Encoding
+
+            from src.protocol.decision_attestation import SignedDecision
+            from src.prover.history_timing import TimestampTrust, timestamp_request
+            from src.services.timestamp_evidence import TimestampEvidenceService, timestamp_record_bytes
+            from tests.timestamp_fixture import timestamp_authority
+
+            tsa_root, tsa_leaf, issue_timestamp = timestamp_authority(tmp_path / "tsa")
+            timing_config = dict(policy_oid="1.2.3.4", not_before=now - 100, not_after=now + 86400)
+            timing_trust = TimestampTrust(certificate=tsa_leaf, roots=(tsa_root,), **timing_config)
+            signed_decision = SignedDecision.model_validate(record["decision_attestation"])
+            timestamp_response = issue_timestamp(timestamp_request(signed_decision))
+            timestamp_at = int(time.time()) + 2  # Includes the synthetic TSA's one-second accuracy.
+            timestamp_service = TimestampEvidenceService(
+                db,
+                cipher(),
+                principal,
+                timing_trust=timing_trust,
+                decision_trust=DecisionTrustStore([decision_authority]),
+            )
+            with pytest.raises(ValueError):
+                await timestamp_service.attach(receipt["receipt_id"], b"invalid", now=timestamp_at)
+            denied_timestamp = TimestampEvidenceService(
+                db,
+                cipher(),
+                restricted,
+                timing_trust=timing_trust,
+                decision_trust=DecisionTrustStore([decision_authority]),
+            )
+            with pytest.raises(HTTPException):
+                await denied_timestamp.attach(receipt["receipt_id"], timestamp_response, now=timestamp_at)
+            timestamp_id = await timestamp_service.attach(receipt["receipt_id"], timestamp_response, now=timestamp_at)
+            assert (
+                await timestamp_service.attach(receipt["receipt_id"], timestamp_response, now=timestamp_at)
+                == timestamp_id
+            )
+            await db.close()
+            await db.connect()
+            timestamp_record = await retained.get("authorization-evidence", timestamp_id)
+            assert (
+                timestamp_record_bytes(
+                    timestamp_record,
+                    tenant_id=principal.tenant_id,
+                    receipt_id=receipt["receipt_id"],
+                )
+                == timestamp_response
+            )
+            async with db.connection() as conn:
+                assert (await (await conn.execute("SELECT count(*) FROM pilot_records")).fetchone())[0] == baseline + 10
+                assert (await (await conn.execute("SELECT count(*) FROM pilot_consumptions")).fetchone())[0] == 1
             evidence_manifest = await retained.get("authorization-evidence", receipt["evidence_id"])
             assert record_digest("clearproof/authorization-evidence/v1", evidence_manifest) == receipt["evidence_id"]
             assert evidence_manifest["timing_authority"] == "operator-clock-only"
@@ -2016,15 +2071,16 @@ async def test_durable_current_inspection_real_pairing_and_revocation(db, monkey
                     export_principal,
                     EvidenceRecipient.model_validate({**reviewer.model_dump(), "tenant_id": "foreign"}),
                 )
-            encrypted = await exporter.export(receipt["receipt_id"], now=now + 2)
+            encrypted = await exporter.export(receipt["receipt_id"], now=timestamp_at + 1)
             expected_export_binding = {
                 "tenant_id": principal.tenant_id,
                 "receipt_id": receipt["receipt_id"],
                 "reviewer_id": reviewer.reviewer_id,
                 "key_id": derive_key_id(reviewer_public),
-                "exported_at": now + 2,
+                "exported_at": timestamp_at + 1,
             }
             bundle = open_evidence_bundle(encrypted, reviewer_private, expected_binding=expected_export_binding)
+            assert bundle["decision_timestamp"] == timestamp_record
             assert bundle["evidence_manifest"] == evidence_manifest
             assert bundle["proof"] == record
             assert bundle["receipt"] == {k: v for k, v in receipt.items() if k != "receipt_id"}
@@ -2109,7 +2165,35 @@ async def test_durable_current_inspection_real_pairing_and_revocation(db, monkey
             )
             assert with_status.status_authenticated and with_status.decision_authenticated
             assert with_status.outcome == "indeterminate"
-            assert with_status.reasons == ("independent_timing_evidence_missing",)
+            assert with_status.reasons == (
+                "independent_timing_evidence_missing",
+                "historical_source_authority_review_incomplete",
+            )
+            timed = await inspect_history_bundle(
+                bundle,
+                verifier,
+                statement_trust=historical_trust,
+                fact_trust=trust,
+                decision_trust=decision_trust,
+                status_trust=status_trust,
+                timing_trust=timing_trust,
+                **history_args,
+            )
+            assert timed.timing_authenticated and timed.status_authenticated and timed.policy_reproduced
+            assert timed.timestamp_observation.accuracy_us == 1000000
+            assert timed.reasons == ("historical_source_authority_review_incomplete",)
+            no_timestamp = deepcopy(bundle)
+            del no_timestamp["decision_timestamp"]
+            missing_timing = await inspect_history_bundle(
+                no_timestamp, verifier, timing_trust=timing_trust, **history_args
+            )
+            assert missing_timing.outcome == "indeterminate" and not missing_timing.timing_authenticated
+            swapped_timestamp = deepcopy(bundle)
+            swapped_timestamp["decision_timestamp"]["response"] = [base64.b64encode(b"invalid").decode()]
+            invalid_timing = await inspect_history_bundle(
+                swapped_timestamp, verifier, timing_trust=timing_trust, **history_args
+            )
+            assert invalid_timing.outcome == "indeterminate" and not invalid_timing.timing_authenticated
             # Original signed observation survives a later real revocation. Its
             # authority must be independently delegated for this issuer/registry.
             for field, value in (
@@ -2259,6 +2343,7 @@ async def test_durable_current_inspection_real_pairing_and_revocation(db, monkey
                     "import json,sys,socket,asyncio; from pathlib import Path; "
                     "from src.services.evidence_export import open_evidence_bundle; "
                     "from src.prover.history import inspect_history_bundle; "
+                    "from src.prover.history_timing import TimestampTrust; from cryptography import x509; "
                     "from src.prover.pilot_artifacts import inspect_artifacts; "
                     "from src.prover.pilot_verifier import PilotPairingVerifier; "
                     "socket.socket.connect=lambda *a,**k: (_ for _ in ()).throw(RuntimeError('network forbidden')); "
@@ -2266,9 +2351,12 @@ async def test_durable_current_inspection_real_pairing_and_revocation(db, monkey
                     "expected_binding=v['binding']); "
                     "a=inspect_artifacts(Path(v['artifacts']),trusted_digest=v['pin']); "
                     "p=PilotPairingVerifier.load(a,bundle_path=Path(v['runtime']),bundle_sha256=v['runtime_pin'],"
-                    "node=Path(v['node'])); r=asyncio.run(inspect_history_bundle(b,p,**v['history_args'])); "
+                    "node=Path(v['node'])); t=TimestampTrust(certificate=x509.load_der_x509_certificate("
+                    "bytes.fromhex(v['tsa_leaf'])),roots=(x509.load_der_x509_certificate(bytes.fromhex(v['tsa_root'])),),"
+                    "**v['timing_config']); "
+                    "r=asyncio.run(inspect_history_bundle(b,p,timing_trust=t,**v['history_args'])); "
                     "print(json.dumps({'receipt_id':b['receipt_id'],'records':len(b['records']),"
-                    "'integrity':r.integrity_valid,'pairing':r.cryptographic_valid,'outcome':r.outcome}))",
+                    "'integrity':r.integrity_valid,'pairing':r.cryptographic_valid,'timing':r.timing_authenticated,'outcome':r.outcome}))",
                 ],
                 input=json.dumps(
                     {
@@ -2281,6 +2369,9 @@ async def test_durable_current_inspection_real_pairing_and_revocation(db, monkey
                         "runtime_pin": hashlib.sha256(verifier.bundle).hexdigest(),
                         "node": str(verifier.node),
                         "history_args": history_args,
+                        "tsa_leaf": tsa_leaf.public_bytes(Encoding.DER).hex(),
+                        "tsa_root": tsa_root.public_bytes(Encoding.DER).hex(),
+                        "timing_config": timing_config,
                     }
                 ),
                 capture_output=True,
@@ -2293,6 +2384,7 @@ async def test_durable_current_inspection_real_pairing_and_revocation(db, monkey
                 "records": len(bundle["records"]),
                 "integrity": True,
                 "pairing": True,
+                "timing": True,
                 "outcome": "indeterminate",
             }
             await db.connect()

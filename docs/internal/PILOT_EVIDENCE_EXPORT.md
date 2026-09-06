@@ -44,3 +44,8 @@ wrong keys/binding, corrupted ciphertext, missing chunks and unchanged record an
 consumption counts. A fresh Python process decrypts the encrypted artifact after
 the database closes, with socket connections disabled, and reports only the
 receipt ID and evidence count.
+
+When a verified [timestamp record](PILOT_HISTORY_TIMING.md) has been attached,
+export includes it alongside the immutable receipt/proof. Attachment is separate
+from original capture and cannot change the decision. Offline review supplies its
+own TSA trust; neither export inclusion nor decryption approves a certificate.
