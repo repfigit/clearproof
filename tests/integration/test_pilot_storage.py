@@ -195,3 +195,94 @@ async def test_roles_closed_transactions_and_independent_tenant_lock(db):
         async with asyncio.timeout(3):
             async with store(db, "tenant-b").transaction() as other:
                 await other.put("proof", "proof-1", {})
+
+
+async def test_enrollment_api_real_signatures_tenant_binding_and_reconnect(db, monkeypatch):
+    import time
+
+    import jwt
+    from cryptography.hazmat.primitives import serialization
+    from cryptography.hazmat.primitives.asymmetric import ec
+    from eth_account import Account
+    from httpx import ASGITransport, AsyncClient
+
+    from src.api.main import create_app
+    from src.api.middleware import auth
+    from src.protocol.credential import PilotCredential, holder_commitment
+    from src.protocol.enrollment import EnrollmentConsent
+
+    private = ec.generate_private_key(ec.SECP256R1())
+    monkeypatch.setattr(auth, "AUTH_MODE", "jwt")
+    monkeypatch.setattr(
+        auth,
+        "JWT_PUBLIC_KEY",
+        private.public_key()
+        .public_bytes(serialization.Encoding.PEM, serialization.PublicFormat.SubjectPublicKeyInfo)
+        .decode(),
+    )
+    monkeypatch.setenv("PILOT_CHAIN_ID", "31337")
+    monkeypatch.setenv("PILOT_REGISTRY_ADDRESS", "0x" + "1" * 40)
+    monkeypatch.setenv("PII_MASTER_KEY", (b"a" * 32).hex())
+    now = int(time.time())
+    claims = dict(
+        iss=auth.JWT_ISSUER,
+        aud=auth.JWT_AUDIENCE,
+        sub="operator",
+        iat=now,
+        exp=now + 300,
+        tenant_id="tenant-a",
+        actor_id="issuer-operator",
+        roles=["credential:issue"],
+        issuer_dids=["did:web:issuer.example"],
+    )
+    wallet = Account.create()
+    credential = PilotCredential(
+        tenant_id="tenant-a",
+        credential_nonce="a" * 64,
+        issuer_did="did:web:issuer.example",
+        subject_wallet=wallet.address.lower(),
+        holder_commitment=holder_commitment("123456"),
+        jurisdiction="US",
+        kyc_tier=2,
+        sanctions_clear=True,
+        issued_at=now,
+        expires_at=now + 1000,
+    )
+    consent = EnrollmentConsent(
+        credential=credential, chain_id=31337, registry_address="0x" + "1" * 40, consent_expires_at=now + 300
+    )
+    body = {
+        "consent": consent.model_dump(mode="json"),
+        "signature": "0x" + wallet.sign_message(consent.signing_message()).signature.hex(),
+        "idempotency_key": "enroll-1",
+    }
+    headers = {"Authorization": "Bearer " + jwt.encode(claims, private, algorithm="ES256")}
+    app = create_app()
+    app.state.db = db
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        response = await client.post("/pilot/credential/enroll", json=body, headers=headers)
+        assert response.status_code == 200, response.text
+        assert response.json() == {"credential_id": "a" * 64, "status": "awaiting-root-publication"}
+        for changed, status in [({"tenant_id": "tenant-b"}, 422), ({"issuer_dids": []}, 403)]:
+            token = jwt.encode({**claims, **changed}, private, algorithm="ES256")
+            denied = await client.post(
+                "/pilot/credential/enroll", json=body, headers={"Authorization": "Bearer " + token}
+            )
+            assert denied.status_code == status
+        duplicate = await client.post(
+            "/pilot/credential/enroll", json={**body, "idempotency_key": "enroll-2"}, headers=headers
+        )
+        assert duplicate.status_code == 409
+    await db.close()
+    await db.connect()
+    restarted = create_app()
+    restarted.state.db = db
+    async with AsyncClient(transport=ASGITransport(app=restarted), base_url="http://test") as client:
+        retry = await client.post("/pilot/credential/enroll", json=body, headers=headers)
+        assert retry.status_code == 200 and retry.json() == response.json()
+    saved = await store(db).get("credential", "a" * 64)
+    assert saved["consent"]["credential"]["subject_wallet"] == wallet.address.lower()
+    assert await store(db, "tenant-b").get("credential", "a" * 64) is None
+    async with db.connection() as conn:
+        rows = await (await conn.execute("SELECT row_to_json(r)::text FROM pilot_records r")).fetchall()
+        assert all(wallet.address.lower() not in row[0] and body["signature"] not in row[0] for row in rows)
