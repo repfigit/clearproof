@@ -170,6 +170,7 @@ jobs:
         env:
           DATABASE_URL: postgresql://postgres:local-ci-only@localhost:5432/clearproof_test
           CLEARPROOF_PILOT_TEST_ARTIFACTS: ${{ runner.temp }}/clearproof-development-circuits/pilot
+          CLEARPROOF_POLICY_CLI_TEST: "1"
         run: uv run python -m pytest tests/integration/test_pilot_storage.py::test_durable_current_inspection_real_pairing_and_revocation -q
       - name: Upload unapproved development artifacts
         uses: actions/upload-artifact@v4

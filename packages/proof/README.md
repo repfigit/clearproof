@@ -2,6 +2,17 @@
 
 TypeScript SDK for generating and verifying ZK compliance proofs using Groth16/snarkjs.
 
+## Current pilot inspection (unreleased source 0.4.0)
+
+The source SDK also exports `inspectCurrentProof(origin, token, requestBytes)` for
+read-only pilot-transfer-v2 inspection through an operator-selected authenticated
+Clearproof API. It validates the scoped response and preserves development
+assurance; it does not authorize a transfer or independently verify API claims.
+This is separate from the legacy 16-signal `verifyProof` function below. See
+`docs/internal/PILOT_CURRENT_INSPECTION_API.md` in the monorepo for server setup,
+request format, CLI usage and real-proof integration validation. Public npm 0.3.0
+does not include this source addition.
+
 ## Install
 
 ```bash

@@ -47,3 +47,52 @@ legal conclusion or settlement evidence. This endpoint does not expose the
 state-changing authorization service. Development manifest assurance is retained
 in the response. SDK/CLI current inspection and contract parity, durable
 observation reports and complete local onboarding remain separate work.
+
+## Source SDK and CLI
+
+Build the source workspaces first; these additions are not part of public npm
+0.3.0:
+
+```bash
+npm run build --workspace=@clearproof/proof
+npm run build --workspace=@clearproof/cli
+node packages/cli/dist/index.js inspect-current --api-url http://127.0.0.1:8000
+```
+
+Provide the request JSON described above through stdin and the bearer token via
+`CLEARPROOF_API_TOKEN` in the process environment. The command prints only the
+validated report to stdout. Exit 0 means the API reported successful current
+pairing, 1 means failed pairing, and 2 means the request or response could not be
+accepted. None of these exit codes conveys an authorization or policy ALLOW.
+Failures use a generic stderr message without request/response bodies or tokens.
+
+SDK callers can use the same thin remote inspection adapter:
+
+```typescript
+import { inspectCurrentProof, type CurrentInspectionRequest } from '@clearproof/proof';
+
+// request has target_id, credential_id, proof_json and eight public_signals.
+const request: CurrentInspectionRequest = preparedRequest;
+const report = await inspectCurrentProof(
+  operatorApiOrigin,
+  bearerToken,
+  Buffer.from(JSON.stringify(request)),
+);
+```
+
+`inspectCurrentProof` also accepts exact `Uint8Array` JSON bytes, preserving
+ambiguous/duplicate keys for the server to reject. It bounds the upload to 16 KiB,
+uses the shared bounded authenticated transport, refuses redirects and requires
+HTTPS except for explicitly selected loopback HTTP. API origin selection belongs
+to the operator; this transport is not a general-purpose untrusted URL fetcher.
+Responses must match the exact current inspection schema, eight-signal v2 profile
+and development assurance; additional/private fields and unexpected assurance
+claims reject. Future profiles require an explicit client update.
+
+The SDK delegates current acceptance to the selected API. It does not independently
+verify API claims or reproduce Python business rules. The real PostgreSQL gate
+with `CLEARPROOF_POLICY_CLI_TEST=1` exercises built Node CLI → SDK → HTTP → JWT →
+current service/pairing, covering success, failed pairing, tenant/role rejection
+and input-error redaction. The isolated development-artifact CI job enables this
+gate. Other current authorization, contract parity and observation work remains
+open.

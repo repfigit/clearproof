@@ -12,3 +12,8 @@ export {
 export type { Thresholds } from './thresholds.js';
 export type { ComplianceInput, ProofResult, VerifyResult } from './types.js';
 export type { ClearproofDiscoveryInfo, DiscoveryOptions } from './discovery.js';
+
+export { reportEndpoint, requestReport } from './api-client.js';
+export type { ReportPath } from './api-client.js';
+export { inspectCurrentProof } from './current-inspection.js';
+export type { CurrentInspectionRequest, CurrentInspectionReport } from './current-inspection.js';

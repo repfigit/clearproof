@@ -2959,6 +2959,8 @@ async def check_current_inspection_http(
         app.state.pilot_inspection_targets = None
         assert (await client.post("/pilot/proof/inspect", json=body, headers=headers())).status_code == 503
         app.state.pilot_inspection_targets = targets
+    if os.getenv("CLEARPROOF_POLICY_CLI_TEST") == "1":
+        await exercise_current_inspection_cli(app, body, headers, response.json())
     await db.close()
     await db.connect()
     restarted = create_app()
@@ -2966,3 +2968,76 @@ async def check_current_inspection_http(
     restarted.state.pilot_inspection_targets = targets
     async with AsyncClient(transport=ASGITransport(app=restarted), base_url="http://test") as client:
         assert (await client.post("/pilot/proof/inspect", json=body, headers=headers())).json()["cryptographic_valid"]
+
+
+async def exercise_current_inspection_cli(app, body, headers, expected):
+    """Built CLI -> SDK -> real HTTP/JWT -> real pairing and PostgreSQL state."""
+    import json
+    import shutil
+    import socket
+    from pathlib import Path
+
+    import uvicorn
+
+    node = shutil.which("node")
+    cli = Path(__file__).resolve().parents[2] / "packages/cli/dist/index.js"
+    assert node and cli.is_file(), "Build the CLI before enabling the integration gate"
+    sock = socket.socket()
+    sock.bind(("127.0.0.1", 0))
+    origin = f"http://127.0.0.1:{sock.getsockname()[1]}"
+    server = uvicorn.Server(uvicorn.Config(app, lifespan="off", access_log=False, log_level="error"))
+    task = asyncio.create_task(server.serve(sockets=[sock]))
+
+    async def invoke(payload, **claims):
+        process = await asyncio.create_subprocess_exec(
+            node,
+            str(cli),
+            "inspect-current",
+            "--api-url",
+            origin,
+            env={
+                "PATH": os.environ.get("PATH", ""),
+                "CLEARPROOF_API_TOKEN": headers(**claims)["Authorization"].removeprefix("Bearer "),
+            },
+            stdin=asyncio.subprocess.PIPE,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+        )
+        try:
+            stdout, stderr = await asyncio.wait_for(process.communicate(json.dumps(payload).encode()), 30)
+            return process.returncode, stdout, stderr
+        finally:
+            if process.returncode is None:
+                process.kill()
+            await process.wait()
+
+    try:
+        async with asyncio.timeout(10):
+            while not server.started:
+                if task.done():
+                    await task
+                    raise AssertionError("API server stopped before startup")
+                await asyncio.sleep(0.01)
+        code, stdout, stderr = await invoke(body)
+        assert code == 0 and json.loads(stdout) == expected, stderr.decode()
+        assert stderr == b""
+        changed = json.loads(body["proof_json"])
+        changed["pi_a"] = changed["pi_c"]
+        code, stdout, stderr = await invoke(dict(body, proof_json=json.dumps(changed)))
+        assert code == 1 and json.loads(stdout) == dict(expected, cryptographic_valid=False)
+        assert stderr == b""
+        for payload, claims in [
+            (body, {"tenant_id": "foreign"}),
+            (body, {"roles": ["proof:inspect"]}),
+            (dict(body, proof_json="PRIVATE-MARKER"), {}),
+        ]:
+            code, stdout, stderr = await invoke(payload, **claims)
+            assert code == 2 and stdout == b""
+            assert b"Current proof inspection failed" in stderr
+            assert b"PRIVATE-MARKER" not in stderr and origin.encode() not in stderr
+    finally:
+        server.should_exit = True
+        try:
+            await asyncio.wait_for(task, 10)
+        finally:
+            sock.close()
