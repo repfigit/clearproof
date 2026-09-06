@@ -286,3 +286,77 @@ async def test_enrollment_api_real_signatures_tenant_binding_and_reconnect(db, m
     async with db.connection() as conn:
         rows = await (await conn.execute("SELECT row_to_json(r)::text FROM pilot_records r")).fetchall()
         assert all(wallet.address.lower() not in row[0] and body["signature"] not in row[0] for row in rows)
+
+
+async def test_signed_root_publication_revision_chain_rotation_and_tenant_boundary(db):
+    from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
+
+    from src.protocol.root_snapshot import RootAuthority, RootSnapshot, RootTrustError, RootTrustStore, sign_root
+    from src.services.root_publication import RootPublicationService, root_record_id
+
+    key = Ed25519PrivateKey.generate()
+    authority = RootAuthority(
+        public_key=key.public_key().public_bytes_raw().hex(),
+        tenant_id="tenant-a",
+        chain_id=31337,
+        registry_address="0x" + "1" * 40,
+        kinds=("issuer-root",),
+        not_before=1,
+        not_after=1000,
+    )
+    trust = RootTrustStore([authority])
+    principal = Principal(tenant_id="tenant-a", actor_id="registrar", roles=("tenant:admin", "evidence:decrypt"))
+    service = RootPublicationService(db, cipher(), principal, trust)
+    root = RootSnapshot(
+        tenant_id="tenant-a",
+        chain_id=31337,
+        registry_address="0x" + "1" * 40,
+        kind="issuer-root",
+        root="123",
+        tree_depth=8,
+        source_digest="a" * 64,
+        revision=1,
+        issued_at=100,
+        expires_at=200,
+        key_id=authority.key_id,
+    )
+    signed = sign_root(root, key)
+    first = await service.publish(signed, idempotency_key="root-1", now=150)
+    assert first["snapshot_digest"] == root.digest
+    assert await service.publish(signed, idempotency_key="root-1", now=150) == first
+    new = RootSnapshot.model_validate(
+        {
+            **root.model_dump(),
+            "revision": 2,
+            "previous_digest": root.digest,
+            "root": "124",
+            "issued_at": 150,
+            "expires_at": 250,
+        }
+    )
+    fork = RootSnapshot.model_validate({**new.model_dump(), "root": "125"})
+    results = await asyncio.gather(
+        service.publish(sign_root(new, key), idempotency_key="root-2", now=175),
+        service.publish(sign_root(fork, key), idempotency_key="root-fork", now=175),
+        return_exceptions=True,
+    )
+    assert sum(isinstance(result, RecordConflict) for result in results) == 1
+    assert sum(type(result) is dict for result in results) == 1
+    reader = store(db)
+    current = await reader.read("issuer-root", root_record_id(root))
+    assert current.revision == 2
+    assert (await reader.read("issuer-root", root_record_id(root), revision=1)).value == signed.model_dump(mode="json")
+    await db.close()
+    await db.connect()
+    assert (await store(db).read("issuer-root", root_record_id(root))).value == current.value
+    other = RootPublicationService(
+        db, cipher(), Principal(tenant_id="tenant-b", actor_id="registrar", roles=principal.roles), trust
+    )
+    with pytest.raises(RootTrustError):
+        await other.publish(signed, idempotency_key="root-1", now=150)
+    bad_previous = RootSnapshot.model_validate({**new.model_dump(), "revision": 3, "previous_digest": "b" * 64})
+    with pytest.raises(RecordConflict):
+        await service.publish(sign_root(bad_previous, key), idempotency_key="bad-predecessor", now=175)
+    with pytest.raises(RootTrustError):
+        await service.publish(signed, idempotency_key="expired", now=200)
+    assert (await reader.read("issuer-root", root_record_id(root))).revision == 2
