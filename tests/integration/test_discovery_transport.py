@@ -48,6 +48,7 @@ async def tls_endpoint(tmp_path):
     server_context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
     server_context.load_cert_chain(cert_path, key_path)
     client_context = ssl.create_default_context(cafile=str(cert_path))
+    client_context.minimum_version = ssl.TLSVersion.TLSv1_2
     state = SimpleNamespace(
         status=200,
         body=None,
@@ -199,3 +200,21 @@ async def test_deadline_covers_dns_and_response_body(tls_endpoint):
     state.delay = 10
     with pytest.raises(DiscoveryUnavailable):
         await DiscoveryClient(**state.options, timeout=0.1).discover(state.authority)
+
+
+async def test_explicit_floor_on_owned_context_with_unspecified_openssl_default(tls_endpoint, monkeypatch):
+    state = tls_endpoint
+    context = state.options["ssl_context"]
+    context.minimum_version = ssl.TLSVersion.MINIMUM_SUPPORTED
+    monkeypatch.setattr("src.protocol.discovery_transport.ssl.create_default_context", lambda: context)
+    options = {**state.options, "ssl_context": None}
+    assert await DiscoveryClient(**options).discover(state.authority) == state.document
+    assert context.minimum_version == ssl.TLSVersion.TLSv1_2
+
+
+async def test_operator_context_must_explicitly_require_tls12(tls_endpoint):
+    state = tls_endpoint
+    state.options["ssl_context"].minimum_version = ssl.TLSVersion.MINIMUM_SUPPORTED
+    with pytest.raises(DiscoveryInvalid, match="TLS 1.2"):
+        await DiscoveryClient(**state.options).discover(state.authority)
+    assert not state.requests

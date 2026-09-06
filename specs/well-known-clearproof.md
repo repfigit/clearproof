@@ -40,7 +40,7 @@ An operator may explicitly allow private enterprise destinations by exact author
 {"beneficiary.corp.example:8443": ["10.42.0.0/16"]}
 ```
 
-These are operator trust settings, never transfer-request fields. An exception for one authority does not allow another host or port. CIDRs describe network ranges; host bits are normalized. Enterprise certificates must still validate: Python accepts an operator SSL context or system CA configuration, and Node accepts an operator CA bundle. The Node discovery transport requires Node.js; browser fetch cannot provide the same socket policy. Use a controlled server integration for browser applications.
+These are operator trust settings, never transfer-request fields. An exception for one authority does not allow another host or port. CIDRs describe network ranges; host bits are normalized. Enterprise certificates must still validate: Python accepts an operator SSL context or system CA configuration, and Node accepts an operator CA bundle. The built-in Python context explicitly requires TLS 1.2 or newer; a supplied context must set `minimum_version` to at least `ssl.TLSVersion.TLSv1_2`. The Node discovery transport requires Node.js; browser fetch cannot provide the same socket policy. Use a controlled server integration for browser applications.
 
 Discovery validates the advertised endpoint's origin but does not contact it. Any later proof-exchange transport must apply its own connection policy at send time; discovery approval cannot prevent rebinding in an unrelated HTTP client.
 

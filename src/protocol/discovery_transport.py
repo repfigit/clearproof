@@ -108,7 +108,13 @@ async def fetch_document(
     timeout: float,
     ssl_context: ssl.SSLContext | None = None,
 ) -> dict:
-    context = ssl_context or ssl.create_default_context()
+    if ssl_context is None:
+        context = ssl.create_default_context()
+        # OpenSSL builds differ in whether system defaults are reflected in
+        # this property. Set an explicit floor on the context we own.
+        context.minimum_version = max(context.minimum_version, ssl.TLSVersion.TLSv1_2)
+    else:
+        context = ssl_context
     if (
         context.verify_mode != ssl.CERT_REQUIRED
         or not context.check_hostname
