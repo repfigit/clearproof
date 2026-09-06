@@ -6,11 +6,11 @@ from typing import Literal
 from pydantic import Field
 
 from src.auth.principal import Principal
-from src.policy.diff import PolicyCase
+from src.policy.diff import PolicyCase, PolicyDiffRequest, compare_policies
 from src.policy.evaluator import evaluate_policy
 from src.policy.model import PilotPolicy
 from src.protocol.canonical import canonical_bytes, record_digest
-from src.protocol.transfer import Record
+from src.protocol.transfer import Hex32, Record
 from src.storage.pilot import PilotStore, RecordConflict
 
 
@@ -22,6 +22,16 @@ class ReviewedCase(Record):
 class PolicyReviewRequest(Record):
     policy: PilotPolicy
     cases: tuple[ReviewedCase, ...] = Field(min_length=1, max_length=16)
+
+
+class StoredPolicyComparison(Record):
+    before_digest: Hex32
+    after_digest: Hex32
+    case_digests: tuple[Hex32, ...] = Field(min_length=1, max_length=64)
+
+
+class PolicyRecordMissing(ValueError):
+    pass
 
 
 class PolicyReviewService:
@@ -100,3 +110,29 @@ class PolicyReviewService:
         return await self.store.run_idempotent(
             "approve-policy", idempotency_key, {"request_digest": request_digest}, persist
         )
+
+    async def compare_stored(self, request: StoredPolicyComparison):
+        self.principal.require("policy:read")
+        self.principal.require("evidence:decrypt")
+        request = StoredPolicyComparison.model_validate(request)
+        if len(set(request.case_digests)) != len(request.case_digests):
+            raise ValueError("Duplicate retained case")
+        policies, cases = [], []
+        async with self.store.transaction() as tx:
+            for digest in (request.before_digest, request.after_digest):
+                value = await tx.get("policy", digest)
+                if not value or value.get("schema_version") != "clearproof-policy-approval-v1":
+                    raise PolicyRecordMissing("Retained policy or case is unavailable")
+                policy = PilotPolicy.model_validate_json(json.dumps(value["policy"]))
+                if policy.digest != digest or policy.tenant_id != self.principal.tenant_id:
+                    raise ValueError("Retained policy binding is invalid")
+                policies.append(policy)
+            for digest in request.case_digests:
+                value = await tx.get("policy", digest)
+                if not value or value.get("schema_version") != "clearproof-reviewed-case-v1":
+                    raise PolicyRecordMissing("Retained policy or case is unavailable")
+                case = PolicyCase.model_validate_json(json.dumps(value["case"]))
+                if record_digest("clearproof/review-case/v1", case.model_dump(mode="json")) != digest:
+                    raise ValueError("Retained case binding is invalid")
+                cases.append(case)
+        return compare_policies(PolicyDiffRequest(before=policies[0], after=policies[1], cases=tuple(cases)))

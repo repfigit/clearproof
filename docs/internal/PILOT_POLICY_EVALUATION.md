@@ -46,8 +46,8 @@ performs independent current-version selection for the proof-input path.
 Tests cover reproducible replay without input mutation, smallest-unit boundaries,
 missing facts below a threshold, deny/allow conflict, review for incomplete
 information, unsupported predicates, invalid timing, empty policies and foreign
-or conflicting evidence. Durable fact authentication and rule-approval history
-remain integration work.
+or conflicting evidence. Durable fact authentication remains integration work;
+the retained policy review service is described below.
 
 ## Counterfactual comparison API and CLI
 
@@ -80,8 +80,9 @@ the explanation flag even if its final decision is unchanged.
 
 This is a supplied-case simulation, not a workload forecast. It does not prove
 snapshot authenticity, activate policies, consume transfer authorization or
-alter original evidence. Durable reviewed expected outcomes, source/approval
-history and a packaged TypeScript CLI command remain open CP-011 integration.
+alter original evidence. The service below retains reviewed expected outcomes
+and approvals. Source-document retention, activation history and a packaged
+TypeScript CLI command remain open CP-011 integration.
 Tests exercise real stdin subprocesses and signed JWT requests, tenant and role
 rejection, bounded/malformed input, deterministic ordering, business-identity
 deduplication, reverse review counts and same-ID rule edits.
@@ -92,7 +93,8 @@ deduplication, reverse review counts and same-ID rule edits.
 approval through the encrypted tenant store. Its operator-authenticated
 principal needs `policy:approve` and `evidence:decrypt`. The service records the
 principal's actor ID and the supplied server clock; API callers must never
-choose either identity or approval time. There is no public approval route yet.
+choose either identity or approval time. The authenticated route below supplies
+them from the token and server clock.
 
 Each request contains one policy and 1–16 reviewed cases with independently
 specified expected outcomes. Evaluation must match every expectation before
@@ -114,7 +116,31 @@ receipts remain separate work.
 
 The review attests the authenticated reviewer's action, not external source
 truth or independent legal assessment. Actual source documents, authenticated
-fact acquisition, approval HTTP integration, stored-case comparison loading
-and offline historical approval verification remain open. PostgreSQL tests
+fact acquisition, independent activation and offline historical approval
+verification remain open. PostgreSQL tests
 exercise reconnect persistence, encrypted rows, tenant isolation, predecessor
 links, immutable approval conflicts and rejected expected outcomes.
+
+## Authenticated retained-record endpoints
+
+`POST /pilot/policy/approve` accepts `{ "review": { "policy": ..., "cases":
+[{ "case": ..., "expected": "ALLOW" }] }, "idempotency_key": "opaque-key" }`.
+It requires `policy:approve` and `evidence:decrypt`. Actor/time fields in the
+request are rejected. The service uses the configured database and encryption
+keyring; missing dependencies return 503. Conflicts return 409; invalid reviews
+return generic 422 errors without submitted values. Approval is not activation.
+
+`POST /pilot/policy/diff/stored` accepts `before_digest`, `after_digest` and
+`case_digests` (1–64 unique digests). It requires `policy:read` and
+`evidence:decrypt`. It loads encrypted approvals and cases in a tenant
+transaction, validates their schema markers and recomputed content digests,
+then runs the same counterfactual comparison as `/diff`. Missing records and
+records belonging to another tenant both return 404. Duplicate cases reject.
+This operation writes no records and consumes no authorization. Historical
+case evaluation times are preserved; the result is not current authorization.
+
+Both endpoints enforce the same 1 MiB/ten-second input bounds as supplied-case
+comparison and reject duplicate JSON keys. Reports still omit wallets and raw
+amounts. Cases come from authenticated retained review actions, whose source
+truth remains the reviewer's responsibility. Retained source documents and
+independent historical trust verification remain separate work.

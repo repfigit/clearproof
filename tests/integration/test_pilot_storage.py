@@ -738,3 +738,74 @@ async def test_reviewed_policy_history_is_atomic_private_and_survives_restart(db
             PolicyReviewRequest(policy=missing, cases=request.cases), idempotency_key="missing", now=now
         )
     assert await service.store.get("policy", missing.digest) is None
+
+
+async def test_policy_http_approval_and_stored_comparison_real_jwt(db, monkeypatch):
+    import runpy
+    from pathlib import Path
+    from types import SimpleNamespace
+
+    from httpx import ASGITransport, AsyncClient
+
+    from src.api.routes import policy as routes
+    from src.protocol.canonical import record_digest
+    from src.storage.keyring import load_keyring
+
+    fixtures = runpy.run_path(str(Path(__file__).resolve().parents[1] / "unit/test_policy_diff.py"))
+    comparison = fixtures["comparison"].__wrapped__()
+    app, token = fixtures["authenticated_app"].__wrapped__(monkeypatch)
+    app.state.db = db
+    monkeypatch.setenv("PII_MASTER_KEY", "61" * 32)
+    monkeypatch.setattr(routes, "time", SimpleNamespace(time=lambda: comparison.cases[0].evaluated_at))
+    headers = {"Authorization": "Bearer " + token(roles=("policy:approve", "policy:read", "evidence:decrypt"))}
+    snapshots = [{"case": case.model_dump(mode="json"), "expected": "ALLOW"} for case in comparison.cases]
+    body = {
+        "review": {"policy": comparison.before.model_dump(mode="json"), "cases": snapshots},
+        "idempotency_key": "http-approval-1",
+    }
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        first = await client.post("/pilot/policy/approve", json=body, headers=headers)
+        assert first.status_code == 200, first.text
+        assert first.json() == (await client.post("/pilot/policy/approve", json=body, headers=headers)).json()
+        forged = {**body, "approved_at": 0, "actor_id": "forged-reviewer"}
+        rejected = await client.post("/pilot/policy/approve", json=forged, headers=headers)
+        assert rejected.status_code == 422 and "forged-reviewer" not in rejected.text
+        assert (await client.post("/pilot/policy/approve", json=body)).status_code == 401
+        readonly = {"Authorization": "Bearer " + token()}
+        assert (await client.post("/pilot/policy/approve", json=body, headers=readonly)).status_code == 403
+        foreign = {
+            "Authorization": "Bearer "
+            + token(tenant="tenant-b", roles=("policy:approve", "policy:read", "evidence:decrypt"))
+        }
+        assert (await client.post("/pilot/policy/approve", json=body, headers=foreign)).status_code == 403
+        second = {
+            "review": {
+                "policy": comparison.after.model_dump(mode="json"),
+                "cases": [{**item, "expected": "REVIEW"} for item in snapshots],
+            },
+            "idempotency_key": "http-approval-2",
+        }
+        assert (await client.post("/pilot/policy/approve", json=second, headers=headers)).status_code == 200
+        await db.close()
+        await db.connect()
+        stored = {
+            "before_digest": comparison.before.digest,
+            "after_digest": comparison.after.digest,
+            "case_digests": [record_digest("clearproof/review-case/v1", item["case"]) for item in snapshots],
+        }
+        async with db.connection() as conn:
+            count_before = await (await conn.execute("SELECT count(*) FROM pilot_records")).fetchone()
+        result = await client.post("/pilot/policy/diff/stored", json=stored, headers=readonly)
+        assert result.status_code == 200 and result.json()["review_delta"] == 1
+        assert comparison.cases[0].transfer.originator.wallet not in result.text
+        repeated = await client.post("/pilot/policy/diff/stored", json=stored, headers=readonly)
+        assert repeated.json() == result.json()
+        assert (await client.post("/pilot/policy/diff/stored", json=stored, headers=foreign)).status_code == 404
+        duplicate = {**stored, "case_digests": stored["case_digests"] * 2}
+        assert (await client.post("/pilot/policy/diff/stored", json=duplicate, headers=readonly)).status_code == 422
+        async with db.connection() as conn:
+            assert count_before == await (await conn.execute("SELECT count(*) FROM pilot_records")).fetchone()
+            assert (await (await conn.execute("SELECT count(*) FROM pilot_consumptions")).fetchone())[0] == 0
+        retained = store(db, encryption=RecordCipher(load_keyring()))
+        approval = await retained.get("policy", comparison.before.digest)
+        assert approval["actor_id"] == "actor-a" and approval["approved_at"] == comparison.cases[0].evaluated_at

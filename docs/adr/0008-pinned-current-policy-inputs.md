@@ -3,7 +3,8 @@
 Status: threshold/input binding and the bounded M2 business evaluator are implemented.
 Counterfactual comparison now has a Python stdin CLI and authenticated API.
 Encrypted approval and reviewed-case retention are implemented as a service;
-HTTP integration and independent activation remain open.
+authenticated approval and stored-comparison routes are implemented. Independent
+activation remains open.
 
 `PilotPolicy` is an immutable, bounded record containing a policy identity,
 revision/predecessor, tenant, EVM deployment, jurisdiction, asset catalog digest,
@@ -44,8 +45,8 @@ boundary is not an ALLOW/REVIEW/DENY decision, and an amount below a threshold
 does not remove information-exchange, screening or other obligations. The M2
 rule evaluator now provides explicit missing/unsupported-input outcomes; see
 `docs/internal/PILOT_POLICY_EVALUATION.md`. Policy-diff reports are implemented for supplied snapshots. The encrypted review
-service retains approvals and expected outcomes; approval HTTP integration and
-historical activation evidence remain separate work.
+service retains approvals and expected outcomes with authenticated HTTP access;
+historical activation evidence remains separate work.
 No legal rule or jurisdictional threshold is inferred from synthetic fixtures.
 
 Validation includes exact cent threshold minus/equal/plus boundaries; stale and
