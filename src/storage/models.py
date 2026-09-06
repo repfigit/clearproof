@@ -3,7 +3,9 @@ from __future__ import annotations
 import hashlib
 from typing import Optional
 
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict, field_validator
+
+from src.storage.signals import validate_public_signals
 
 
 class StoredCredential(BaseModel):
@@ -20,6 +22,8 @@ class StoredCredential(BaseModel):
 
 
 class StoredProof(BaseModel):
+    model_config = ConfigDict(hide_input_in_errors=True)
+
     proof_id: str
     transfer_id: str
     groth16_proof: str
@@ -32,6 +36,11 @@ class StoredProof(BaseModel):
     proof_generated_at: int
     proof_expires_at: int
     is_expired: bool = False
+
+    @field_validator("public_signals", mode="before")
+    @classmethod
+    def check_public_signals(cls, value: object) -> list[str]:
+        return validate_public_signals(value)
 
 
 class StoredNullifier(BaseModel):

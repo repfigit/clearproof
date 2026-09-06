@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import logging
 import os
 from contextlib import asynccontextmanager
@@ -8,7 +9,11 @@ from typing import AsyncIterator
 import psycopg
 from psycopg_pool import AsyncConnectionPool
 
+from src.storage.signals import PUBLIC_SIGNALS_CONSTRAINT, migrate_public_signals
+
 logger = logging.getLogger(__name__)
+
+_MIGRATION_LOCK = 0x4350524F4F46
 
 _SCHEMA_MIGRATIONS = [
     """
@@ -104,6 +109,8 @@ _SCHEMA_MIGRATIONS = [
     CREATE INDEX IF NOT EXISTS idx_audit_type ON audit_entries (entry_type);
     CREATE INDEX IF NOT EXISTS idx_audit_transaction ON audit_entries (transaction_ref);
     """,
+    migrate_public_signals,
+    PUBLIC_SIGNALS_CONSTRAINT,
 ]
 
 
@@ -112,35 +119,35 @@ class Database:
         self._pool_min = pool_min
         self._pool_max = pool_max
         self._pool: AsyncConnectionPool | None = None
+        self._lifecycle_lock = asyncio.Lock()
 
     @property
     def is_ready(self) -> bool:
         return self._pool is not None
 
     async def connect(self) -> None:
-        if self._pool is not None:
-            return
-
-        url = os.environ.get("DATABASE_URL")
-        if not url:
-            raise RuntimeError("DATABASE_URL environment variable is required")
-
-        self._pool = AsyncConnectionPool(
-            conninfo=url,
-            min_size=self._pool_min,
-            max_size=self._pool_max,
-            open=False,
-        )
-        await self._pool.open()
-
-        await self._migrate()
-        logger.info("Database connected, schema up to date")
+        async with self._lifecycle_lock:
+            if self._pool is not None:
+                return
+            url = os.environ.get("DATABASE_URL")
+            if not url:
+                raise RuntimeError("DATABASE_URL environment variable is required")
+            pool = AsyncConnectionPool(conninfo=url, min_size=self._pool_min, max_size=self._pool_max, open=False)
+            try:
+                await pool.open(wait=True)
+                await self._migrate(pool)
+            except BaseException:
+                await pool.close()
+                raise
+            self._pool = pool
+            logger.info("Database connected, schema up to date")
 
     async def close(self) -> None:
-        if self._pool is not None:
-            await self._pool.close()
-            self._pool = None
-            logger.info("Database connection pool closed")
+        async with self._lifecycle_lock:
+            if self._pool is not None:
+                await self._pool.close()
+                self._pool = None
+                logger.info("Database connection pool closed")
 
     @asynccontextmanager
     async def connection(self) -> AsyncIterator[psycopg.AsyncConnection]:
@@ -149,9 +156,12 @@ class Database:
         async with self._pool.connection() as conn:
             yield conn
 
-    async def _migrate(self) -> None:
-        async with self.connection() as conn:
+    async def _migrate(self, pool: AsyncConnectionPool) -> None:
+        # The pool context commits schema, data and version rows together, or
+        # rolls them all back. Acquire the lock before even creating the table.
+        async with pool.connection() as conn:
             async with conn.cursor() as cur:
+                await cur.execute("SELECT pg_advisory_xact_lock(%s)", (_MIGRATION_LOCK,))
                 await cur.execute("""
                     CREATE TABLE IF NOT EXISTS schema_migrations (
                         version INTEGER PRIMARY KEY,
@@ -159,15 +169,18 @@ class Database:
                     )
                 """)
 
-                await cur.execute("SELECT MAX(version) FROM schema_migrations")
-                row = await cur.fetchone()
-                current_version = (row[0] if row and row[0] is not None else 0)
+                await cur.execute("SELECT version FROM schema_migrations ORDER BY version")
+                versions = [row[0] for row in await cur.fetchall()]
+                current_version = versions[-1] if versions else 0
+                if current_version > len(_SCHEMA_MIGRATIONS) or versions != list(range(1, current_version + 1)):
+                    raise RuntimeError("Unrecognized database migration history; operator review required")
 
-                for i, migration in enumerate(_SCHEMA_MIGRATIONS, start=current_version + 1):
+                for i, migration in enumerate(_SCHEMA_MIGRATIONS, start=1):
                     if i <= current_version:
                         continue
-                    await cur.execute(migration)
-                    await conn.commit()
+                    if callable(migration):
+                        await migration(conn)
+                    else:
+                        await cur.execute(migration)
                     await cur.execute("INSERT INTO schema_migrations (version) VALUES (%s)", (i,))
-                    await conn.commit()
-                    logger.info("Applied migration %d", i)
+        logger.info("Database migrations committed through version %d", len(_SCHEMA_MIGRATIONS))
