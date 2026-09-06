@@ -3185,3 +3185,148 @@ async def check_current_evaluation_http(
     async with db.connection() as conn:
         assert (await (await conn.execute("SELECT count(*) FROM pilot_records")).fetchone())[0] == count
         assert (await (await conn.execute("SELECT count(*) FROM pilot_consumptions")).fetchone())[0] == 0
+    await check_durable_observations(
+        db,
+        monkeypatch,
+        principal,
+        configuration,
+        verifier,
+        proof,
+        signals,
+        credential_id,
+        trust,
+        cases,
+        FactTrustStore([other_authority]),
+    )
+
+
+async def check_durable_observations(
+    db, monkeypatch, principal, configuration, verifier, proof, signals, credential_id, trust, cases, excluded_trust
+):
+    """Durable non-enforcement, idempotency, isolation and rollback with real proofs."""
+    import json
+    import time
+
+    from src.services.proof_observation import ObservationRecord, ProofObservationService, read_observation
+    from src.storage.pilot import PilotTransaction
+
+    observer = Principal.model_validate(
+        {**principal.model_dump(), "roles": ("observations:write", "proof:inspect", "policy:read", "evidence:decrypt")}
+    )
+    service = ProofObservationService(db, cipher(), observer, verifier, configuration)
+    now = int(time.time())
+    async with db.connection() as conn:
+        baseline = (await (await conn.execute("SELECT count(*) FROM pilot_records")).fetchone())[0]
+
+    async def observe(key="observe-allow", refs=cases["ALLOW"], **changes):
+        return await service.observe(
+            credential_id,
+            proof,
+            signals,
+            refs,
+            **{
+                "fact_trust": trust,
+                "idempotency_key": key,
+                "now": now,
+                **changes,
+            },
+        )
+
+    first, repeated = await asyncio.gather(observe(), observe())
+    assert first == repeated
+    assert first["mode"] == "observation" and first["authorization_consumed"] is False
+    assert first["execution"] == "not-requested" and first["assurance"] == "development-unapproved"
+    assert first["policy"]["outcome"] == "ALLOW"
+    reports = [first]
+    for outcome in ("DENY", "REVIEW", "INDETERMINATE"):
+        report = await observe(key="observe-" + outcome.lower(), refs=cases[outcome])
+        assert report["policy"]["outcome"] == outcome and report["cryptographic_valid"] is True
+        reports.append(report)
+    changed = json.loads(proof)
+    changed["pi_a"] = changed["pi_c"]
+    invalid = await service.observe(
+        credential_id,
+        json.dumps(changed).encode(),
+        signals,
+        cases["ALLOW"],
+        fact_trust=trust,
+        idempotency_key="observe-invalid-pairing",
+        now=now,
+    )
+    assert invalid["cryptographic_valid"] is False and invalid["policy"] is None
+    reports.append(invalid)
+    fresh = await observe(key="observe-again", now=now + 1)
+    assert fresh["observation_id"] != first["observation_id"]
+    reports.append(fresh)
+    assert configuration.transfer.originator.wallet not in json.dumps(reports)
+    with pytest.raises(ValueError):
+        ObservationRecord.model_validate_json(
+            json.dumps({k: v for k, v in dict(first, mode="enforcement").items() if k != "observation_id"})
+        )
+    for references in (cases["DENY"], ()):
+        with pytest.raises(RecordConflict):
+            await observe(refs=references)
+    other_actor = Principal.model_validate({**observer.model_dump(), "actor_id": "another-observer"})
+    with pytest.raises(RecordConflict):
+        await ProofObservationService(db, cipher(), other_actor, verifier, configuration).observe(
+            credential_id, proof, signals, cases["ALLOW"], fact_trust=trust, idempotency_key="observe-allow", now=now
+        )
+    no_write = Principal.model_validate(
+        {**observer.model_dump(), "roles": ("proof:inspect", "policy:read", "evidence:decrypt")}
+    )
+    with pytest.raises(HTTPException) as denied:
+        await ProofObservationService(db, cipher(), no_write, verifier, configuration).observe(
+            credential_id, proof, signals, cases["ALLOW"], fact_trust=trust, idempotency_key="forbidden", now=now
+        )
+    assert denied.value.status_code == 403
+    with pytest.raises(RecordConflict):
+        async with PilotStore(db, cipher(), observer).transaction() as tx:
+            await tx.put("observation", first["observation_id"], {}, expected_revision=1)
+    # Even a consumption-authorized actor cannot use an observation as an authorization proof.
+    with pytest.raises(psycopg.errors.ForeignKeyViolation):
+        async with PilotStore(db, cipher(), principal).transaction() as tx:
+            await tx.consume(format(int(signals[3]), "064x"), first["observation_id"])
+    original_put = PilotTransaction._put
+
+    async def fail_idempotency(tx, kind, *args, **kwargs):
+        if kind == "idempotency":
+            raise RuntimeError("injected observation transaction failure")
+        return await original_put(tx, kind, *args, **kwargs)
+
+    with monkeypatch.context() as patch:
+        patch.setattr(PilotTransaction, "_put", fail_idempotency)
+        with pytest.raises(RuntimeError, match="injected observation"):
+            await observe(key="observe-rollback")
+    with pytest.raises(ValueError):
+        await service.observe(
+            credential_id,
+            proof,
+            [str(int(signals[0]) + 1), *signals[1:]],
+            cases["ALLOW"],
+            fact_trust=trust,
+            idempotency_key="observe-wrong-binding",
+            now=now,
+        )
+    await db.close()
+    await db.connect()
+    # A retry after proof expiry and authority replacement is historical retrieval, not reevaluation.
+    assert (
+        await observe(refs=tuple(reversed(cases["ALLOW"])), now=int(signals[5]) + 1, fact_trust=excluded_trust) == first
+    )
+    with pytest.raises(ValueError):
+        await observe(key="observe-expired-new-request", now=int(signals[5]) + 1)
+    foreign = Principal.model_validate({**observer.model_dump(), "tenant_id": "foreign"})
+    for report in reports:
+        assert await read_observation(db, cipher(), observer, report["observation_id"]) == report
+        assert await read_observation(db, cipher(), foreign, report["observation_id"]) is None
+    restricted = Principal.model_validate({**observer.model_dump(), "roles": ("evidence:decrypt",)})
+    with pytest.raises(HTTPException):
+        await read_observation(db, cipher(), restricted, first["observation_id"])
+    async with db.connection() as conn:
+        assert (await (await conn.execute("SELECT count(*) FROM pilot_records")).fetchone())[0] == baseline + 12
+        rows = await (
+            await conn.execute("SELECT row_to_json(r)::text FROM pilot_records r WHERE kind='observation'")
+        ).fetchall()
+        assert len(rows) == 6
+        assert all("observe-allow" not in row[0] and '"outcome"' not in row[0] for row in rows)
+        assert (await (await conn.execute("SELECT count(*) FROM pilot_consumptions")).fetchone())[0] == 0
