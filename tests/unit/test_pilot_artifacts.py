@@ -27,6 +27,7 @@ def bundle(tmp_path):
     # Deliberately not cryptographic test vectors: this suite tests the loader.
     # Groth16 verification remains a separate requirement.
     value = {
+        "proof_profile": "pilot-transfer-v2",
         "policy_schema_digest": POLICY_SCHEMA_DIGEST,
         "source_bundle_digest": "34" * 32,
         "compiler_sha256": "56" * 32,
@@ -161,7 +162,7 @@ def test_context_cannot_select_another_key_or_profile(bundle):
     root, _, pin = bundle
     result = inspect_artifacts(root, trusted_digest=pin)
     fixture = json.loads((Path(__file__).resolve().parents[2] / "specs/fixtures/transfer-v1.json").read_text())
-    data = {**fixture["records"][1]["value"], "artifact_manifest_digest": pin, "proof_profile": "pilot-transfer-v1"}
+    data = {**fixture["records"][1]["value"], "artifact_manifest_digest": pin, "proof_profile": "pilot-transfer-v2"}
     result.check_artifact_context(VerificationContext.model_validate(data))
     for key, changed in [("artifact_manifest_digest", "ab" * 32), ("proof_profile", "legacy-v1")]:
         with pytest.raises(ArtifactError, match="artifact_context_mismatch"):
@@ -192,7 +193,26 @@ def test_pinned_unknown_policy_schema_is_inspectable_but_not_current_compatible(
     assert inspected.report()["policy_schema_supported"] is False
     fixture = json.loads((Path(__file__).resolve().parents[2] / "specs/fixtures/transfer-v1.json").read_text())
     context = VerificationContext.model_validate(
-        {**fixture["records"][1]["value"], "artifact_manifest_digest": pin, "proof_profile": "pilot-transfer-v1"}
+        {**fixture["records"][1]["value"], "artifact_manifest_digest": pin, "proof_profile": "pilot-transfer-v2"}
     )
     with pytest.raises(ArtifactError, match="^unsupported_policy_schema$"):
+        inspected.check_artifact_context(context)
+
+
+def test_v1_remains_inspectable_but_cannot_enter_current_context(bundle):
+    from pathlib import Path
+
+    from src.protocol.transfer import VerificationContext
+
+    root, value, _ = bundle
+    value.pop("proof_profile")  # Original v1 manifests omitted the default field.
+    pin = publish(root, value)
+    inspected = inspect_artifacts(root, trusted_digest=pin)
+    assert inspected.manifest.proof_profile == "pilot-transfer-v1"
+    assert inspected.report()["current_profile_supported"] is False
+    fixture = json.loads((Path(__file__).resolve().parents[2] / "specs/fixtures/transfer-v1.json").read_text())
+    context = VerificationContext.model_validate(
+        {**fixture["records"][1]["value"], "artifact_manifest_digest": pin, "proof_profile": "pilot-transfer-v1"}
+    )
+    with pytest.raises(ArtifactError, match="historical_profile_not_current"):
         inspected.check_artifact_context(context)

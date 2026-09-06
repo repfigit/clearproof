@@ -76,7 +76,7 @@ class PairingInspection:
     cryptographic_valid: bool
     # Explicitly no ambiguous `valid`/`compliant`/`authorized` property.
     manifest_digest: str
-    proof_profile: Literal["pilot-transfer-v1"] = "pilot-transfer-v1"
+    proof_profile: Literal["pilot-transfer-v1", "pilot-transfer-v2"]
 
 
 _RUNNER = r"""
@@ -182,7 +182,9 @@ class PilotPairingVerifier:
                 stdout, _ = await asyncio.wait_for(proc.communicate(payload), timeout=timeout)
                 if proc.returncode != 0 or stdout not in (b"0", b"1"):
                     raise ProofInspectionError("pairing_runtime_failed")
-                return PairingInspection(stdout == b"1", self.artifacts.manifest.digest)
+                return PairingInspection(
+                    stdout == b"1", self.artifacts.manifest.digest, self.artifacts.manifest.proof_profile
+                )
             except asyncio.TimeoutError:
                 raise ProofInspectionError("pairing_timeout") from None
             except OSError:

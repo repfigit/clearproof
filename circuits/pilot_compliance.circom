@@ -3,7 +3,7 @@ include "./pilot_transfer.circom";
 include "./pilot_credential.circom";
 include "./pilot_sanctions.circom";
 
-// Development profile pilot-transfer-v1. Eight public inputs; no SAR/tier output.
+// Development profile pilot-transfer-v2. Eight public inputs; no SAR/tier output.
 // State/authority, quote/policy provenance, revocation and consumption are
 // verifier responsibilities. See ADR 0006 before enabling authorization.
 template PilotCompliance(issuance_depth, issuer_depth, sanctions_depth) {
@@ -17,6 +17,7 @@ template PilotCompliance(issuance_depth, issuer_depth, sanctions_depth) {
     signal input domain_registry;
 
     signal input transfer_fields[48];
+    signal input transfer_projection_commitment;
     signal input valuation_remainder;
     signal input credential_fields[13];
     signal input credential_commitment;
@@ -36,7 +37,13 @@ template PilotCompliance(issuance_depth, issuer_depth, sanctions_depth) {
     component transfer = PilotTransferProjection();
     for (var i = 0; i < 48; i++) { transfer.transfer_fields[i] <== transfer_fields[i]; }
     transfer.valuation_remainder <== valuation_remainder;
-    transfer.projection_commitment <== projection_commitment;
+    transfer.projection_commitment <== transfer_projection_commitment;
+    component bound = Poseidon(4);
+    bound.inputs[0] <== 204;
+    bound.inputs[1] <== transfer_projection_commitment;
+    bound.inputs[2] <== credential_commitment;
+    bound.inputs[3] <== issuance_root;
+    projection_commitment === bound.out;
     evaluated_at === transfer_fields[23];
     domain_chain_id === transfer_fields[26];
     domain_registry === transfer_fields[27];

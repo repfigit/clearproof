@@ -45,6 +45,13 @@ async def test_real_pinned_pairing_and_tampered_proof():
     assert expected == [witness[name] for name in PUBLIC_SIGNALS]
     result = await verifier.inspect(proof, signals, expected_signals=expected)
     assert result.cryptographic_valid
+    alternate, _ = fixture["synthetic_case"](
+        artifact_manifest_digest=artifacts.manifest.digest, alternate_credential=True
+    )
+    alternate_signals = [alternate[name] for name in PUBLIC_SIGNALS]
+    assert not (
+        await verifier.inspect(proof, alternate_signals, expected_signals=alternate_signals)
+    ).cryptographic_valid
     other_digest = "ab" * 32 if artifacts.manifest.digest != "ab" * 32 else "cd" * 32
     other_witness, other_context = fixture["synthetic_case"](artifact_manifest_digest=other_digest)
     with pytest.raises(ArtifactError, match="artifact_context_mismatch"):

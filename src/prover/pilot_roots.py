@@ -56,7 +56,7 @@ def verify_pilot_roots(
     if (
         type(now) is not int
         or not context.evaluated_at <= now <= 2**53 - 1
-        or context.proof_profile != "pilot-transfer-v1"
+        or context.proof_profile != "pilot-transfer-v2"
         or (context.tenant_id, context.deployment_chain_id, context.deployment_address)
         != (pins.tenant_id, str(pins.chain_id), pins.registry_address)
         or (context.issuance_snapshot_digest, context.issuer_snapshot_digest, context.sanctions_snapshot_digest)

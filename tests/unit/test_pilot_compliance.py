@@ -20,11 +20,11 @@ from src.registry.pilot_tree import PilotTree
 ROOT = Path(__file__).resolve().parents[2]
 
 
-def synthetic_case(*, artifact_manifest_digest=None):
+def synthetic_case(*, artifact_manifest_digest=None, alternate_credential=False):
     fixture = json.loads((ROOT / "specs/fixtures/transfer-v1.json").read_text())
     transfer = Transfer.model_validate(fixture["records"][0]["value"])
     context = VerificationContext.model_validate(
-        {**fixture["records"][1]["value"], "proof_profile": "pilot-transfer-v1"}
+        {**fixture["records"][1]["value"], "proof_profile": "pilot-transfer-v2"}
     )
     if artifact_manifest_digest is not None:
         context = VerificationContext.model_validate(
@@ -73,7 +73,10 @@ def synthetic_case(*, artifact_manifest_digest=None):
         issued_at=transfer.created_at,
         expires_at=transfer.expires_at,
     )
-    issuance = PilotTree([("credential", credential.commitment)], depth=8)
+    alternate = PilotCredential.model_validate({**credential.model_dump(), "credential_nonce": "cd" * 32})
+    issuance = PilotTree([("credential", credential.commitment), ("alternate", alternate.commitment)], depth=8)
+    if alternate_credential:
+        credential = alternate
     issuers = PilotTree([("issuer", credential.authorized_issuer_leaf(issuance.root))], depth=8)
     quote_key = Ed25519PrivateKey.generate()
     quote_authority = ValuationAuthority(
@@ -103,7 +106,7 @@ def synthetic_case(*, artifact_manifest_digest=None):
         registry,
         credential,
         secret="123456",
-        issuance_path=issuance.membership("credential"),
+        issuance_path=issuance.membership("alternate" if alternate_credential else "credential"),
         issuer_path=issuers.membership("issuer"),
         sanctions=PilotSanctionsTree([]),
         valuation_approval=quote_approval,
@@ -227,3 +230,17 @@ def test_actual_manifest_binding_changes_proved_projection():
     assert first["projection_commitment"] != second["projection_commitment"]
     # Changing artifacts must not create another spend of the same authorization.
     assert first["authorization_nullifier"] == second["authorization_nullifier"]
+
+
+def test_valid_credential_substitution_requires_a_different_public_commitment(compiled, tmp_path):
+    original, context = synthetic_case()
+    alternate, alternate_context = synthetic_case(alternate_credential=True)
+    assert context == alternate_context
+    assert original["authorized_issuer_root"] == alternate["authorized_issuer_root"]
+    assert original["issuance_root"] == alternate["issuance_root"]
+    assert original["authorization_nullifier"] == alternate["authorization_nullifier"]
+    assert original["projection_commitment"] != alternate["projection_commitment"]
+    assert calculate(compiled, tmp_path, alternate).returncode == 0
+    alternate["projection_commitment"] = original["projection_commitment"]
+    result = calculate(compiled, tmp_path, alternate)
+    assert result.returncode != 0 and b"Assert Failed" in result.stderr

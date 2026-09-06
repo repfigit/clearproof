@@ -124,7 +124,7 @@ def main():
     # Reproduce the composed profile from synthetic fixtures, without private data.
     from src.policy.model import POLICY_SCHEMA_DIGEST
     from src.prover.pilot_artifacts import PilotArtifactManifest, inspect_artifacts
-    from src.prover.pilot_compliance import PUBLIC_SIGNALS
+    from src.prover.pilot_compliance import PROFILE, PUBLIC_SIGNALS
 
     pilot = output / "pilot"
     shutil.copyfile(pilot / "pilot_compliance_js/pilot_compliance.wasm", pilot / "pilot_compliance.wasm")
@@ -137,6 +137,7 @@ def main():
     source_bytes = json.dumps(sources, sort_keys=True, separators=(",", ":")).encode()
     (output / "source-inventory.json").write_bytes(source_bytes)
     value = {
+        "proof_profile": PROFILE,
         "policy_schema_digest": POLICY_SCHEMA_DIGEST,
         "source_bundle_digest": hashlib.sha256(source_bytes).hexdigest(),
         "compiler_sha256": digest(Path(circom)),

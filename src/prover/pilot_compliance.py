@@ -1,4 +1,4 @@
-"""Witness encoder for pilot-transfer-v1; not an authorization verifier.
+"""Witness encoder for pilot-transfer-v2; not an authorization verifier.
 
 Callers must authenticate records, policy/quote provenance, roots and current
 revocation separately. Returned private inputs must never be logged or stored
@@ -6,11 +6,12 @@ outside an encrypted envelope.
 """
 
 from src.policy.model import PolicyTrustStore
-from src.protocol.credential import PilotCredential
+from src.protocol.credential import PilotCredential, scalar
 from src.protocol.transfer import AssetRegistry, Transfer, VerificationContext
 from src.protocol.valuation_approval import SignedValuationApproval, ValuationTrustStore
 from src.prover.pilot_projection import project_transfer
 from src.registry.pilot_sanctions import PilotSanctionsTree
+from src.registry.poseidon import poseidon_hash
 
 PUBLIC_SIGNALS = (
     "projection_commitment",
@@ -22,7 +23,12 @@ PUBLIC_SIGNALS = (
     "domain_chain_id",
     "domain_registry",
 )
-PROFILE = "pilot-transfer-v1"
+PROFILE = "pilot-transfer-v2"
+
+
+def credential_bound_projection(projection: str, credential_commitment: str, issuance_root: str) -> str:
+    """v2 public commitment to the transfer and exact privately proved credential."""
+    return str(poseidon_hash([204, scalar(projection), scalar(credential_commitment), scalar(issuance_root)]))
 
 
 def compliance_witness(
@@ -73,6 +79,10 @@ def compliance_witness(
     for name in ("expected_tenant", "expected_subject", "expected_jurisdiction"):
         del data[name]
     data.update(projection.witness())
+    data["transfer_projection_commitment"] = projection.commitment
+    data["projection_commitment"] = credential_bound_projection(
+        projection.commitment, credential.commitment, issuance_path["root"]
+    )
     data.update(
         sanctions_root=sanctions.root,
         authorization_nullifier=projection.nullifier(secret),

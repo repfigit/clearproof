@@ -58,7 +58,7 @@ class ArtifactFile(Record):
 
 class PilotArtifactManifest(Record):
     schema_version: Literal["clearproof-artifact-manifest-v1"] = "clearproof-artifact-manifest-v1"
-    proof_profile: Literal["pilot-transfer-v1"] = "pilot-transfer-v1"
+    proof_profile: Literal["pilot-transfer-v1", "pilot-transfer-v2"] = "pilot-transfer-v1"
     protocol: Literal["groth16"] = "groth16"
     curve: Literal["bn128"] = "bn128"
     assurance: Literal["development-unapproved"] = "development-unapproved"
@@ -108,6 +108,8 @@ class InspectedArtifacts:
             self.manifest.proof_profile,
         ):
             raise ArtifactError("artifact_context_mismatch")
+        if self.manifest.proof_profile != "pilot-transfer-v2":
+            raise ArtifactError("historical_profile_not_current")
         if self.manifest.policy_schema_digest != POLICY_SCHEMA_DIGEST:
             raise ArtifactError("unsupported_policy_schema")
 
@@ -119,6 +121,7 @@ class InspectedArtifacts:
             "checked_artifacts": list(ARTIFACT_ROLES),
             "production_eligible": False,
             "policy_schema_supported": self.manifest.policy_schema_digest == POLICY_SCHEMA_DIGEST,
+            "current_profile_supported": self.manifest.proof_profile == "pilot-transfer-v2",
         }
 
 

@@ -96,3 +96,8 @@ selection from independent operator pins. Approved thresholds and policy digest
 now feed the same private projection. Current authorization must repeat that
 selection independently; the amount tier does not itself encode a business or
 legal ALLOW decision.
+
+The current development profile is superseded by `pilot-transfer-v2` in
+[ADR 0009](0009-credential-bound-pilot-profile.md). V1 remains available only for
+explicitly pinned read-only cryptographic inspection; its transfer commitment
+cannot support exact-credential current revocation acceptance.
