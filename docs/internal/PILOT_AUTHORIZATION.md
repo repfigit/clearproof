@@ -18,6 +18,7 @@ Authorization also requires a [trusted recipient envelope](PILOT_RECIPIENT_ENVEL
 The supplied bytes must first satisfy the [bound information profile](PILOT_TRANSFER_INFORMATION.md).
 An independently trusted [information approval](PILOT_INFORMATION_APPROVAL.md)
 must cover the exact bytes and credential before the current inspection proceeds.
+A server-configured [decision signer](PILOT_DECISION_ATTESTATION.md) is also required.
 After ALLOW it seals those validated bytes to a currently approved beneficiary VASP
 key. Encryption failure rejects the operation before any consumption commits.
 
@@ -26,7 +27,7 @@ policy/root/revocation writers. After `ALLOW`, it retains:
 
 - An immutable encrypted proof record containing exact original proof bytes as
   base64, their SHA-256 digest, public signals, transfer/context, credential and
-  fact references, the policy evaluation and recipient-encrypted payload.
+  fact references, the policy evaluation, recipient-encrypted payload and signed decision attestation.
 - An immutable encrypted `clearproof-local-authorization-v1` receipt binding the
   proof record, tenant/actor, transfer/context/policy, artifact/profile, nullifier,
   authorization time, proof expiry and exact randomized envelope digest. Its
@@ -53,7 +54,8 @@ evidence manifest and configuration chunks.
 
 This service records a local policy authorization. It has no public API endpoint,
 recipient envelope delivery, payment execution or on-chain consumption adapter.
-It does not establish agreement with SDK/contract acceptance or supply portable
-historical evidence. Those integrations remain required pilot work. Development
+It does not establish agreement with SDK/contract acceptance or complete historical
+verification. Encrypted export and partial offline inspection are available;
+authenticated timing/status and those integrations remain required pilot work. Development
 keys and synthetic policy/attestation sources provide no production assurance or
 legal certification.

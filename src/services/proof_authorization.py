@@ -5,6 +5,7 @@ import hashlib
 
 from src.policy.fact_approval import FactTrustStore
 from src.protocol.canonical import record_digest
+from src.protocol.decision_attestation import DecisionSigner
 from src.protocol.information_approval import InformationTrustStore, SignedInformationApproval
 from src.protocol.transfer_information import validate_transfer_information
 from src.prover.pilot_verifier import PilotProof, public_signals
@@ -30,6 +31,7 @@ class ProofAuthorizationService(ProofInspectionService):
         pii: bytes,
         information_approval: SignedInformationApproval,
         information_trust: InformationTrustStore,
+        decision_signer: DecisionSigner,
         recipient_trust: RecipientTrustStore,
         recipient_key_id: str,
         idempotency_key: str,
@@ -123,6 +125,7 @@ class ProofAuthorizationService(ProofInspectionService):
                 "evidence_id": evidence_id,
             }
             receipt_id = record_digest("clearproof/local-authorization/v1", receipt)
+            attested_decision = decision_signer.sign(receipt, self._context)
             await tx.put(
                 "proof",
                 proof_id,
@@ -135,6 +138,7 @@ class ProofAuthorizationService(ProofInspectionService):
                     "policy_evaluation": decision.model_dump(mode="json"),
                     "recipient_envelope": envelope,
                     "information_approval": information_approval.model_dump(mode="json"),
+                    "decision_attestation": attested_decision.model_dump(mode="json"),
                 },
             )
             await tx.put("receipt", receipt_id, receipt)

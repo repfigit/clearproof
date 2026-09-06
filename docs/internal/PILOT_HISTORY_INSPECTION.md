@@ -32,7 +32,7 @@ Without statement trust it checks only the captured vector. The report keeps
 - Missing referenced evidence or unavailable pairing yields `indeterminate`.
 - Successful reconstruction sets `statement_valid`; unavailable historical trust
   stays indeterminate, and a reconstructed-vector mismatch contradicts the claim.
-- Successful pairing still yields `indeterminate`, naming decision authority,
+- Successful pairing still yields `indeterminate`, naming any unverified decision authority,
   historical revocation and independent timing evidence gaps. If reconstruction
   was omitted, unverified semantics is also reported. This implementation cannot
   yet return `supported`.
@@ -70,7 +70,16 @@ not establish those pins' authority or prove absence of intervening compromise.
 
 Tests reproduce the original policy report, detect a fabricated report reason,
 and refuse a fact source excluded by reviewer trust. Successful replay still
-retains missing decision authority, status history and independent timing reasons.
+retains status history and independent timing reasons, plus decision authority
+when its independent check is omitted.
 
-Required next layers are historical status and compromise handling, decision/timing authority, the
+Required next layers are historical status and broader compromise handling, independent timing authority, the
 `supported` path and `verify-history` CLI. This stage does not complete CP-015.
+
+Reviewer-supplied `decision_trust` verifies the retained
+[decision attestation](PILOT_DECISION_ATTESTATION.md) against the exact receipt,
+evidence and context. Success sets `decision_authenticated` and removes the
+unverified-decision reason. An invalid signature yields `contradicted`; missing,
+unknown or compromised authority yields `indeterminate`. Compromise is checked at
+reviewer time, so an operator's claimed earlier time cannot bypass it. Successful
+authentication still leaves historical status and independent timing unresolved.

@@ -1774,6 +1774,19 @@ async def test_durable_current_inspection_real_pairing_and_revocation(db, monkey
                 information_trust=InformationTrustStore([information_authority]),
             )
 
+            from src.protocol.decision_attestation import DecisionAuthority, DecisionSigner, DecisionTrustStore
+
+            decision_key = Ed25519PrivateKey.generate()
+            decision_authority = DecisionAuthority(
+                tenant_id=principal.tenant_id,
+                chain_id=int(configuration.context.deployment_chain_id),
+                registry_address=configuration.context.deployment_address,
+                public_key=decision_key.public_key().public_bytes_raw().hex(),
+                not_before=now,
+                not_after=credential.expires_at,
+            )
+            payload_args["decision_signer"] = DecisionSigner(decision_authority, decision_key)
+
             async def authorize(key="consume-once", references=refs, who=authorizer, body=proof, **changes):
                 return await who.authorize(
                     credential.credential_nonce,
@@ -1824,6 +1837,11 @@ async def test_durable_current_inspection_real_pairing_and_revocation(db, monkey
                 patch.setattr(authorization_module, "seal_pilot_envelope", fail_encryption)
                 with pytest.raises(RuntimeError, match="synthetic encryption"):
                     await authorize()
+            foreign_authority = DecisionAuthority.model_validate(
+                {**decision_authority.model_dump(), "tenant_id": "foreign"}
+            )
+            with pytest.raises(ValueError, match="Decision signer"):
+                await authorize(decision_signer=DecisionSigner(foreign_authority, decision_key))
             original_consume = PilotTransaction.consume
 
             async def fail_after_consume(tx, *values):
@@ -2059,6 +2077,30 @@ async def test_durable_current_inspection_real_pairing_and_revocation(db, monkey
             assert replayed.statement_valid and replayed.cryptographic_valid and replayed.policy_reproduced
             assert replayed.outcome == "indeterminate" and "policy_replay_unverified" not in replayed.reasons
             assert "historical_revocation_evidence_missing" in replayed.reasons
+            decision_trust = DecisionTrustStore([decision_authority])
+            attested = await inspect_history_bundle(
+                bundle,
+                verifier,
+                statement_trust=historical_trust,
+                fact_trust=trust,
+                decision_trust=decision_trust,
+                **history_args,
+            )
+            assert attested.decision_authenticated and attested.policy_reproduced and attested.statement_valid
+            assert attested.outcome == "indeterminate" and "decision_authority_unverified" not in attested.reasons
+            bad_decision_signature = deepcopy(bundle)
+            bad_decision_signature["proof"]["decision_attestation"]["signature"] = "00" * 64
+            bad_attestation = await inspect_history_bundle(
+                bad_decision_signature, verifier, decision_trust=decision_trust, **history_args
+            )
+            assert bad_attestation.outcome == "contradicted" and bad_attestation.reasons == (
+                "decision_signature_invalid",
+            )
+            compromised = DecisionTrustStore(
+                [DecisionAuthority.model_validate({**decision_authority.model_dump(), "compromised_at": now + 1})]
+            )
+            uncertain = await inspect_history_bundle(bundle, verifier, decision_trust=compromised, **history_args)
+            assert uncertain.outcome == "indeterminate" and not uncertain.decision_authenticated
             forged_decision = deepcopy(bundle)
             forged_decision["proof"]["policy_evaluation"]["reasons"] = ["fabricated_reason"]
             disagreement = await inspect_history_bundle(

@@ -29,10 +29,11 @@ private evidence to its authorized caller; it does not print or persist it.
 Decryption is not historical verification. A separate
 [offline inspector](PILOT_HISTORY_INSPECTION.md) checks linked integrity and real
 pairing against reviewer-supplied pins, while retaining an indeterminate historical
-outcome when authority evidence is missing. The exported artifact is not a signed
-decision certificate and HPKE base mode does not authenticate the exporter.
+outcome when authority evidence is missing. The exported proof includes a signed decision attestation; independent reviewer
+trust is required to authenticate it. HPKE base mode does not authenticate the
+exporter.
 Captured/local clocks and local revocation absence remain explicitly labeled.
-Independent historical trust, authenticated decision and timing evidence,
+Complete historical authority and authenticated timing/status evidence,
 supported/contradicted/indeterminate reporting and the public `verify-history`
 command remain required CP-015 work.
 

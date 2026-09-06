@@ -8,6 +8,7 @@ from typing import Literal
 
 from src.policy.fact_approval import FactTrustStore
 from src.protocol.canonical import canonical_bytes, record_digest
+from src.protocol.decision_attestation import DecisionSignatureError, DecisionTrustStore, SignedDecision
 from src.protocol.transfer import Transfer, VerificationContext
 from src.prover.history_policy import replay_history_policy
 from src.prover.history_statement import HistoryStatementTrust, reconstruct_history_statement
@@ -23,6 +24,7 @@ class HistoryInspection:
     reasons: tuple[str, ...]
     statement_valid: bool | None = None
     policy_reproduced: bool | None = None
+    decision_authenticated: bool | None = None
 
 
 class MissingHistoryEvidence(ValueError):
@@ -141,6 +143,7 @@ async def inspect_history_bundle(
     verified_at: int,
     statement_trust: HistoryStatementTrust | None = None,
     fact_trust: FactTrustStore | None = None,
+    decision_trust: DecisionTrustStore | None = None,
 ) -> HistoryInspection:
     """Pins and verifier come from the reviewer, never from the exported bundle.
 
@@ -184,6 +187,35 @@ async def inspect_history_bundle(
             return HistoryInspection(
                 "contradicted", True, True, verified_at, ("policy_decision_mismatch",), True, False
             )
+    decision_authenticated = None
+    if decision_trust is not None:
+        try:
+            signed = SignedDecision.model_validate_json(json.dumps(bundle["proof"]["decision_attestation"]))
+            context = VerificationContext.model_validate_json(json.dumps(bundle["proof"]["context"]))
+            decision_trust.verify(signed, bundle["receipt"], context, verified_at=verified_at)
+            decision_authenticated = True
+        except DecisionSignatureError:
+            return HistoryInspection(
+                "contradicted",
+                True,
+                True,
+                verified_at,
+                ("decision_signature_invalid",),
+                statement_valid,
+                policy_reproduced,
+                False,
+            )
+        except (ValueError, KeyError, TypeError):
+            return HistoryInspection(
+                "indeterminate",
+                True,
+                True,
+                verified_at,
+                ("decision_authority_unavailable",),
+                statement_valid,
+                policy_reproduced,
+                False,
+            )
     return HistoryInspection(
         "indeterminate",
         True,
@@ -192,10 +224,11 @@ async def inspect_history_bundle(
         (
             *(("statement_semantics_unverified",) if statement_valid is None else ()),
             *(("policy_replay_unverified",) if policy_reproduced is None else ()),
-            "decision_authority_unverified",
+            *(("decision_authority_unverified",) if decision_authenticated is None else ()),
             "historical_revocation_evidence_missing",
             "independent_timing_evidence_missing",
         ),
         statement_valid,
         policy_reproduced,
+        decision_authenticated,
     )
