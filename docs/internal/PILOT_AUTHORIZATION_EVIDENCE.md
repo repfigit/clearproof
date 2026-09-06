@@ -26,8 +26,9 @@ Later revocation or activation cannot overwrite the prior capture, but must stil
 be considered by a future historical verifier under independently configured
 trust and compromise rules.
 
-This is the durable input-preservation layer for CP-015. Portable encrypted export,
-authenticated decision/timing evidence, independent bundle trust configuration,
+This is the durable input-preservation layer for CP-015. A separate
+[encrypted export service](PILOT_EVIDENCE_EXPORT.md) assembles these pinned records
+for an approved reviewer. Authenticated decision/timing evidence, independent bundle trust configuration,
 and offline supported/contradicted/indeterminate evaluation are not implemented by
 the capture function. Captured manifests or keys are evidence to check, not trust
 anchors to accept automatically.

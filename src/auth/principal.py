@@ -20,6 +20,7 @@ Role = Literal[
     "proof:consume",
     "evidence:read",
     "evidence:decrypt",
+    "evidence:export",
     "events:ingest",
     "facts:ingest",
     "policy:read",

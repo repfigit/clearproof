@@ -1968,6 +1968,108 @@ async def test_durable_current_inspection_real_pairing_and_revocation(db, monkey
                     await tx.put(
                         "authorization-evidence", receipt["evidence_id"], evidence_manifest, expected_revision=1
                     )
+            from src.sar.hpke_envelope import derive_key_id
+            from src.services.evidence_export import EvidenceExportService, EvidenceRecipient, open_evidence_bundle
+
+            reviewer_private, reviewer_public = generate_keypair()
+            reviewer = EvidenceRecipient(
+                tenant_id=principal.tenant_id,
+                reviewer_id="synthetic-reviewer",
+                public_key=reviewer_public.hex(),
+                not_before=now,
+                not_after=now + 120,
+            )
+            export_principal = Principal(
+                tenant_id=principal.tenant_id, actor_id="exporter", roles=("evidence:export", "evidence:decrypt")
+            )
+            exporter = EvidenceExportService(db, cipher(), export_principal, reviewer)
+            async with db.connection() as conn:
+                before_export = (await (await conn.execute("SELECT count(*) FROM pilot_records")).fetchone())[0]
+            with pytest.raises(HTTPException):
+                await EvidenceExportService(db, cipher(), principal, reviewer).export(
+                    receipt["receipt_id"], now=now + 2
+                )
+            with pytest.raises(ValueError, match="currently approved"):
+                await exporter.export(receipt["receipt_id"], now=now + 120)
+            with pytest.raises(ValueError, match="tenant mismatch"):
+                EvidenceExportService(
+                    db,
+                    cipher(),
+                    export_principal,
+                    EvidenceRecipient.model_validate({**reviewer.model_dump(), "tenant_id": "foreign"}),
+                )
+            encrypted = await exporter.export(receipt["receipt_id"], now=now + 2)
+            expected_export_binding = {
+                "tenant_id": principal.tenant_id,
+                "receipt_id": receipt["receipt_id"],
+                "reviewer_id": reviewer.reviewer_id,
+                "key_id": derive_key_id(reviewer_public),
+                "exported_at": now + 2,
+            }
+            bundle = open_evidence_bundle(encrypted, reviewer_private, expected_binding=expected_export_binding)
+            assert bundle["evidence_manifest"] == evidence_manifest
+            assert bundle["proof"] == record
+            assert bundle["receipt"] == {k: v for k, v in receipt.items() if k != "receipt_id"}
+            assert b"Synthetic" not in encrypted and b"proof_base64" not in encrypted
+            captured_selection = next(r for r in bundle["records"] if r["kind"] == "policy-activation")
+            assert captured_selection["revision"] == 1 and captured_selection["value"]["policy_digest"] == policy.digest
+            for name, encoded in bundle["configuration_base64"].items():
+                assert base64.b64decode(encoded, validate=True) == expected_config[name]
+            with pytest.raises(ValueError):
+                open_evidence_bundle(encrypted, generate_keypair()[0], expected_binding=expected_export_binding)
+            with pytest.raises(ValueError):
+                open_evidence_bundle(
+                    encrypted, reviewer_private, expected_binding={**expected_export_binding, "receipt_id": "00" * 32}
+                )
+            corrupted = json.loads(encrypted)
+            text = corrupted["hpke"]["ct"]
+            corrupted["hpke"]["ct"] = ("A" if text[0] != "A" else "B") + text[1:]
+            with pytest.raises(ValueError):
+                open_evidence_bundle(
+                    json.dumps(corrupted).encode(), reviewer_private, expected_binding=expected_export_binding
+                )
+            # A fresh process can decrypt with no database or network access.
+            await db.close()
+            offline = subprocess.run(
+                [
+                    str(Path(__file__).parents[2] / ".venv/bin/python"),
+                    "-c",
+                    "import json,sys,socket; from src.services.evidence_export import open_evidence_bundle; "
+                    "socket.socket.connect=lambda *a,**k: (_ for _ in ()).throw(RuntimeError('network forbidden')); "
+                    "v=json.load(sys.stdin); b=open_evidence_bundle(v['encrypted'].encode(),bytes.fromhex(v['key']),"
+                    "expected_binding=v['binding']); print(json.dumps({'receipt_id':b['receipt_id'],"
+                    "'records':len(b['records'])}))",
+                ],
+                input=json.dumps(
+                    {"encrypted": encrypted.decode(), "key": reviewer_private.hex(), "binding": expected_export_binding}
+                ),
+                capture_output=True,
+                text=True,
+                timeout=15,
+            )
+            assert offline.returncode == 0, "Offline export decryption failed"
+            assert json.loads(offline.stdout) == {
+                "receipt_id": receipt["receipt_id"],
+                "records": len(bundle["records"]),
+            }
+            await db.connect()
+            real_get = PilotTransaction.get
+
+            async def missing_chunk(tx, kind, identity):
+                if (
+                    kind == "authorization-evidence"
+                    and identity in evidence_manifest["configuration"]["verification_key"]["chunks"]
+                ):
+                    return None
+                return await real_get(tx, kind, identity)
+
+            with monkeypatch.context() as patch:
+                patch.setattr(PilotTransaction, "get", missing_chunk)
+                with pytest.raises(ValueError, match="chunk unavailable"):
+                    await exporter.export(receipt["receipt_id"], now=now + 2)
+            async with db.connection() as conn:
+                assert (await (await conn.execute("SELECT count(*) FROM pilot_records")).fetchone())[0] == before_export
+                assert (await (await conn.execute("SELECT count(*) FROM pilot_consumptions")).fetchone())[0] == 1
             return
 
         assert complete.outcome == "INDETERMINATE" and complete.reasons == ("no_decisive_rule",)
