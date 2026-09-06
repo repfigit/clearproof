@@ -286,6 +286,23 @@ async def test_enrollment_api_real_signatures_tenant_binding_and_reconnect(db, m
     async with db.connection() as conn:
         rows = await (await conn.execute("SELECT row_to_json(r)::text FROM pilot_records r")).fetchall()
         assert all(wallet.address.lower() not in row[0] and body["signature"] not in row[0] for row in rows)
+    revoke_token = jwt.encode(
+        {**claims, "roles": ["credential:revoke", "evidence:decrypt"]}, private, algorithm="ES256"
+    )
+    revocation = {"credential_id": "a" * 64, "idempotency_key": "revoke-1", "reason_code": "issuer-withdrawal"}
+    async with AsyncClient(transport=ASGITransport(app=restarted), base_url="http://test") as client:
+        denied = await client.post("/pilot/credential/revoke", json=revocation, headers=headers)
+        assert denied.status_code == 403
+        revoked = await client.post(
+            "/pilot/credential/revoke", json=revocation, headers={"Authorization": "Bearer " + revoke_token}
+        )
+        assert revoked.status_code == 200 and revoked.json()["status"] == "revoked"
+        missing = await client.post(
+            "/pilot/credential/revoke",
+            json={**revocation, "credential_id": "b" * 64},
+            headers={"Authorization": "Bearer " + revoke_token},
+        )
+        assert missing.status_code == 404
 
 
 async def test_signed_root_publication_revision_chain_rotation_and_tenant_boundary(db):
@@ -360,3 +377,78 @@ async def test_signed_root_publication_revision_chain_rotation_and_tenant_bounda
     with pytest.raises(RootTrustError):
         await service.publish(signed, idempotency_key="expired", now=200)
     assert (await reader.read("issuer-root", root_record_id(root))).revision == 2
+
+
+async def test_durable_revocation_scope_retry_and_proving_precondition(db):
+    from eth_account import Account
+
+    from src.protocol.credential import PilotCredential, holder_commitment
+    from src.protocol.enrollment import EnrollmentConsent
+    from src.services.enrollment import (
+        EnrollmentIneligible,
+        EnrollmentNotFound,
+        EnrollmentService,
+        RevocationRequest,
+        load_unrevoked_enrollment,
+    )
+
+    principal = Principal(
+        tenant_id="tenant-a",
+        actor_id="issuer-operator",
+        roles=("credential:issue", "credential:revoke", "evidence:decrypt"),
+        issuer_dids=("did:web:issuer.example",),
+    )
+
+    def service(who=principal):
+        return EnrollmentService(db, cipher(), who, chain_id=31337, registry_address="0x" + "1" * 40)
+
+    wallet = Account.create()
+    credential = PilotCredential(
+        tenant_id="tenant-a",
+        credential_nonce="a" * 64,
+        issuer_did="did:web:issuer.example",
+        subject_wallet=wallet.address.lower(),
+        holder_commitment=holder_commitment("123456"),
+        jurisdiction="US",
+        kyc_tier=2,
+        sanctions_clear=True,
+        issued_at=100,
+        expires_at=1000,
+    )
+    consent = EnrollmentConsent(
+        credential=credential, chain_id=31337, registry_address="0x" + "1" * 40, consent_expires_at=200
+    )
+    signature = "0x" + wallet.sign_message(consent.signing_message()).signature.hex()
+    await service().enroll(consent, signature, idempotency_key="enroll-1", now=110)
+    async with store(db).transaction() as tx:
+        assert await load_unrevoked_enrollment(tx, "a" * 64, now=120) == credential
+        for invalid_time in (109, 1000):
+            with pytest.raises(EnrollmentIneligible):
+                await load_unrevoked_enrollment(tx, "a" * 64, now=invalid_time)
+    request = RevocationRequest(credential_id="a" * 64, idempotency_key="revoke-1", reason_code="issuer-withdrawal")
+    for changes in [{"issuer_dids": ("did:web:other.example",)}, {"roles": ("evidence:decrypt",)}]:
+        unauthorized = Principal.model_validate({**principal.model_dump(), **changes})
+        with pytest.raises(HTTPException) as err:
+            await service(unauthorized).revoke(request, now=120)
+        assert err.value.status_code == 403
+    outsider = Principal.model_validate({**principal.model_dump(), "tenant_id": "tenant-b"})
+    with pytest.raises(EnrollmentNotFound):
+        await service(outsider).revoke(request, now=120)
+    first = await service().revoke(request, now=120)
+    assert first == {"credential_id": "a" * 64, "status": "revoked", "revoked_at": 120}
+    assert await service().revoke(request, now=130) == first
+    with pytest.raises(RecordConflict):
+        await service().revoke(
+            RevocationRequest.model_validate({**request.model_dump(), "reason_code": "other"}), now=130
+        )
+    lost_scope = Principal.model_validate({**principal.model_dump(), "issuer_dids": ()})
+    with pytest.raises(HTTPException):
+        await service(lost_scope).revoke(request, now=130)
+    await db.close()
+    await db.connect()
+    assert await service().revoke(request, now=140) == first
+    async with store(db).transaction() as tx:
+        with pytest.raises(EnrollmentIneligible, match="revoked"):
+            await load_unrevoked_enrollment(tx, "a" * 64, now=140)
+    assert (await store(db).get("credential", "a" * 64))["consent"]["credential"] == credential.model_dump(mode="json")
+    assert (await store(db).get("revocation", "a" * 64))["reason_code"] == "issuer-withdrawal"

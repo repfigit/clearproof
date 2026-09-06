@@ -47,3 +47,25 @@ revocation, composed transfer proving and verification. Neither this endpoint no
 the legacy proof route establishes those gates. Tests use real ES256 API tokens,
 EOA enrollment signatures and PostgreSQL, with app reconstruction and database
 pool reconnection; a full operating-system process recovery test remains open.
+
+## Durable revocation
+
+`POST /pilot/credential/revoke` accepts `credential_id`, `idempotency_key` and an
+opaque `reason_code`. It requires `credential:revoke`, `evidence:decrypt` and the
+exact issuer DID scope for that credential. Scope is checked even on cached
+retries. A credential outside the tenant is not found; a credential belonging to
+another issuer is forbidden. Reason codes and the revoking actor are retained
+inside the encrypted record, and are not logged or returned by the endpoint.
+
+Revocation appends an immutable record and its response in one transaction;
+matching retries return the original time after reconnection. Changed requests
+under the same key conflict. A second independent revocation cannot overwrite the
+first. Enrollment itself remains immutable for historical reconstruction.
+
+`load_unrevoked_enrollment()` reads enrollment and revocation in a caller-held
+transaction, checks tenant/ID/commitment consistency, acceptance and expiry times,
+and screening status. It rejects any recorded revocation. This is a current-use
+precondition, not a historical verifier or complete proving authorization check.
+The composed prover and root builder must call it at their transaction boundary;
+those integrations and independently authenticated revocation evidence remain
+open. This API does not update deployed contracts or the legacy credential route.

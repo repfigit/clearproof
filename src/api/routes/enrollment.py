@@ -9,7 +9,7 @@ from pydantic import Field
 from src.auth.principal import Principal, TenantPrincipalDependency
 from src.protocol.enrollment import EnrollmentConsent, EnrollmentError
 from src.protocol.transfer import OpaqueId, Record
-from src.services.enrollment import EnrollmentService
+from src.services.enrollment import EnrollmentIneligible, EnrollmentNotFound, EnrollmentService, RevocationRequest
 from src.storage.keyring import load_keyring
 from src.storage.pilot import RecordConflict
 from src.storage.pilot_cipher import RecordCipher
@@ -48,3 +48,15 @@ async def enroll(request: EnrollmentRequest, service: EnrollmentService = Depend
         raise HTTPException(status_code=422, detail=str(exc)) from exc
     except RecordConflict as exc:
         raise HTTPException(status_code=409, detail="Enrollment or idempotency key already exists") from exc
+
+
+@router.post("/revoke", summary="Revoke an enrolled credential in durable tenant state")
+async def revoke(request: RevocationRequest, service: EnrollmentService = Depends(enrollment_service)):
+    try:
+        return await service.revoke(request, now=int(time.time()))
+    except EnrollmentNotFound as exc:
+        raise HTTPException(status_code=404, detail="Enrollment not found") from exc
+    except EnrollmentIneligible as exc:
+        raise HTTPException(status_code=422, detail="Revocation timestamp is invalid") from exc
+    except RecordConflict as exc:
+        raise HTTPException(status_code=409, detail="Revocation or idempotency key already exists") from exc

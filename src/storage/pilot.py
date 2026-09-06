@@ -149,6 +149,10 @@ class PilotTransaction:
         self._conn, self._cipher, self._principal = conn, cipher, principal
         self._closed = False
 
+    @property
+    def tenant_id(self) -> str:
+        return self._principal.tenant_id
+
     def _check_open(self):
         if self._closed:
             raise RuntimeError("Pilot transaction is closed")
