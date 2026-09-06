@@ -85,3 +85,36 @@ history and a packaged TypeScript CLI command remain open CP-011 integration.
 Tests exercise real stdin subprocesses and signed JWT requests, tenant and role
 rejection, bounded/malformed input, deterministic ordering, business-identity
 deduplication, reverse review counts and same-ID rule edits.
+
+## Retained policy reviews
+
+`src.services.policy_review.PolicyReviewService.approve` stores an immutable
+approval through the encrypted tenant store. Its operator-authenticated
+principal needs `policy:approve` and `evidence:decrypt`. The service records the
+principal's actor ID and the supplied server clock; API callers must never
+choose either identity or approval time. There is no public approval route yet.
+
+Each request contains one policy and 1–16 reviewed cases with independently
+specified expected outcomes. Evaluation must match every expectation before
+anything is written. Unique case/business-transfer IDs prevent duplicate review
+counts; future case observations and currently inactive policies reject.
+Case snapshots are retained separately under domain-separated digests, and the
+approval retains their digests, expectations and actual evaluation reports.
+All records, including source references inside the policy, are encrypted.
+The complete approval must fit the existing bounded canonical storage profile.
+
+A successor requires an already retained approval for its exact predecessor,
+with matching policy identity/scope, consecutive revision and nondecreasing
+approval time. Case records, approval and idempotency result share one tenant
+transaction. Retries return the original approval timestamp; another actor or
+changed request cannot reuse the same idempotency key. One immutable approval
+is retained per policy digest. This permits draft branches and does not choose
+which branch is current: independent activation and historical activation
+receipts remain separate work.
+
+The review attests the authenticated reviewer's action, not external source
+truth or independent legal assessment. Actual source documents, authenticated
+fact acquisition, approval HTTP integration, stored-case comparison loading
+and offline historical approval verification remain open. PostgreSQL tests
+exercise reconnect persistence, encrypted rows, tenant isolation, predecessor
+links, immutable approval conflicts and rejected expected outcomes.

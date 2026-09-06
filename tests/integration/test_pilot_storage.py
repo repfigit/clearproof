@@ -684,3 +684,57 @@ async def test_atomic_registrar_refresh_and_rollback(db, monkeypatch):
     monkeypatch.setattr(registrar_module, "build_issuance_tree", original_builder)
     final = await registrar().refresh(expected_revision=3, idempotency_key="refresh-4", now=170)
     assert final["root"] == second["root"]
+
+
+async def test_reviewed_policy_history_is_atomic_private_and_survives_restart(db):
+    import runpy
+    from pathlib import Path
+
+    from src.policy.diff import PolicyCase
+    from src.policy.model import PilotPolicy
+    from src.services.policy_review import PolicyReviewRequest, PolicyReviewService, ReviewedCase
+
+    policy, transfer, context, facts = runpy.run_path(
+        str(Path(__file__).resolve().parents[1] / "unit/test_policy_evaluator.py")
+    )["case"].__wrapped__()
+    case = PolicyCase(
+        case_id="review-001", transfer=transfer, context=context, facts=facts, evaluated_at=context.evaluated_at
+    )
+    request = PolicyReviewRequest(policy=policy, cases=(ReviewedCase(case=case, expected="ALLOW"),))
+    principal = Principal(tenant_id="tenant-a", actor_id="reviewer-a", roles=("policy:approve", "evidence:decrypt"))
+    service = PolicyReviewService(db, cipher(), principal)
+    now = context.evaluated_at
+    result = await service.approve(request, idempotency_key="approval-1", now=now)
+    assert result == await service.approve(request, idempotency_key="approval-1", now=now + 1)
+    await db.close()
+    await db.connect()
+    service = PolicyReviewService(db, cipher(), principal)
+    saved = await service.store.get("policy", policy.digest)
+    assert saved["actor_id"] == "reviewer-a" and saved["approved_at"] == now
+    assert saved["reviews"][0]["expected"] == "ALLOW"
+    case_digest = saved["reviews"][0]["case_digest"]
+    assert (await service.store.get("policy", case_digest))["case"] == case.model_dump(mode="json")
+    assert await store(db, "tenant-b").get("policy", policy.digest) is None
+    async with db.connection() as conn:
+        rows = await (await conn.execute("SELECT row_to_json(r)::text FROM pilot_records r")).fetchall()
+        assert all(transfer.originator.wallet not in row[0] and "reviewer-a" not in row[0] for row in rows)
+    next_policy = PilotPolicy.model_validate({**policy.model_dump(), "revision": 2, "previous_digest": policy.digest})
+    next_request = PolicyReviewRequest(policy=next_policy, cases=request.cases)
+    await service.approve(next_request, idempotency_key="approval-2", now=now)
+    assert (await service.store.get("policy", next_policy.digest))["policy"]["previous_digest"] == policy.digest
+    with pytest.raises(RecordConflict):
+        await service.approve(request, idempotency_key="different-key", now=now)
+    bad = PolicyReviewRequest(policy=policy, cases=(ReviewedCase(case=case, expected="DENY"),))
+    with pytest.raises(ValueError, match="expected outcome"):
+        await service.approve(bad, idempotency_key="bad-outcome", now=now)
+    foreign = PolicyReviewService(
+        db, cipher(), Principal(tenant_id="tenant-b", actor_id="reviewer-b", roles=principal.roles)
+    )
+    with pytest.raises(ValueError, match="tenant"):
+        await foreign.approve(request, idempotency_key="foreign", now=now)
+    missing = PilotPolicy.model_validate({**policy.model_dump(), "revision": 2, "previous_digest": "f" * 64})
+    with pytest.raises(ValueError, match="predecessor"):
+        await service.approve(
+            PolicyReviewRequest(policy=missing, cases=request.cases), idempotency_key="missing", now=now
+        )
+    assert await service.store.get("policy", missing.digest) is None
