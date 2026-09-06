@@ -59,9 +59,9 @@ constraint and need explicit resolution. It never invents arrival sequences.
 
 The output omits raw transaction addresses, amounts, notes and provider metadata.
 Its evidence digest identifies the exact verified bytes. The adapter itself
-neither logs nor persists them. Encrypted raw-body/signature retention and
-historical key provenance must be added at the durable webhook intake boundary;
-a digest alone is not retained evidence. Current internal event ingestion is
+neither logs nor persists them. The durable intake service below retains encrypted raw bodies and signatures;
+independent historical key provenance remains open. A digest alone is not
+retained evidence. Current internal event ingestion is
 not a public provider webhook endpoint.
 
 `tests/fixtures/fireblocks/transaction-status-v2.json` is a synthetic schema
@@ -70,5 +70,41 @@ fixture based on the documented fields, not a captured customer/provider event.
 exercises verification, workspace/transaction/asset binding, byte tampering,
 wrong keys, key expiry, duplicate keys/JSON and unsupported headers. No real
 Fireblocks key, account, network transaction or production integration is used.
-Provider-to-durable-store integration, authenticated JWKS refresh, real fixture
-validation and the bilateral Travel Rule scenario remain open CP-013 work.
+Provider-to-durable-store integration is described below. Authenticated JWKS
+refresh, real fixture validation and the bilateral Travel Rule scenario remain
+open CP-013 work.
+
+## Durable verified intake
+
+`src.services.fireblocks_intake.FireblocksIntake` joins the verifier to an
+operator-configured `EventIngestionService`. It verifies the exact bytes and
+binding first, then retains evidence and the normalized event in the same tenant
+transaction. The internal event service still checks its source/actor grant.
+There is no public Fireblocks webhook route or live account connection yet.
+
+Migration 12 permits the encrypted `provider-evidence` record kind, writable
+only by `events:ingest`. Raw bodies are split into 2,048-byte base64 chunks so
+Unicode and large provider notes do not violate the store's canonical-string
+limits. At most 32 chunks and one manifest are retained for the adapter's 64 KiB
+input limit. Each record has a domain-separated digest and remains encrypted.
+
+The manifest retains ordered chunk digests, raw-byte SHA-256 and size, exact
+detached signature, selected public JWK/key ID, configured key validity/age
+bounds and pinned transaction binding. The encrypted event references these
+records and retains the original actor and receipt time. Those records capture
+which configuration was used; they are not an independently signed historical
+trust statement. Offline verification must receive trusted keys and time
+sources independently of this manifest.
+
+Chunk/manifest writes, normalized event and sequence index share one transaction.
+A sequence conflict rolls back newly inserted evidence too. A byte-identical
+source event retry preserves the first retained evidence and receipt time, even
+if a later valid verification uses a different key snapshot. An existing event
+without provider evidence cannot be silently treated as a provider-backed retry.
+
+The PostgreSQL test verifies multi-chunk Unicode byte reconstruction after
+reconnect, signature revalidation using independently retained test trust,
+tenant isolation, ciphertext privacy, no chain-finality inference, retry
+semantics and evidence rollback on a post-insert sequence conflict. This is a
+local signed simulator flow; provider HTTP intake, JWKS refresh, historical
+authority receipts and live interoperability still require separate work.

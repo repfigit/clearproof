@@ -1117,3 +1117,75 @@ asyncio.run(main())
     result = await service.ingest(source, now=151)
     assert not result["duplicate"]
     assert len((await service.investigate(source.scope, now=152)).timeline) == 1
+
+
+async def test_fireblocks_verified_bytes_retained_atomically_and_private(db):
+    import base64
+    import hashlib
+    import json
+    import runpy
+    from pathlib import Path
+
+    from src.adapters.fireblocks import FireblocksError
+    from src.protocol.canonical import record_digest
+    from src.services.event_ingestion import EventAuthority, EventIngestionService
+    from src.services.fireblocks_intake import FireblocksIntake
+
+    fixture = runpy.run_path(str(Path(__file__).resolve().parents[1] / "unit/test_fireblocks.py"))
+    verifier, key, binding, _ = fixture["setup"].__wrapped__()
+    payload = json.loads(fixture["FIXTURE"].read_bytes())
+    payload["data"]["note"] = "synthetic-private-marker" + "é" * 4000
+    raw, now = json.dumps(payload, ensure_ascii=False).encode(), fixture["NOW"]
+    principal = Principal(
+        tenant_id="tenant-a", actor_id="adapter-a", roles=("events:ingest", "evidence:read", "evidence:decrypt")
+    )
+    authority = EventAuthority(
+        tenant_id="tenant-a",
+        chain_id=binding.scope.chain_id,
+        registry_address=binding.scope.registry_address,
+        source_id=binding.source_id,
+        actors=("adapter-a",),
+        dimensions=("custody",),
+        valid_from=0,
+        valid_until=now // 1000 + 1000,
+    )
+    events = EventIngestionService(db, cipher(), principal, authorities=(authority,))
+    intake = FireblocksIntake(events, verifier)
+    signature = fixture["sign"](raw, key)
+    result = await intake.ingest(raw, signature, binding, now_ms=now)
+    repeated = await intake.ingest(raw, signature, binding, now_ms=now + 1000)
+    assert repeated["duplicate"] and repeated["ingested_at"] == result["ingested_at"]
+    await db.close()
+    await db.connect()
+    persisted = await events.store.get("event", result["event_id"])
+    records = [await events.store.get("provider-evidence", ref) for ref in persisted["evidence_records"]]
+    manifest = records[-1]
+    assert len(manifest["chunks"]) > 1
+    restored = bytearray()
+    for ref in manifest["chunks"]:
+        chunk = await events.store.get("provider-evidence", ref)
+        assert record_digest("clearproof/provider-evidence/v1", chunk) == ref
+        restored.extend(base64.b64decode(chunk["base64"], validate=True))
+    assert bytes(restored) == raw and hashlib.sha256(restored).hexdigest() == manifest["raw_sha256"]
+    assert manifest["signature"] == signature
+    assert verifier.verify(bytes(restored), signature, binding, now_ms=now).state == "completed"
+    report = await events.investigate(binding.scope, now=now // 1000 + 2)
+    assert report.states["custody"] == "completed" and report.states["chain"] == "unknown"
+    assert "synthetic-private-marker" not in report.model_dump_json()
+    async with db.connection() as conn:
+        before = (await (await conn.execute("SELECT count(*) FROM pilot_records")).fetchone())[0]
+        rows = await (await conn.execute("SELECT row_to_json(r)::text FROM pilot_records r")).fetchall()
+        assert all("synthetic-private-marker" not in row[0] and signature not in row[0] for row in rows)
+    other = store(db, "tenant-b")
+    assert all([await other.get("provider-evidence", ref) is None for ref in persisted["evidence_records"]])
+    with pytest.raises(FireblocksError):
+        await intake.ingest(raw + b" ", signature, binding, now_ms=now)
+    # Same source timestamp but new identity: evidence is written first, then the
+    # unique sequence index rejects. All new chunks/manifest must roll back.
+    altered = json.loads(raw)
+    altered["id"] = "44444444-4444-4444-8444-444444444444"
+    conflict = json.dumps(altered).encode()
+    with pytest.raises(RecordConflict):
+        await intake.ingest(conflict, fixture["sign"](conflict, key), binding, now_ms=now)
+    async with db.connection() as conn:
+        assert before == (await (await conn.execute("SELECT count(*) FROM pilot_records")).fetchone())[0]

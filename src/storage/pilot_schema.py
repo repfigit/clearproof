@@ -52,3 +52,11 @@ CREATE TABLE pilot_event_index (
 );
 CREATE INDEX pilot_events_by_scope ON pilot_event_index (tenant_id, scope_digest, record_id);
 """
+
+
+PROVIDER_EVIDENCE_MIGRATION = """
+ALTER TABLE pilot_records DROP CONSTRAINT pilot_records_kind_check;
+ALTER TABLE pilot_records ADD CONSTRAINT pilot_records_kind_check
+CHECK (kind IN ('credential','proof','transfer','receipt','event','policy','revocation',
+               'issuance-root','issuer-root','sanctions-root','idempotency','root-source','provider-evidence'));
+"""

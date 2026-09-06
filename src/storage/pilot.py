@@ -29,6 +29,7 @@ _WRITE_ROLES = {
     "transfer": "proof:generate",
     "receipt": "proof:generate",
     "event": "events:ingest",
+    "provider-evidence": "events:ingest",
     "policy": "policy:approve",
     "revocation": "credential:revoke",
     "issuer-root": "tenant:admin",

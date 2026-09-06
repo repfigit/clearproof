@@ -51,6 +51,9 @@ class EventIngestionService:
         self.store = PilotStore(db, cipher, self.principal)
 
     async def ingest(self, source_event: SourceEvent, *, now: int) -> dict:
+        return await self._ingest_with_evidence(source_event, now=now, evidence=())
+
+    async def _ingest_with_evidence(self, source_event: SourceEvent, *, now: int, evidence: tuple[dict, ...]) -> dict:
         self.principal.require("events:ingest")
         self.principal.require("evidence:decrypt")
         source = SourceEvent.model_validate(source_event)
@@ -66,6 +69,9 @@ class EventIngestionService:
             for authority in self.authorities
         ):
             raise EventAuthorityError("Event source is outside the configured authority")
+        if type(evidence) is not tuple or len(evidence) > 33:
+            raise ValueError("Provider evidence exceeds retention bounds")
+        evidence_ids = [record_digest("clearproof/provider-evidence/v1", value) for value in evidence]
         identity = record_digest(
             "clearproof/source-event-id/v1",
             {
@@ -86,15 +92,29 @@ class EventIngestionService:
             old = await tx.get("event", identity)
             if old is not None:
                 previous = TransferEvent.model_validate_json(json.dumps(old["event"]))
-                if previous.content_digest != event.content_digest:
+                if previous.content_digest != event.content_digest or bool(old.get("evidence_records", [])) != bool(
+                    evidence_ids
+                ):
                     raise RecordConflict("Source event identity belongs to different content")
                 return {"event_id": identity, "ingested_at": previous.ingested_at, "duplicate": True}
             ids = await tx.event_ids(event.scope.digest)
             if len(ids) >= 256:
                 raise ValueError("Transfer event capacity exceeded")
+            for evidence_id, value in zip(evidence_ids, evidence, strict=True):
+                existing = await tx.get("provider-evidence", evidence_id)
+                if existing is None:
+                    await tx.put("provider-evidence", evidence_id, value)
+                elif existing != value:
+                    raise RecordConflict("Provider evidence identity differs")
             # Persist reviewer identity inside ciphertext, not the public index.
             await tx.put(
-                "event", identity, {"actor_id": self.principal.actor_id, "event": event.model_dump(mode="json")}
+                "event",
+                identity,
+                {
+                    "actor_id": self.principal.actor_id,
+                    "event": event.model_dump(mode="json"),
+                    "evidence_records": evidence_ids,
+                },
             )
             await tx.index_event(identity, event.scope.digest, stream, event.source_sequence)
             return {"event_id": identity, "ingested_at": now, "duplicate": False}
