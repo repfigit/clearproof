@@ -72,7 +72,7 @@ retrieval after restart/expiry/authority replacement. Development proving keys
 remain outside the source package.
 
 Deterministic counterparty scenarios,
-coverage/disagreement/latency reports, integrated clean setup and paid-pilot usage
+latency measurement, report client support, integrated clean setup and paid-pilot usage
 reporting remain CP-016–018 work. This service alone does not close those gates.
 
 ## Authenticated API
@@ -103,7 +103,7 @@ idempotent creation, changed-request conflict, role/tenant isolation, rejected
 mode/clock/trust overrides, minimized errors, bounded reads and retrieval in a
 replacement app without current targets. Exactly four logical HTTP observations
 add eight encrypted observation/idempotency records and zero consumptions.
-Observation pagination/reporting and the complete onboarding
+Observation pagination, report clients and the complete onboarding
 scenario remain open; these API routes do not close CP-016–018 by themselves.
 
 ## Source SDK and CLI clients
@@ -143,4 +143,52 @@ The real PostgreSQL gate exercises built CLI creation of a fresh DENY observatio
 exact retries, reads across all four outcomes, request/role/tenant rejection and
 redacted errors. The SDK recomputes Python-generated observation digests. Creating
 a DENY observation successfully returns exit 0 and leaves consumption empty.
-Pagination, aggregate reports, counterparties and clean onboarding remain open.
+Pagination, latency reports, counterparties and clean onboarding remain open.
+
+## Selected-cohort reporting
+
+`POST /pilot/proof/observations/report` requires `policy:read` and
+`evidence:decrypt`, accepts at most 16 KiB, and reads immutable records under the
+authenticated tenant transaction. It needs no current targets or proving runtime.
+The body contains `cohort_id` and 1–64 `cases`, each with:
+
+- `case_id`: an opaque case label, unique in the cohort.
+- `observation_id`: a retained digest, or explicit null for a not-yet-observed case.
+- Optional `baseline_outcome`: ALLOW, DENY, REVIEW, INDETERMINATE or null.
+
+Duplicate non-null observation IDs reject so one record cannot be counted twice.
+Different logical observations of the same transfer may be selected deliberately;
+the report exposes distinct observed transfers separately. Unknown or foreign
+references are identically unavailable. Malformed/duplicate input returns a
+generic 422, oversized input 413, missing roles 403, and storage/configuration
+failure 503. A requested reference that cannot be read does not become a policy
+outcome.
+
+The deterministic `clearproof-observation-cohort-report-v1` response binds the
+normalized selected cohort with `cohort_digest` and sorts case results by case ID.
+It reports case, observed, missing, failed-pairing, policy, determinate and
+per-outcome counts. `determinate_count` includes ALLOW/DENY/REVIEW; observed
+INDETERMINATE is counted as a policy result but not a determinate result. Failed
+pairing is an observation with no policy result. Explicitly unobserved and
+unavailable records remain distinct per-case statuses.
+
+Baseline labels are marked `caller-supplied-unverified`. Label count includes
+labels on missing cases; comparable count includes only labels paired with an
+actual policy result. Agreements and disagreements use that comparable subset.
+A missing or failed-pairing result is not automatically a disagreement, a DENY or
+an ALLOW. These counts compare selected operator labels, not independently verified
+customer decisions or legal truth. They do not establish unexplained disagreement
+causes, representative population coverage or commercial value.
+
+For example, four selected observations with one of each policy outcome and two
+missing cases produce six cases, four observations, four policy results and three
+determinate results. If only three observed results have baseline labels, only
+those three enter the agreement/disagreement denominator. Multiple observations
+of one transfer still count as one distinct observed transfer.
+
+No record or consumption is written. Cohort summaries currently expose
+`latency_status: not-recorded`; v1 observations have no evaluation-duration field,
+so timestamps are not converted into invented latency measurements. Latency
+instrumentation, report SDK/CLI support, broader cohort discovery/pagination and
+integrated onboarding remain open. Raw proof bytes, wallets, fact values and
+observation source references are omitted from the returned case summaries.

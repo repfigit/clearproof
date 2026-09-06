@@ -3414,6 +3414,7 @@ async def check_observation_http(app, db, headers, evaluation_body, cases):
                 headers=reader_headers,
             )
             assert loaded.status_code == 200 and loaded.json() == report
+    await check_observation_cohort_http(restarted, headers, reports)
     async with db.connection() as conn:
         assert (await (await conn.execute("SELECT count(*) FROM pilot_records")).fetchone())[0] == baseline + 2 * len(
             reports
@@ -3504,3 +3505,66 @@ async def exercise_observation_cli(app, headers, body, reports):
             await asyncio.wait_for(task, 10)
         finally:
             sock.close()
+
+
+async def check_observation_cohort_http(app, headers, reports):
+    """Selected-cohort reports from real encrypted observations, without current targets."""
+    import json
+
+    from httpx import ASGITransport, AsyncClient
+
+    from src.services.observation_report import ObservationCohort
+
+    cases = [
+        dict(
+            case_id=f"case-{index}",
+            observation_id=report["observation_id"],
+            baseline_outcome=["ALLOW", "ALLOW", None, "INDETERMINATE"][index],
+        )
+        for index, report in enumerate(reports[:4])
+    ]
+    cases += [
+        dict(case_id="not-observed", observation_id=None, baseline_outcome="ALLOW"),
+        dict(case_id="unavailable", observation_id="00" * 32, baseline_outcome="DENY"),
+    ]
+    body = dict(cohort_id="synthetic-cohort", cases=cases)
+    reader = headers(roles=["policy:read", "evidence:decrypt"])
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        result = await client.post("/pilot/proof/observations/report", json=body, headers=reader)
+        assert result.status_code == 200, result.text
+        report = result.json()
+        assert report["cohort_digest"] == ObservationCohort.model_validate_json(json.dumps(body)).digest
+        assert report["case_count"] == 6 and report["observed_count"] == 4 and report["missing_count"] == 2
+        assert report["distinct_observed_transfers"] == 1 and report["policy_count"] == 4
+        assert report["determinate_count"] == 3 and report["failed_pairing_count"] == 0
+        assert report["outcome_counts"] == {"ALLOW": 1, "DENY": 1, "REVIEW": 1, "INDETERMINATE": 1}
+        assert report["baseline_label_count"] == 5 and report["comparable_count"] == 3
+        assert report["agreement_count"] == 2 and report["disagreement_count"] == 1
+        assert (
+            await client.post(
+                "/pilot/proof/observations/report", json=dict(body, cases=list(reversed(cases))), headers=reader
+            )
+        ).json() == report
+        assert (await client.post("/pilot/proof/observations/report", json=body)).status_code == 401
+        assert (
+            await client.post(
+                "/pilot/proof/observations/report", json=body, headers=headers(roles=["evidence:decrypt"])
+            )
+        ).status_code == 403
+        foreign = await client.post(
+            "/pilot/proof/observations/report",
+            json=body,
+            headers=headers(tenant_id="foreign", roles=["policy:read", "evidence:decrypt"]),
+        )
+        assert foreign.status_code == 200 and foreign.json()["observed_count"] == 0
+        assert foreign.json()["missing_count"] == 6 and foreign.json()["comparable_count"] == 0
+        for altered in [
+            dict(body, cases=cases + [cases[0]]),
+            dict(body, tenant_id="foreign"),
+            dict(body, cases=[dict(cases[0], baseline_outcome="PRIVATE-MARKER")]),
+        ]:
+            rejected = await client.post("/pilot/proof/observations/report", json=altered, headers=reader)
+            assert rejected.status_code == 422 and "PRIVATE-MARKER" not in rejected.text
+        assert (
+            await client.post("/pilot/proof/observations/report", content=b"x" * 16385, headers=reader)
+        ).status_code == 413

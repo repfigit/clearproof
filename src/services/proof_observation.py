@@ -142,10 +142,14 @@ async def read_observation(
     value = await PilotStore(db, cipher, principal).get("observation", observation_id)
     if value is None:
         return None
+    return decode_observation(value, tenant_id=principal.tenant_id, observation_id=observation_id).report()
+
+
+def decode_observation(value: dict, *, tenant_id: str, observation_id: str) -> ObservationRecord:
     # JSON storage converts tuples to arrays; validate using the JSON boundary.
     import json
 
     record = ObservationRecord.model_validate_json(json.dumps(value))
-    if record.tenant_id != principal.tenant_id or record.digest != observation_id:
+    if record.tenant_id != tenant_id or record.digest != observation_id:
         raise ValueError("Observation scope or identity mismatch")
-    return record.report()
+    return record
