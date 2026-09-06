@@ -7,6 +7,7 @@ circuits or a Node.js subprocess.
 """
 
 import json
+import logging
 import os
 import time
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -193,8 +194,9 @@ def mock_registry():
 
 
 @pytest.mark.asyncio
-async def test_credential_issue_creates_credential(client: AsyncClient, mock_registry):
+async def test_credential_issue_creates_credential(client: AsyncClient, mock_registry, caplog):
     """POST /credential/issue with valid input should return the credential."""
+    caplog.set_level(logging.INFO, logger="src.api.routes.credential")
     mock_registry.issue.return_value = "0xdeadbeef"
     resp = await client.post(
         "/credential/issue",
@@ -211,6 +213,8 @@ async def test_credential_issue_creates_credential(client: AsyncClient, mock_reg
     assert body["credential_id"] is not None
     assert body["commitment"] == "0xdeadbeef"
     assert body["issuer_did"] == "did:web:issuer.example.com"
+    assert "Credential issued:" in caplog.text
+    assert "0x1234567890abcdef" not in caplog.text
 
 
 @pytest.mark.asyncio
@@ -273,9 +277,10 @@ async def test_credential_get_existing(client: AsyncClient, mock_registry):
 
 
 @pytest.mark.asyncio
-async def test_credential_revoke_success(client: AsyncClient, mock_registry):
+async def test_credential_revoke_success(client: AsyncClient, mock_registry, caplog):
     """POST /credential/revoke for an active credential returns revoked=true."""
     mock_cred = MagicMock()
+    caplog.set_level(logging.INFO, logger="src.api.routes.credential")
     mock_cred.revoked = False
 
     mock_registry.get.return_value = mock_cred
@@ -292,6 +297,8 @@ async def test_credential_revoke_success(client: AsyncClient, mock_registry):
     body = resp.json()
     assert body["revoked"] is True
     assert body["credential_id"] == "cred-123"
+    assert "Credential revoked:" in caplog.text
+    assert "Testing revocation" not in caplog.text
 
 
 @pytest.mark.asyncio

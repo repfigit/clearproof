@@ -118,13 +118,7 @@ async def issue_credential(
 
     commitment = await _registry.issue(credential)
 
-    logger.info(
-        "Credential issued: id=%s issuer=%s subject=%s jurisdiction=%s",
-        credential.credential_id,
-        request.issuer_did,
-        request.subject_wallet,
-        request.jurisdiction,
-    )
+    logger.info("Credential issued: id=%s", credential.credential_id)
 
     return CredentialIssueResponse(
         credential_id=credential.credential_id,
@@ -158,11 +152,7 @@ async def revoke_credential(
 
     _registry.revoke(request.credential_id)
 
-    logger.info(
-        "Credential revoked: id=%s reason=%s",
-        request.credential_id,
-        request.reason,
-    )
+    logger.info("Credential revoked: id=%s", request.credential_id)
 
     return CredentialRevokeResponse(
         revoked=True,
