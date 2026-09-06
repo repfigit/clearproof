@@ -1,7 +1,8 @@
 # ADR 0008: Pinned current policy inputs
 
 Status: threshold/input binding and the bounded M2 business evaluator are implemented.
-The policy-diff service and durable approval integration remain open.
+Counterfactual comparison now has a Python stdin CLI and authenticated API.
+Durable approval integration remains open.
 
 `PilotPolicy` is an immutable, bounded record containing a policy identity,
 revision/predecessor, tenant, EVM deployment, jurisdiction, asset catalog digest,
@@ -41,8 +42,8 @@ This record only defines the supported private tier predicate. Crossing a tier
 boundary is not an ALLOW/REVIEW/DENY decision, and an amount below a threshold
 does not remove information-exchange, screening or other obligations. The M2
 rule evaluator now provides explicit missing/unsupported-input outcomes; see
-`docs/internal/PILOT_POLICY_EVALUATION.md`. Approval persistence, policy-diff
-reports and historical activation evidence remain separate work.
+`docs/internal/PILOT_POLICY_EVALUATION.md`. Policy-diff reports are implemented for supplied snapshots. Approval persistence
+and historical activation evidence remain separate work.
 No legal rule or jurisdictional threshold is inferred from synthetic fixtures.
 
 Validation includes exact cent threshold minus/equal/plus boundaries; stale and

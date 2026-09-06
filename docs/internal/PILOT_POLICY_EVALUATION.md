@@ -39,12 +39,49 @@ asserted to be enforced by the circuit.
 Counterfactual replay may evaluate a candidate policy digest against the original
 transfer snapshot without editing that transfer's historical policy reference.
 It still checks tenant, deployment, jurisdiction, catalog and context consistency.
-This enables later policy diff while preserving the original record. Replay is
+Policy comparison uses this replay while preserving the original record. Replay is
 not current policy activation or transfer authorization; `PolicyTrustStore`
 performs independent current-version selection for the proof-input path.
 
 Tests cover reproducible replay without input mutation, smallest-unit boundaries,
 missing facts below a threshold, deny/allow conflict, review for incomplete
 information, unsupported predicates, invalid timing, empty policies and foreign
-or conflicting evidence. Durable fact authentication, rule-approval history,
-API/CLI reports and the policy-diff workflow remain integration work.
+or conflicting evidence. Durable fact authentication and rule-approval history
+remain integration work.
+
+## Counterfactual comparison API and CLI
+
+`src.policy.diff.compare_policies` accepts `PolicyDiffRequest` with `before` and
+`after` policies and 1–64 cases. Each case supplies `case_id`, `transfer`,
+`context`, `facts` and `evaluated_at`. Policies must share tenant, deployment,
+jurisdiction and asset catalog. Duplicate case IDs or tenant/transfer business
+identities reject the entire batch, even if nonces differ. Cases are sorted by
+case ID so input ordering cannot change the report.
+
+Run `python -m src.policy.diff` with comparison JSON on stdin. It emits a
+`clearproof-policy-diff-v1` JSON report on stdout; rejected input emits a generic
+error and exits 1. Feed confidential input from an authorized encrypted source
+through a pipe; do not put customer data in command arguments or plaintext files.
+
+`POST /pilot/policy/diff` accepts the same JSON through the authenticated API.
+The verified principal requires both `policy:read` and `evidence:decrypt`; all
+policy and case tenants must match that principal. Uploads are limited to 1 MiB
+and ten seconds, and both interfaces reject duplicate JSON keys. HTTP errors
+omit submitted values. The endpoint performs no persistence or external calls.
+The report remains tenant-private, including its case IDs and diagnostic rules.
+
+Reports include before/after decisions, missing and unsupported predicates,
+explicit `not-established` ZK coverage, cases entering/leaving review, review
+counts and delta, indeterminate counts and changed decision/explanation flags.
+`changed_rule_ids` identifies edited definitions and changed matched-rule IDs;
+it is a candidate explanation, not a minimal causal attribution. Both matched
+rule lists remain available. Editing a matched rule under the same ID changes
+the explanation flag even if its final decision is unchanged.
+
+This is a supplied-case simulation, not a workload forecast. It does not prove
+snapshot authenticity, activate policies, consume transfer authorization or
+alter original evidence. Durable reviewed expected outcomes, source/approval
+history and a packaged TypeScript CLI command remain open CP-011 integration.
+Tests exercise real stdin subprocesses and signed JWT requests, tenant and role
+rejection, bounded/malformed input, deterministic ordering, business-identity
+deduplication, reverse review counts and same-ID rule edits.
