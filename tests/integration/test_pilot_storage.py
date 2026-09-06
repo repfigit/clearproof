@@ -3543,7 +3543,32 @@ async def exercise_observation_cli(app, headers, body, reports):
             )
             assert code == 0 and json.loads(stdout) == report, stderr.decode()
             assert stderr == b""
+        from httpx import AsyncClient
+
+        cohort = {
+            "cohort_id": "cli-cohort",
+            "cases": [
+                {"case_id": f"case-{i}", "observation_id": r["observation_id"], "baseline_outcome": "ALLOW"}
+                for i, r in enumerate(reports)
+            ]
+            + [{"case_id": "missing", "observation_id": None}, {"case_id": "unavailable", "observation_id": "00" * 32}],
+        }
+        async with AsyncClient(base_url=origin) as client:
+            expected = await client.post(
+                "/pilot/proof/observations/report",
+                json=cohort,
+                headers=headers(roles=["policy:read", "evidence:decrypt"]),
+            )
+        assert expected.status_code == 200, expected.text
+        code, stdout, stderr = await invoke("report", cohort, roles=["policy:read", "evidence:decrypt"])
+        assert code == 0 and json.loads(stdout) == expected.json() and stderr == b"", stderr.decode()
+        code, stdout, stderr = await invoke(
+            "report", cohort, tenant_id="foreign", roles=["policy:read", "evidence:decrypt"]
+        )
+        assert code == 0 and json.loads(stdout)["observed_count"] == 0 and stderr == b""
         for operation, payload, claims in [
+            ("report", cohort, {"roles": ["evidence:decrypt"]}),
+            ("report", dict(cohort, private="PRIVATE-MARKER"), {}),
             ("create", dict(body, fact_ids=[]), {}),
             ("create", body, {"roles": ["policy:read", "evidence:decrypt"]}),
             ("read", {"observation_id": reports[0]["observation_id"]}, {"tenant_id": "foreign"}),

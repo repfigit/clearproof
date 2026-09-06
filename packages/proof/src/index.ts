@@ -20,3 +20,6 @@ export type { CurrentInspectionRequest, CurrentInspectionReport } from './curren
 
 export { createObservation, readObservation } from './observation.js';
 export type { ObservationRequest, ObservationReport, ObservationReportV1, ObservationReportV2, ObservedPolicy } from './observation.js';
+
+export { reportObservationCohort } from './observation-cohort.js';
+export type { ObservationCohortRequest, ObservationCohortReport } from './observation-cohort.js';

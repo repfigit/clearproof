@@ -73,7 +73,7 @@ retrieval after restart/expiry/authority replacement. Development proving keys
 remain outside the source package.
 
 Deterministic counterparty scenarios,
-report client support, integrated clean setup and paid-pilot usage
+integrated clean setup and paid-pilot usage
 reporting remain CP-016–018 work. This service alone does not close those gates.
 
 ## Authenticated API
@@ -104,7 +104,7 @@ idempotent creation, changed-request conflict, role/tenant isolation, rejected
 mode/clock/trust overrides, minimized errors, bounded reads and retrieval in a
 replacement app without current targets. Exactly four logical HTTP observations
 add eight encrypted observation/idempotency records and zero consumptions.
-Observation pagination, report clients and the complete onboarding
+Observation pagination and the complete onboarding
 scenario remain open; these API routes do not close CP-016–018 by themselves.
 
 ## Source SDK and CLI clients
@@ -144,7 +144,7 @@ The real PostgreSQL gate exercises built CLI creation of a fresh DENY observatio
 exact retries, reads across all four outcomes, request/role/tenant rejection and
 redacted errors. The SDK recomputes Python-generated observation digests. Creating
 a DENY observation successfully returns exit 0 and leaves consumption empty.
-Pagination, report clients, counterparties and clean onboarding remain open.
+Pagination, counterparties and clean onboarding remain open.
 
 ## Selected-cohort reporting
 
@@ -189,7 +189,7 @@ of one transfer still count as one distinct observed transfer.
 
 No record or consumption is written. Raw proof bytes, wallets, fact values and
 observation source references are omitted from the returned case summaries.
-Report SDK/CLI support, broader cohort discovery/pagination and integrated
+Broader cohort discovery/pagination and integrated
 onboarding remain open.
 
 
@@ -231,3 +231,34 @@ real-proof records through the built CLI, and check exact cohort duration sums.
 These local development measurements describe the selected completed evaluations;
 they are not production performance claims, independent time attestations or an
 end-to-end service-level objective.
+
+## Cohort report clients
+
+The source SDK exports `reportObservationCohort(origin, token, requestBytes)` and
+typed `ObservationCohortRequest` / `ObservationCohortReport` models. The CLI exposes:
+
+```bash
+node packages/cli/dist/index.js observation report --api-url http://127.0.0.1:8000
+```
+
+Supply the cohort JSON described above on stdin and `CLEARPROOF_API_TOKEN` in the
+environment. Only policy-read and decryption roles are needed. Exit 0 means the
+report request succeeded, including a report with disagreements or no available
+observations. Request/response rejection uses exit 2 and generic stderr, with no
+private body or bearer token echoed.
+
+Clients normalize the cohort for digest comparison while sending the original
+JSON bytes to the API. Duplicate cases/references, unsupported labels and oversized
+inputs reject. Returned cohort ID/digest, case identities, baseline labels and
+case order must match the normalized request. Exact profile/field checks reject
+unexpected claims or private extra fields. Clients verify count arithmetic,
+missing/failed-pairing semantics, baseline denominators, timing coverage and
+bounded integer duration aggregates. Null measurements cannot silently become
+zero values. Distinct-transfer counts and timing totals remain server-supplied
+facts; the client checks their consistency/bounds, not independent source truth.
+
+The built-command PostgreSQL gate compares CLI output with the actual API report,
+including measured records, missing cases, baseline disagreements and foreign-tenant
+unavailability. Reporting leaves encrypted record counts and consumption unchanged.
+Cohort discovery/pagination, deterministic bilateral scenarios, complete onboarding
+and commercial preparation remain open.
