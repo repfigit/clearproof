@@ -8,6 +8,7 @@ from src.auth.principal import Principal
 from src.protocol.canonical import record_digest
 from src.protocol.transfer import Address, Epoch, OpaqueId, Record, UInt128
 from src.reconciliation.events import Dimension, SourceEvent, TransferEvent, TransferScope, reconcile
+from src.reconciliation.queue import QueueItem, QueuePage, QueueRequest
 from src.storage.pilot import PilotStore, RecordConflict
 
 
@@ -125,22 +126,60 @@ class EventIngestionService:
         scope = TransferScope.model_validate(scope)
         if scope.tenant_id != self.principal.tenant_id:
             raise EventAuthorityError("Investigation is outside the authenticated tenant")
-        events = []
         async with self.store.transaction() as tx:
-            for record_id in await tx.event_ids(scope.digest):
-                value = await tx.get("event", record_id)
-                if value is None:
-                    raise ValueError("Indexed event is missing")
-                event = TransferEvent.model_validate_json(json.dumps(value["event"]))
-                expected = record_digest(
-                    "clearproof/source-event-id/v1",
-                    {
-                        "tenant_id": self.principal.tenant_id,
-                        "source_id": event.source_id,
-                        "source_event_id": event.source_event_id,
-                    },
-                )
-                if expected != record_id:
-                    raise ValueError("Indexed event identity differs")
-                events.append(event)
-        return reconcile(scope, tuple(events), now=now)
+            events = await self._load_events(tx, scope.digest)
+        return reconcile(scope, events, now=now)
+
+    async def _load_events(self, tx, scope_digest: str) -> tuple[TransferEvent, ...]:
+        events = []
+        for record_id in await tx.event_ids(scope_digest):
+            value = await tx.get("event", record_id)
+            if value is None:
+                raise ValueError("Indexed event is missing")
+            event = TransferEvent.model_validate_json(json.dumps(value["event"]))
+            expected = record_digest(
+                "clearproof/source-event-id/v1",
+                {
+                    "tenant_id": self.principal.tenant_id,
+                    "source_id": event.source_id,
+                    "source_event_id": event.source_event_id,
+                },
+            )
+            if (
+                expected != record_id
+                or event.scope.digest != scope_digest
+                or event.scope.tenant_id != self.principal.tenant_id
+            ):
+                raise ValueError("Indexed event identity or scope differs")
+            events.append(event)
+        return tuple(events)
+
+    async def queue(self, request: QueueRequest, *, now: int) -> QueuePage:
+        self.principal.require("evidence:read")
+        self.principal.require("evidence:decrypt")
+        request = QueueRequest.model_validate(request)
+        items = []
+        async with self.store.transaction() as tx:
+            scopes = await tx.event_scopes(after=request.after, limit=request.limit)
+            for digest in scopes[: request.limit]:
+                events = await self._load_events(tx, digest)
+                if not events:
+                    raise ValueError("Indexed transfer has no events")
+                report = reconcile(events[0].scope, events, now=now)
+                findings = tuple(f for f in report.findings if f.age_seconds >= request.minimum_age_seconds)
+                if findings:
+                    items.append(
+                        QueueItem(
+                            scope=events[0].scope,
+                            scope_digest=digest,
+                            states=report.states,
+                            findings=findings,
+                            oldest_age_seconds=max(f.age_seconds for f in findings),
+                        )
+                    )
+        return QueuePage(
+            as_of=now,
+            scanned_transfers=min(len(scopes), request.limit),
+            items=tuple(sorted(items, key=lambda item: (-item.oldest_age_seconds, item.scope_digest))),
+            next_cursor=scopes[request.limit - 1] if len(scopes) > request.limit else None,
+        )

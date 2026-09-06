@@ -1286,3 +1286,89 @@ async def test_fireblocks_relay_requires_jwt_signature_and_operator_binding(db, 
         async with db.connection() as conn:
             assert count == (await (await conn.execute("SELECT count(*) FROM pilot_records")).fetchone())[0]
             assert (await (await conn.execute("SELECT count(*) FROM pilot_consumptions")).fetchone())[0] == 0
+
+
+async def test_ageing_queue_paginates_without_omissions_or_cross_tenant_reads(db, monkeypatch, event_case):
+    import runpy
+    from pathlib import Path
+    from types import SimpleNamespace
+
+    from httpx import ASGITransport, AsyncClient
+
+    from src.api.routes import events as routes
+    from src.reconciliation.events import SourceEvent, TransferScope
+    from src.reconciliation.queue import QueueRequest
+    from src.services.event_ingestion import EventIngestionService
+
+    source, authority = event_case
+    principal = Principal(
+        tenant_id="tenant-a", actor_id="actor-a", roles=("events:ingest", "evidence:read", "evidence:decrypt")
+    )
+    service = EventIngestionService(db, cipher(), principal, authorities=(authority,))
+    scopes = []
+    for index in range(4):
+        scope = TransferScope.model_validate({**source.scope.model_dump(), "transfer_id": f"transfer-{index}"})
+        scopes.append(scope)
+        await service.ingest(
+            SourceEvent.model_validate(
+                {
+                    **source.model_dump(),
+                    "scope": scope,
+                    "source_event_id": f"event-{index}",
+                    "occurred_at": 100 + index,
+                    "state": "submitted" if index == 3 else "failed",
+                }
+            ),
+            now=150,
+        )
+    await db.close()
+    await db.connect()
+    full = await service.queue(QueueRequest(limit=16), now=200)
+    assert full.scanned_transfers == 4 and full.next_cursor is None
+    assert [item.oldest_age_seconds for item in full.items] == [100, 99, 98]
+    assert all(item.findings[0].reason == "settlement-failed" for item in full.items)
+    assert "timeline" not in full.model_dump_json() and source.evidence_digest not in full.model_dump_json()
+    cursor, scanned, seen = None, 0, set()
+    while True:
+        page = await service.queue(QueueRequest(after=cursor, limit=1), now=200)
+        scanned += page.scanned_transfers
+        for item in page.items:
+            assert item.scope_digest not in seen
+            seen.add(item.scope_digest)
+        cursor = page.next_cursor
+        if cursor is None:
+            break
+    assert scanned == 4 and seen == {item.scope_digest for item in full.items}
+    filtered = await service.queue(QueueRequest(limit=1, minimum_age_seconds=1000), now=200)
+    assert filtered.items == () and filtered.next_cursor is not None and filtered.scanned_transfers == 1
+    assert (await service.queue(QueueRequest(minimum_age_seconds=100), now=200)).items == full.items[:1]
+    foreign = EventIngestionService(
+        db, cipher(), Principal(tenant_id="tenant-b", actor_id="actor-a", roles=principal.roles), authorities=()
+    )
+    assert (await foreign.queue(QueueRequest(), now=200)).items == ()
+    fixture = runpy.run_path(str(Path(__file__).resolve().parents[1] / "unit/test_policy_diff.py"))
+    app, token = fixture["authenticated_app"].__wrapped__(monkeypatch)
+    app.include_router(routes.router)
+    app.state.db = db
+    monkeypatch.setenv("PII_MASTER_KEY", "61" * 32)
+    monkeypatch.setattr(routes, "time", SimpleNamespace(time=lambda: 200))
+    headers = {"Authorization": "Bearer " + token(roles=("evidence:read", "evidence:decrypt"))}
+    async with db.connection() as conn:
+        count = (await (await conn.execute("SELECT count(*) FROM pilot_records")).fetchone())[0]
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        response = await client.post("/pilot/events/queue", json={"limit": 16}, headers=headers)
+        assert response.status_code == 200 and response.json() == full.model_dump(mode="json")
+        assert (await client.post("/pilot/events/queue", json={})).status_code == 401
+        assert (
+            await client.post("/pilot/events/queue", json={}, headers={"Authorization": "Bearer " + token()})
+        ).status_code == 403
+        for invalid in (
+            {"tenant_id": "tenant-b"},
+            {"limit": 17},
+            {"after": "not-a-digest"},
+            {"minimum_age_seconds": -1},
+        ):
+            assert (await client.post("/pilot/events/queue", json=invalid, headers=headers)).status_code == 422
+    async with db.connection() as conn:
+        assert count == (await (await conn.execute("SELECT count(*) FROM pilot_records")).fetchone())[0]
+        assert (await (await conn.execute("SELECT count(*) FROM pilot_consumptions")).fetchone())[0] == 0

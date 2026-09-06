@@ -11,6 +11,7 @@ from src.auth.principal import Principal, TenantPrincipalDependency
 from src.protocol.transfer import Record
 from src.prover.pilot_artifacts import strict_json
 from src.reconciliation.events import SourceEvent, TransferScope
+from src.reconciliation.queue import QueueRequest
 from src.services.event_ingestion import EventAuthority, EventAuthorityError, EventIngestionService
 from src.storage.keyring import load_keyring
 from src.storage.pilot import RecordConflict
@@ -70,3 +71,17 @@ async def investigate_events(request: Request, principal: Principal = Depends(Te
         raise HTTPException(status_code=403, detail="Investigation is outside the authenticated tenant") from None
     except (ValueError, TypeError, RecursionError):
         raise HTTPException(status_code=422, detail="Invalid investigation scope or retained event") from None
+
+
+@router.post("/queue", summary="Page through tenant investigations with aged unresolved findings")
+async def investigation_queue(request: Request, principal: Principal = Depends(TenantPrincipalDependency)):
+    principal.require("evidence:read")
+    principal.require("evidence:decrypt")
+    raw = await read_private_body(request, limit=4096)
+    try:
+        strict_json(raw, limit=4096)
+        page = QueueRequest.model_validate_json(raw)
+        result = await event_service(request, principal, ingestion=False).queue(page, now=int(time.time()))
+        return result.model_dump(mode="json")
+    except (ValueError, TypeError, RecursionError):
+        raise HTTPException(status_code=422, detail="Invalid queue request or retained evidence") from None

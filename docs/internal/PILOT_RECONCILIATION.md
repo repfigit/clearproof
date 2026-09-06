@@ -92,7 +92,7 @@ source/actor/time/dimension rejection, ciphertext minimization and identical
 provider IDs in separate tenants. A separate process-death test kills the
 ingester after its encrypted insert and before index insertion, then checks
 rollback and successful retry. Provider signatures, signed source provenance,
-queue policy and the complete investigation CLI remain open acceptance work.
+broader queue policy and the complete investigation CLI remain open acceptance work.
 
 ## Authenticated API
 
@@ -120,3 +120,39 @@ for investigation. The policy API now shares the same bounded body reader,
 retaining its existing 1 MiB limit. Signed-JWT/PostgreSQL tests cover real role
 checks, source grants, duplicate and conflicting events, server timestamps,
 redacted errors, oversized bodies, reconnect and fail-closed configuration.
+
+## Ageing queue API
+
+`POST /pilot/events/queue` accepts a `QueueRequest` with optional `after` scope
+digest, `limit` (1–16 indexed transfers, default 8) and `minimum_age_seconds`
+(default 0). The authenticated principal needs `evidence:read` and
+`evidence:decrypt`; no tenant selector is accepted in the body. Configuration
+for new event ingestion is not needed to inspect retained observations.
+
+The service scans indexed business transfers using tenant-scoped keyset
+pagination and validates every loaded event's identity, scope digest and tenant.
+Each page is loaded under the tenant transaction lock, then returns only matching
+findings, independent states and opaque transfer scope. Full timelines and raw
+provider evidence are omitted. Each item includes the oldest matching age;
+findings retain reason, owner, next action, start time and current age.
+
+`scanned_transfers` counts examined transfers, including those with no matching
+findings. `next_cursor` advances by the last examined scope, not the last
+returned item, so age filters cannot hide later pages. Clients must continue
+while a cursor is present even if `items` is empty. Within a page, items sort by
+oldest age descending with scope-digest ties. The explicit ordering value is
+`scope-pages-age-within-page`; it does not promise global oldest-first ordering
+across uncollected pages. Collect the pages before globally prioritizing results.
+
+Pagination converges without omissions on unchanged data. New transfers inserted
+before a cursor need a fresh scan, and each page has its own server `as_of`
+clock; this is not a frozen cross-page historical snapshot. The queue only
+covers transfers with retained indexed events. Event generation from every
+upstream workflow remains integration work. Reads neither create events nor
+consume authorizations or move funds.
+
+Real PostgreSQL/JWT tests cover multi-page traversal, nonmatching transfers,
+empty filtered pages with continuation, exact age boundaries, deterministic
+ordering, reconnect, role rejection, tenant isolation and unchanged storage
+counts. CLI rendering, provider links and broader queue decision rules remain
+open CP-014 work.

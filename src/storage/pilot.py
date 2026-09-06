@@ -245,6 +245,20 @@ class PilotTransaction:
         )
         return revision
 
+    async def event_scopes(self, *, after: str | None, limit: int) -> list[str]:
+        self._check_open()
+        self._principal.require("evidence:decrypt")
+        if type(limit) is not int or not 1 <= limit <= 16:
+            raise ValueError("Invalid scope page limit")
+        rows = await (
+            await self._conn.execute(
+                "SELECT DISTINCT scope_digest FROM pilot_event_index WHERE tenant_id=%s AND scope_digest>%s "
+                "ORDER BY scope_digest LIMIT %s",
+                (self.tenant_id, _identifier(after) if after else "", limit + 1),
+            )
+        ).fetchall()
+        return [row[0] for row in rows]
+
     async def event_ids(self, scope_digest: str) -> list[str]:
         self._check_open()
         self._principal.require("evidence:decrypt")
