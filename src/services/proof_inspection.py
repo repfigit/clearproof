@@ -6,7 +6,7 @@ from dataclasses import dataclass, fields
 from src.auth.principal import Principal
 from src.policy.evaluator import PolicyEvaluation, PolicyFact, PolicyFacts, evaluate_policy
 from src.policy.fact_approval import FactTrustStore
-from src.policy.model import PolicyTrustStore
+from src.policy.model import PolicyTrustError, PolicyTrustStore
 from src.protocol.root_snapshot import RootTrustError, RootTrustStore, SignedRootSnapshot, root_scope_id
 from src.protocol.transfer import AssetRegistry, Transfer, VerificationContext
 from src.protocol.valuation_approval import SignedValuationApproval, ValuationTrustStore
@@ -15,6 +15,7 @@ from src.prover.pilot_roots import CurrentRootPins
 from src.prover.pilot_verifier import PairingInspection, PilotPairingVerifier, public_signals
 from src.services.enrollment import load_unrevoked_enrollment
 from src.services.fact_evidence import load_current_facts
+from src.services.policy_activation import activation_scope, load_active_policy
 from src.storage.database import Database
 from src.storage.pilot import PilotStore, PilotTransaction
 from src.storage.pilot_cipher import RecordCipher
@@ -60,9 +61,9 @@ class ProofInspectionService:
     async def inspect(self, credential_id: str, proof: bytes, signals: list[str], *, now: int) -> PairingInspection:
         """Hold the existing tenant lock across current-state reads and pairing.
 
-        This serializes with supported enrollment/revocation/root writers. Other
-        trust inventories are operator configuration; this is not their activation
-        or historical authority mechanism. No record or consumption is written.
+        This serializes with supported enrollment/revocation/root/policy writers.
+        Other trust inventories remain operator configuration; this is not an
+        independent historical authority. No record or consumption is written.
         """
         self._principal.require("proof:inspect")
         self._principal.require("evidence:decrypt")
@@ -71,6 +72,14 @@ class ProofInspectionService:
             return await self._inspect_transaction(tx, credential_id, proof, signals, now=now)
 
     async def _inspect_transaction(self, tx: PilotTransaction, credential_id, proof, signals, *, now):
+        configured_policy = self._inputs["policy_trust"].for_transfer(
+            self._inputs["transfer"], self._context, tenant_id=self._principal.tenant_id, now=now
+        )
+        active_policy = await load_active_policy(
+            tx, activation_scope(configured_policy), now=now, evaluated_at=self._context.evaluated_at
+        )
+        if active_policy.digest != configured_policy.digest:
+            raise PolicyTrustError("Configured policy is not the active tenant selection")
         credential = await load_unrevoked_enrollment(
             tx,
             credential_id,

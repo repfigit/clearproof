@@ -1486,7 +1486,7 @@ async def exercise_investigation_cli(app, token, scope, expected_queue, expected
 
 
 @pytest.mark.skipif(not os.getenv("CLEARPROOF_PILOT_TEST_ARTIFACTS"), reason="requires fresh synthetic pilot artifacts")
-@pytest.mark.parametrize("mutation", ["root", "revocation", "cancel", "policy"])
+@pytest.mark.parametrize("mutation", ["root", "revocation", "cancel", "policy", "activation"])
 async def test_durable_current_inspection_real_pairing_and_revocation(db, monkeypatch, mutation):
     import hashlib
     import json
@@ -1496,11 +1496,16 @@ async def test_durable_current_inspection_real_pairing_and_revocation(db, monkey
 
     from eth_account import Account
 
+    from src.policy.diff import PolicyCase
+    from src.policy.evaluator import PolicyFacts
+    from src.policy.model import PilotPolicy, PolicyTrustError
     from src.protocol.enrollment import EnrollmentConsent
     from src.protocol.root_snapshot import RootSnapshot, RootTrustError, sign_root
     from src.prover.pilot_artifacts import inspect_artifacts
     from src.prover.pilot_verifier import PilotPairingVerifier, ProofInspectionError
     from src.services.enrollment import EnrollmentIneligible, EnrollmentService, RevocationRequest
+    from src.services.policy_activation import PolicyActivationRequest, PolicyActivationService
+    from src.services.policy_review import PolicyReviewRequest, PolicyReviewService, ReviewedCase
     from src.services.proof_inspection import CurrentStatementConfiguration, ProofInspectionService
     from src.services.root_publication import RootPublicationService
 
@@ -1513,7 +1518,7 @@ async def test_durable_current_inspection_real_pairing_and_revocation(db, monkey
     principal = Principal(
         tenant_id=credential.tenant_id,
         actor_id="simulator",
-        roles=(*ROLES, "policy:read", "facts:ingest") if mutation == "policy" else ROLES,
+        roles=(*ROLES, "policy:activate", "policy:read", "facts:ingest"),
         issuer_dids=(credential.issuer_did,),
     )
     wallet = Account.from_key(bytes([8]) * 32)  # Public synthetic-only signer.
@@ -1548,6 +1553,28 @@ async def test_durable_current_inspection_real_pairing_and_revocation(db, monkey
     def service(who=principal):
         return ProofInspectionService(db, cipher(), who, verifier, configuration)
 
+    policy = configuration.policy_trust.for_transfer(
+        configuration.transfer, configuration.context, tenant_id=principal.tenant_id, now=now
+    )
+    case = PolicyCase(
+        case_id="synthetic-proof-review",
+        transfer=configuration.transfer,
+        context=configuration.context,
+        facts=PolicyFacts(tenant_id=principal.tenant_id, transfer_digest=configuration.transfer.digest, facts=()),
+        evaluated_at=now,
+    )
+    reviewed = (ReviewedCase(case=case, expected="INDETERMINATE"),)
+    review_service = PolicyReviewService(db, cipher(), principal)
+    await review_service.approve(
+        PolicyReviewRequest(policy=policy, cases=reviewed), idempotency_key="review-proof-policy", now=now
+    )
+    with pytest.raises(ValueError, match="No active policy"):
+        await service().inspect(credential.credential_nonce, proof, signals, now=now)
+    activation = PolicyActivationService(db, cipher(), principal)
+    await activation.activate(
+        PolicyActivationRequest(policy_digest=policy.digest), idempotency_key="activate-proof-policy", now=now
+    )
+
     async with db.connection() as conn:
         before = (await (await conn.execute("SELECT count(*) FROM pilot_records")).fetchone())[0]
     assert (await service().inspect(credential.credential_nonce, proof, signals, now=now)).cryptographic_valid
@@ -1566,6 +1593,37 @@ async def test_durable_current_inspection_real_pairing_and_revocation(db, monkey
     async with db.connection() as conn:
         assert before == (await (await conn.execute("SELECT count(*) FROM pilot_records")).fetchone())[0]
         assert (await (await conn.execute("SELECT count(*) FROM pilot_consumptions")).fetchone())[0] == 0
+
+    if mutation == "activation":
+        successor = PilotPolicy.model_validate({**policy.model_dump(), "revision": 2, "previous_digest": policy.digest})
+        await review_service.approve(
+            PolicyReviewRequest(policy=successor, cases=reviewed), idempotency_key="review-successor", now=now
+        )
+        # Review alone leaves the original proof valid; selection changes acceptance.
+        assert (await service().inspect(credential.credential_nonce, proof, signals, now=now)).cryptographic_valid
+        await activation.activate(
+            PolicyActivationRequest(policy_digest=successor.digest, expected_revision=1),
+            idempotency_key="activate-successor",
+            now=now,
+        )
+        with pytest.raises(PolicyTrustError, match="not the active tenant selection"):
+            await service().inspect(credential.credential_nonce, proof, signals, now=now)
+        # Restoring the same digest later cannot backdate the proof's evaluation.
+        await activation.activate(
+            PolicyActivationRequest(policy_digest=policy.digest, expected_revision=2),
+            idempotency_key="rollback-original",
+            now=now + 1,
+        )
+        await db.close()
+        await db.connect()
+        async with db.connection() as conn:
+            count = (await (await conn.execute("SELECT count(*) FROM pilot_records")).fetchone())[0]
+        with pytest.raises(ValueError, match="does not cover proof evaluation time"):
+            await service().inspect(credential.credential_nonce, proof, signals, now=now + 1)
+        async with db.connection() as conn:
+            assert (await (await conn.execute("SELECT count(*) FROM pilot_records")).fetchone())[0] == count
+            assert (await (await conn.execute("SELECT count(*) FROM pilot_consumptions")).fetchone())[0] == 0
+        return
 
     if mutation == "policy":
         from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey

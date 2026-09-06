@@ -41,12 +41,15 @@ only a credential ID, proof and public signals; server configuration supplies th
 transfer/context and trust inventories. The service loads and revalidates the
 wallet-signed enrollment, current eligibility and revocation record, then checks
 that the retained issuance/issuer/sanctions heads equal the configured approvals.
-A newer retained revision invalidates an older configured pin.
+A newer retained revision invalidates an older configured pin. The active reviewed
+policy must match the independently configured selection and must have been
+activated by the proof evaluation time. Missing activation, supersession, or a
+later rollback to the same policy digest rejects inspection.
 
 All reads and pairing run inside the existing tenant transaction lock, serializing
-with supported enrollment, revocation and root writers. This bounds a potential
-revocation race at the local storage boundary, but does not create a policy
-activation protocol or a cross-system snapshot. The service performs no writes and
+with supported enrollment, revocation, root and policy activation writers. This
+bounds changes during inspection at the local storage boundary, without creating
+a cross-system snapshot. The service performs no writes and
 returns cryptographic inspection only. It does not consume a nullifier or decide
 business-policy authorization. Pairing holds the tenant lock for its bounded
 runtime; this is acceptable for the bounded local pilot, not a throughput claim.

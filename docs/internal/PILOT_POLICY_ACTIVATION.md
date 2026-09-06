@@ -20,11 +20,15 @@ available through authorized encrypted storage. Activating a previously reviewed
 version is an explicit rollback selection with a new activation revision; it does
 not delete intervening history or revive an expired policy.
 
+Current durable proof inspection reads this active head inside the same tenant
+transaction as enrollment/revocation, roots and pairing. It requires the active
+digest to equal the independently configured policy pin and activation to precede
+or equal the proof evaluation time. A later rollback to the original digest cannot
+retroactively cover an earlier proof evaluation. Review alone does not select a policy.
+
 This is an authenticated local service, not a signed external policy authority or
-proof of source truth. Current inspection still uses configured policy pins; wiring
-this service's active head into the same verification/consumption transaction
-remains open. No API activation endpoint, authorization consumption, legal approval
-or historical timing attestation is implied.
+proof of source truth. No API activation endpoint, authorization consumption, legal
+approval or independent historical timing attestation is implied.
 
 PostgreSQL tests cover activation before review, review without activation,
 idempotent retry, competing selections with one winner, retained predecessor

@@ -8,7 +8,7 @@ from src.auth.principal import Principal
 from src.policy.model import PilotPolicy
 from src.protocol.canonical import record_digest
 from src.protocol.transfer import Hex32, Record
-from src.storage.pilot import PilotStore, RecordConflict
+from src.storage.pilot import PilotStore, PilotTransaction, RecordConflict
 
 
 class PolicyActivationRequest(Record):
@@ -86,23 +86,36 @@ class PolicyActivationService:
     async def current(self, scope_digest: str, *, now: int) -> PilotPolicy:
         self.principal.require("policy:read")
         self.principal.require("evidence:decrypt")
-        if type(now) is not int or not 0 <= now < 2**53:
-            raise ValueError("Invalid activation clock")
         async with self.store.transaction() as tx:
-            head = await tx.read("policy-activation", scope_digest)
-            if head is None:
-                raise ValueError("No active policy in this tenant scope")
-            value = head.value
-            if (
-                value.get("schema_version") != "clearproof-policy-activation-v1"
-                or value.get("scope_digest") != scope_digest
-                or type(value.get("revision")) is not int
-                or value.get("revision") != head.revision
-                or type(value.get("activated_at")) is not int
-                or value["activated_at"] > now
-            ):
-                raise ValueError("Invalid policy activation head")
-            policy = await reviewed_policy(tx, value["policy_digest"], now=now)
-            if activation_scope(policy) != scope_digest:
-                raise ValueError("Active policy scope mismatch")
-            return policy
+            return await load_active_policy(tx, scope_digest, now=now)
+
+
+async def load_active_policy(
+    tx: PilotTransaction,
+    scope_digest: str,
+    *,
+    now: int,
+    evaluated_at: int | None = None,
+) -> PilotPolicy:
+    """Read the active selection inside the caller's authenticated tenant transaction."""
+    if type(now) is not int or not 0 <= now < 2**53:
+        raise ValueError("Invalid activation clock")
+    head = await tx.read("policy-activation", scope_digest)
+    if head is None:
+        raise ValueError("No active policy in this tenant scope")
+    value = head.value
+    if (
+        value.get("schema_version") != "clearproof-policy-activation-v1"
+        or value.get("scope_digest") != scope_digest
+        or type(value.get("revision")) is not int
+        or value.get("revision") != head.revision
+        or type(value.get("activated_at")) is not int
+        or value["activated_at"] > now
+    ):
+        raise ValueError("Invalid policy activation head")
+    if evaluated_at is not None and (type(evaluated_at) is not int or not value["activated_at"] <= evaluated_at <= now):
+        raise ValueError("Policy activation does not cover proof evaluation time")
+    policy = await reviewed_policy(tx, value["policy_digest"], now=now)
+    if activation_scope(policy) != scope_digest:
+        raise ValueError("Active policy scope mismatch")
+    return policy
