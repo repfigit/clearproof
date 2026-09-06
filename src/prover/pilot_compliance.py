@@ -7,6 +7,7 @@ outside an encrypted envelope.
 
 from src.protocol.credential import PilotCredential
 from src.protocol.transfer import AssetRegistry, Transfer, VerificationContext
+from src.protocol.valuation_approval import SignedValuationApproval, ValuationTrustStore
 from src.prover.pilot_projection import project_transfer
 from src.registry.pilot_sanctions import PilotSanctionsTree
 
@@ -34,7 +35,16 @@ def compliance_witness(
     issuance_path: dict,
     issuer_path: dict,
     sanctions: PilotSanctionsTree,
+    valuation_approval: SignedValuationApproval,
+    valuation_trust: ValuationTrustStore,
 ) -> dict:
+    transfer = Transfer.model_validate(transfer)
+    context = VerificationContext.model_validate(context)
+    # Witness construction checks the quote at the claimed evaluation time.
+    # Current authorization must independently check freshness using its clock.
+    valuation_trust.verify_for_transfer(
+        valuation_approval, transfer, registry, tenant_id=context.tenant_id, now=context.evaluated_at
+    )
     projection = project_transfer(transfer, context, registry, thresholds)
     credential = PilotCredential.model_validate(credential)
     if context.proof_profile != PROFILE:

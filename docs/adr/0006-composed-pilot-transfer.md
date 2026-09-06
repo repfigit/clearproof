@@ -84,3 +84,9 @@ It exercises both circuit profiles and creates the development manifest and
 files needed by the opt-in pairing integration test. See the CI development
 setup section in `docs/internal/PILOT_ARTIFACT_DOCTOR.md`. The script does not
 approve its self-generated trust pins for any production or customer workflow.
+
+ADR 0007 adds scoped signed valuation approvals to the Python witness builder.
+The approval is checked outside the circuit at the evaluation time. Current
+verifiers still must authenticate the quote with their own tenant/clock and
+recompute the expected projection; a prover bypassing Python does not thereby
+receive authority to choose its own price.

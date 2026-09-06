@@ -7,9 +7,11 @@ import subprocess
 from pathlib import Path
 
 import pytest
+from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 
 from src.protocol.credential import PilotCredential, holder_commitment
 from src.protocol.transfer import AssetDefinition, AssetRegistry, Transfer, VerificationContext
+from src.protocol.valuation_approval import ValuationApproval, ValuationAuthority, ValuationTrustStore, sign_valuation
 from src.prover.pilot_compliance import PUBLIC_SIGNALS, compliance_witness
 from src.registry.pilot_sanctions import PilotSanctionsTree
 from src.registry.pilot_tree import PilotTree
@@ -39,6 +41,28 @@ def witness():
     )
     issuance = PilotTree([("credential", credential.commitment)], depth=8)
     issuers = PilotTree([("issuer", credential.authorized_issuer_leaf(issuance.root))], depth=8)
+    quote_key = Ed25519PrivateKey.generate()
+    quote_authority = ValuationAuthority(
+        public_key=quote_key.public_key().public_bytes_raw().hex(),
+        tenant_id=transfer.tenant_id,
+        asset_registry_digest=registry.digest,
+        asset_ids=(transfer.asset_id,),
+        source_ids=(transfer.valuation.source_id,),
+        not_before=transfer.valuation.observed_at,
+        not_after=transfer.valuation.expires_at,
+        max_quote_lifetime_seconds=600,
+        max_observation_age_seconds=300,
+    )
+    quote_approval = sign_valuation(
+        ValuationApproval(
+            tenant_id=transfer.tenant_id,
+            asset_registry_digest=registry.digest,
+            valuation=transfer.valuation,
+            signed_at=transfer.created_at,
+            key_id=quote_authority.key_id,
+        ),
+        quote_key,
+    )
     return compliance_witness(
         transfer,
         context,
@@ -49,6 +73,8 @@ def witness():
         issuance_path=issuance.membership("credential"),
         issuer_path=issuers.membership("issuer"),
         sanctions=PilotSanctionsTree([]),
+        valuation_approval=quote_approval,
+        valuation_trust=ValuationTrustStore([quote_authority]),
     )
 
 
