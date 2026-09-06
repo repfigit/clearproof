@@ -49,8 +49,8 @@ Unit tests enumerate all permutations of a multi-event lifecycle, replay
 retries, reject conflicting duplicate identities/sequences, exercise tenant and
 clock substitution, and distinguish complete, failed, timed-out and reorganized
 observations. Durable internal ingestion is described below. Authenticated
-provider adapters, abrupt-restart acceptance, provider links, full queue policy
-and API/CLI reports remain open CP-012–CP-014 integration. No provider interoperability or
+provider adapters, provider links, full queue policy and CLI reports remain
+open CP-012–CP-014 integration. No provider interoperability or
 live account integration is claimed by these local replay tests.
 
 ## Durable internal ingestion
@@ -89,6 +89,34 @@ receipts. Revoking an actor does not erase prior evidence or prove it was false.
 PostgreSQL tests cover concurrent duplicates, out-of-order delivery, reconnect,
 sequence-conflict rollback after the encrypted insert, identity substitution,
 source/actor/time/dimension rejection, ciphertext minimization and identical
-provider IDs in separate tenants. Abrupt process death during ingestion,
-authenticated HTTP ingestion, provider signatures, signed source provenance,
-and the complete investigation API/CLI remain open acceptance work.
+provider IDs in separate tenants. A separate process-death test kills the
+ingester after its encrypted insert and before index insertion, then checks
+rollback and successful retry. Provider signatures, signed source provenance,
+queue policy and the complete investigation CLI remain open acceptance work.
+
+## Authenticated API
+
+`POST /pilot/events/ingest` accepts a `SourceEvent` JSON record. It requires
+`events:ingest` and `evidence:decrypt`, verifies the actor against server-owned
+`PILOT_EVENT_AUTHORITIES` JSON (`{"authorities": [...]}`), and stamps ingestion
+with the server clock. The authority inventory is bounded to 256 grants and
+64 KiB; each grant uses the `EventAuthority` fields described above. Configuration
+must be supplied by the operator, never copied from a request. Missing/invalid
+configuration fails closed with 503. Unknown source/actor/scope grants return
+403, conflicting identities/sequences 409, malformed events 422. Client-supplied
+ingestion timestamps or extra personal-data fields reject without being echoed.
+
+`POST /pilot/events/investigate` accepts `TransferScope`, requires `evidence:read`
+and `evidence:decrypt`, and returns the retained timeline, independent states
+and findings at the server clock. Its tenant must match the token. It requires
+the database and encryption keyring, but can inspect retained events even when
+new ingestion has been disabled by removing source grants. It performs no
+external calls or writes. Reports remain private operational evidence, with
+`caller-required` source trust; API authentication is not provider signature or
+canonical-chain verification.
+
+Uploads have ten-second deadlines and limits of 64 KiB for ingestion and 4 KiB
+for investigation. The policy API now shares the same bounded body reader,
+retaining its existing 1 MiB limit. Signed-JWT/PostgreSQL tests cover real role
+checks, source grants, duplicate and conflicting events, server timestamps,
+redacted errors, oversized bodies, reconnect and fail-closed configuration.

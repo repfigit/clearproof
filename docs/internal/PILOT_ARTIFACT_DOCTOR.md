@@ -134,6 +134,7 @@ The hosted circuit run 34009491967 timed out during phase-two preparation at
 snarkjs progress; other commands retain their 1,800-second limits. The CI job
 has a 150-minute total ceiling. Every command reports elapsed time, and the
 runner kills and reaps its owned process group on timeout or interruption.
-These changes do not establish CI success: a completed remote proof run is
-still required. Real subprocess tests cover success, nonzero exit and timeout
+CI run 34011343899 subsequently completed successfully at commit 3953cff,
+including both development round trips and all 11 jobs. This verifies that
+revision; newer changes require their own CI evidence. Real subprocess tests cover success, nonzero exit and timeout
 termination of a spawned worker.

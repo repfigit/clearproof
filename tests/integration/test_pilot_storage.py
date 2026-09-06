@@ -965,3 +965,155 @@ async def test_event_ingestion_concurrent_retry_restart_conflict_rollback_and_sc
     assert (await foreign.investigate(foreign_scope, now=150)).timeline == ()
     await foreign.ingest(SourceEvent.model_validate({**source.model_dump(), "scope": foreign_scope}), now=150)
     assert len((await foreign.investigate(foreign_scope, now=150)).timeline) == 1
+
+
+@pytest.fixture
+def event_case():
+    from src.reconciliation.events import SourceEvent, TransferScope
+    from src.services.event_ingestion import EventAuthority
+
+    scope = TransferScope(
+        tenant_id="tenant-a", transfer_id="transfer-a", chain_id="1", registry_address="0x" + "12" * 20
+    )
+    source = SourceEvent(
+        scope=scope,
+        source_id="custody-a",
+        source_event_id="event-1",
+        source_sequence=1,
+        dimension="custody",
+        state="submitted",
+        occurred_at=100,
+        evidence_digest="ab" * 32,
+    )
+    authority = EventAuthority(
+        tenant_id="tenant-a",
+        chain_id="1",
+        registry_address=scope.registry_address,
+        source_id="custody-a",
+        actors=("actor-a",),
+        dimensions=("custody",),
+        valid_from=1,
+        valid_until=300,
+    )
+    return source, authority
+
+
+async def test_event_api_real_jwt_configuration_and_minimized_errors(db, monkeypatch, event_case):
+    import json
+    import runpy
+    from pathlib import Path
+    from types import SimpleNamespace
+
+    from httpx import ASGITransport, AsyncClient
+
+    from src.api.routes import events as routes
+
+    source, authority = event_case
+    fixture = runpy.run_path(str(Path(__file__).resolve().parents[1] / "unit/test_policy_diff.py"))
+    app, token = fixture["authenticated_app"].__wrapped__(monkeypatch)
+    app.include_router(routes.router)
+    app.state.db = db
+    monkeypatch.setenv("PII_MASTER_KEY", "61" * 32)
+    monkeypatch.setenv("PILOT_EVENT_AUTHORITIES", json.dumps({"authorities": [authority.model_dump(mode="json")]}))
+    monkeypatch.setattr(routes, "time", SimpleNamespace(time=lambda: 150))
+    headers = {"Authorization": "Bearer " + token(roles=("events:ingest", "evidence:read", "evidence:decrypt"))}
+    body = source.model_dump(mode="json")
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        first = await client.post("/pilot/events/ingest", json=body, headers=headers)
+        assert first.status_code == 200 and not first.json()["duplicate"]
+        again = await client.post("/pilot/events/ingest", json=body, headers=headers)
+        assert again.status_code == 200 and again.json()["duplicate"]
+        assert (await client.post("/pilot/events/ingest", json=body)).status_code == 401
+        missing_role = {"Authorization": "Bearer " + token()}
+        assert (await client.post("/pilot/events/ingest", json=body, headers=missing_role)).status_code == 403
+        spoofed = await client.post("/pilot/events/ingest", json={**body, "ingested_at": 1}, headers=headers)
+        assert spoofed.status_code == 422 and "ingested_at" not in spoofed.text
+        rejected = await client.post(
+            "/pilot/events/ingest", json={**body, "customer": "secret-customer"}, headers=headers
+        )
+        assert rejected.status_code == 422 and "secret-customer" not in rejected.text
+        unknown = await client.post("/pilot/events/ingest", json={**body, "source_id": "not-granted"}, headers=headers)
+        assert unknown.status_code == 403
+        conflict = await client.post("/pilot/events/ingest", json={**body, "state": "failed"}, headers=headers)
+        assert conflict.status_code == 409
+        assert (await client.post("/pilot/events/ingest", content=b"x" * 65537, headers=headers)).status_code == 413
+        await db.close()
+        await db.connect()
+        scope = source.scope.model_dump(mode="json")
+        report = await client.post("/pilot/events/investigate", json=scope, headers=headers)
+        assert report.status_code == 200 and report.json()["states"]["custody"] == "submitted"
+        assert report.json()["timeline"][0]["ingested_at"] == 150
+        assert (
+            await client.post("/pilot/events/investigate", json={**scope, "tenant_id": "tenant-b"}, headers=headers)
+        ).status_code == 403
+        monkeypatch.delenv("PILOT_EVENT_AUTHORITIES")
+        assert (await client.post("/pilot/events/ingest", json=body, headers=headers)).status_code == 503
+        assert (await client.post("/pilot/events/investigate", json=scope, headers=headers)).status_code == 200
+
+
+async def test_process_death_between_event_and_index_rolls_back(db, event_case):
+    import json
+    import sys
+
+    from src.services.event_ingestion import EventIngestionService
+
+    source, authority = event_case
+    principal = Principal(
+        tenant_id="tenant-a", actor_id="actor-a", roles=("events:ingest", "evidence:decrypt", "evidence:read")
+    )
+    program = """
+import asyncio,json,sys
+from src.auth.principal import Principal
+from src.reconciliation.events import SourceEvent
+from src.services.event_ingestion import EventAuthority,EventIngestionService
+from src.storage.database import Database
+from src.storage.keyring import KeyRing,KeyVersion
+from src.storage.pilot_cipher import RecordCipher
+from src.storage.pilot import PilotTransaction
+async def pause_after_insert(self,*args):
+    print("INSERTED-UNCOMMITTED",flush=True)
+    await asyncio.sleep(60)
+async def main():
+    data=json.loads(sys.stdin.read())
+    db=Database(pool_min=1,pool_max=1)
+    await db.connect()
+    PilotTransaction.index_event=pause_after_insert
+    principal=Principal.model_validate_json(json.dumps(data["principal"]))
+    authority=EventAuthority.model_validate_json(json.dumps(data["authority"]))
+    cipher=RecordCipher(KeyRing(KeyVersion("current",b"a"*32,0)))
+    service=EventIngestionService(db,cipher,principal,authorities=(authority,))
+    await service.ingest(SourceEvent.model_validate_json(json.dumps(data["source"])),now=150)
+asyncio.run(main())
+"""
+    process = await asyncio.create_subprocess_exec(
+        sys.executable,
+        "-c",
+        program,
+        stdin=asyncio.subprocess.PIPE,
+        stdout=asyncio.subprocess.PIPE,
+        stderr=asyncio.subprocess.DEVNULL,
+    )
+    try:
+        payload = {
+            "principal": principal.model_dump(mode="json"),
+            "authority": authority.model_dump(mode="json"),
+            "source": source.model_dump(mode="json"),
+        }
+        process.stdin.write(json.dumps(payload).encode())
+        await process.stdin.drain()
+        process.stdin.close()
+        assert await asyncio.wait_for(process.stdout.readline(), 15) == b"INSERTED-UNCOMMITTED\n"
+        process.kill()
+        await asyncio.wait_for(process.wait(), 10)
+    finally:
+        if process.returncode is None:
+            process.kill()
+        await process.wait()
+    service = EventIngestionService(db, cipher(), principal, authorities=(authority,))
+    # Taking the tenant lock waits for the dead backend's transaction rollback.
+    assert (await service.investigate(source.scope, now=150)).timeline == ()
+    async with db.connection() as conn:
+        assert (await (await conn.execute("SELECT count(*) FROM pilot_records WHERE kind='event'")).fetchone())[0] == 0
+    result = await service.ingest(source, now=151)
+    assert not result["duplicate"]
+    assert len((await service.investigate(source.scope, now=152)).timeline) == 1

@@ -16,6 +16,7 @@ from src.api.routes.auth import router as auth_router
 from src.api.routes.credential import router as credential_router
 from src.api.routes.discovery import router as discovery_router
 from src.api.routes.enrollment import router as enrollment_router
+from src.api.routes.events import router as events_router
 from src.api.routes.health import router as health_router
 from src.api.routes.policy import router as policy_router
 from src.api.routes.proof import router as proof_router
@@ -108,6 +109,7 @@ def create_app() -> FastAPI:
     app.include_router(discovery_router)
     app.include_router(enrollment_router)
     app.include_router(policy_router)
+    app.include_router(events_router)
 
     return app
 

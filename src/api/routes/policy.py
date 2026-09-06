@@ -1,10 +1,10 @@
 """Authenticated bounded policy review and read-only comparison."""
 
-import asyncio
 import time
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 
+from src.api.request_body import read_private_body as read_policy_body
 from src.auth.principal import Principal, TenantPrincipalDependency
 from src.policy.diff import MAX_INPUT_BYTES, PolicyDiffRequest, compare_policies
 from src.protocol.transfer import OpaqueId, Record
@@ -43,19 +43,6 @@ async def policy_diff(request: Request, principal: Principal = Depends(TenantPri
         return compare_policies(comparison).model_dump(mode="json")
     except (ValueError, TypeError):
         raise HTTPException(status_code=422, detail="Policy comparison scope or evidence is invalid") from None
-
-
-async def read_policy_body(request: Request) -> bytes:
-    body = bytearray()
-    try:
-        async with asyncio.timeout(10):
-            async for chunk in request.stream():
-                if len(body) + len(chunk) > MAX_INPUT_BYTES:
-                    raise HTTPException(status_code=413, detail="Policy comparison exceeds the input limit")
-                body.extend(chunk)
-    except TimeoutError:
-        raise HTTPException(status_code=408, detail="Policy comparison upload timed out") from None
-    return bytes(body)
 
 
 class ApprovalBody(Record):

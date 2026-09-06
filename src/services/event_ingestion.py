@@ -11,6 +11,10 @@ from src.reconciliation.events import Dimension, SourceEvent, TransferEvent, Tra
 from src.storage.pilot import PilotStore, RecordConflict
 
 
+class EventAuthorityError(ValueError):
+    pass
+
+
 class EventAuthority(Record):
     tenant_id: OpaqueId
     chain_id: UInt128
@@ -61,7 +65,7 @@ class EventIngestionService:
             and authority.valid_from <= event.occurred_at <= now < authority.valid_until
             for authority in self.authorities
         ):
-            raise ValueError("Event source is outside the configured authority")
+            raise EventAuthorityError("Event source is outside the configured authority")
         identity = record_digest(
             "clearproof/source-event-id/v1",
             {
@@ -100,7 +104,7 @@ class EventIngestionService:
         self.principal.require("evidence:decrypt")
         scope = TransferScope.model_validate(scope)
         if scope.tenant_id != self.principal.tenant_id:
-            raise ValueError("Investigation is outside the authenticated tenant")
+            raise EventAuthorityError("Investigation is outside the authenticated tenant")
         events = []
         async with self.store.transaction() as tx:
             for record_id in await tx.event_ids(scope.digest):
