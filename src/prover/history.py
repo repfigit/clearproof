@@ -12,6 +12,7 @@ from src.protocol.decision_attestation import DecisionSignatureError, DecisionTr
 from src.protocol.transfer import Transfer, VerificationContext
 from src.prover.history_policy import replay_history_policy
 from src.prover.history_statement import HistoryStatementTrust, reconstruct_history_statement
+from src.prover.history_status import HistoryStatusTrust
 from src.prover.pilot_verifier import PilotPairingVerifier, PilotProof, public_signals
 
 
@@ -25,6 +26,7 @@ class HistoryInspection:
     statement_valid: bool | None = None
     policy_reproduced: bool | None = None
     decision_authenticated: bool | None = None
+    status_authenticated: bool | None = None
 
 
 class MissingHistoryEvidence(ValueError):
@@ -144,6 +146,7 @@ async def inspect_history_bundle(
     statement_trust: HistoryStatementTrust | None = None,
     fact_trust: FactTrustStore | None = None,
     decision_trust: DecisionTrustStore | None = None,
+    status_trust: HistoryStatusTrust | None = None,
 ) -> HistoryInspection:
     """Pins and verifier come from the reviewer, never from the exported bundle.
 
@@ -216,6 +219,23 @@ async def inspect_history_bundle(
                 policy_reproduced,
                 False,
             )
+    status_authenticated = None
+    if status_trust is not None and statement_valid:
+        try:
+            status_trust.verify(bundle, verified_at=verified_at)
+            status_authenticated = True
+        except (ValueError, KeyError, TypeError):
+            return HistoryInspection(
+                "indeterminate",
+                True,
+                True,
+                verified_at,
+                ("historical_status_authority_unavailable",),
+                statement_valid,
+                policy_reproduced,
+                decision_authenticated,
+                False,
+            )
     return HistoryInspection(
         "indeterminate",
         True,
@@ -225,10 +245,11 @@ async def inspect_history_bundle(
             *(("statement_semantics_unverified",) if statement_valid is None else ()),
             *(("policy_replay_unverified",) if policy_reproduced is None else ()),
             *(("decision_authority_unverified",) if decision_authenticated is None else ()),
-            "historical_revocation_evidence_missing",
+            *(("historical_revocation_evidence_missing",) if status_authenticated is None else ()),
             "independent_timing_evidence_missing",
         ),
         statement_valid,
         policy_reproduced,
         decision_authenticated,
+        status_authenticated,
     )

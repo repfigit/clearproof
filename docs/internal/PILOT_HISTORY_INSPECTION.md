@@ -53,8 +53,8 @@ without reconstructed statement semantics.
 
 Proof expiry at the reviewer's time does not itself prevent historical pairing.
 `verified_at` is recorded separately; embedded decision/capture times remain
-claims to authenticate. A locally observed absence of revocation is not upgraded
-into historical non-revocation, and valid pairing cannot authorize a replay.
+claims to authenticate. Integrity and pairing alone cannot upgrade a locally observed absence of
+revocation into authoritative historical status or authorize a replay.
 
 The PostgreSQL/real-proof scenario checks exported history after expiry, later
 policy activation and credential revocation. It rejects altered receipts, roots,
@@ -73,7 +73,7 @@ and refuse a fact source excluded by reviewer trust. Successful replay still
 retains status history and independent timing reasons, plus decision authority
 when its independent check is omitted.
 
-Required next layers are historical status and broader compromise handling, independent timing authority, the
+Required next layers are broader source compromise handling, independent timing authority, the
 `supported` path and `verify-history` CLI. This stage does not complete CP-015.
 
 Reviewer-supplied `decision_trust` verifies the retained
@@ -83,3 +83,11 @@ unverified-decision reason. An invalid signature yields `contradicted`; missing,
 unknown or compromised authority yields `indeterminate`. Compromise is checked at
 reviewer time, so an operator's claimed earlier time cannot bypass it. Successful
 authentication still leaves historical status and independent timing unresolved.
+
+Optional reviewer-supplied `status_trust` independently delegates registry status
+authority for the issuer. The [historical status check](PILOT_HISTORY_STATUS.md)
+runs only after statement reconstruction, verifies the signed captured observation
+and records `status_authenticated`. Successful status authentication removes the
+missing-revocation-evidence reason for that configured pilot registry scope;
+independent timing remains unresolved. Current status is never queried or used
+as a replacement for the original observation.

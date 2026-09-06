@@ -2088,6 +2088,63 @@ async def test_durable_current_inspection_real_pairing_and_revocation(db, monkey
             )
             assert attested.decision_authenticated and attested.policy_reproduced and attested.statement_valid
             assert attested.outcome == "indeterminate" and "decision_authority_unverified" not in attested.reasons
+            from src.prover.history_status import HistoryStatusAuthority, HistoryStatusTrust, status_registry_id
+
+            status_authority = HistoryStatusAuthority.model_validate(
+                {
+                    **decision_authority.model_dump(),
+                    "registry_id": status_registry_id(configuration.context),
+                    "issuer_did": credential.issuer_did,
+                }
+            )
+            status_trust = HistoryStatusTrust([status_authority])
+            with_status = await inspect_history_bundle(
+                bundle,
+                verifier,
+                statement_trust=historical_trust,
+                fact_trust=trust,
+                decision_trust=decision_trust,
+                status_trust=status_trust,
+                **history_args,
+            )
+            assert with_status.status_authenticated and with_status.decision_authenticated
+            assert with_status.outcome == "indeterminate"
+            assert with_status.reasons == ("independent_timing_evidence_missing",)
+            # Original signed observation survives a later real revocation. Its
+            # authority must be independently delegated for this issuer/registry.
+            for field, value in (
+                ("issuer_did", "did:web:other.example"),
+                ("registry_id", "ef" * 32),
+                ("tenant_id", "foreign"),
+                ("compromised_at", now + 1),
+            ):
+                restricted_status = HistoryStatusTrust(
+                    [HistoryStatusAuthority.model_validate({**status_authority.model_dump(), field: value})]
+                )
+                with pytest.raises(ValueError):
+                    restricted_status.verify(bundle, verified_at=history_args["verified_at"])
+            missing_delegation = await inspect_history_bundle(
+                bundle,
+                verifier,
+                statement_trust=historical_trust,
+                status_trust=restricted_status,
+                **history_args,
+            )
+            assert missing_delegation.outcome == "indeterminate" and not missing_delegation.status_authenticated
+            for field, value in (
+                ("observed_at", now - 1),
+                ("credential_id", "ee" * 32),
+                ("revocation", "revoked"),
+                ("registry_id", "ff" * 32),
+            ):
+                altered_status = deepcopy(bundle)
+                altered_status["evidence_manifest"]["credential_status"][field] = value
+                with pytest.raises(ValueError):
+                    status_trust.verify(altered_status, verified_at=history_args["verified_at"])
+            unsigned_status = deepcopy(bundle)
+            del unsigned_status["proof"]["decision_attestation"]
+            with pytest.raises(KeyError):
+                status_trust.verify(unsigned_status, verified_at=history_args["verified_at"])
             bad_decision_signature = deepcopy(bundle)
             bad_decision_signature["proof"]["decision_attestation"]["signature"] = "00" * 64
             bad_attestation = await inspect_history_bundle(

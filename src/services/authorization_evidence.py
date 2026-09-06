@@ -5,6 +5,7 @@ import hashlib
 
 from src.protocol.canonical import canonical_bytes, record_digest
 from src.protocol.root_snapshot import root_scope_id
+from src.prover.history_status import status_registry_id
 from src.services.policy_activation import activation_scope
 
 
@@ -15,6 +16,7 @@ async def retain_authorization_evidence(tx, *, inputs, verifier, credential_id, 
     An absent local revocation is an observation, not authenticated global history.
     """
     references = []
+    enrollment = None
     selected = [
         ("credential", credential_id),
         ("policy", policy.digest),
@@ -29,6 +31,8 @@ async def retain_authorization_evidence(tx, *, inputs, verifier, credential_id, 
         row = await tx.read(kind, identity)
         if row is None:
             raise ValueError("Required authorization evidence is unavailable")
+        if kind == "credential":
+            enrollment = row.value
         references.append(
             {
                 "kind": kind,
@@ -73,6 +77,9 @@ async def retain_authorization_evidence(tx, *, inputs, verifier, credential_id, 
         "captured_at": now,
         "timing_authority": "operator-clock-only",
         "credential_status": {
+            "schema_version": "clearproof-local-status-observation-v1",
+            "registry_id": status_registry_id(inputs["context"]),
+            "issuer_did": enrollment["consent"]["credential"]["issuer_did"],
             "credential_id": credential_id,
             "revocation": "not-present-in-local-store",
             "observed_at": now,

@@ -39,3 +39,9 @@ changes policy activation and revokes the credential. After reconnect it verifie
 that the capture still identifies the original activation and observation. The
 existing failure-after-consumption injection checks that chunks and manifest also
 roll back with the rest of authorization.
+
+New captures include `clearproof-local-status-observation-v1`, binding the issuer
+and a tenant/deployment registry ID to the credential and observation time. The
+decision signature covers this manifest through its digest. Independent
+[historical status delegation](PILOT_HISTORY_STATUS.md) is required to regard
+that registry as authoritative for the issuer; capture alone cannot approve it.
