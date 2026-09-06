@@ -118,7 +118,7 @@ jobs:
       - run: cd packages/proof && npx tsc --noEmit
       - run: cd packages/cli && npx tsc
       - name: Policy CLI transport and built-command checks
-        run: cd packages/cli && npx vitest run test/policy.test.ts
+        run: cd packages/cli && npx vitest run test/policy.test.ts test/investigation.test.ts
       - name: Off-chain parity tests (committed vector)
         run: cd packages/proof && npx vitest run
 

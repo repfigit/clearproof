@@ -57,3 +57,31 @@ A comparison neither activates a policy nor consumes transfer authorization.
 ## License
 
 Apache-2.0
+
+## Investigation reports (unreleased)
+
+The `investigation timeline` and `investigation queue` commands read JSON from
+stdin and use the same explicit API origin and environment token as policy
+comparison. The token needs `evidence:read` and `evidence:decrypt`.
+
+```bash
+# Pipe a TransferScope object into the timeline command:
+node packages/cli/dist/index.js investigation timeline --api-url https://your-api.example
+
+# Pipe QueueRequest JSON, such as {}, into the queue command:
+node packages/cli/dist/index.js investigation queue --api-url https://your-api.example --pages 8
+```
+
+Both default to readable text; `--json` emits the report. Timeline text displays
+independent states, findings and source/receipt times. It does not infer
+settlement from compliance approval. Output belongs in protected tenant workflows.
+
+Queue collection follows continuation through empty filtered pages, rejects
+nonadvancing cursors and duplicate transfer scopes, and sorts the collected
+results by reported age. `--pages` defaults to 1 and permits 1–32. The collection
+has a 60-second deadline; each HTTP request retains its 30-second bound. A page
+budget exhausted before the final page produces an explicitly partial report
+with `next_cursor`; pass that digest as `after` in the next stdin request.
+Starting from a cursor is also marked partial relative to the whole queue.
+Pages have separate observation times and are not a frozen historical snapshot.
+Terminal-control characters in rendered fields reject instead of being executed.

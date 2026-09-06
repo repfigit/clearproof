@@ -156,3 +156,20 @@ empty filtered pages with continuation, exact age boundaries, deterministic
 ordering, reconnect, role rejection, tenant isolation and unchanged storage
 counts. CLI rendering, provider links and broader queue decision rules remain
 open CP-014 work.
+
+## CLI reports
+
+The unreleased CLI now provides `investigation timeline` and `investigation
+queue`, taking the corresponding API request JSON from stdin. Both use the
+shared bounded authenticated HTTP client and default to readable output;
+`--json` preserves machine-readable results. Queue collection follows up to
+`--pages` pages (default 1, maximum 32) under a 60-second deadline, continues
+through empty filtered pages, and preserves continuation for partial scans.
+Collected items sort by their reported age; separate page times remain explicit.
+No frozen global snapshot or complete traversal is inferred from a page budget.
+
+Transport and rendering tests exercise collection order, empty pages, partial
+budgets, duplicate/cursor rejection, terminal escape rejection and actual built
+CLI execution against a local HTTP simulator. The previous policy CLI transport
+checks pass after sharing the client. Combined investigation CLI-to-real-API
+validation and provider links remain open integration work.

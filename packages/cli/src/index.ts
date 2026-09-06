@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 import { Command } from 'commander';
+import { investigationCommand } from './commands/investigation.js';
 import { policyCommand } from './commands/policy.js';
 import { demoCommand } from './commands/demo.js';
 import { proveCommand } from './commands/prove.js';
@@ -17,6 +18,7 @@ program
   .description('ZK Travel Rule Compliance Bridge — proof generation & verification')
   .version(pkg.version);
 
+program.addCommand(investigationCommand);
 program.addCommand(policyCommand);
 program.addCommand(demoCommand);
 program.addCommand(proveCommand);
