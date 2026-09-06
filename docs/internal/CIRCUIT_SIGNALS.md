@@ -389,3 +389,21 @@ for the parent holder-nullifier construction. This is not the final public ABI.
 | 47 | `valuation_digest_lo` |
 
 See ADR 0005 for canonical-record binding and trust boundaries.
+
+## Unreleased composed development profile: pilot-transfer-v1
+
+`circuits/pilot_compliance.circom` has eight public inputs and zero outputs:
+
+1. `projection_commitment`
+2. `authorized_issuer_root`
+3. `sanctions_root`
+4. `authorization_nullifier`
+5. `evaluated_at`
+6. `proof_expires_at`
+7. `domain_chain_id`
+8. `domain_registry`
+
+The Python encoder is `src/prover/pilot_compliance.py`. This is a separate
+profile, not a replacement ABI for the legacy verifier. See
+[ADR 0006](../adr/0006-composed-pilot-transfer.md) for private fields, tree bounds,
+trust requirements and the incompatible raw-address sanctions profile.

@@ -40,7 +40,7 @@ jobs:
           circom --version
           node --version
       - name: Real credential, valuation and projection constraints
-        run: uv run python -m pytest tests/unit/test_pilot_credential.py tests/unit/test_pilot_valuation.py tests/unit/test_pilot_projection.py -q
+        run: uv run python -m pytest tests/unit/test_pilot_credential.py tests/unit/test_pilot_valuation.py tests/unit/test_pilot_projection.py tests/unit/test_pilot_compliance.py -q
 
   discovery:
     runs-on: ubuntu-latest
