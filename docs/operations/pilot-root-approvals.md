@@ -95,3 +95,8 @@ Matching retries return the original publication receipt, not an assertion that
 its root is still current. The local refresh is not a production key-management
 service. It neither publishes an independently trusted head nor provides a new
 HTTP endpoint. Those integration gates and real composed proofs remain open.
+
+A separate development checkpoint implementation and Python reader are now
+available; see `pilot-root-checkpoint.md`. They provide a local-EVM-tested current
+head boundary. Operator deployment, registrar delivery and composed-verifier
+integration remain required before enabling authorization.

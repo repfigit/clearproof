@@ -6,6 +6,21 @@ on:
     branches: [main]
 
 jobs:
+  pilot-root-checkpoint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - run: npm install
+      - run: uv sync --extra dev
+      - name: Checkpoint contract invariants
+        run: cd packages/contracts && npx hardhat test test/PilotRootCheckpoint.test.ts
+      - name: Python checkpoint verification on an isolated local EVM
+        run: uv run python scripts/test_checkpoint_evm.py
+
   pilot-credential-witness:
     runs-on: ubuntu-latest
     steps:

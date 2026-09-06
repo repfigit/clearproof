@@ -1,24 +1,11 @@
 """Persist registrar-approved root revisions with atomic predecessor checks."""
 
 from src.auth.principal import Principal
-from src.protocol.canonical import record_digest
-from src.protocol.root_snapshot import RootSnapshot, RootTrustError, RootTrustStore, SignedRootSnapshot
+from src.protocol.root_snapshot import RootTrustError, RootTrustStore, SignedRootSnapshot
+from src.protocol.root_snapshot import root_scope_id as root_record_id
 from src.storage.database import Database
 from src.storage.pilot import PilotStore, PilotTransaction, RecordConflict
 from src.storage.pilot_cipher import RecordCipher
-
-
-def root_record_id(snapshot: RootSnapshot) -> str:
-    return record_digest(
-        "clearproof/root-scope/v1",
-        {
-            "kind": snapshot.kind,
-            "issuer_did": snapshot.issuer_did,
-            "chain_id": snapshot.chain_id,
-            "registry_address": snapshot.registry_address,
-            "proof_profile": snapshot.proof_profile,
-        },
-    )
 
 
 class RootPublicationService:

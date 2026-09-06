@@ -168,3 +168,16 @@ def sign_root(snapshot: RootSnapshot, private_key: Ed25519PrivateKey) -> SignedR
     if root_key_id(private_key.public_key().public_bytes_raw()) != snapshot.key_id:
         raise RootTrustError("Signing key does not match the snapshot")
     return SignedRootSnapshot(snapshot=snapshot, signature=private_key.sign(snapshot.signing_bytes()).hex())
+
+
+def root_scope_id(snapshot: RootSnapshot) -> str:
+    return record_digest(
+        "clearproof/root-scope/v1",
+        {
+            "kind": snapshot.kind,
+            "issuer_did": snapshot.issuer_did,
+            "chain_id": snapshot.chain_id,
+            "registry_address": snapshot.registry_address,
+            "proof_profile": snapshot.proof_profile,
+        },
+    )
