@@ -1,126 +1,115 @@
-"""
-Counterparty VASP discovery client (specs/well-known-clearproof.md).
-
-Resolves a beneficiary VASP's HPKE public key from its well-known
-``clearproof.json`` document so PII envelopes can be sealed with HPKE v2
-without manual key configuration.
-
-Trust model: the well-known document is self-declared by the counterparty
-domain over TLS. If registry-backed identity assurance is required, compare
-the domain/DID against the on-chain VASPRegistry before trusting the key
-(see ROADMAP Phase 1, "Registry-backed discovery verification").
-
-Cache: in-memory, 1-hour TTL (counterparty key rotation is expected to be
-rare and announced; a stale key fails open to v1 with a warning rather than
-breaking transfers).
-"""
+"""Constrained, versioned counterparty discovery. Never permits a downgrade."""
 
 from __future__ import annotations
 
-import base64
-import logging
+import copy
+import json
+import math
+import os
+import ssl
 import time
-from typing import Any
+from collections import OrderedDict
 
-import httpx
+from src.protocol.discovery_profile import (
+    DiscoveryError,
+    DiscoveryInvalid,
+    DiscoveryUnavailable,
+    DiscoveryUnsupported,
+    decode_hpke_key,
+    parse_target,
+    validate_document,
+)
+from src.protocol.discovery_transport import EgressPolicy, Resolver, fetch_document, resolve_addresses
 
-logger = logging.getLogger(__name__)
+__all__ = [
+    "DiscoveryClient",
+    "DiscoveryError",
+    "DiscoveryInvalid",
+    "DiscoveryUnavailable",
+    "DiscoveryUnsupported",
+    "EgressPolicy",
+    "clear_discovery_cache",
+    "resolve_hpke_public_key",
+]
 
-__all__ = ["DiscoveryError", "clear_discovery_cache", "resolve_hpke_public_key"]
 
-_CACHE_TTL_SECONDS = 3600
-_TIMEOUT_SECONDS = 10.0
+class DiscoveryClient:
+    """One transport policy and bounded cache per client instance.
 
-# domain -> (expires_at, hpke_public_key_bytes | None)
-_cache: dict[str, tuple[float, bytes | None]] = {}
+    Resolver and TLS context are operator dependencies, never request fields.
+    Domain ownership is self-declared; this does not check a VASP registry.
+    """
+
+    def __init__(
+        self,
+        *,
+        policy: EgressPolicy | None = None,
+        resolver: Resolver = resolve_addresses,
+        ssl_context: ssl.SSLContext | None = None,
+        cache_ttl: float = 300,
+        timeout: float = 10,
+    ):
+        if not math.isfinite(cache_ttl) or not 0 <= cache_ttl <= 3600:
+            raise ValueError("cache_ttl must be finite and between 0 and 3600 seconds")
+        if not math.isfinite(timeout) or not 0 < timeout <= 60:
+            raise ValueError("timeout must be finite and between 0 and 60 seconds")
+        self._policy, self._resolver, self._ssl_context = policy or EgressPolicy(), resolver, ssl_context
+        self._ttl, self._timeout = cache_ttl, timeout
+        self._cache: OrderedDict[str, tuple[float, dict]] = OrderedDict()
+        self._generation = 0
+
+    def clear_cache(self) -> None:
+        self._generation += 1
+        self._cache.clear()
+
+    async def discover(self, identity: str) -> dict:
+        target = parse_target(identity)
+        now, generation = time.monotonic(), self._generation
+        cached = self._cache.pop(target.did, None)
+        if cached and cached[0] > now:
+            self._cache[target.did] = cached
+            return copy.deepcopy(cached[1])
+        document = validate_document(
+            await fetch_document(target, self._policy, self._resolver, self._timeout, self._ssl_context),
+            target,
+        )
+        # TTL starts before the fetch. Clearing the cache fences in-flight replies.
+        if self._ttl and now + self._ttl > time.monotonic() and generation == self._generation:
+            self._cache[target.did] = (now + self._ttl, copy.deepcopy(document))
+            while len(self._cache) > 128:
+                self._cache.popitem(last=False)
+        return document
+
+    async def resolve_hpke_public_key(self, identity: str) -> bytes:
+        doc = await self.discover(identity)
+        return decode_hpke_key(doc["clearproof"]["hpkePublicKey"])
 
 
-class DiscoveryError(Exception):
-    """Raised when a counterparty's discovery document cannot be resolved."""
+_default_client = DiscoveryClient()
+_default_settings = ("{}", None, None)
 
 
 def clear_discovery_cache() -> None:
-    """Flush the discovery cache (tests, forced key-rotation refresh)."""
-    _cache.clear()
+    _default_client.clear_cache()
 
 
-def _domain_from_did_or_domain(value: str) -> str:
-    """
-    Extract the domain from a did:web DID or pass a bare domain through.
-
-    did:web:example.com            -> example.com
-    did:web:example.com:path:vasp  -> example.com (path segments ignored for
-                                     the well-known location; the document
-                                     itself carries the full DID)
-    """
-    value = value.strip()
-    if value.startswith("did:web:"):
-        parts = value[len("did:web:"):].split(":")
-        return parts[0]
-    return value.removeprefix("https://").removeprefix("http://").split("/")[0]
-
-
-async def _fetch_well_known(domain: str, http_client: httpx.AsyncClient | None) -> dict[str, Any]:
-    url = f"https://{domain}/.well-known/clearproof.json"
-    try:
-        if http_client is not None:
-            resp = await http_client.get(url)
-        else:
-            async with httpx.AsyncClient(timeout=_TIMEOUT_SECONDS) as client:
-                resp = await client.get(url)
-    except httpx.HTTPError as exc:
-        raise DiscoveryError(f"Failed to fetch {url}: {exc}") from exc
-    if resp.status_code != 200:
-        raise DiscoveryError(f"{url} returned HTTP {resp.status_code}")
-    try:
-        doc = resp.json()
-    except ValueError as exc:
-        raise DiscoveryError(f"{url} did not return valid JSON") from exc
-    if "clearproof" not in doc:
-        raise DiscoveryError(f"{url} is not a clearproof discovery document")
-    return doc
-
-
-async def resolve_hpke_public_key(
-    vasp_did_or_domain: str,
-    http_client: httpx.AsyncClient | None = None,
-) -> bytes | None:
-    """
-    Resolve the counterparty's HPKE (X25519) public key.
-
-    Args:
-        vasp_did_or_domain: Beneficiary ``did:web:`` DID or bare domain.
-        http_client: Optional injected client (testing).
-
-    Returns:
-        32-byte X25519 public key, or None if the counterparty does not
-        advertise one (caller should fall back per migration policy).
-
-    Raises:
-        DiscoveryError: On fetch/parse failure (callers decide fail-open vs
-            fail-closed; the proof route currently fails open to v1).
-    """
-    domain = _domain_from_did_or_domain(vasp_did_or_domain)
-
-    if domain in _cache:
-        expires_at, cached = _cache[domain]
-        if time.time() < expires_at:
-            return cached
-        del _cache[domain]
-
-    doc = await _fetch_well_known(domain, http_client)
-    clearproof = doc["clearproof"]
-
-    key_b64 = clearproof.get("hpkePublicKey")
-    result: bytes | None = None
-    if key_b64:
+async def resolve_hpke_public_key(vasp_did_or_domain: str) -> bytes:
+    global _default_client, _default_settings
+    settings = (
+        os.getenv("DISCOVERY_PRIVATE_DESTINATIONS", "{}"),
+        os.getenv("SSL_CERT_FILE"),
+        os.getenv("SSL_CERT_DIR"),
+    )
+    if settings != _default_settings:
         try:
-            key = base64.urlsafe_b64decode(key_b64.encode("ascii"))
-        except Exception as exc:
-            raise DiscoveryError(f"{domain}: hpkePublicKey is not valid base64url") from exc
-        if len(key) != 32:
-            raise DiscoveryError(f"{domain}: hpkePublicKey must be 32 bytes (X25519)")
-        result = key
-
-    _cache[domain] = (time.time() + _CACHE_TTL_SECONDS, result)
-    return result
+            if len(settings[0]) > 16384:
+                raise ValueError("Oversized policy")
+            destinations = json.loads(settings[0])
+            if not isinstance(destinations, dict):
+                raise ValueError("Expected an authority-to-CIDRs map")
+            replacement = DiscoveryClient(policy=EgressPolicy(destinations))
+        except (ValueError, TypeError, DiscoveryError) as exc:
+            raise DiscoveryInvalid("Invalid operator discovery egress configuration") from exc
+        _default_client.clear_cache()
+        _default_client, _default_settings = replacement, settings
+    return await _default_client.resolve_hpke_public_key(vasp_did_or_domain)

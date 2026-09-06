@@ -6,6 +6,19 @@ on:
     branches: [main]
 
 jobs:
+  discovery:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v4
+      - run: uv sync --extra dev
+      - name: Discovery profile, real TLS, encryption policy and SIWE compatibility
+        run: >-
+          uv run python -m pytest -q
+          tests/unit/test_discovery.py tests/unit/test_recipient_encryption_policy.py
+          tests/unit/test_siwe_compatibility.py tests/integration/test_discovery_transport.py
+          tests/integration/test_api_endpoints.py
+
   proof-storage:
     runs-on: ubuntu-latest
     services:

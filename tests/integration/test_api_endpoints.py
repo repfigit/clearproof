@@ -184,7 +184,7 @@ def mock_registry():
     registry.get = MagicMock()
     registry.revoke = MagicMock()
     registry.get_commitment = MagicMock()
-    
+
     # Override the dependency
     app.dependency_overrides[get_credential_registry] = lambda: registry
     yield registry
@@ -327,8 +327,10 @@ async def test_credential_revoke_already_revoked(client: AsyncClient, mock_regis
 
 
 @pytest.mark.asyncio
-async def test_proof_generate_happy_path(client: AsyncClient, mock_registry):
-    """POST /proof/generate with valid input should return a hybrid payload."""
+async def test_proof_generate_explicit_legacy_mode(client: AsyncClient, mock_registry, monkeypatch):
+    """Legacy encryption is available only through explicit operator selection."""
+    monkeypatch.setenv("PII_ENVELOPE_MODE", "legacy-v1")
+    monkeypatch.delenv("BENEFICIARY_HPKE_PUBLIC_KEY", raising=False)
     mock_credential = MagicMock()
     mock_credential.revoked = False
     mock_credential.sanctions_clear = True
@@ -518,3 +520,46 @@ async def test_rate_limiter_unit_returns_429():
         await limiter(mock_request)
     assert exc_info.value.status_code == 429
     assert "Rate limit" in exc_info.value.detail
+
+
+@pytest.mark.parametrize("failure,status", [("invalid", 422), ("unsupported", 422), ("unavailable", 503)])
+async def test_discovery_failure_stops_before_proving_or_encryption(
+    client, mock_registry, monkeypatch, failure, status
+):
+    from src.protocol.discovery_profile import DiscoveryInvalid, DiscoveryUnavailable, DiscoveryUnsupported
+
+    monkeypatch.setenv("PII_ENVELOPE_MODE", "hpke-v2")
+    monkeypatch.setenv("HPKE_DISCOVERY_ENABLED", "1")
+    monkeypatch.delenv("BENEFICIARY_HPKE_PUBLIC_KEY", raising=False)
+    credential = MagicMock(revoked=False, expires_at=int(time.time()) + 3600)
+    mock_registry.get.return_value = credential
+    error = {"invalid": DiscoveryInvalid, "unsupported": DiscoveryUnsupported, "unavailable": DiscoveryUnavailable}[
+        failure
+    ]
+    with (
+        patch(
+            "src.protocol.discovery.resolve_hpke_public_key", new_callable=AsyncMock, side_effect=error("lookup failed")
+        ),
+        patch("src.api.routes.proof._get_db_from_app", return_value=None),
+        patch("src.api.routes.proof._prover.fullprove", new_callable=AsyncMock) as prover,
+        patch("src.sar.encryption.encrypt_pii") as legacy,
+        patch("src.sar.hpke_envelope.seal_envelope") as hpke,
+    ):
+        response = await client.post(
+            "/proof/generate",
+            headers={"X-API-Key": API_KEY},
+            json={
+                "credential_id": "synthetic-credential",
+                "wallet_address": "0x" + "1" * 40,
+                "amount_usd": 100,
+                "asset": "USDC",
+                "destination_wallet": "0x" + "2" * 40,
+                "destination_vasp_did": "did:web:beneficiary.example",
+                "jurisdiction": "US",
+                "idempotency_key": "discovery-failure",
+            },
+        )
+        assert response.status_code == status
+        prover.assert_not_awaited()
+        legacy.assert_not_called()
+        hpke.assert_not_called()

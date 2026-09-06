@@ -2,7 +2,7 @@
 
 Created: 2026-09-05  
 Baseline: `4e7523147b26b23878265fa6759ec202e1a0b71e`  
-Status: implementation in progress; M0–M5 remain open until their acceptance gates pass  
+Status: M0 implemented and locally verified on draft PR #27; M1–M5 remain open until their acceptance gates pass
 Canonical location: `docs/plans/2026-09-05-adoption-pilot-implementation.md`
 
 **Goal**
@@ -160,5 +160,8 @@ The active goal is complete only when M0–M5 pass these acceptance gates and th
 | 2026-09-05 | Verification baseline | CI run `33999156760` at docs commit `9452788`: TypeScript, license and protobuf checks pass. Python collection fails in the SIWE/ABNF dependency with a core-rule `ALPHA` error; Hardhat reports 36 passing, 2 pending and 19 failing (outdated constructor fixtures and sender-binding expectations); circuit setup download returns HTTP 403. Circuit lint also passes; final result is four checks passing and three failing. No Python, circuit or contract source was changed by the website refresh. Investigate these gates as part of M0/M1 and CP-017; do not claim full CI passes. | Open |
 
 | 2026-09-05 | M0 / CP-002 | Reproduced cross-reader root leakage and swallowed RPC errors. Added deployment-local bounded caches, monotonic TTL, concurrent-call sharing, invalidation generations, defensive copies and strict 32-byte identifiers. Corrected bundled ABIs and proof-record decoding against current compiled contracts. Web3 wire-encoding/decoding fixture passes without live RPCs. All unit tests plus PostgreSQL proof-storage tests now pass: 231 tests; Ruff check/format and Hardhat compile pass. Added a dedicated PostgreSQL CI job for CP-001. | CP-002 complete; CP-003 open |
+
+| 2026-09-05 | M0 / CP-003 | Replaced permissive discovery with the explicit 0.4.0 profile: full DID matching, usable canonical X25519 keys, fingerprint/purpose/suite/version checks and same-authority endpoints. Python/Node use connection-pinned DNS policy, verified TLS, bounded uncompressed responses, no proxies or redirects, exact enterprise CIDR exceptions and isolated bounded caches. API rejects discovery errors before proving/encryption; legacy v1 requires operator selection. Shared Python-produced metadata/adversarial/network fixtures and real local HTTPS tests pass. Final focused Python gate: 143 passed; SDK: 124 passed; SDK build, CLI typecheck and full `npm run build` pass (all four workspaces, Node 24.20). Unit + PostgreSQL storage + TLS integration run: 333 passed (before seven additional key/number tests). Ruff and diff checks pass. Migration/limitations documented in `specs/well-known-clearproof.md`. | CP-003 complete; M0 implemented on draft PR #27; M1–M5 open |
+| 2026-09-05 | Verification baseline repair | Reproduced SIWE 4.4.0 import failure with ABNF 2.9.0 in an isolated environment. Pinned the tested ABNF 2.6.0; actual SIWE message parsing, EOA signing/verification, wrong signer/domain/nonce checks pass. Full local Python suite: 416 passed, 45 skipped (optional DB/artifact gates; real proof storage verified separately). Added dedicated discovery/TLS/API CI job. Prior PR #27 run `34000838114` confirmed the PostgreSQL job passes; contract fixture and circuit-download CI failures remain open. | Python collection repaired; remaining broader gates tracked |
 
 Update this log with implementation evidence. Keep unchecked milestones open until their tests and deliverables are verified.

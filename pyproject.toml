@@ -8,11 +8,15 @@ dependencies = [
     "fastapi>=0.110",
     "uvicorn[standard]>=0.29",
     "httpx>=0.27",
+    "httpcore[asyncio]>=1.0.9,<2",
     "cryptography>=42.0",
     "grpcio>=1.62",
     "PyJWT[crypto]>=2.8",
     "web3>=7.0",
     "siwe>=4.0",
+    # SIWE 4.4.0 redefines ABNF core rules; 2.9.0 rejects them at import.
+    # Keep the locally tested parser until upstream grammar compatibility is fixed.
+    "abnf==2.6.0",
     "psycopg[binary,pool]>=3.2",
     "asyncpg>=0.30",
     "pyhpke>=0.6.5",

@@ -1,131 +1,75 @@
-# Well-Known clearproof Discovery Spec
+# Clearproof discovery profile 0.4.0
 
-> - **Spec version:** 0.3.0
-> - **Status:** draft (see [specs/README.md](README.md) for lifecycle)
-> - **Last updated:** 2026-07-23
->
-> ## Changelog
->
-> | Version | Date | Change |
-> |---------|------|--------|
-> | 0.3.0 | 2026-07-23 | Added HPKE v2 envelope fields (`hpkePublicKey`, `hpkeKeyId`, `hpkeSuites`) for RFC 9180 PII encryption |
-> | 0.2.0 | 2026-05-21 | Formalized spec front matter and lifecycle governance |
-> | 0.2.0 | 2026-05 | Initial draft (versioned inline in schema) |
+Status: development profile implemented on the adoption-pilot branch. This is a breaking update to the 0.3.0 discovery draft; it is not a claim that the deployed API or public npm 0.3.0 already supports it.
 
-## Overview
+A counterparty publishes `https://<authority>/.well-known/clearproof.json`. The Python API and Node SDK consume the same profile and test vectors in [fixtures/discovery-0.4.0.json](fixtures/discovery-0.4.0.json). No directory enumeration or address-to-VASP lookup is provided.
 
-Any VASP that supports clearproof publishes a JSON document at:
+## Identity and capabilities
 
-```
-https://<vasp-domain>/.well-known/clearproof.json
-```
+| Field | Requirement |
+| --- | --- |
+| `version` | Exactly `0.4.0`; other versions are unsupported |
+| `vasp.did` | Full exact requested `did:web` identity, including any path components |
+| `clearproof.endpoint` | HTTPS URL on the same exact authority, with a path and no credentials, query, fragment or backslash |
+| `clearproof.supportedVersions` | Nonempty unique strings, including `0.4.0`; no default negotiation |
+| `clearproof.supportedChains` | 1–64 unique positive integers no larger than JavaScript's maximum safe integer |
+| `clearproof.proofFormat` | `groth16` |
+| `clearproof.hpkePublicKey` | Canonical base64url encoding of a usable, canonically encoded 32-byte X25519 public key; padded or unpadded |
+| `clearproof.hpkeKeyId` | First 16 bytes of SHA-256 of the raw public key, canonical base64url; padded or unpadded |
+| `clearproof.hpkeKeyPurpose` | Exactly `pii-envelope-v2` |
+| `clearproof.hpkeSuites` | Includes `DHKEM_X25519_HKDF_SHA256/HKDF_SHA256/AES_256_GCM` |
 
-This enables plug-and-play discovery. A new VASP publishes one file and registers on-chain — they're immediately discoverable by every participant in the network.
+Version and suite arrays contain 1–16 unique strings of 1–128 characters. Display name, jurisdiction, contact and `updatedAt` are optional informational metadata. `updatedAt` is not independent time evidence. Discovery capability versions do not identify the circuit artifact or establish its public-signal ABI; a verifier must check those separately.
 
-## Schema
+This profile accepts lowercase ASCII DNS names (including punycode), optionally followed by a nondefault port. IP literals, single-label hosts, trailing dots, URL inputs and noncanonical ports are rejected. A DID port uses uppercase `%3A`, following the [did:web method's port convention](https://w3c-ccg.github.io/did-method-web/). Path components in this profile use ASCII letters, digits, `.`, `_` and `-`, and cannot be `.` or `..`. Other DID methods and broader DID URL syntax are unsupported.
+
+A bare `beneficiary.example` means `did:web:beneficiary.example`. A request for `did:web:beneficiary.example:vasps:eu` still fetches this profile's root well-known file, but its `vasp.did` must match that entire DID. The helper does not resolve a DID document or infer control of a nested DID from a different DID on the same domain.
+
+## Connection policy
+
+Python uses an [HTTPcore network backend](https://www.encode.io/httpcore/network-backends/) to connect to a vetted IP while retaining the original TLS hostname. Node uses its [HTTPS request API](https://nodejs.org/api/https.html) with the vetted IP, original SNI and Host. Both clients:
+
+- Resolve DNS for each uncached fetch, check every answer and connect directly to the first allowed address. A mixed allowed/disallowed answer set fails. Connection failure is unavailable; no fallback to an unchecked address occurs.
+- Require TLS certificate and hostname verification. They ignore proxy environment variables and reject every redirect.
+- Block loopback, private, link-local, shared-address, documentation, multicast and reserved destinations by default. IPv6 accepts the global-unicast range with conservative exclusions, blocking translation and mapped-address bypasses. Shared network vectors specify the policy.
+- Accept only uncompressed UTF-8 `application/json`, at most 64 KiB. A whole-request deadline includes DNS, TLS and body reads (default 10 seconds, maximum 60 seconds).
+
+An operator may explicitly allow private enterprise destinations by exact authority and CIDR. In Python, instantiate `DiscoveryClient(policy=EgressPolicy({...}))`. The API's default resolver also reads `DISCOVERY_PRIVATE_DESTINATIONS`, a JSON authority-to-CIDR map. In Node, pass `privateDestinations` to `DiscoveryClient`. For example:
 
 ```json
-{
-  "version": "0.2.0",
-  "vasp": {
-    "name": "Example Exchange",
-    "did": "did:web:exchange.example",
-    "jurisdiction": "702"
-  },
-  "clearproof": {
-    "endpoint": "https://exchange.example/clearproof/v1",
-    "publicKey": "age1...",
-    "hpkePublicKey": "uJ7K3vHk9...base64url-X25519",
-    "hpkeKeyId": "Y2xpZW50LWtleS0wMQ",
-    "hpkeSuites": ["DHKEM_X25519_HKDF_SHA256/HKDF_SHA256/AES_256_GCM"],
-    "supportedChains": [1, 42161, 8453, 137, 10],
-    "supportedVersions": ["0.3.0"],
-    "proofFormat": "groth16"
-  },
-  "contact": {
-    "compliance": "compliance@exchange.example",
-    "technical": "devops@exchange.example"
-  },
-  "updatedAt": "2026-04-01T00:00:00Z"
-}
+{"beneficiary.corp.example:8443": ["10.42.0.0/16"]}
 ```
 
-## Field Reference
+These are operator trust settings, never transfer-request fields. An exception for one authority does not allow another host or port. CIDRs describe network ranges; host bits are normalized. Enterprise certificates must still validate: Python accepts an operator SSL context or system CA configuration, and Node accepts an operator CA bundle. The Node discovery transport requires Node.js; browser fetch cannot provide the same socket policy. Use a controlled server integration for browser applications.
 
-### Required fields
+Discovery validates the advertised endpoint's origin but does not contact it. Any later proof-exchange transport must apply its own connection policy at send time; discovery approval cannot prevent rebinding in an unrelated HTTP client.
 
-| Field | Type | Description |
+## Results, caching and rotation
+
+Python raises `DiscoveryUnsupported`, `DiscoveryUnavailable` or `DiscoveryInvalid`, all subclasses of `DiscoveryError`. Node throws `DiscoveryError` with `code` equal to `unsupported`, `unavailable` or `invalid`. Neither returns an ambiguous `null` or converts an error into `supportsChain=false`.
+
+| Result | Examples | Action |
 | --- | --- | --- |
-| `version` | string | clearproof protocol version |
-| `clearproof.endpoint` | string | HTTPS URL for proof exchange API |
-| `clearproof.publicKey` | string | Public key for PII encryption (age or X25519) |
-| `clearproof.supportedChains` | number[] | EVM chain IDs where this VASP accepts proofs |
+| Unsupported | HTTP 404, older profile, no compatible suite/version | Establish a compatible integration explicitly |
+| Unavailable | DNS/TLS failure, timeout, non-200 service error | Retry or investigate availability without changing encryption |
+| Invalid | DID mismatch, malformed key, redirect, disallowed address, malformed response | Correct configuration or investigate the counterparty |
 
-### HPKE v2 envelope fields (0.3.0+)
+Each client owns a maximum of 128 cached successful documents, keyed by the full DID. Default TTL is five minutes, configurable from zero to one hour. Expiry uses a monotonic clock starting before the fetch. Documents returned to callers are copied. Errors are not cached and expired documents are not served after errors. Clearing a cache prevents in-flight responses from refilling it; already waiting callers still receive their original response.
 
-| Field | Type | Description |
-| --- | --- | --- |
-| `clearproof.hpkePublicKey` | string | X25519 public key (base64url, 32 bytes) for HPKE v2 PII envelopes (RFC 9180, base mode). Originating VASPs SHOULD prefer this over legacy `publicKey` when present |
-| `clearproof.hpkeKeyId` | string | Key fingerprint matching the envelope `kid` header (first 16 bytes of SHA-256 over the raw public key, base64url) — supports rotation and decrypt audit |
-| `clearproof.hpkeSuites` | string[] | Supported HPKE suites as `KEM/KDF/AEAD` identifiers; currently `DHKEM_X25519_HKDF_SHA256/HKDF_SHA256/AES_256_GCM`. PQ-hybrid suites (draft-ietf-hpke-pq) may be added as a v3 envelope without a document format break |
+Use `clear_cache()` / `clearCache()` after known key rotation. Construct a new client when changing its trust configuration. Python's default client replaces its cache when the configured authority map or CA environment paths change; restart or explicitly clear it when CA file contents change at the same path. Node helper calls with custom options are isolated; retain a `DiscoveryClient` instance for custom-policy caching.
 
-Key rotation: publish the new key before retiring the old one; counterparties
-cache discovery documents for up to 1 hour. Envelopes carry the `kid`, so
-overlap windows are safe as long as the retiring private key remains available
-for in-flight envelopes.
+Retain retiring private keys for the agreed envelope retention and in-flight window. A fingerprint detects a substituted key/ID pair mismatch; it is not an independent authorization for key rotation.
 
-### Optional fields
+## Migration and API encryption
 
-| Field | Type | Description |
-| --- | --- | --- |
-| `vasp.name` | string | Display name |
-| `vasp.did` | string | Decentralized identifier |
-| `vasp.jurisdiction` | string | ISO 3166-1 numeric code |
-| `clearproof.supportedVersions` | string[] | Protocol versions accepted (default: latest) |
-| `clearproof.proofFormat` | string | Always "groth16" for now |
-| `contact.compliance` | string | Email for compliance inquiries |
-| `contact.technical` | string | Email for technical support |
-| `updatedAt` | string | ISO 8601 timestamp of last update |
+The old `publicKey` field mixed age and X25519 key representations. It is now optional informational legacy metadata and is **never** used as an HPKE key. Upgrade a publisher to the complete 0.4.0 fields before upgrading counterparties. There is no automatic interpretation of 0.2.0/0.3.0 documents as this profile.
 
-## Discovery Flow
+The proof API defaults to `PII_ENVELOPE_MODE=hpke-v2`. Resolution uses a supplied HPKE key, then operator `BENEFICIARY_HPKE_PUBLIC_KEY`, then enabled DID discovery. All explicit keys use strict X25519 validation. Invalid/unsupported discovery rejects the request with HTTP 422; unavailable discovery returns HTTP 503. These checks run before proving or encrypting. No error or missing key selects legacy encryption.
 
-```
-1. Originating VASP knows counterparty domain (from address-to-VASP lookup)
-2. Fetch https://counterparty.example/.well-known/clearproof.json
-3. Verify the counterparty supports the required chain and version
-4. Use endpoint + publicKey to send hybrid payload
-```
+For a deliberately configured legacy integration, the operator can select `PII_ENVELOPE_MODE=legacy-v1`. It does not attempt discovery, requires the existing master-key configuration and rejects supplied HPKE keys as a mode conflict. It does not make a counterparty able to decrypt without separate shared-key provisioning. Remove that mode after migration. `HPKE_DISCOVERY_ENABLED=0` disables lookup but does not permit fallback.
 
-If the well-known URL returns 404, the counterparty does not support clearproof. Fall back to standard Travel Rule exchange (TRISA/TRP cleartext).
+The publisher requires a configured HPKE key, validates its own document, derives its DID from `VASP_DOMAIN` when no DID is supplied, and rejects an inconsistent public/private keypair. Invalid server configuration returns HTTP 503 without exposing key values.
 
-## Trust Model
+## Limits of assurance
 
-The well-known URL provides **self-declared** capability information. It is secured by TLS (the VASP controls their domain) but not independently verified.
-
-For higher trust, verify the VASP is also registered in the **on-chain VASPRegistry**. The registry entry's `discoveryEndpoint` should match the domain serving the well-known file.
-
-```
-Trust levels:
-  1. Well-known only     — self-declared, TLS-secured
-  2. Well-known + on-chain — verified registration, immutable audit trail
-```
-
-## Key Rotation
-
-To rotate the encryption public key, the VASP updates their `clearproof.json` file. No on-chain transaction needed. The `updatedAt` field signals when the key changed.
-
-Clients should cache the well-known response with a TTL of 1 hour and re-fetch on cache miss.
-
-## CORS
-
-The well-known endpoint should include CORS headers to allow browser-based clients:
-
-```
-Access-Control-Allow-Origin: *
-```
-
-This is safe because the document contains only public discovery information.
-
-## Content-Type
-
-Serve as `application/json` with UTF-8 encoding.
+TLS metadata is self-declared domain information. This helper does not establish licensing, registry membership, issuer authority, sanctions status or authorization to receive a particular transfer. A supplied request key and a domain-declared key still need recipient authorization in the application trust model (CP-008). HPKE base mode does not authenticate the sender. None of these checks is a regulatory certification or a production security audit.

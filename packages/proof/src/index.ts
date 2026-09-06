@@ -1,6 +1,6 @@
 export { generateProof } from './prover.js';
 export { verifyProof } from './verifier.js';
-export { discoverVASP, supportsChain, clearDiscoveryCache } from './discovery.js';
+export { discoverVASP, supportsChain, clearDiscoveryCache, DiscoveryClient, DiscoveryError, EgressPolicy } from './discovery.js';
 export {
   JURISDICTION_THRESHOLDS,
   DEFAULT_THRESHOLDS,

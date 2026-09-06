@@ -198,7 +198,10 @@ Start the API server and visit `http://localhost:8000/docs` for interactive Swag
 | Variable | Required | Description |
 |----------|----------|-------------|
 | `PII_MASTER_KEY` | Yes | Stable key for legacy v1 PII encryption (server will not start without it) |
-| `BENEFICIARY_HPKE_PUBLIC_KEY` | No | Beneficiary VASP's X25519 public key (base64url) — enables HPKE v2 PII envelopes (RFC 9180). Per-request `beneficiary_hpke_public_key` takes precedence. Without a key, the API falls back to v1 shared-key AES-256-GCM with a deprecation warning |
+| `PII_ENVELOPE_MODE` | No | Defaults to `hpke-v2`, requiring a usable recipient key. Operator-selected `legacy-v1` is available for explicitly provisioned shared-key integrations; discovery errors never select it |
+| `BENEFICIARY_HPKE_PUBLIC_KEY` | No | Operator-configured beneficiary X25519 public key (base64url). A supplied request key takes precedence; otherwise the API attempts strict DID discovery. Recipient authorization remains separate from key-format validation |
+| `HPKE_DISCOVERY_ENABLED` | No | Defaults to `1`; `0` disables lookup and requires an explicit HPKE key in HPKE mode |
+| `DISCOVERY_PRIVATE_DESTINATIONS` | No | Operator JSON map of exact DNS authorities to allowed private CIDRs; default `{}`. TLS verification remains required |
 | `VASP_DID` | No | This VASP's DID (default: `did:web:vasp.example.com`) |
 | `CIRCUIT_ARTIFACTS_DIR` | No | Path to circuit artifacts (default: `./artifacts`) |
 | `CORS_ALLOWED_ORIGINS` | No | Comma-separated origins (default: `http://localhost:3000`) |
