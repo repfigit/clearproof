@@ -118,36 +118,41 @@ class ProofInspectionService:
             self._principal.require(role)
         signals = public_signals(signals)
         async with self._store.transaction() as tx:
-            external = await load_current_facts(
-                tx,
-                fact_trust,
-                fact_ids,
-                transfer=self._inputs["transfer"],
-                context=self._context,
-                now=now,
+            return await self._evaluate_transaction(
+                tx, credential_id, proof, signals, fact_ids, fact_trust=fact_trust, now=now
             )
-            inspection = await self._inspect_transaction(tx, credential_id, proof, signals, now=now)
-            if not inspection.cryptographic_valid:
-                return inspection, None
-            derived = tuple(
-                PolicyFact(
-                    predicate=predicate,
-                    value=True,
-                    observed_at=now,
-                    expires_at=int(signals[5]),
-                    evidence_digest=hashlib.sha256(proof).hexdigest(),
-                )
-                for predicate in ("credential_valid", "sanctions_clear", "valuation_authenticated", "proof_valid")
+
+    async def _evaluate_transaction(self, tx, credential_id, proof, signals, fact_ids, *, fact_trust, now):
+        external = await load_current_facts(
+            tx,
+            fact_trust,
+            fact_ids,
+            transfer=self._inputs["transfer"],
+            context=self._context,
+            now=now,
+        )
+        inspection = await self._inspect_transaction(tx, credential_id, proof, signals, now=now)
+        if not inspection.cryptographic_valid:
+            return inspection, None
+        derived = tuple(
+            PolicyFact(
+                predicate=predicate,
+                value=True,
+                observed_at=now,
+                expires_at=int(signals[5]),
+                evidence_digest=hashlib.sha256(proof).hexdigest(),
             )
-            facts = PolicyFacts(
-                tenant_id=self._principal.tenant_id,
-                transfer_digest=self._context.transfer_digest,
-                facts=(*external.facts, *derived),
-            )
-            policy = self._inputs["policy_trust"].for_transfer(
-                self._inputs["transfer"],
-                self._context,
-                tenant_id=self._principal.tenant_id,
-                now=now,
-            )
-            return inspection, evaluate_policy(policy, self._inputs["transfer"], self._context, facts, now=now)
+            for predicate in ("credential_valid", "sanctions_clear", "valuation_authenticated", "proof_valid")
+        )
+        facts = PolicyFacts(
+            tenant_id=self._principal.tenant_id,
+            transfer_digest=self._context.transfer_digest,
+            facts=(*external.facts, *derived),
+        )
+        policy = self._inputs["policy_trust"].for_transfer(
+            self._inputs["transfer"],
+            self._context,
+            tenant_id=self._principal.tenant_id,
+            now=now,
+        )
+        return inspection, evaluate_policy(policy, self._inputs["transfer"], self._context, facts, now=now)

@@ -10,7 +10,7 @@ import pytest
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 from eth_account import Account
 
-from src.policy.model import PilotPolicy, PolicySource, PolicyTrustStore
+from src.policy.model import PilotPolicy, PolicyRule, PolicySource, PolicyTrustStore
 from src.protocol.credential import PilotCredential, holder_commitment
 from src.protocol.root_snapshot import RootAuthority, RootSnapshot, RootTrustStore, sign_root
 from src.protocol.transfer import AssetDefinition, AssetRegistry, Transfer, VerificationContext
@@ -23,7 +23,7 @@ from src.registry.pilot_tree import PilotTree
 ROOT = Path(__file__).resolve().parents[2]
 
 
-def synthetic_case(*, artifact_manifest_digest=None, alternate_credential=False, with_trust=False):
+def synthetic_case(*, artifact_manifest_digest=None, alternate_credential=False, with_trust=False, authorization=False):
     fixture = json.loads((ROOT / "specs/fixtures/transfer-v1.json").read_text())
     transfer = Transfer.model_validate(fixture["records"][0]["value"])
     if with_trust:
@@ -65,6 +65,21 @@ def synthetic_case(*, artifact_manifest_digest=None, alternate_credential=False,
             ),
         ),
     )
+    if authorization:
+        policy = PilotPolicy.model_validate(
+            {
+                **policy.model_dump(),
+                "rules": (
+                    PolicyRule(
+                        rule_id="synthetic-allow",
+                        predicate="proof_valid",
+                        operator="is_true",
+                        effect="ALLOW",
+                        source_ids=("synthetic-rules",),
+                    ),
+                ),
+            }
+        )
     transfer = Transfer.model_validate({**transfer.model_dump(), "policy_digest": policy.digest})
     context = VerificationContext.model_validate(
         {

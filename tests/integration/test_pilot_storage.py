@@ -1486,12 +1486,13 @@ async def exercise_investigation_cli(app, token, scope, expected_queue, expected
 
 
 @pytest.mark.skipif(not os.getenv("CLEARPROOF_PILOT_TEST_ARTIFACTS"), reason="requires fresh synthetic pilot artifacts")
-@pytest.mark.parametrize("mutation", ["root", "revocation", "cancel", "policy", "activation"])
-async def test_durable_current_inspection_real_pairing_and_revocation(db, monkeypatch, mutation):
+@pytest.mark.parametrize("mutation", ["root", "revocation", "cancel", "policy", "activation", "authorization"])
+async def test_durable_current_inspection_real_pairing_and_revocation(db, monkeypatch, mutation, tmp_path):
     import hashlib
     import json
     import runpy
     import shutil
+    import subprocess
     from pathlib import Path
 
     from eth_account import Account
@@ -1512,7 +1513,9 @@ async def test_durable_current_inspection_real_pairing_and_revocation(db, monkey
     root = Path(os.environ["CLEARPROOF_PILOT_TEST_ARTIFACTS"])
     artifacts = inspect_artifacts(root, trusted_digest=(root / "development-manifest-pin.txt").read_text().strip())
     helper = runpy.run_path(str(Path(__file__).parents[1] / "unit/test_pilot_compliance.py"))["synthetic_case"]
-    _, _, inputs = helper(artifact_manifest_digest=artifacts.manifest.digest, with_trust=True)
+    witness, _, inputs = helper(
+        artifact_manifest_digest=artifacts.manifest.digest, with_trust=True, authorization=mutation == "authorization"
+    )
     credential, now = inputs.pop("credential"), inputs.pop("now")
     configuration = CurrentStatementConfiguration(**inputs)
     principal = Principal(
@@ -1547,8 +1550,29 @@ async def test_durable_current_inspection_real_pairing_and_revocation(db, monkey
         bundle_sha256=hashlib.sha256(runtime.read_bytes()).hexdigest(),
         node=Path(shutil.which("node")),
     )
-    proof = (root / "proof.json").read_bytes()
-    signals = json.loads((root / "public.json").read_text())
+    proof_root = root
+    if mutation == "authorization":
+        # A different policy needs a different real proof, using the same inspected development artifacts.
+        (tmp_path / "synthetic.json").write_text(json.dumps(witness))
+        subprocess.run(
+            [
+                str(verifier.node),
+                str(Path(__file__).parents[2] / "node_modules/snarkjs/cli.js"),
+                "groth16",
+                "fullprove",
+                str(tmp_path / "synthetic.json"),
+                str(root / "pilot_compliance_js/pilot_compliance.wasm"),
+                str(root / "UNAPPROVED-development.zkey"),
+                str(tmp_path / "proof.json"),
+                str(tmp_path / "public.json"),
+            ],
+            check=True,
+            capture_output=True,
+            timeout=120,
+        )
+        proof_root = tmp_path
+    proof = (proof_root / "proof.json").read_bytes()
+    signals = json.loads((proof_root / "public.json").read_text())
 
     def service(who=principal):
         return ProofInspectionService(db, cipher(), who, verifier, configuration)
@@ -1625,7 +1649,7 @@ async def test_durable_current_inspection_real_pairing_and_revocation(db, monkey
             assert (await (await conn.execute("SELECT count(*) FROM pilot_consumptions")).fetchone())[0] == 0
         return
 
-    if mutation == "policy":
+    if mutation in ("policy", "authorization"):
         from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 
         from src.policy.evaluator import PolicyFact
@@ -1681,6 +1705,86 @@ async def test_durable_current_inspection_real_pairing_and_revocation(db, monkey
         refs = await retain(True)
         valid, complete = await service().evaluate(credential.credential_nonce, proof, signals, refs, **args)
         assert valid.cryptographic_valid and complete.missing_predicates == ()
+        if mutation == "authorization":
+            import base64
+
+            from src.services.proof_authorization import AuthorizationRejected, ProofAuthorizationService
+            from src.storage.pilot import PilotTransaction
+
+            assert complete.outcome == "ALLOW"
+            authorizer = ProofAuthorizationService(db, cipher(), principal, verifier, configuration)
+
+            async def authorize(key="consume-once", references=refs, who=authorizer, body=proof):
+                return await who.authorize(
+                    credential.credential_nonce, body, signals, references, idempotency_key=key, **args
+                )
+
+            for references in ((), await retain(False)):
+                with pytest.raises(AuthorizationRejected):
+                    await authorize(references=references)
+            changed = json.loads(proof)
+            changed["pi_c"][0] = str(int(changed["pi_c"][0]) + 1)
+            with pytest.raises(AuthorizationRejected):
+                await authorize(body=json.dumps(changed).encode())
+            restricted = Principal.model_validate({**principal.model_dump(), "roles": ("proof:inspect",)})
+            with pytest.raises(HTTPException):
+                await authorize(who=ProofAuthorizationService(db, cipher(), restricted, verifier, configuration))
+            async with db.connection() as conn:
+                baseline = (await (await conn.execute("SELECT count(*) FROM pilot_records")).fetchone())[0]
+            original_consume = PilotTransaction.consume
+
+            async def fail_after_consume(tx, *values):
+                await original_consume(tx, *values)
+                raise RuntimeError("synthetic failure after consumption")
+
+            with monkeypatch.context() as patch:
+                patch.setattr(PilotTransaction, "consume", fail_after_consume)
+                with pytest.raises(RuntimeError, match="synthetic failure"):
+                    await authorize()
+            async with db.connection() as conn:
+                assert (await (await conn.execute("SELECT count(*) FROM pilot_records")).fetchone())[0] == baseline
+                assert (await (await conn.execute("SELECT count(*) FROM pilot_consumptions")).fetchone())[0] == 0
+            # Different request keys compete for the same real proof nullifier.
+            contenders = ("consume-once", "competing-spend")
+            results = await asyncio.gather(*(authorize(key=k) for k in contenders), return_exceptions=True)
+            assert sum(isinstance(result, ReplayConflict) for result in results) == 1
+            assert sum(isinstance(result, dict) for result in results) == 1
+            winning_key = contenders[next(i for i, result in enumerate(results) if isinstance(result, dict))]
+            receipts = await asyncio.gather(authorize(key=winning_key), authorize(key=winning_key))
+            assert receipts[0] == receipts[1]
+            receipt = receipts[0]
+            assert receipt["execution"] == "not-requested" and receipt["outcome"] == "ALLOW"
+            with pytest.raises(ReplayConflict):
+                await authorize(key="second-spend")
+            with pytest.raises(RecordConflict):
+                await authorize(key=winning_key, references=())
+            await db.close()
+            await db.connect()
+            assert (
+                await authorizer.authorize(
+                    credential.credential_nonce,
+                    proof,
+                    signals,
+                    refs,
+                    fact_trust=trust,
+                    idempotency_key=winning_key,
+                    now=credential.expires_at + 1,
+                )
+                == receipt
+            )
+            retained = PilotStore(db, cipher(), principal)
+            record = await retained.get("proof", receipt["proof_id"])
+            assert base64.b64decode(record["proof_base64"], validate=True) == proof
+            assert hashlib.sha256(proof).hexdigest() == record["proof_digest"]
+            assert record["policy_evaluation"]["outcome"] == "ALLOW"
+            assert record["context"] == configuration.context.model_dump(mode="json")
+            assert (await retained.get("receipt", receipt["receipt_id"]))["authorized_at"] == now
+            assert (await service().inspect(credential.credential_nonce, proof, signals, now=now)).cryptographic_valid
+            async with db.connection() as conn:
+                assert (await (await conn.execute("SELECT count(*) FROM pilot_records")).fetchone())[0] == baseline + 3
+                assert (await (await conn.execute("SELECT count(*) FROM pilot_consumptions")).fetchone())[0] == 1
+            return
+
         assert complete.outcome == "INDETERMINATE" and complete.reasons == ("no_decisive_rule",)
         provided = signals.copy()
         evaluator = service()

@@ -54,6 +54,10 @@ returns cryptographic inspection only. It does not consume a nullifier or decide
 business-policy authorization. Pairing holds the tenant lock for its bounded
 runtime; this is acceptable for the bounded local pilot, not a throughput claim.
 
+The separate [authorization service](PILOT_AUTHORIZATION.md) reuses the internal
+evaluation path within its own atomic transaction to retain an `ALLOW` receipt and
+consume a nullifier. The public inspection/evaluation methods remain read-only.
+
 The PostgreSQL integration enrolls a synthetic EOA through `EnrollmentService`,
 publishes signed roots, inspects a real development proof, reconnects, and repeats.
 It rejects a foreign tenant, missing role, modified signal, newly replaced root
