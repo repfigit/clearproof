@@ -125,6 +125,11 @@ class PilotPolicy(Record):
         return (self.tenant_id, self.chain_id, self.registry_address, self.jurisdiction)
 
 
+# The structural schema is distinct from a policy revision, evaluator semantics,
+# source truth and approval. Its canonical digest is portable across runtimes.
+POLICY_SCHEMA_DIGEST = record_digest("clearproof/policy-schema/v1", PilotPolicy.model_json_schema())
+
+
 class PolicyTrustStore:
     def __init__(self, policies: list[PilotPolicy], *, current_digests: tuple[str, ...]):
         """Pins are operator configuration, never fields accepted from a proof request.

@@ -8,6 +8,8 @@ import sys
 
 import pytest
 
+from src.policy.model import POLICY_SCHEMA_DIGEST, PilotPolicy
+from src.protocol.canonical import record_digest
 from src.prover.pilot_artifacts import ArtifactError, PilotArtifactManifest, inspect_artifacts
 from src.prover.pilot_compliance import PUBLIC_SIGNALS
 
@@ -25,7 +27,7 @@ def bundle(tmp_path):
     # Deliberately not cryptographic test vectors: this suite tests the loader.
     # Groth16 verification remains a separate requirement.
     value = {
-        "policy_schema_digest": "12" * 32,
+        "policy_schema_digest": POLICY_SCHEMA_DIGEST,
         "source_bundle_digest": "34" * 32,
         "compiler_sha256": "56" * 32,
         "public_signals": list(PUBLIC_SIGNALS),
@@ -51,6 +53,7 @@ def test_pinned_snapshot_and_read_only_report(bundle):
     result = inspect_artifacts(root, trusted_digest=pin)
     assert result.report()["status"] == "development_unapproved"
     assert result.report()["production_eligible"] is False
+    assert result.report()["policy_schema_supported"] is True
     assert {p.name: p.read_bytes() for p in root.iterdir()} == before
     key = root / value["verification_key"]["filename"]
     key.write_bytes(b"replaced")
@@ -163,3 +166,33 @@ def test_context_cannot_select_another_key_or_profile(bundle):
     for key, changed in [("artifact_manifest_digest", "ab" * 32), ("proof_profile", "legacy-v1")]:
         with pytest.raises(ArtifactError, match="artifact_context_mismatch"):
             result.check_artifact_context(VerificationContext.model_validate({**data, key: changed}))
+
+
+def test_published_policy_schema_matches_runtime():
+    from pathlib import Path
+
+    path = Path(__file__).resolve().parents[2] / "specs/pilot-policy-v1.schema.json"
+    schema = json.loads(path.read_text())
+    assert schema == PilotPolicy.model_json_schema()
+    assert record_digest("clearproof/policy-schema/v1", schema) == POLICY_SCHEMA_DIGEST
+    schema["properties"]["rules"]["maxItems"] = 65
+    assert record_digest("clearproof/policy-schema/v1", schema) != POLICY_SCHEMA_DIGEST
+
+
+@pytest.mark.parametrize("schema_digest", ["00" * 32, "ab" * 32])
+def test_pinned_unknown_policy_schema_is_inspectable_but_not_current_compatible(bundle, schema_digest):
+    from pathlib import Path
+
+    from src.protocol.transfer import VerificationContext
+
+    root, value, _ = bundle
+    value["policy_schema_digest"] = schema_digest
+    pin = publish(root, value)
+    inspected = inspect_artifacts(root, trusted_digest=pin)
+    assert inspected.report()["policy_schema_supported"] is False
+    fixture = json.loads((Path(__file__).resolve().parents[2] / "specs/fixtures/transfer-v1.json").read_text())
+    context = VerificationContext.model_validate(
+        {**fixture["records"][1]["value"], "artifact_manifest_digest": pin, "proof_profile": "pilot-transfer-v1"}
+    )
+    with pytest.raises(ArtifactError, match="^unsupported_policy_schema$"):
+        inspected.check_artifact_context(context)

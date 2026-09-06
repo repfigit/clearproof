@@ -15,6 +15,7 @@ from typing import Literal
 
 from pydantic import Field, field_validator, model_validator
 
+from src.policy.model import POLICY_SCHEMA_DIGEST
 from src.protocol.canonical import record_digest
 from src.protocol.transfer import Hex32, Record, VerificationContext
 from src.prover.pilot_compliance import PUBLIC_SIGNALS
@@ -107,6 +108,8 @@ class InspectedArtifacts:
             self.manifest.proof_profile,
         ):
             raise ArtifactError("artifact_context_mismatch")
+        if self.manifest.policy_schema_digest != POLICY_SCHEMA_DIGEST:
+            raise ArtifactError("unsupported_policy_schema")
 
     def report(self) -> dict:
         return {
@@ -115,6 +118,7 @@ class InspectedArtifacts:
             "proof_profile": self.manifest.proof_profile,
             "checked_artifacts": list(ARTIFACT_ROLES),
             "production_eligible": False,
+            "policy_schema_supported": self.manifest.policy_schema_digest == POLICY_SCHEMA_DIGEST,
         }
 
 

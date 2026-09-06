@@ -64,7 +64,7 @@ def main():
         raise SystemExit("Install the repository dependencies before running")
     (output / "DEVELOPMENT-ONLY.txt").write_text(
         "UNAPPROVED development keys. No audit or production ceremony.\n"
-        "Synthetic policy-schema marker is unbound, not an approved policy.\n"
+        "Policy schema binding is structural, not policy approval or authorization.\n"
     )
     ptau = output / "UNAPPROVED-final.ptau"
     if args.prepared_ptau:
@@ -122,6 +122,7 @@ def main():
     run(node, ROOT / "packages/cli/dist/index.js", "demo", "--artifacts", output / "legacy")
 
     # Reproduce the composed profile from synthetic fixtures, without private data.
+    from src.policy.model import POLICY_SCHEMA_DIGEST
     from src.prover.pilot_artifacts import PilotArtifactManifest, inspect_artifacts
     from src.prover.pilot_compliance import PUBLIC_SIGNALS
 
@@ -157,7 +158,7 @@ def main():
     source_bytes = json.dumps(sources, sort_keys=True, separators=(",", ":")).encode()
     (output / "source-inventory.json").write_bytes(source_bytes)
     value = {
-        "policy_schema_digest": "0" * 64,
+        "policy_schema_digest": POLICY_SCHEMA_DIGEST,
         "source_bundle_digest": hashlib.sha256(source_bytes).hexdigest(),
         "compiler_sha256": digest(Path(circom)),
         "public_signals": list(PUBLIC_SIGNALS),

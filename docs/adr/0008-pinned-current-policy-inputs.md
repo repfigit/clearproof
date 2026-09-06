@@ -55,3 +55,27 @@ intervals; source provenance changes; and invalid predecessor chains. A fresh
 composed Groth16 proof with the policy digest in the transfer/context projection
 also passed the actual pairing integration and tampering checks. The circuit ABI
 and constraint layout remain unchanged.
+
+## Artifact policy-schema binding
+
+`specs/pilot-policy-v1.schema.json` publishes the structural JSON schema for
+`PilotPolicy`. Its digest uses the existing restricted canonical JSON codec and
+`clearproof/policy-schema/v1` domain. A regression check requires the published
+schema to match the runtime model. Schema changes therefore require an explicit
+review of this file and fresh manifest pins; library-generated schema changes
+can also change the digest.
+
+The development circuit builder writes this digest into new artifact manifests
+instead of the former zero marker. Artifact context checking rejects manifests
+whose policy schema differs from the runtime's supported schema, even when the
+manifest itself is operator-pinned. Read-only artifact inspection preserves the
+ability to inspect older development files and reports
+`policy_schema_supported: false`; that result is not current-context acceptance.
+Production still rejects all development manifests.
+
+This digest describes structure, not all Python model validators or evaluator
+semantics. It does not approve a particular policy revision, prove source truth,
+activate policy, or authorize a transfer. Independent policy selection, the exact
+policy revision in the transfer commitment, and current authorization checks
+remain necessary. The full current-verifier integration and its context/manifest
+binding remain open; this change does not claim to complete those gates.
