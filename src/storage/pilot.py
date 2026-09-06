@@ -32,6 +32,7 @@ _WRITE_ROLES = {
     "provider-evidence": "events:ingest",
     "fact-evidence": "facts:ingest",
     "policy": "policy:approve",
+    "policy-activation": "policy:activate",
     "revocation": "credential:revoke",
     "issuer-root": "tenant:admin",
     "sanctions-root": "tenant:admin",
@@ -44,6 +45,7 @@ _OPERATIONS = {
     "consume-proof": "proof:consume",
     "ingest-event": "events:ingest",
     "approve-policy": "policy:approve",
+    "activate-policy": "policy:activate",
     "update-root": "tenant:admin",
 }
 
@@ -225,7 +227,7 @@ class PilotTransaction:
         if (row is None and expected_revision is not None) or (row and row["revision"] != expected_revision):
             raise RecordConflict("Record already exists or expected revision differs")
         # Proofs/events/receipts/revocations/idempotency results are append-only.
-        if row and kind not in ("issuance-root", "issuer-root", "sanctions-root"):
+        if row and kind not in ("issuance-root", "issuer-root", "sanctions-root", "policy-activation"):
             raise RecordConflict("Pilot record is immutable")
         revision = (row["revision"] if row else 0) + 1
         sealed = self._cipher.seal(self._principal.tenant_id, kind, record_id, revision, value)

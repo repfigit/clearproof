@@ -24,6 +24,7 @@ Role = Literal[
     "facts:ingest",
     "policy:read",
     "policy:approve",
+    "policy:activate",
     "tenant:admin",
 ]
 

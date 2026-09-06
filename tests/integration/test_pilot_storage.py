@@ -1822,3 +1822,85 @@ async def test_signed_fact_retention_atomic_retry_reconnect_and_current_trust(db
         assert len(rows) == len(refs)
         assert all(b"business-source" not in bytes(row[0]) for row in rows)
         assert (await (await conn.execute("SELECT count(*) FROM pilot_consumptions")).fetchone())[0] == 0
+
+
+async def test_policy_activation_requires_review_and_serializes_current_selection(db):
+    import runpy
+    from pathlib import Path
+
+    from src.policy.diff import PolicyCase
+    from src.policy.model import PilotPolicy, PolicySource
+    from src.protocol.canonical import record_digest
+    from src.services.policy_activation import PolicyActivationRequest, PolicyActivationService, activation_scope
+    from src.services.policy_review import PolicyReviewRequest, PolicyReviewService, ReviewedCase
+
+    policy, transfer, context, facts = runpy.run_path(str(Path(__file__).parents[1] / "unit/test_policy_evaluator.py"))[
+        "case"
+    ].__wrapped__()
+    principal = Principal(
+        tenant_id=transfer.tenant_id,
+        actor_id="policy-operator",
+        roles=("policy:approve", "policy:activate", "policy:read", "evidence:decrypt"),
+    )
+    activation = PolicyActivationService(db, cipher(), principal)
+    now = context.evaluated_at
+    initial = PolicyActivationRequest(policy_digest=policy.digest)
+    with pytest.raises(ValueError, match="Reviewed policy unavailable"):
+        await activation.activate(initial, idempotency_key="first", now=now)
+    review = PolicyReviewService(db, cipher(), principal)
+    case = PolicyCase(case_id="approved-case", transfer=transfer, context=context, facts=facts, evaluated_at=now)
+    expected = (ReviewedCase(case=case, expected="ALLOW"),)
+    await review.approve(PolicyReviewRequest(policy=policy, cases=expected), idempotency_key="review-first", now=now)
+    with pytest.raises(ValueError, match="No active"):
+        await activation.current(activation_scope(policy), now=now)
+    first = await activation.activate(initial, idempotency_key="first", now=now)
+    assert first["revision"] == 1
+    assert await activation.activate(initial, idempotency_key="first", now=now + 1) == first
+    other = PilotPolicy.model_validate({**policy.model_dump(), "revision": 2, "previous_digest": policy.digest})
+    source = PolicySource.model_validate({**policy.sources[0].model_dump(), "evidence_digest": "cd" * 32})
+    alternate = PilotPolicy.model_validate({**other.model_dump(), "sources": (source,)})
+    for index, candidate in enumerate((other, alternate)):
+        await review.approve(
+            PolicyReviewRequest(policy=candidate, cases=expected), idempotency_key=f"review-next-{index}", now=now
+        )
+    results = await asyncio.gather(
+        *(
+            activation.activate(
+                PolicyActivationRequest(policy_digest=c.digest, expected_revision=1),
+                idempotency_key=f"select-{i}",
+                now=now + 1,
+            )
+            for i, c in enumerate((other, alternate))
+        ),
+        return_exceptions=True,
+    )
+    assert sum(isinstance(r, RecordConflict) for r in results) == 1
+    winner = next(r for r in results if isinstance(r, dict))
+    assert (await activation.current(first["scope_digest"], now=now + 1)).digest == winner["policy_digest"]
+    records = PilotStore(db, cipher(), principal)
+    prior = await records.read("policy-activation", first["scope_digest"], revision=1)
+    head = await records.read("policy-activation", first["scope_digest"])
+    assert head.revision == 2 and head.value["previous_digest"] == record_digest(
+        "clearproof/policy-activation/v1", prior.value
+    )
+    # An explicit reviewed rollback is another recorded selection, not history erasure.
+    restored = await activation.activate(
+        PolicyActivationRequest(policy_digest=policy.digest, expected_revision=2),
+        idempotency_key="restore-reviewed",
+        now=now + 2,
+    )
+    assert restored["revision"] == 3
+    await db.close()
+    await db.connect()
+    assert (await activation.current(first["scope_digest"], now=now + 2)).digest == policy.digest
+    assert (await records.read("policy-activation", first["scope_digest"], revision=2)).value == head.value
+    with pytest.raises(ValueError):
+        await activation.current(first["scope_digest"], now=policy.effective_until)
+    foreign = Principal.model_validate({**principal.model_dump(), "tenant_id": "foreign"})
+    with pytest.raises(ValueError):
+        await PolicyActivationService(db, cipher(), foreign).current(first["scope_digest"], now=now + 2)
+    reviewer = Principal.model_validate({**principal.model_dump(), "roles": ("policy:approve", "evidence:decrypt")})
+    with pytest.raises(HTTPException):
+        await PolicyActivationService(db, cipher(), reviewer).activate(initial, idempotency_key="forbidden", now=now)
+    async with db.connection() as conn:
+        assert (await (await conn.execute("SELECT count(*) FROM pilot_consumptions")).fetchone())[0] == 0
