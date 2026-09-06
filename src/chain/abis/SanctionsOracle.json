@@ -1,7 +1,7 @@
 [
   {
     "inputs": [],
-    "name": "sanctionsRoot",
+    "name": "currentRoot",
     "outputs": [
       {
         "internalType": "bytes32",

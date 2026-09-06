@@ -3,37 +3,6 @@
     "inputs": [
       {
         "internalType": "bytes32",
-        "name": "transferId",
-        "type": "bytes32"
-      },
-      {
-        "internalType": "bytes32",
-        "name": "proofHash",
-        "type": "bytes32"
-      }
-    ],
-    "name": "recordProof",
-    "outputs": [],
-    "stateMutability": "nonpayable",
-    "type": "function"
-  },
-  {
-    "inputs": [
-      {
-        "internalType": "bytes32",
-        "name": "commitment",
-        "type": "bytes32"
-      }
-    ],
-    "name": "revokeCredential",
-    "outputs": [],
-    "stateMutability": "nonpayable",
-    "type": "function"
-  },
-  {
-    "inputs": [
-      {
-        "internalType": "bytes32",
         "name": "commitment",
         "type": "bytes32"
       }
@@ -53,17 +22,12 @@
     "inputs": [
       {
         "internalType": "bytes32",
-        "name": "transferId",
+        "name": "",
         "type": "bytes32"
       }
     ],
-    "name": "getProofRecord",
+    "name": "proofs",
     "outputs": [
-      {
-        "internalType": "bytes32",
-        "name": "transferId_",
-        "type": "bytes32"
-      },
       {
         "internalType": "bytes32",
         "name": "proofHash",
@@ -71,16 +35,73 @@
       },
       {
         "internalType": "uint256",
-        "name": "verifiedAt",
+        "name": "timestamp",
         "type": "uint256"
       },
       {
-        "internalType": "address",
-        "name": "verifier",
-        "type": "address"
+        "internalType": "bool",
+        "name": "verified",
+        "type": "bool"
       }
     ],
     "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "bytes32",
+        "name": "commitment",
+        "type": "bytes32"
+      }
+    ],
+    "name": "revokeCredential",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "bytes32",
+        "name": "transferId",
+        "type": "bytes32"
+      },
+      {
+        "internalType": "uint256[2]",
+        "name": "_pA",
+        "type": "uint256[2]"
+      },
+      {
+        "internalType": "uint256[2][2]",
+        "name": "_pB",
+        "type": "uint256[2][2]"
+      },
+      {
+        "internalType": "uint256[2]",
+        "name": "_pC",
+        "type": "uint256[2]"
+      },
+      {
+        "internalType": "uint256[16]",
+        "name": "_pubSignals",
+        "type": "uint256[16]"
+      },
+      {
+        "internalType": "bytes32",
+        "name": "vaspDidHash",
+        "type": "bytes32"
+      }
+    ],
+    "name": "verifyAndRecord",
+    "outputs": [
+      {
+        "internalType": "bool",
+        "name": "",
+        "type": "bool"
+      }
+    ],
+    "stateMutability": "nonpayable",
     "type": "function"
   }
 ]
