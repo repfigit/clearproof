@@ -1726,8 +1726,13 @@ async def test_durable_current_inspection_real_pairing_and_revocation(db, monkey
                 not_before=now,
                 not_after=credential.expires_at,
             )
+            make_information = runpy.run_path(str(Path(__file__).parents[1] / "unit/test_transfer_information.py"))[
+                "synthetic_information"
+            ]
+            information = make_information(configuration.transfer, configuration.context)
+            raw_information = json.dumps(information, ensure_ascii=False).encode()
             payload_args = dict(
-                pii=(b"synthetic-information-only" * 1400)[:32768],
+                pii=raw_information + b" " * (32768 - len(raw_information)),
                 recipient_key_id=recipient.key_id,
                 recipient_trust=RecipientTrustStore([recipient]),
             )
@@ -1755,6 +1760,12 @@ async def test_durable_current_inspection_real_pairing_and_revocation(db, monkey
                 await authorize(who=ProofAuthorizationService(db, cipher(), restricted, verifier, configuration))
             async with db.connection() as conn:
                 baseline = (await (await conn.execute("SELECT count(*) FROM pilot_records")).fetchone())[0]
+            for invalid_information in (b"opaque-unvalidated-information", b"{}"):
+                with pytest.raises(ValueError, match="transfer information"):
+                    await authorize(pii=invalid_information)
+            mismatched_information = {**information, "amount_base_units": "1"}
+            with pytest.raises(ValueError, match="transfer information"):
+                await authorize(pii=json.dumps(mismatched_information).encode())
             with pytest.raises(ValueError, match="Recipient key"):
                 await authorize(recipient_key_id="unknown")
             from src.services import proof_authorization as authorization_module
@@ -1794,7 +1805,9 @@ async def test_durable_current_inspection_real_pairing_and_revocation(db, monkey
             with pytest.raises(RecordConflict):
                 await authorize(key=winning_key, references=())
             with pytest.raises(RecordConflict):
-                await authorize(key=winning_key, pii=b"changed-synthetic-information")
+                changed_information = json.loads(raw_information)
+                changed_information["originator"]["person"]["name"] = "Changed synthetic name"
+                await authorize(key=winning_key, pii=json.dumps(changed_information).encode())
             await db.close()
             await db.connect()
             assert (
@@ -1829,6 +1842,8 @@ async def test_durable_current_inspection_real_pairing_and_revocation(db, monkey
             assert open_pilot_envelope(envelope, private, expected_binding=expected_binding) == payload_args["pii"]
             assert record_digest("clearproof/pilot-envelope/v1", envelope) == receipt["envelope_digest"]
             assert payload_args["pii"].decode() not in json.dumps(record)
+            assert "Synthetic José Originator" not in json.dumps(record, ensure_ascii=False)
+            assert "Synthetic Recipient Ltd" not in json.dumps(record)
             assert "payload_digest" not in record and "payload_digest" not in receipt
             assert (await retained.get("receipt", receipt["receipt_id"]))["authorized_at"] == now
             assert (await service().inspect(credential.credential_nonce, proof, signals, now=now)).cryptographic_valid

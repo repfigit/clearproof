@@ -5,6 +5,7 @@ import hashlib
 
 from src.policy.fact_approval import FactTrustStore
 from src.protocol.canonical import record_digest
+from src.protocol.transfer_information import validate_transfer_information
 from src.prover.pilot_verifier import PilotProof, public_signals
 from src.sar.pilot_envelope import MAX_PAYLOAD_BYTES, RecipientTrustStore, seal_pilot_envelope
 from src.services.proof_inspection import ProofInspectionService
@@ -43,6 +44,7 @@ class ProofAuthorizationService(ProofInspectionService):
             raise ValueError("Invalid authorization clock")
         if type(pii) is not bytes or not 1 <= len(pii) <= MAX_PAYLOAD_BYTES:
             raise ValueError("Expected 1–32768 payload bytes")
+        validate_transfer_information(pii, self._inputs["transfer"], self._context)
         PilotProof.parse(proof)
         signals = public_signals(signals)
         fact_ids = tuple(fact_ids)

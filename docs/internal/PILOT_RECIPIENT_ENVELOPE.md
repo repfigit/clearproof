@@ -1,6 +1,7 @@
 # Trusted recipient envelope
 
-Pilot authorization requires 1–32768 payload bytes and an independently configured
+Pilot authorization requires 1–32768 bytes of [validated transfer information](PILOT_TRANSFER_INFORMATION.md)
+and an independently configured
 `RecipientTrustStore`. Each immutable authority pins an X25519 public key to one
 tenant, chain, registry address, beneficiary VASP DID and validity interval. The
 requested key ID must resolve in that inventory and match the actual transfer.
@@ -37,9 +38,9 @@ recover the original ciphertext and receipt even after key expiry.
 Recipient authority or encryption failure aborts authorization. A subsequent
 storage/consumption failure rolls back the envelope, proof, receipt and consumption
 together. There is no shared-key or plaintext fallback. Delivery, acknowledgment,
-IVMS101 completeness validation and sender-authenticated bilateral exchange remain
+complete IVMS101 mapping and sender-authenticated bilateral exchange remain
 separate required integrations; the signed business fact about information
-completeness does not prove the contents of these opaque payload bytes.
+completeness does not establish the truth of the validated personal fields.
 
 Tests use real X25519/HPKE and synthetic bytes. They cover scoped authority,
 validity and rotation overlap, wrong keys, altered metadata/associated data,

@@ -15,7 +15,8 @@ real pairing. `DENY`, `REVIEW`, `INDETERMINATE`, invalid pairing and invalid tru
 cannot consume or create authorization records.
 
 Authorization also requires a [trusted recipient envelope](PILOT_RECIPIENT_ENVELOPE.md).
-After ALLOW it seals the supplied bytes to a currently approved beneficiary VASP
+The supplied bytes must first satisfy the [bound information profile](PILOT_TRANSFER_INFORMATION.md).
+After ALLOW it seals those validated bytes to a currently approved beneficiary VASP
 key. Encryption failure rejects the operation before any consumption commits.
 
 The existing tenant transaction serializes inspection and writes with supported
