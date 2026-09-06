@@ -13,17 +13,25 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 CONTRACTS = ROOT / "packages/contracts"
-CLI = CONTRACTS / "node_modules/hardhat/internal/cli/cli.js"
 
 
 def main() -> int:
-    subprocess.run(["node", str(CLI), "compile"], cwd=CONTRACTS, check=True)
+    # npm may hoist Hardhat to the repo root. Resolve from the workspace using
+    # Node's package lookup instead of assuming a node_modules directory layout.
+    cli = subprocess.run(
+        ["node", "-p", "require.resolve('hardhat/internal/cli/cli.js')"],
+        cwd=CONTRACTS,
+        check=True,
+        capture_output=True,
+        text=True,
+    ).stdout.strip()
+    subprocess.run(["node", cli, "compile"], cwd=CONTRACTS, check=True)
     with socket.socket() as listener:
         listener.bind(("127.0.0.1", 0))
         port = listener.getsockname()[1]
     url = f"http://127.0.0.1:{port}"
     node = subprocess.Popen(
-        ["node", str(CLI), "node", "--hostname", "127.0.0.1", "--port", str(port)],
+        ["node", cli, "node", "--hostname", "127.0.0.1", "--port", str(port)],
         cwd=CONTRACTS,
         stdin=subprocess.DEVNULL,
         stdout=subprocess.DEVNULL,
