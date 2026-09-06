@@ -52,6 +52,29 @@ class PolicySource(Record):
         return self
 
 
+class PolicyRule(Record):
+    rule_id: OpaqueId
+    predicate: OpaqueId
+    operator: Literal["is_true", "is_false", "at_least", "below"]
+    threshold_usd_cents: UInt128 | None = None
+    effect: Literal["ALLOW", "REVIEW", "DENY"]
+    source_ids: tuple[OpaqueId, ...] = Field(min_length=1, max_length=16)
+
+    @model_validator(mode="after")
+    def coherent_rule(self):
+        numeric = self.operator in ("at_least", "below")
+        if numeric != (self.threshold_usd_cents is not None):
+            raise ValueError("Only amount comparisons require a threshold")
+        if numeric:
+            if self.predicate != "usd_cents" or int(uint128(self.threshold_usd_cents)) <= 0:
+                raise ValueError("Amount rules require positive USD cents")
+        elif self.predicate == "usd_cents":
+            raise ValueError("Amount requires an integer comparison")
+        if len(set(self.source_ids)) != len(self.source_ids):
+            raise ValueError("Rule source IDs must be distinct")
+        return self
+
+
 class PilotPolicy(Record):
     schema_version: Literal["clearproof-pilot-policy-v1"] = "clearproof-pilot-policy-v1"
     policy_id: OpaqueId
@@ -67,6 +90,7 @@ class PilotPolicy(Record):
     # USD cents, exact unsigned integers, for the private tier predicate only.
     tier_thresholds_usd_cents: tuple[UInt128, UInt128, UInt128]
     sources: tuple[PolicySource, ...] = Field(min_length=1, max_length=16)
+    rules: tuple[PolicyRule, ...] = Field(default=(), max_length=64)
 
     @model_validator(mode="after")
     def coherent(self):
@@ -81,6 +105,10 @@ class PilotPolicy(Record):
             raise ValueError("Policy thresholds must be positive and ordered")
         if len({source.source_id for source in self.sources}) != len(self.sources):
             raise ValueError("Policy source IDs must be unique")
+        if len({rule.rule_id for rule in self.rules}) != len(self.rules):
+            raise ValueError("Policy rule IDs must be unique")
+        if any(set(rule.source_ids) - {source.source_id for source in self.sources} for rule in self.rules):
+            raise ValueError("Rule requires policy source references")
         if any(
             source.reviewed_at > self.effective_from or source.valid_until < self.effective_until
             for source in self.sources
