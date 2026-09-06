@@ -9,7 +9,7 @@ from typing import AsyncIterator
 import psycopg
 from psycopg_pool import AsyncConnectionPool
 
-from src.storage.pilot_schema import PILOT_SCHEMA, ROOT_SOURCE_MIGRATION
+from src.storage.pilot_schema import EVENT_INDEX_MIGRATION, PILOT_SCHEMA, ROOT_SOURCE_MIGRATION
 from src.storage.signals import PUBLIC_SIGNALS_CONSTRAINT, migrate_public_signals
 
 logger = logging.getLogger(__name__)
@@ -114,6 +114,7 @@ _SCHEMA_MIGRATIONS = [
     PUBLIC_SIGNALS_CONSTRAINT,
     PILOT_SCHEMA,
     ROOT_SOURCE_MIGRATION,
+    EVENT_INDEX_MIGRATION,
 ]
 
 

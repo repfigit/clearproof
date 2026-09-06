@@ -875,3 +875,93 @@ async def exercise_policy_cli(app, token, comparison, stored, expected):
             await asyncio.wait_for(task, 10)
         finally:
             sock.close()
+
+
+async def test_event_ingestion_concurrent_retry_restart_conflict_rollback_and_scope(db):
+    from src.reconciliation.events import SourceEvent, TransferScope
+    from src.services.event_ingestion import EventAuthority, EventIngestionService
+
+    scope = TransferScope(
+        tenant_id="tenant-a", transfer_id="transfer-a", chain_id="1", registry_address="0x" + "12" * 20
+    )
+    principal = Principal(
+        tenant_id="tenant-a", actor_id="ingester-a", roles=("events:ingest", "evidence:decrypt", "evidence:read")
+    )
+    authority = EventAuthority(
+        tenant_id="tenant-a",
+        chain_id="1",
+        registry_address=scope.registry_address,
+        source_id="custody-a",
+        actors=("ingester-a",),
+        dimensions=("custody",),
+        valid_from=1,
+        valid_until=300,
+    )
+    service = EventIngestionService(db, cipher(), principal, authorities=(authority,))
+    source = SourceEvent(
+        scope=scope,
+        source_id="custody-a",
+        source_event_id="event-2",
+        source_sequence=2,
+        dimension="custody",
+        state="submitted",
+        occurred_at=100,
+        evidence_digest="ab" * 32,
+    )
+    results = await asyncio.gather(*(service.ingest(source, now=110) for _ in range(5)))
+    assert sum(not item["duplicate"] for item in results) == 1
+    assert len({item["event_id"] for item in results}) == 1
+    older = SourceEvent.model_validate(
+        {
+            **source.model_dump(),
+            "source_event_id": "event-1",
+            "source_sequence": 1,
+            "state": "created",
+            "occurred_at": 90,
+        }
+    )
+    await service.ingest(older, now=120)
+    await db.close()
+    await db.connect()
+    service = EventIngestionService(db, cipher(), principal, authorities=(authority,))
+    report = await service.investigate(scope, now=150)
+    assert report.states["custody"] == "submitted" and len(report.timeline) == 2
+    retry = await service.ingest(source, now=140)
+    assert retry["duplicate"] and retry["ingested_at"] == 110
+    assert (await service.investigate(scope, now=150)).model_dump_json() == report.model_dump_json()
+    conflict = SourceEvent.model_validate({**source.model_dump(), "source_event_id": "different-id"})
+    with pytest.raises(RecordConflict):
+        await service.ingest(conflict, now=140)
+    changed = SourceEvent.model_validate({**source.model_dump(), "state": "failed"})
+    with pytest.raises(RecordConflict):
+        await service.ingest(changed, now=140)
+    # The sequence conflict occurs after the encrypted record insert; both must roll back.
+    async with db.connection() as conn:
+        assert (await (await conn.execute("SELECT count(*) FROM pilot_records WHERE kind='event'")).fetchone())[0] == 2
+        assert (await (await conn.execute("SELECT count(*) FROM pilot_event_index")).fetchone())[0] == 2
+        assert (await (await conn.execute("SELECT count(*) FROM pilot_consumptions")).fetchone())[0] == 0
+        rows = await (await conn.execute("SELECT row_to_json(r)::text FROM pilot_records r")).fetchall()
+        assert all("ingester-a" not in row[0] and "custody-a" not in row[0] for row in rows)
+    impostor = EventIngestionService(
+        db, cipher(), Principal(tenant_id="tenant-a", actor_id="other", roles=principal.roles), authorities=(authority,)
+    )
+    with pytest.raises(ValueError, match="authority"):
+        await impostor.ingest(source, now=150)
+    with pytest.raises(ValueError, match="authority"):
+        await service.ingest(source, now=300)
+    unsupported = SourceEvent.model_validate({**source.model_dump(), "dimension": "proof", "state": "valid"})
+    with pytest.raises(ValueError, match="authority"):
+        await service.ingest(unsupported, now=150)
+    foreign_scope = TransferScope.model_validate({**scope.model_dump(), "tenant_id": "tenant-b"})
+    with pytest.raises(ValueError, match="tenant"):
+        await service.investigate(foreign_scope, now=150)
+    foreign_authority = EventAuthority.model_validate({**authority.model_dump(), "tenant_id": "tenant-b"})
+    foreign = EventIngestionService(
+        db,
+        cipher(),
+        Principal(tenant_id="tenant-b", actor_id="ingester-a", roles=principal.roles),
+        authorities=(foreign_authority,),
+    )
+    assert (await foreign.investigate(foreign_scope, now=150)).timeline == ()
+    await foreign.ingest(SourceEvent.model_validate({**source.model_dump(), "scope": foreign_scope}), now=150)
+    assert len((await foreign.investigate(foreign_scope, now=150)).timeline) == 1

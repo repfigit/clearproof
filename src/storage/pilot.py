@@ -14,6 +14,7 @@ from contextlib import asynccontextmanager
 from dataclasses import dataclass, field
 from typing import Awaitable, Callable
 
+from psycopg.errors import UniqueViolation
 from psycopg.rows import dict_row
 
 from src.auth.principal import Principal
@@ -242,6 +243,40 @@ class PilotTransaction:
             ),
         )
         return revision
+
+    async def event_ids(self, scope_digest: str) -> list[str]:
+        self._check_open()
+        self._principal.require("evidence:decrypt")
+        rows = await (
+            await self._conn.execute(
+                "SELECT record_id FROM pilot_event_index WHERE tenant_id=%s AND scope_digest=%s "
+                "ORDER BY record_id LIMIT 257",
+                (self.tenant_id, _identifier(scope_digest)),
+            )
+        ).fetchall()
+        if len(rows) > 256:
+            raise ValueError("Transfer event capacity exceeded")
+        return [row[0] for row in rows]
+
+    async def index_event(self, record_id: str, scope_digest: str, stream_digest: str, sequence: int) -> None:
+        self._check_open()
+        self._principal.require("events:ingest")
+        if type(sequence) is not int or not 1 <= sequence <= 2**53 - 1:
+            raise ValueError("Invalid source sequence")
+        try:
+            await self._conn.execute(
+                "INSERT INTO pilot_event_index (tenant_id, record_id, scope_digest, stream_digest, source_sequence) "
+                "VALUES (%s,%s,%s,%s,%s)",
+                (
+                    self.tenant_id,
+                    _identifier(record_id),
+                    _identifier(scope_digest),
+                    _identifier(stream_digest),
+                    sequence,
+                ),
+            )
+        except UniqueViolation:
+            raise RecordConflict("Event identity or source sequence already exists") from None
 
     async def consume(self, nullifier: str, proof_id: str) -> None:
         self._check_open()

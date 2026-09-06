@@ -34,3 +34,21 @@ ALTER TABLE pilot_records ADD CONSTRAINT pilot_records_kind_check
 CHECK (kind IN ('credential','proof','transfer','receipt','event','policy','revocation',
                'issuance-root','issuer-root','sanctions-root','idempotency','root-source'));
 """
+
+
+EVENT_INDEX_MIGRATION = """
+CREATE TABLE pilot_event_index (
+    tenant_id TEXT NOT NULL,
+    record_id TEXT NOT NULL CHECK (record_id ~ '^[0-9a-f]{64}$' AND length(record_id)=64),
+    scope_digest TEXT NOT NULL CHECK (scope_digest ~ '^[0-9a-f]{64}$' AND length(scope_digest)=64),
+    stream_digest TEXT NOT NULL CHECK (stream_digest ~ '^[0-9a-f]{64}$' AND length(stream_digest)=64),
+    source_sequence BIGINT NOT NULL CHECK (source_sequence BETWEEN 1 AND 9007199254740991),
+    kind TEXT NOT NULL DEFAULT 'event' CHECK (kind='event'),
+    revision BIGINT NOT NULL DEFAULT 1 CHECK (revision=1),
+    PRIMARY KEY (tenant_id, record_id),
+    UNIQUE (tenant_id, stream_digest, source_sequence),
+    FOREIGN KEY (tenant_id, kind, record_id, revision)
+        REFERENCES pilot_records(tenant_id, kind, record_id, revision)
+);
+CREATE INDEX pilot_events_by_scope ON pilot_event_index (tenant_id, scope_digest, record_id);
+"""

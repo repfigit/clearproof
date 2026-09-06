@@ -35,7 +35,7 @@ class TransferScope(Record):
         return record_digest("clearproof/business-transfer/v1", self.model_dump(mode="json"))
 
 
-class TransferEvent(Record):
+class SourceEvent(Record):
     schema_version: Literal["clearproof-transfer-event-v1"] = "clearproof-transfer-event-v1"
     scope: TransferScope
     source_id: OpaqueId
@@ -44,7 +44,6 @@ class TransferEvent(Record):
     dimension: Dimension
     state: OpaqueId
     occurred_at: Epoch
-    ingested_at: Epoch
     evidence_digest: Hex32
     block_number: Epoch | None = None
     block_hash: Hex32 | None = None
@@ -53,8 +52,6 @@ class TransferEvent(Record):
     def coherent(self):
         if self.state not in STATES[self.dimension]:
             raise ValueError("Unsupported state for event dimension")
-        if self.occurred_at > self.ingested_at:
-            raise ValueError("Future source event requires quarantine")
         has_block = self.block_number is not None and self.block_hash is not None
         if (self.block_number is None) != (self.block_hash is None):
             raise ValueError("Block identity requires both number and hash")
@@ -62,6 +59,16 @@ class TransferEvent(Record):
             raise ValueError("Only chain observations carry block identities")
         if self.dimension == "chain" and self.state != "pending" and not has_block:
             raise ValueError("Chain observation requires its observed block identity")
+        return self
+
+
+class TransferEvent(SourceEvent):
+    ingested_at: Epoch
+
+    @model_validator(mode="after")
+    def received_after_event(self):
+        if self.occurred_at > self.ingested_at:
+            raise ValueError("Future source event requires quarantine")
         return self
 
     @property
