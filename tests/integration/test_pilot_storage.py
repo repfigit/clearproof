@@ -803,9 +803,75 @@ async def test_policy_http_approval_and_stored_comparison_real_jwt(db, monkeypat
         assert (await client.post("/pilot/policy/diff/stored", json=stored, headers=foreign)).status_code == 404
         duplicate = {**stored, "case_digests": stored["case_digests"] * 2}
         assert (await client.post("/pilot/policy/diff/stored", json=duplicate, headers=readonly)).status_code == 422
+        if os.getenv("CLEARPROOF_POLICY_CLI_TEST") == "1":
+            await exercise_policy_cli(app, token, comparison, stored, result.json())
         async with db.connection() as conn:
             assert count_before == await (await conn.execute("SELECT count(*) FROM pilot_records")).fetchone()
             assert (await (await conn.execute("SELECT count(*) FROM pilot_consumptions")).fetchone())[0] == 0
         retained = store(db, encryption=RecordCipher(load_keyring()))
         approval = await retained.get("policy", comparison.before.digest)
         assert approval["actor_id"] == "actor-a" and approval["approved_at"] == comparison.cases[0].evaluated_at
+
+
+async def exercise_policy_cli(app, token, comparison, stored, expected):
+    """Actual Node stdin process -> loopback HTTP -> verified JWT -> PostgreSQL."""
+    import json
+    import shutil
+    import socket
+    from pathlib import Path
+
+    import uvicorn
+
+    node = shutil.which("node")
+    cli = Path(__file__).resolve().parents[2] / "packages/cli/dist/index.js"
+    assert node and cli.is_file(), "Build the CLI and install Node before enabling the integration gate"
+    sock = socket.socket()
+    sock.bind(("127.0.0.1", 0))
+    origin = f"http://127.0.0.1:{sock.getsockname()[1]}"
+    server = uvicorn.Server(uvicorn.Config(app, lifespan="off", access_log=False, log_level="error"))
+    task = asyncio.create_task(server.serve(sockets=[sock]))
+
+    async def invoke(payload, bearer, retained):
+        process = await asyncio.create_subprocess_exec(
+            node,
+            str(cli),
+            "policy",
+            "diff",
+            "--api-url",
+            origin,
+            *(["--stored"] if retained else []),
+            env={"PATH": os.environ.get("PATH", ""), "CLEARPROOF_API_TOKEN": bearer},
+            stdin=asyncio.subprocess.PIPE,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+        )
+        try:
+            stdout, stderr = await asyncio.wait_for(process.communicate(json.dumps(payload).encode()), 15)
+            return process.returncode, stdout, stderr
+        finally:
+            if process.returncode is None:
+                process.kill()
+            await process.wait()
+
+    try:
+        async with asyncio.timeout(10):
+            while not server.started:
+                if task.done():
+                    await task
+                    raise AssertionError("API server stopped before startup")
+                await asyncio.sleep(0.01)
+        for retained, payload in ((False, comparison.model_dump(mode="json")), (True, stored)):
+            code, stdout, stderr = await invoke(payload, token(), retained)
+            assert code == 0, stderr.decode()
+            assert json.loads(stdout) == expected
+            assert comparison.cases[0].transfer.originator.wallet.encode() not in stdout + stderr
+        code, stdout, stderr = await invoke(stored, token(tenant="tenant-b"), True)
+        assert code == 1 and stdout == b""
+        assert b"Policy comparison failed" in stderr
+        assert stored["before_digest"].encode() not in stderr
+    finally:
+        server.should_exit = True
+        try:
+            await asyncio.wait_for(task, 10)
+        finally:
+            sock.close()

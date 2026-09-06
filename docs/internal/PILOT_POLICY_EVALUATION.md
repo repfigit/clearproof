@@ -155,6 +155,21 @@ HTTPS is required except loopback HTTP for local evaluation; origin credentials,
 paths, queries/fragments and redirects are rejected. Stdin and network reads
 are bounded, and failures omit input values, tokens and server response bodies.
 See `packages/cli/README.md` for exact usage. The command is implemented in source;
-it has not been published as a working public npm release. Built-command tests
-use a local HTTP simulator; the separate API tests use actual JWT/PostgreSQL.
-A single combined CLI-to-API pilot still requires integration evidence.
+it has not been published as a working public npm release. Built-command unit tests
+use a local HTTP simulator. The PostgreSQL integration test also runs the built
+Node CLI against a real loopback Uvicorn listener with signed JWTs, comparing
+supplied and retained cases after reconnect and rejecting a foreign tenant.
+Its output must equal the direct API report, and record/consumption counts must
+remain unchanged. This covers the policy workflow, not the complete proof pilot.
+
+Build content, proof and CLI workspaces, set `DATABASE_URL` for an isolated UTF-8
+PostgreSQL database, and run:
+
+```bash
+CLEARPROOF_POLICY_CLI_TEST=1 python -m pytest tests/integration/test_pilot_storage.py -q
+```
+
+The database CI job builds those workspaces and enables this gate. If explicitly
+enabled, a missing Node executable or CLI build fails rather than skipping. The
+server and child processes are bounded and cleaned up by the test. Only
+synthetic fixtures enter the unencrypted loopback test transport.
