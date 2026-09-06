@@ -11,7 +11,7 @@ STATES = {
     "compliance": {"approved", "review", "denied"},
     "proof": {"valid", "invalid"},
     "counterparty": {"accepted", "rejected", "information-requested", "timeout"},
-    "custody": {"created", "submitted", "failed", "cancelled"},
+    "custody": {"created", "submitted", "completed", "failed", "cancelled"},
     "chain": {"pending", "confirmed", "finalized", "reorged"},
     "evidence": {"complete", "incomplete"},
 }
