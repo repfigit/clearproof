@@ -90,3 +90,9 @@ The approval is checked outside the circuit at the evaluation time. Current
 verifiers still must authenticate the quote with their own tenant/clock and
 recompute the expected projection; a prover bypassing Python does not thereby
 receive authority to choose its own price.
+
+ADR 0008 replaces the composed encoder's free threshold tuple with current policy
+selection from independent operator pins. Approved thresholds and policy digest
+now feed the same private projection. Current authorization must repeat that
+selection independently; the amount tier does not itself encode a business or
+legal ALLOW decision.

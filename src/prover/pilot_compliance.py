@@ -5,6 +5,7 @@ revocation separately. Returned private inputs must never be logged or stored
 outside an encrypted envelope.
 """
 
+from src.policy.model import PolicyTrustStore
 from src.protocol.credential import PilotCredential
 from src.protocol.transfer import AssetRegistry, Transfer, VerificationContext
 from src.protocol.valuation_approval import SignedValuationApproval, ValuationTrustStore
@@ -28,7 +29,6 @@ def compliance_witness(
     transfer: Transfer,
     context: VerificationContext,
     registry: AssetRegistry,
-    thresholds: tuple[str, str, str],
     credential: PilotCredential,
     *,
     secret: str,
@@ -37,6 +37,7 @@ def compliance_witness(
     sanctions: PilotSanctionsTree,
     valuation_approval: SignedValuationApproval,
     valuation_trust: ValuationTrustStore,
+    policy_trust: PolicyTrustStore,
 ) -> dict:
     transfer = Transfer.model_validate(transfer)
     context = VerificationContext.model_validate(context)
@@ -45,7 +46,8 @@ def compliance_witness(
     valuation_trust.verify_for_transfer(
         valuation_approval, transfer, registry, tenant_id=context.tenant_id, now=context.evaluated_at
     )
-    projection = project_transfer(transfer, context, registry, thresholds)
+    policy = policy_trust.for_transfer(transfer, context, tenant_id=context.tenant_id, now=context.evaluated_at)
+    projection = project_transfer(transfer, context, registry, policy.tier_thresholds_usd_cents)
     credential = PilotCredential.model_validate(credential)
     if context.proof_profile != PROFILE:
         raise ValueError("Unsupported composed proof profile")

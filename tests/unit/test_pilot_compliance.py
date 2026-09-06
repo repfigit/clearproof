@@ -9,6 +9,7 @@ from pathlib import Path
 import pytest
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 
+from src.policy.model import PilotPolicy, PolicySource, PolicyTrustStore
 from src.protocol.credential import PilotCredential, holder_commitment
 from src.protocol.transfer import AssetDefinition, AssetRegistry, Transfer, VerificationContext
 from src.protocol.valuation_approval import ValuationApproval, ValuationAuthority, ValuationTrustStore, sign_valuation
@@ -27,6 +28,36 @@ def witness():
         {**fixture["records"][1]["value"], "proof_profile": "pilot-transfer-v1"}
     )
     registry = AssetRegistry([AssetDefinition.model_validate(a) for a in fixture["assets"]])
+    policy = PilotPolicy(
+        policy_id="synthetic-policy",
+        revision=1,
+        tenant_id=transfer.tenant_id,
+        chain_id=context.deployment_chain_id,
+        registry_address=context.deployment_address,
+        jurisdiction=transfer.jurisdiction,
+        asset_registry_digest=registry.digest,
+        effective_from=transfer.created_at,
+        effective_until=transfer.valuation.expires_at,
+        tier_thresholds_usd_cents=("10000", "100000", "1000000"),
+        sources=(
+            PolicySource(
+                source_id="synthetic-rules",
+                kind="synthetic",
+                reference="urn:clearproof:synthetic:policy-v1",
+                evidence_digest="ab" * 32,
+                reviewed_at=transfer.created_at,
+                valid_until=transfer.valuation.expires_at,
+            ),
+        ),
+    )
+    transfer = Transfer.model_validate({**transfer.model_dump(), "policy_digest": policy.digest})
+    context = VerificationContext.model_validate(
+        {
+            **context.model_dump(),
+            "policy_digest": policy.digest,
+            "transfer_digest": transfer.digest,
+        }
+    )
     credential = PilotCredential(
         tenant_id=transfer.tenant_id,
         credential_nonce="ab" * 32,
@@ -67,7 +98,6 @@ def witness():
         transfer,
         context,
         registry,
-        ("10000", "100000", "1000000"),
         credential,
         secret="123456",
         issuance_path=issuance.membership("credential"),
@@ -75,6 +105,7 @@ def witness():
         sanctions=PilotSanctionsTree([]),
         valuation_approval=quote_approval,
         valuation_trust=ValuationTrustStore([quote_authority]),
+        policy_trust=PolicyTrustStore([policy], current_digests=(policy.digest,)),
     )
 
 
