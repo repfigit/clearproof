@@ -942,3 +942,23 @@ still need completion and final merged-main verification.
 - The repository-wide coverage goal remains incomplete. Other Python modules,
   SDK branches, Solidity, docs/scripts and final remote CI/merge evidence remain
   outstanding. Checkpoint 42 remains the last complete Python measurement.
+
+## Fifty-first checkpoint
+
+- Extended the artifact-enabled authorization integration scenario with 12
+  dependency-boundary rejection checks: zero consumer, missing/wrong-schema proof,
+  six invalid or non-ALLOW inspection results, two missing source records and an
+  expired valuation checkpoint interval. A real successful evaluation establishes
+  the baseline before controlled dependency-result changes; patches are restored
+  and the original evidence still prepares successfully afterward.
+- The real PostgreSQL/development-proof scenario passes (1 passed, 102 deselected,
+  129.26 seconds). Authorization mirror coverage improves to 86/89 statements and
+  23/26 branches (`authorization-mirror-boundaries.log`/`.data`). Three paths remain:
+  information binding, envelope binding and missing participant evidence. These
+  require inputs that reach the guards through the earlier integrity checks.
+- The existing scenario verifies record and consumption counts are unchanged.
+  This focused invocation does not enable the optional local-EVM publication
+  branch; checkpoint 42 remains its latest execution evidence. Owned PostgreSQL
+  stopped; Ruff and whitespace checks pass. No production source changed.
+- Full repository coverage remains incomplete, including this module's remaining
+  paths and other Python, SDK, Solidity, docs/scripts and publication requirements.

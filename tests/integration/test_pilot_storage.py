@@ -4443,6 +4443,7 @@ async def check_authorization_mirror(
     restricted = AuthorizationMirrorService(db, cipher(), principal, verifier, configuration, consumer=consumer)
     with pytest.raises(HTTPException):
         await restricted.prepare(receipt["receipt_id"], **arguments)
+    await check_authorization_mirror_rejections(service, arguments, receipt)
     if mirror_evm:
         import time
 
@@ -5151,3 +5152,78 @@ async def test_event_ingestion_queue_rejects_indexed_scope_without_events(event_
     monkeypatch.setattr(PilotTransaction, "event_ids", AsyncMock(return_value=[]))
     with pytest.raises(ValueError, match="Indexed transfer has no events"):
         await event_service.queue(QueueRequest(), now=120)
+
+
+async def check_authorization_mirror_rejections(service, arguments, receipt):
+    """Fault-inject dependency results after establishing a real valid baseline."""
+    from dataclasses import replace
+    from unittest.mock import AsyncMock
+
+    from src.services.authorization_mirror import MirrorDestination
+    from src.storage.pilot import PilotTransaction
+
+    with pytest.raises(ValueError, match="Mirror consumer must be configured"):
+        MirrorDestination(consumer="0x" + "00" * 20)
+    original_get = PilotTransaction.get
+    for missing in (None, {"schema_version": "synthetic-wrong-schema"}):
+
+        async def unavailable(tx, kind, record_id):
+            if kind == "proof":
+                return missing
+            return await original_get(tx, kind, record_id)
+
+        with pytest.MonkeyPatch.context() as patch:
+            patch.setattr(PilotTransaction, "get", unavailable)
+            with pytest.raises(ValueError, match="Retained authorization proof is unavailable"):
+                await service.prepare(receipt["receipt_id"], **arguments)
+
+    observed = []
+    original_evaluate = service._evaluate_transaction
+
+    async def capture(*args, **kwargs):
+        result = await original_evaluate(*args, **kwargs)
+        observed.append(result)
+        return result
+
+    with pytest.MonkeyPatch.context() as patch:
+        patch.setattr(service, "_evaluate_transaction", capture)
+        await service.prepare(receipt["receipt_id"], **arguments)
+    inspection, decision = observed[0]
+    assert inspection.cryptographic_valid and decision.outcome == "ALLOW"
+    rejected = [
+        (replace(inspection, cryptographic_valid=False), decision),
+        (inspection, None),
+        (inspection, decision.model_copy(update={"outcome": "DENY"})),
+        (inspection, decision.model_copy(update={"policy_digest": "ab" * 32})),
+        (replace(inspection, proof_profile="synthetic-unsupported-profile"), decision),
+        (replace(inspection, manifest_digest="ab" * 32), decision),
+    ]
+    # These are dependency-contract tests: signatures, proof and retained inputs
+    # were verified above. Altered inspection results must never authorize a plan.
+    for result in rejected:
+        with pytest.MonkeyPatch.context() as patch:
+            patch.setattr(service, "_evaluate_transaction", AsyncMock(return_value=result))
+            with pytest.raises(ValueError, match="Current authorization checks did not confirm ALLOW"):
+                await service.prepare(receipt["receipt_id"], **arguments)
+
+    original_read = PilotTransaction.read
+    for missing_kind in ("policy-activation", "credential"):
+
+        async def missing_source(tx, kind, record_id, **kwargs):
+            if kind == missing_kind:
+                return None
+            return await original_read(tx, kind, record_id, **kwargs)
+
+        with pytest.MonkeyPatch.context() as patch:
+            patch.setattr(service, "_evaluate_transaction", AsyncMock(return_value=(inspection, decision)))
+            patch.setattr(PilotTransaction, "read", missing_source)
+            with pytest.raises(ValueError, match="Current source records are unavailable"):
+                await service.prepare(receipt["receipt_id"], **arguments)
+
+    with pytest.MonkeyPatch.context() as patch:
+        patch.setattr(service, "_evaluate_transaction", AsyncMock(return_value=(inspection, decision)))
+        patch.setattr(service._inputs["valuation_trust"], "current_valid_until", lambda *a, **k: arguments["now"])
+        with pytest.raises(ValueError, match="Mirror checkpoint interval is not current"):
+            await service.prepare(receipt["receipt_id"], **arguments)
+    # Every patch has been restored; the original evidence remains usable.
+    assert (await service.prepare(receipt["receipt_id"], **arguments))["receipt_id"] == receipt["receipt_id"]
