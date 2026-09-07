@@ -27,7 +27,7 @@ or transfers. Report excluded/unavailable cases and any post-hoc cohort change.
 
 | Measure | Baseline and pilot method | Required evidence / caveat |
 | --- | --- | --- |
-| Onboarding effort | Engineer active minutes and elapsed time from agreed prerequisites to first usable report | Start/stop events, blockers and manual assistance; local setup gate still open |
+| Onboarding effort | Engineer active minutes and elapsed time from agreed prerequisites to first usable report | Start/stop events, blockers and manual assistance; distinguish the local reference setup from customer onboarding |
 | Supported-case coverage | Determinate policy cases / selected cases, with observed and missing counts separately | Cohort report; no inferred coverage of the unselected population |
 | Decision disagreement | Disagreements / comparable labelled policy cases | Cohort report plus label provenance; unverified labels are not ground truth |
 | Unexplained disagreement | Disagreements remaining unresolved after a named reviewer investigates / all disagreements | Review log; not inferred automatically from comparison count |

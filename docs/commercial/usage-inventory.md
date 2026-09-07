@@ -10,7 +10,8 @@ The response includes `tenant_id`, operator-clock `sampled_at`,
 `scope: retained-tenant-records`, `billing_status: not-an-invoice` and these integer
 counters. One SQL statement reads a consistent database snapshot across records
 and consumptions. No records, secrets, encryption-key IDs or source payloads are
-returned, and reading the endpoint writes nothing.
+returned, and reading the endpoint writes nothing. Publication journal and
+publication-history rows are outside this inventory.
 
 | Counter | Exact unit |
 | --- | --- |

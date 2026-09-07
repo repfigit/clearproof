@@ -180,3 +180,7 @@ validates the documented workflow with those host prerequisites. It is not a
 claim of bit-identical keys, production assurance or compatibility with every
 host/version. The run manifest itself still leaves clean-environment status
 unestablished because test success alone cannot prove the preceding setup steps.
+
+For version selection and upgrades, use the [compatibility matrix](pilot-compatibility.md).
+For endpoint meanings, report interpretation and failure handling, use the
+[observability and operator runbook](pilot-observability.md).

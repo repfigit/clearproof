@@ -47,7 +47,9 @@ async def test_health_returns_200(client: AsyncClient):
     assert resp.status_code == 200
     body = resp.json()
     assert body["status"] == "ok"
-    assert "version" in body
+    from importlib.metadata import version
+
+    assert body["version"] == version("clearproof")
     assert "timestamp" in body
 
 

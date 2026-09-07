@@ -25,6 +25,7 @@ from src.api.routes.policy import router as policy_router
 from src.api.routes.proof import router as proof_router
 from src.api.routes.usage import router as usage_router
 from src.storage.database import Database
+from src.version import VERSION
 
 logger = logging.getLogger(__name__)
 
@@ -81,10 +82,9 @@ def create_app() -> FastAPI:
     """Build and return the configured FastAPI application."""
     app = FastAPI(
         title="ZK Travel Rule Compliance Bridge",
-        version="0.1.0",
+        version=VERSION,
         description=(
-            "Privacy-preserving compliance infrastructure for FATF Travel Rule obligations. "
-            "Generates and verifies ZK proofs that both parties are KYC-compliant and sanctions-clear."
+            "Development tools for proof inspection, tenant-scoped policy evaluation and encrypted transfer evidence."
         ),
         lifespan=lifespan,
     )

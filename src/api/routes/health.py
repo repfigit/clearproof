@@ -1,7 +1,7 @@
 """
 Health and metrics endpoints.
 
-GET /health  — Liveness / readiness probe.
+GET /health  — Process liveness only; no dependency readiness checks.
 GET /metrics — Basic operational metrics.
 """
 
@@ -11,12 +11,13 @@ from fastapi import APIRouter, Depends
 from pydantic import BaseModel
 
 from src.api.middleware.auth import JWTAuthDependency
+from src.version import VERSION
 
 router = APIRouter(tags=["health"])
 
 
 # ---------------------------------------------------------------------------
-# In-memory metrics accumulator (replaced by Prometheus/OTEL in production)
+# Process-local debug counters; pilot services expose separate durable reports.
 # ---------------------------------------------------------------------------
 
 
@@ -81,10 +82,10 @@ class MetricsResponse(BaseModel):
 
 @router.get("/health", response_model=HealthResponse, summary="Health check")
 async def health():
-    """Liveness / readiness probe. Returns 200 if the service is operational."""
+    """Process liveness only. Does not inspect database, trust, artifacts or external services."""
     return HealthResponse(
         status="ok",
-        version="0.1.0",
+        version=VERSION,
         timestamp=int(time.time()),
     )
 
@@ -94,8 +95,8 @@ async def get_metrics(_auth: dict = Depends(JWTAuthDependency)):
     """
     Basic operational metrics.
 
-    In production these are exported via OpenTelemetry / Prometheus;
-    this endpoint provides a quick JSON view for debugging.
+    These counters are process-local and reset on restart. No telemetry exporter
+    or pilot-service instrumentation is configured by this endpoint.
     """
     return MetricsResponse(
         proof_generated_count=metrics.proof_generated_count,

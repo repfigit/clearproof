@@ -19,8 +19,10 @@ Exit one emits a stable rejection code without paths, contents or key material.
 Place `manifest.json` and four distinct regular artifact files in the directory.
 Manifest schema: `src.prover.pilot_artifacts.PilotArtifactManifest`. It binds:
 
-- `pilot-transfer-v1`, Groth16/BN128, transfer/context schema versions and the
-  exact ordered eight public signal names;
+- Explicit `pilot-transfer-v2` for current inspection, or historical
+  `pilot-transfer-v1`; both use Groth16/BN128 and eight signals, with different
+  first-signal semantics and keys. Missing profile retains the historical v1
+  default. Transfer/context schema versions and signal order remain mandatory;
 - the declared policy schema, reviewed source bundle and compiler SHA-256
   digests;
 - each WASM, R1CS, proving-key and verification-key basename, byte length and
@@ -38,7 +40,7 @@ entries. This structural check is not a pairing or subgroup check.
 
 The Python return value captures verified key bytes; consumers must use that
 snapshot, not reopen a path that could have changed. Other files are inspected
-but not retained. A future prover must snapshot or revalidate its files before
+but not retained. A proving caller must snapshot or revalidate its files before
 use. `check_artifact_context` additionally rejects a context selecting another
 manifest or proof profile; it does not check current roots, policy or transfer
 eligibility.
@@ -46,16 +48,19 @@ eligibility.
 Limitations: source and compiler digests are pinned provenance declarations,
 not a reproducible-build attestation. The loader does not establish that the
 proving and verification keys came from the declared R1CS; review and the real
-proof reproduction in ADR 0006 are separate evidence. Runtime binary/dependency
-pins, authenticated policy schema loading, CLI package integration and enforced
-use at API/SDK/contract acceptance boundaries remain required before CP-009 is
-complete. This development profile is not an audit, production ceremony or
+proof reproduction in ADR 0006 are separate evidence. The pairing loader below pins the JavaScript runtime, and current inspection
+checks the artifact/context profile and supported policy-schema digest before
+its independently configured source/policy checks. The [compatibility matrix](../operations/pilot-compatibility.md)
+and current-inspection/authorization guides describe the separate acceptance
+boundaries; a doctor success alone never substitutes for them. This development profile is not an audit, production ceremony or
 regulatory certification.
 
-Local validation on September 5, 2026 inspected the actual composed WASM,
+Historical validation on September 5, 2026 inspected the actual composed WASM,
 R1CS, development zkey and exported verification key from ADR 0006. The local
 manifest used an all-zero synthetic policy-schema marker, so it cannot serve as
-an approved policy binding. No generated artifacts or manifest were committed.
+an approved policy binding. No generated artifacts or manifest were committed. That historical bundle is
+not a current configuration; the development script now emits explicit v2 and
+the current policy-schema digest.
 
 ## Read-only pairing inspection
 
