@@ -4,8 +4,9 @@
 statement bindings, versioned tenant checkpoints and receipt-bound audit mirrors.
 PostgreSQL is the pilot's authorization and replay authority. The contract cannot
 create another authorization. A local preparation service authenticates retained
-receipts and current evidence; chain publication and complete shared adversarial
-acceptance tests remain required work.
+receipts and current evidence. The local acceptance gate publishes authenticated
+checkpoints, verifies the matching real proof, mirrors the consumed receipt and
+exercises journal reconciliation/recovery. These are synthetic local results.
 
 ## Trust boundary
 
@@ -186,8 +187,11 @@ by its retained hash without sending again. This is recovery evidence for the
 journal, not a complete publisher worker. Checkpoint invalidation is explicitly submitted by
 the fixture; it does not demonstrate an automated source revocation relay.
 
-To complete CP-007, finish the publication worker and broaden the joined gate with
-shared adversarial tests against actual enrollment, facts, policy, valuation,
-information and recipient authorities. Reconcile uncertain transaction outcomes
-without creating another authorization. These contracts and tests remain unapproved
-development infrastructure and establish no production or legal assurance.
+The [publication journal and recovery service](PILOT_PUBLICATION_JOURNAL.md)
+provide bounded, explicitly invoked publication/reconciliation operations.
+Background scheduling, automated source-change relays and live deployment are
+not demonstrated by the local gate. The current acceptance audit covers actual
+enrollment, facts, policy, valuation, information and recipient checks before
+publication, followed by real EVM verification and receipt mirroring. These
+contracts and tests remain unapproved development infrastructure and establish
+no production or legal assurance.

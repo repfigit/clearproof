@@ -1,6 +1,10 @@
 # ADR 0006: Composed development transfer proof
 
-Status: implemented witness composition; end-to-end authorization remains incomplete.
+Status: historical v1 construction, superseded for current authorization by
+[ADR 0009](0009-credential-bound-pilot-profile.md). The v2 service now provides
+durable current inspection and atomic PostgreSQL authorization; contracts mirror
+its consumed receipts through explicitly trusted publisher checkpoints. See
+[current registry boundaries](../internal/PILOT_CURRENT_REGISTRY.md).
 
 The separate `pilot-transfer-v1` circuit composes the authenticated credential
 membership construction, private transfer projection, exact integer valuation,
@@ -32,9 +36,9 @@ prover-supplied projection commitment cannot authenticate its private records.
 The trusted verifier must recompute that commitment or validate an explicitly
 trusted attestation of the binding. See ADRs 0003 and 0005.
 
-The legacy sixteen-signal verifier ABI is unchanged. This profile must not be
-routed to it, nor treated as supported by the current API/SDK/contracts until
-artifact manifests, acceptance parity and adversarial integration checks exist.
+The legacy sixteen-signal verifier ABI is unchanged. Neither pilot profile may be
+routed to it. V1 supports only explicitly pinned read-only pairing; current
+API/SDK/contract acceptance uses the exact-credential-bound v2 profile.
 All newly compiled artifacts and development keys remain local. Neither circuit
 compilation nor successful development proofs constitute an audit or approved
 production trusted setup.

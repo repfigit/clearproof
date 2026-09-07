@@ -166,6 +166,8 @@ const g2 = (p: string[][]): [G1, G1] => [[p[0][1], p[0][0]], [p[1][1], p[1][0]]]
       const changed = [...signals]; changed[index] = index === 5 ? String(await time.latest()) : String(BigInt(signals[index]) + 1n);
       await expect(registry.inspect(tenant, id, a, b, c, changed)).to.be.revertedWithCustomError(registry, "InvalidStatement");
     }
+    const zeroNullifier = [...signals]; zeroNullifier[3] = "0";
+    await expect(registry.inspect(tenant, id, a, b, c, zeroNullifier)).to.be.revertedWithCustomError(registry, "InvalidStatement");
     await approve();
     const q = 21888242871839275222246405745257275088696311157297823662689037894645226208583n;
     const changedC: G1 = [c[0], String(q - BigInt(c[1]))];

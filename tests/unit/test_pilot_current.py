@@ -30,6 +30,12 @@ def test_reconstructed_statement_matches_valid_witness(current_case):
     assert expected_current_signals(**current_case) == tuple(current_case["signals"])
 
 
+def test_zero_nullifier_matches_current_registry_rejection(current_case):
+    current_case["signals"][3] = "0"
+    with pytest.raises(ValueError, match="invalid_authorization_nullifier"):
+        expected_current_signals(**current_case)
+
+
 @pytest.mark.parametrize("change", ["expiry", "future", "stale", "quote", "policy", "credential", "issuer"])
 def test_current_expectations_reject_untrusted_or_stale_evidence(current_case, change):
     args = current_case

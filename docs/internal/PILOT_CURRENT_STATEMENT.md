@@ -14,7 +14,10 @@ credential expiry, policy validity and valuation observation age are rechecked a
 the current clock. The exact credential and approved issuance root determine the
 outer v2 projection commitment.
 
-The nullifier and requested expiry originate in public proof signals. Expiry must
+The nullifier and requested expiry originate in public proof signals. Current
+inspection rejects a zero nullifier, matching the current registry and SDK
+authorization-receipt validation. Raw read-only pairing still accepts canonical
+field encodings and does not claim current authorization eligibility. Expiry must
 still be future and bounded by credential/transfer expiry and evaluation plus
 300 seconds. The pairing proves the nullifier's constrained derivation and expiry
 limits. Current authorization must separately enforce nullifier consumption and
@@ -23,7 +26,9 @@ read credential revocation consistently with its transaction.
 This function returns a `PairingInspection`, not an authorization. It does not
 load durable enrollment, establish revocation history, authenticate business-policy
 facts, decide Travel Rule acceptance, encrypt a payload, or consume an authorization.
-Those service integrations remain required. The fixed circuit statement is also
+The [durable inspection](#durable-inspection-service) and
+[authorization](PILOT_AUTHORIZATION.md) services implement those separate
+boundaries. The fixed circuit statement is also
 not evidence that arbitrary policy rules have ZK coverage.
 
 The synthetic development builder can now produce contexts carrying actual signed

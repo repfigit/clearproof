@@ -45,6 +45,8 @@ def expected_current_signals(
     credential = PilotCredential.model_validate(credential)
     root_pins = CurrentRootPins.model_validate(root_pins)
     observed = public_signals(signals)
+    if observed[3] == "0":
+        raise ProofInspectionError("invalid_authorization_nullifier")
     artifacts.check_artifact_context(context)
     roots = verify_pilot_roots(
         trust=root_trust,
