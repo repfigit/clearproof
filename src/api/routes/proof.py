@@ -192,13 +192,13 @@ def _get_db_from_app() -> Optional[Database]:
     return _get_db(_app)
 
 
-def _check_sanctions_staleness(db: Optional[Database]) -> None:
+async def _check_sanctions_staleness(db: Optional[Database]) -> None:
     if db is None:
         return
     from src.storage.sanctions import SanctionsStore
 
     store = SanctionsStore(db)
-    current = asyncio.get_event_loop().run_until_complete(store.get_current())
+    current = await store.get_current()
     if current is None:
         raise RuntimeError("No sanctions root loaded — cannot generate proof")
     staleness = time.time() - current.updated_at
@@ -234,7 +234,7 @@ async def generate_proof(
         )
 
     db = _get_db_from_app()
-    _check_sanctions_staleness(db)
+    await _check_sanctions_staleness(db)
 
     if db is not None:
         from src.storage.proofs import ProofStore
@@ -253,7 +253,7 @@ async def generate_proof(
         raise HTTPException(status_code=403, detail="Credential revoked")
 
     # 4b. Check credential expiry
-    if int(time.time()) > credential.expires_at:
+    if int(time.time()) >= credential.expires_at:
         raise HTTPException(status_code=410, detail="Credential expired")
 
     recipient_pubkey = await _resolve_recipient_key(request)

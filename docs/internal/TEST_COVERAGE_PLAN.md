@@ -205,3 +205,25 @@ still need completion and final merged-main verification.
   after verification. Reports are retained as `full-coverage-combined-fifth.json`
   in the local evidence directory. API lifecycle and proof-route error/persistence
   paths are the largest remaining authored Python gaps.
+
+## Seventh checkpoint
+
+- API lifecycle tests reproduce skipped database cleanup on serving failure and
+  stale application state after normal shutdown. Lifespan now clears the state
+  reference and closes its owned database in `finally`, including cancellation
+  and connection failure. Key validation and actual CORS preflight tests cover
+  accepted key encodings, missing/short keys and wildcard removal.
+- The proof generation sanctions check previously called `run_until_complete`
+  inside the running API event loop. It is now asynchronous and awaited by the
+  route. Tests exercise fresh/stale boundaries, missing roots, cached retries,
+  missing/revoked credentials and required originator information.
+- An exact-expiration credential regression also failed before the fix. The
+  route now rejects at `now >= expires_at`, before recipient discovery/proving.
+- API/lifecycle/proof-route/compliance regression: 103 tests pass. API main source
+  measures 78/78 lines and 14/14 branches. The focused proof-route report still
+  misses 46 lines and is not a whole-suite coverage claim. Ruff and REUSE pass.
+- Full Python/PostgreSQL/artifact totals remain the prior sixth checkpoint until
+  a fresh combined run. Remaining proof-route work includes durable writes and
+  app-specific database access (the route currently imports the global app),
+  verification failure handling and other error branches. The full objective
+  remains active across Python, SDK, contracts, docs and operational scripts.
