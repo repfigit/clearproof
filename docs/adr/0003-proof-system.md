@@ -38,3 +38,7 @@ reproducible development evidence and the
 [adoption plan](../plans/2026-09-05-adoption-pilot-implementation.md) for the
 separate F5 production gate. The legacy BLS12-381 exploration is described in
 [its own ADR](0002-bls12381-migration.md); it is not the current pilot profile.
+
+A separate [historical L2 cost model](../internal/FFLONK_L2_COST_MODEL.md) explores
+fee sensitivity for the legacy 16-signal profile. Its assumptions and older fee
+snapshot do not determine the current eight-signal pilot choice.

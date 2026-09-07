@@ -12,3 +12,10 @@ Third-party components:
   Copyright 2017 Christian Reitwiessner, licensed under the MIT License.
   Ported to Solidity ^0.8.24 by clearproof contributors. The full MIT
   permission notice is retained in the file header and in LICENSES/MIT.txt.
+
+The standalone historical L2 cost model scripts/l2_cost_model.py includes a
+Python port of FlzCompressLen from ethereum-optimism/op-geth, commit
+647c346e2bef36219cc7b47d76b1cb87e7ca29e4, core/types/rollup_cost.go.
+Copyright 2022 The go-ethereum Authors; licensed LGPL-3.0-or-later.
+This development analysis tool is not part of the proof SDK or deployed verifier.
+The corresponding license texts are retained in LICENSES/.

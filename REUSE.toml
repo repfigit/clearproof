@@ -21,3 +21,10 @@ path = "packages/contracts/contracts/Pairing.sol"
 precedence = "override"
 SPDX-FileCopyrightText = "2017 Christian Reitwiessner"
 SPDX-License-Identifier = "MIT"
+
+# Standalone historical cost model includes an op-geth FastLZ port.
+[[annotations]]
+path = "scripts/l2_cost_model.py"
+precedence = "override"
+SPDX-FileCopyrightText = ["2022 The go-ethereum Authors", "2026 clearproof contributors"]
+SPDX-License-Identifier = "LGPL-3.0-or-later"
