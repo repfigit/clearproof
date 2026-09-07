@@ -76,4 +76,16 @@ describe.skipIf(!vectorPresent)('verifier parity vector (off-chain)', () => {
     const result = await verifyProof(badProof, publicSignals, vkeyPath);
     expect(result.valid).toBe(false);
   });
+  it('keeps omitted jurisdiction unverified and reports explicit observations', async () => {
+    const unverified = await verifyProof(proof, publicSignals, vkeyPath);
+    const match = await verifyProof(proof, publicSignals, vkeyPath, 'US');
+    const mismatch = await verifyProof(proof, publicSignals, vkeyPath, 'EU');
+    expect(unverified.jurisdictionMatchesVASP).toBeNull();
+    expect(match.jurisdictionMatchesVASP).toBe(true);
+    expect(mismatch.jurisdictionMatchesVASP).toBe(false);
+    expect(match.valid).toBe(unverified.valid);
+    expect(mismatch.valid).toBe(unverified.valid);
+    expect(match.proofValid).toBe(true);
+  });
+
 });

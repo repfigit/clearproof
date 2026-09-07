@@ -187,3 +187,16 @@ async def test_invalid_identifiers_are_rejected_before_rpc(value):
     with pytest.raises(ValueError, match="32-byte"):
         await reader.is_vasp_active(value)
     assert calls["active"].await_count == 0
+
+
+async def test_vasp_information_cache_is_scoped_and_immutable():
+    first, _ = make_reader()
+    second, _ = make_reader()
+    for reader, code in [(first, "US"), (second, "EU")]:
+        call = AsyncMock(return_value=["0x" + "11" * 20, code, "", True, 1])
+        reader._contracts["vasp_registry"].functions.vasps.return_value.call = call
+    record = await first.get_vasp_info("did:web:vasp.example")
+    assert isinstance(record, tuple) and record[1] == "US"
+    assert (await second.get_vasp_info("did:web:vasp.example"))[1] == "EU"
+    assert await first.get_vasp_info("did:web:vasp.example") == record
+    first._contracts["vasp_registry"].functions.vasps.return_value.call.assert_awaited_once()

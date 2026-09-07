@@ -229,6 +229,20 @@ class ChainReader:
             ("vasp_active", did_bytes), self._vasp_registry.functions.isActive(did_bytes).call
         )
 
+    async def get_vasp_info(self, did: str) -> tuple:
+        """Observe the selected registry's record with instance-scoped caching."""
+        if not isinstance(did, str) or not did.startswith("did:web:") or len(did) > 1024:
+            raise ValueError("Invalid VASP DID")
+        did_hash = self._w3.keccak(text=did)
+
+        async def fetch():
+            record = await self._vasp_registry.functions.vasps(did_hash).call()
+            if len(record) != 5 or type(record[3]) is not bool or type(record[4]) is not int:
+                raise ValueError("Malformed VASP record")
+            return tuple(record)
+
+        return await self._read_cached(("vasp_info", bytes(did_hash)), fetch)
+
     async def is_credential_revoked(self, commitment: str) -> bool:
         """Check if a credential commitment has been revoked.
 

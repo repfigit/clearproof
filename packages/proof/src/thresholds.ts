@@ -62,6 +62,22 @@ export function getThresholds(jurisdiction: string): Thresholds {
 }
 
 /**
+ * Check if the jurisdiction code in the public signals matches an expected jurisdiction.
+ *
+ * @param publicSignals The full 16-element array of public signals
+ * @param expectedJurisdiction The expected jurisdiction code (e.g. "US", "EU")
+ * @returns true if the jurisdiction codes match, false otherwise
+ */
+export function jurisdictionMatchesVASP(publicSignals: string[], expectedJurisdiction: string): boolean {
+  if (publicSignals.length < 16) return false;
+
+  const claimedJurisdiction = decodeJurisdiction(publicSignals[6]);
+  if (claimedJurisdiction === null) return false;
+
+  return claimedJurisdiction === expectedJurisdiction.toUpperCase();
+}
+
+/**
  * Check that the thresholds carried in the public signals are the ones this
  * verifier expects for the jurisdiction the proof claims.
  *

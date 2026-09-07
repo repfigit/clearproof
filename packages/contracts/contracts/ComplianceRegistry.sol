@@ -57,6 +57,7 @@ contract ComplianceRegistry is AccessControl, Pausable {
     mapping(uint16 => Thresholds) public jurisdictionThresholds;
 
     event JurisdictionThresholdsSet(uint16 indexed jurisdictionCode, uint64 tier2, uint64 tier3, uint64 tier4);
+    event JurisdictionCodeMismatch(bytes32 indexed transferId, uint256 claimedJurisdictionCode, uint256 expectedJurisdictionCode);
 
     VerifierRouter public verifierRouter;
     bytes32 public verifierSelector;
@@ -217,6 +218,8 @@ contract ComplianceRegistry is AccessControl, Pausable {
         // M-1: Transfer binding (proof bound to this transfer)
         if (uint256(keccak256(abi.encodePacked(transferId))) % BN128_R != _pubSignals[13]) revert TransferIDMismatch();
 
+        _observeJurisdiction(transferId, vaspDidHash, _pubSignals[6]);
+
         // AIF-79: Threshold binding (prover cannot choose its own tier boundaries)
         _checkThresholds(_pubSignals);
 
@@ -268,5 +271,25 @@ contract ComplianceRegistry is AccessControl, Pausable {
 
     function unpause() external onlyRole(DEFAULT_ADMIN_ROLE) {
         _unpause();
+    }
+
+    /// @dev Informational legacy observation; zero expected code means unverified.
+    function _observeJurisdiction(bytes32 transferId, bytes32 didHash, uint256 claimed) internal {
+        (, string memory jurisdiction,,,) = vaspRegistry.vasps(didHash);
+        uint256 expected = _encodeJurisdiction(jurisdiction);
+        if (expected == 0 || claimed != expected) {
+            emit JurisdictionCodeMismatch(transferId, claimed, expected);
+        }
+    }
+
+    function _encodeJurisdiction(string memory code) internal pure returns (uint256) {
+        bytes memory codeBytes = bytes(code);
+        if (codeBytes.length != 2) return 0;
+        uint8 hi = uint8(codeBytes[0]);
+        uint8 lo = uint8(codeBytes[1]);
+        // Check that both characters are uppercase ASCII letters
+        if (hi < 0x41 || hi > 0x5A) return 0;
+        if (lo < 0x41 || lo > 0x5A) return 0;
+        return (uint256(hi) << 8) | uint256(lo);
     }
 }

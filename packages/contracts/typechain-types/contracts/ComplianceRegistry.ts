@@ -75,6 +75,7 @@ export interface ComplianceRegistryInterface extends Interface {
   getEvent(
     nameOrSignatureOrTopic:
       | "CredentialRevoked"
+      | "JurisdictionCodeMismatch"
       | "JurisdictionThresholdsSet"
       | "Paused"
       | "ProofVerified"
@@ -285,6 +286,28 @@ export namespace CredentialRevokedEvent {
   export interface OutputObject {
     commitment: string;
     revoker: string;
+  }
+  export type Event = TypedContractEvent<InputTuple, OutputTuple, OutputObject>;
+  export type Filter = TypedDeferredTopicFilter<Event>;
+  export type Log = TypedEventLog<Event>;
+  export type LogDescription = TypedLogDescription<Event>;
+}
+
+export namespace JurisdictionCodeMismatchEvent {
+  export type InputTuple = [
+    transferId: BytesLike,
+    claimedJurisdictionCode: BigNumberish,
+    expectedJurisdictionCode: BigNumberish
+  ];
+  export type OutputTuple = [
+    transferId: string,
+    claimedJurisdictionCode: bigint,
+    expectedJurisdictionCode: bigint
+  ];
+  export interface OutputObject {
+    transferId: string;
+    claimedJurisdictionCode: bigint;
+    expectedJurisdictionCode: bigint;
   }
   export type Event = TypedContractEvent<InputTuple, OutputTuple, OutputObject>;
   export type Filter = TypedDeferredTopicFilter<Event>;
@@ -754,6 +777,13 @@ export interface ComplianceRegistry extends BaseContract {
     CredentialRevokedEvent.OutputObject
   >;
   getEvent(
+    key: "JurisdictionCodeMismatch"
+  ): TypedContractEvent<
+    JurisdictionCodeMismatchEvent.InputTuple,
+    JurisdictionCodeMismatchEvent.OutputTuple,
+    JurisdictionCodeMismatchEvent.OutputObject
+  >;
+  getEvent(
     key: "JurisdictionThresholdsSet"
   ): TypedContractEvent<
     JurisdictionThresholdsSetEvent.InputTuple,
@@ -813,6 +843,17 @@ export interface ComplianceRegistry extends BaseContract {
       CredentialRevokedEvent.InputTuple,
       CredentialRevokedEvent.OutputTuple,
       CredentialRevokedEvent.OutputObject
+    >;
+
+    "JurisdictionCodeMismatch(bytes32,uint256,uint256)": TypedContractEvent<
+      JurisdictionCodeMismatchEvent.InputTuple,
+      JurisdictionCodeMismatchEvent.OutputTuple,
+      JurisdictionCodeMismatchEvent.OutputObject
+    >;
+    JurisdictionCodeMismatch: TypedContractEvent<
+      JurisdictionCodeMismatchEvent.InputTuple,
+      JurisdictionCodeMismatchEvent.OutputTuple,
+      JurisdictionCodeMismatchEvent.OutputObject
     >;
 
     "JurisdictionThresholdsSet(uint16,uint64,uint64,uint64)": TypedContractEvent<

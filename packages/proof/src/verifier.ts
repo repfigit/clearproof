@@ -1,7 +1,7 @@
 import * as snarkjs from 'snarkjs';
-import fs from 'fs';
+import { promises as fs } from 'fs';
 import type { VerifyResult } from './types.js';
-import { decodeJurisdiction, thresholdsMatchJurisdiction } from './thresholds.js';
+import { decodeJurisdiction, thresholdsMatchJurisdiction, jurisdictionMatchesVASP as thresholdsJurisdictionMatchesVASP } from './thresholds.js';
 
 /**
  * Verify a Groth16 ZK proof against the verification key.
@@ -22,17 +22,22 @@ import { decodeJurisdiction, thresholdsMatchJurisdiction } from './thresholds.js
  * @param proof         - The Groth16 proof object
  * @param publicSignals - Array of public signal strings from the prover
  * @param vkeyPath      - Path to the verification key JSON file
+ * @param expectedJurisdiction - Expected jurisdiction code for the VASP (optional)
  * @returns Verification result with compliance interpretation
  */
 export async function verifyProof(
   proof: object,
   publicSignals: string[],
   vkeyPath: string,
+  expectedJurisdiction?: string
 ): Promise<VerifyResult> {
-  const vkey = JSON.parse(fs.readFileSync(vkeyPath, 'utf-8'));
+  const vkey = JSON.parse(await fs.readFile(vkeyPath, 'utf-8'));
   const proofValid = await snarkjs.groth16.verify(vkey, publicSignals, proof);
 
   const thresholdsBound = thresholdsMatchJurisdiction(publicSignals);
+  const jurisdictionMatchesVASP = expectedJurisdiction
+    ? thresholdsJurisdictionMatchesVASP(publicSignals, expectedJurisdiction)
+    : null; // Missing expected jurisdiction is unverified, not a match.
 
   const rejectionReasons: string[] = [];
   if (!proofValid) rejectionReasons.push('groth16_invalid');
@@ -42,6 +47,7 @@ export async function verifyProof(
     valid: proofValid && thresholdsBound,
     proofValid,
     thresholdsBound,
+    jurisdictionMatchesVASP,
     jurisdiction: publicSignals.length >= 16 ? decodeJurisdiction(publicSignals[6]) : null,
     rejectionReasons,
     isCompliant: publicSignals[0] === '1',

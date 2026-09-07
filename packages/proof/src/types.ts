@@ -66,6 +66,8 @@ export interface VerifyResult {
   proofValid: boolean;
   /** Whether signals 8-10 match this verifier's table for signal 6. */
   thresholdsBound: boolean;
+  /** Whether the jurisdiction code in the proof matches the expected jurisdiction */
+  jurisdictionMatchesVASP: boolean | null;
   /** Decoded ISO 3166-1 alpha-2 code from signal 6, or null if malformed. */
   jurisdiction: string | null;
   /** Machine-readable rejection reasons; empty when `valid` is true. */

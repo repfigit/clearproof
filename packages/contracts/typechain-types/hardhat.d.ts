@@ -54,6 +54,10 @@ declare module "hardhat/types/runtime" {
       signerOrOptions?: ethers.Signer | FactoryOptions
     ): Promise<Contracts.ISanctionsRootReceiver__factory>;
     getContractFactory(
+      name: "MockVerifier",
+      signerOrOptions?: ethers.Signer | FactoryOptions
+    ): Promise<Contracts.MockVerifier__factory>;
+    getContractFactory(
       name: "PilotCurrentRegistry",
       signerOrOptions?: ethers.Signer | FactoryOptions
     ): Promise<Contracts.PilotCurrentRegistry__factory>;
@@ -137,6 +141,11 @@ declare module "hardhat/types/runtime" {
       signer?: ethers.Signer
     ): Promise<Contracts.ISanctionsRootReceiver>;
     getContractAt(
+      name: "MockVerifier",
+      address: string | ethers.Addressable,
+      signer?: ethers.Signer
+    ): Promise<Contracts.MockVerifier>;
+    getContractAt(
       name: "PilotCurrentRegistry",
       address: string | ethers.Addressable,
       signer?: ethers.Signer
@@ -218,6 +227,10 @@ declare module "hardhat/types/runtime" {
       signerOrOptions?: ethers.Signer | DeployContractOptions
     ): Promise<Contracts.ISanctionsRootReceiver>;
     deployContract(
+      name: "MockVerifier",
+      signerOrOptions?: ethers.Signer | DeployContractOptions
+    ): Promise<Contracts.MockVerifier>;
+    deployContract(
       name: "PilotCurrentRegistry",
       signerOrOptions?: ethers.Signer | DeployContractOptions
     ): Promise<Contracts.PilotCurrentRegistry>;
@@ -300,6 +313,11 @@ declare module "hardhat/types/runtime" {
       args: any[],
       signerOrOptions?: ethers.Signer | DeployContractOptions
     ): Promise<Contracts.ISanctionsRootReceiver>;
+    deployContract(
+      name: "MockVerifier",
+      args: any[],
+      signerOrOptions?: ethers.Signer | DeployContractOptions
+    ): Promise<Contracts.MockVerifier>;
     deployContract(
       name: "PilotCurrentRegistry",
       args: any[],
