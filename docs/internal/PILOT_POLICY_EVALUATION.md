@@ -46,8 +46,9 @@ performs independent current-version selection for the proof-input path.
 Tests cover reproducible replay without input mutation, smallest-unit boundaries,
 missing facts below a threshold, deny/allow conflict, review for incomplete
 information, unsupported predicates, invalid timing, empty policies and foreign
-or conflicting evidence. Durable fact authentication remains integration work;
-the retained policy review service is described below.
+or conflicting evidence. [Scoped fact attestations](PILOT_FACT_APPROVALS.md)
+provide separate authenticated retention/current loading; supplied-case replay
+does not invoke that service or turn arbitrary input facts into trusted evidence.
 
 ## Counterfactual comparison API and CLI
 
@@ -81,8 +82,9 @@ the explanation flag even if its final decision is unchanged.
 This is a supplied-case simulation, not a workload forecast. It does not prove
 snapshot authenticity, activate policies, consume transfer authorization or
 alter original evidence. The service below retains reviewed expected outcomes
-and approvals. Source-document retention and activation history remain open
-CP-011 integration. The unreleased TypeScript CLI now calls these API endpoints.
+and approvals. [Policy activation](PILOT_POLICY_ACTIVATION.md) retains a separate
+current-selection history. Source references alone do not retain underlying
+documents. The unreleased TypeScript CLI calls these comparison API endpoints.
 Tests exercise real stdin subprocesses and signed JWT requests, tenant and role
 rejection, bounded/malformed input, deterministic ordering, business-identity
 deduplication, reverse review counts and same-ID rule edits.
@@ -111,14 +113,15 @@ approval time. Case records, approval and idempotency result share one tenant
 transaction. Retries return the original approval timestamp; another actor or
 changed request cannot reuse the same idempotency key. One immutable approval
 is retained per policy digest. This permits draft branches and does not choose
-which branch is current: independent activation and historical activation
-receipts remain separate work.
+which branch is current: the separate activation service selects a reviewed
+version and retains encrypted revision history.
 
 The review attests the authenticated reviewer's action, not external source
-truth or independent legal assessment. Actual source documents, authenticated
-fact acquisition, independent activation and offline historical approval
-verification remain open. PostgreSQL tests
-exercise reconnect persistence, encrypted rows, tenant isolation, predecessor
+truth or independent legal assessment. Fact authentication and activation have
+the separate services linked above. [Historical inspection](PILOT_HISTORY_INSPECTION.md)
+reviews retained authorization evidence under independently configured trust;
+this approval service does not supply independent timing or source-document truth.
+PostgreSQL tests exercise reconnect persistence, encrypted rows, tenant isolation, predecessor
 links, immutable approval conflicts and rejected expected outcomes.
 
 ## Authenticated retained-record endpoints
@@ -142,8 +145,9 @@ case evaluation times are preserved; the result is not current authorization.
 Both endpoints enforce the same 1 MiB/ten-second input bounds as supplied-case
 comparison and reject duplicate JSON keys. Reports still omit wallets and raw
 amounts. Cases come from authenticated retained review actions, whose source
-truth remains the reviewer's responsibility. Retained source documents and
-independent historical trust verification remain separate work.
+truth remains the reviewer's responsibility. Underlying source documents are not
+retained by this endpoint; historical authorization review uses the separate
+export and inspection workflow, not a policy-diff result.
 
 ## Packaged CLI source command
 

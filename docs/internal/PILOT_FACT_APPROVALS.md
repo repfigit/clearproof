@@ -26,9 +26,10 @@ current verification workflow. Tests feed externally attested facts into the
 existing evaluator and require INDETERMINATE while those derived facts are absent.
 
 The verification module performs no network calls or storage writes; the retention
-service below provides encrypted persistence. Policy activation and atomic
-authorization remain open. Services must apply independent current trust and
-combine derived facts only after their corresponding checks succeed. Evidence
+service below provides encrypted persistence. [Current inspection](PILOT_CURRENT_STATEMENT.md)
+loads these attestations within its tenant transaction and combines derived facts
+only after their corresponding checks succeed. [Policy activation](PILOT_POLICY_ACTIVATION.md)
+and [atomic authorization](PILOT_AUTHORIZATION.md) provide separate state-changing boundaries. Evidence
 digests alone are not retention of underlying source documents.
 
 ## Encrypted retention and current loading
@@ -48,9 +49,10 @@ a removed key does not stay trusted just because its evidence was retained.
 
 The service retains the signed fact and its evidence digest, not the underlying
 source document. Receipt times are server observations, not independently signed
-timestamps. Historical authority, source retention, policy activation and atomic
-authorization remain open. The read path does not consume an authorization or
-send counterparty messages.
+timestamps. [Historical inspection](PILOT_HISTORY_INSPECTION.md) uses independently
+configured authorities and decision/reviewer clocks; it cannot infer source-document
+retention or truth from this digest. The read path does not consume an authorization
+or send counterparty messages.
 
 Real PostgreSQL checks cover rollback on a second-record insertion failure,
 concurrent duplicate deliveries, exact retention across reconnect/retry, current
