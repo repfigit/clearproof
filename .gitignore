@@ -29,11 +29,7 @@ verification_key.json
 
 # Node
 node_modules/
-package-lock.json
 .turbo/
-
-# Lock files
-uv.lock
 
 # Environment
 .env

@@ -14,8 +14,8 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 20
-      - run: npm install
-      - run: uv sync --extra dev
+      - run: npm ci
+      - run: uv sync --frozen --extra dev
       - name: Checkpoint contract invariants
         run: cd packages/contracts && npx hardhat test test/PilotRootCheckpoint.test.ts
       - name: Python checkpoint verification on an isolated local EVM
@@ -29,8 +29,8 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 20
-      - run: npm install
-      - run: uv sync --extra dev
+      - run: npm ci
+      - run: uv sync --frozen --extra dev
       - name: Install pinned Circom for witness checks
         run: |
           set -euo pipefail
@@ -47,7 +47,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v4
-      - run: uv sync --extra dev
+      - run: uv sync --frozen --extra dev
       - name: Discovery profile, real TLS, encryption policy and SIWE compatibility
         run: >-
           uv run python -m pytest -q
@@ -76,11 +76,11 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v4
-      - run: uv sync --extra dev
+      - run: uv sync --frozen --extra dev
       - uses: actions/setup-node@v4
         with:
           node-version: 20
-      - run: npm install
+      - run: npm ci
       - name: Build policy CLI and its workspace dependencies
         run: |
           npm run build --workspace @clearproof/content
@@ -99,8 +99,8 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 20
-      - run: npm install
-      - run: uv sync --all-extras
+      - run: npm ci
+      - run: uv sync --frozen --all-extras
       - run: uv run python -m pytest tests/ -v
 
   typescript-build:
@@ -110,7 +110,7 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 20
-      - run: npm install
+      - run: npm ci
       - name: Build @clearproof/content (dependency of cli)
         run: cd packages/content && npx tsc
       - name: Build @clearproof/proof (dependency of cli)
@@ -129,7 +129,7 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 20
-      - run: npm install
+      - run: npm ci
       - run: cd packages/contracts && npx hardhat test
       - run: npm run typecheck --workspace=@clearproof/contracts
 
@@ -157,8 +157,8 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 20
-      - run: npm install
-      - run: uv sync --extra dev
+      - run: npm ci
+      - run: uv sync --frozen --extra dev
       - name: Install pinned Circom
         run: |
           set -euo pipefail
@@ -201,7 +201,7 @@ jobs:
         with:
           node-version: 20
       # circuits include ../node_modules/circomlib — needed for include resolution
-      - run: npm install
+      - run: npm ci
       # ubuntu-latest runners ship rustup + stable cargo; no toolchain action needed
       - uses: Swatinem/rust-cache@v2
       - name: Install circomspect

@@ -51,6 +51,48 @@ artifact configuration selects `reports/` and `run.json` explicitly. No signing
 keys, plaintext person information, database credentials or recipient private
 keys for the bilateral message are captured in reports.
 
+## Install from the lockfiles and let the command own the database
+
+From a fresh checkout, install dependencies from the committed lockfiles:
+
+```bash
+npm exec --yes --package=npm@11.9.0 -- npm ci
+uv sync --frozen --extra dev --python 3.12
+npm run build
+```
+
+The npm lockfile uses the public npm registry; the Python lockfile uses PyPI.
+Frozen installs preserve the resolved dependency graph. They do not certify that
+all dependencies are free of security issues. Node, Python, uv, Circom and
+PostgreSQL executables are still explicit host prerequisites. CI installs Circom
+2.2.2 with a pinned binary digest; the local setup requires that compiler too.
+
+Generate fresh unapproved development artifacts outside the checkout, then run
+with a new owned PostgreSQL 18 cluster:
+
+```bash
+.venv/bin/python scripts/test_development_circuits.py /absolute/new-development-artifacts
+.venv/bin/python scripts/test_pilot_local.py \
+  /absolute/new-development-artifacts/pilot \
+  /absolute/new-owned-pilot-run \
+  --postgres-bin /usr/lib/postgresql/18/bin
+```
+
+The PostgreSQL binary directory is explicit and version-checked. Run as a normal
+user permitted to start a local PostgreSQL process. `TMPDIR` may be set to a short,
+writable path when the system temporary directory is constrained. The wrapper
+creates a private temporary Unix socket, enables local trust only within that
+private directory, disables TCP listening and overrides `DATABASE_URL` with its
+owned test database. The test suite owns the EVM. The wrapper stops its PostgreSQL
+cluster on success or failure; it retains private database files and logs for
+diagnosis. It does not start or stop any pre-existing database.
+
+Outputs are under `new-owned-pilot-run/pilot/`. Share only its `reports/` and
+`run.json` as appropriate for synthetic acceptance evidence. The outer run
+contains PostgreSQL data/logs, and `pilot/private/` contains the export key; do not
+publish those directories. As with the existing command, successful acceptance
+is not itself a claim that the host prerequisites were provisioned from scratch.
+
 ## Reproduce the retained offline review
 
 The following uses the private key only through subprocess stdin. Run from this

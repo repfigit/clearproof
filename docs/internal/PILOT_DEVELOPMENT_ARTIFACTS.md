@@ -8,8 +8,8 @@ pilot-transfer-v2 profile. File presence is not artifact approval or compatibili
 Generate both profiles in a new isolated directory:
 
 ```bash
-npm install
-uv sync --extra dev
+npm ci
+uv sync --frozen --extra dev
 # Install the pinned Circom compiler documented in the repository CI setup.
 .venv/bin/python scripts/test_development_circuits.py /absolute/new-development-output
 ```
