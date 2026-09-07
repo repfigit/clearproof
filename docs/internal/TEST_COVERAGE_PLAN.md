@@ -401,3 +401,22 @@ still need completion and final merged-main verification.
   pilot verifier/storage and evidence export. SDK residual branches, Solidity,
   docs rendering, operational scripts and the final review/merge/main verification
   remain outstanding. These results do not establish full repository coverage.
+
+## Sixteenth checkpoint
+
+- Expanded pilot-verifier tests from 25 to 52 cases. New checks cover byte-only
+  proof input, exact runtime pins, empty/oversized/FIFO bundles, absolute executable
+  Node configuration, invalid timeout values, malformed/nonzero runtime responses,
+  negative pairing results and runtime removal after configuration.
+- Controlled real-child tests cover cancellation during shielded process creation
+  and a simulated ProcessLookupError during process-group cleanup. Both verify
+  reaping and temporary-directory removal. Runtime fixtures test transport and
+  lifecycle; existing real Groth16 integration evidence remains separate.
+- All 52 tests pass; the verifier measures 117/117 statements and 22/22 branches
+  (`pilot-verifier-complete.log` and `.data`). Ruff and whitespace pass. No
+  production verifier changes were necessary. The first cleanup-race fixture
+  exited early because it omitted the stub verifier; that fixture was corrected
+  to keep verification pending before checking timeout cleanup.
+- Overall percentages remain the fifteenth checkpoint's full-run results until
+  refreshed. Remaining Python, SDK, Solidity, docs rendering, operational scripts
+  and final publication/review requirements remain open.
