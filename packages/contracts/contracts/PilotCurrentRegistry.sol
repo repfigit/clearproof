@@ -4,7 +4,7 @@ pragma solidity ^0.8.24;
 import "@openzeppelin/contracts/access/AccessControl.sol";
 import {PilotGroth16Verifier} from "./PilotGroth16Verifier.sol";
 
-/// @notice Development current-state checkpoints, proof inspection and local consumption.
+/// @notice Development current-state checkpoints and mirrors of consumed PostgreSQL receipts.
 /// @dev Publishers authenticate private source records off-chain (ADR 0006).
 /// This contract verifies their versioned bindings, not JSON/Ed25519 source signatures.
 contract PilotCurrentRegistry is AccessControl {
@@ -40,7 +40,8 @@ contract PilotCurrentRegistry is AccessControl {
     mapping(bytes32 => uint64) public publisherEpochs;
     mapping(bytes32 => Head) private _heads;
     mapping(bytes32 => Approval) private _statements;
-    mapping(bytes32 => mapping(uint256 => bool)) public consumed;
+    string public constant consumptionOwner = "postgresql";
+    mapping(bytes32 => mapping(uint256 => bytes32)) public mirroredReceipts;
 
     error InvalidScope();
     error InvalidState();
@@ -49,13 +50,13 @@ contract PilotCurrentRegistry is AccessControl {
     error StatementExists();
     error UnauthorizedConsumer();
     error AuthorizationUnavailable();
-    error AlreadyConsumed();
+    error AlreadyMirrored();
     error InvalidProof();
 
     event PublisherChanged(bytes32 indexed tenant, address publisher, uint64 epoch);
     event HeadPublished(bytes32 indexed tenant, Kind indexed kind, bytes32 indexed scope, uint64 revision, bytes32 digest);
     event StatementPublished(bytes32 indexed tenant, bytes32 indexed statementId, bytes32 contextDigest);
-    event AuthorizationConsumed(bytes32 indexed tenant, bytes32 indexed statementId, uint256 indexed nullifier);
+    event AuthorizationMirrored(bytes32 indexed tenant, bytes32 statementId, bytes32 indexed receiptId, uint256 indexed nullifier);
 
     constructor(address admin, PilotGroth16Verifier pairing) {
         if (admin == address(0) || address(pairing).code.length == 0) revert InvalidScope();
@@ -105,9 +106,10 @@ contract PilotCurrentRegistry is AccessControl {
     function _currentHead(bytes32 tenant, Kind kind, Pin memory pin, uint64 evaluatedAt)
         private view returns (Head memory current) {
         current = _heads[_headKey(tenant, kind, pin.scope)];
+        uint256 validAt = uint8(kind) >= 6 ? block.timestamp : evaluatedAt;
         if (pin.scope == bytes32(0) || pin.digest == bytes32(0) || pin.revision == 0 || !current.enabled ||
             current.digest != pin.digest || current.revision != pin.revision ||
-            current.publisherEpoch != publisherEpochs[tenant] || current.validFrom > evaluatedAt ||
+            current.publisherEpoch != publisherEpochs[tenant] || current.validFrom > validAt ||
             block.timestamp >= current.validUntil) revert InvalidState();
     }
 
@@ -159,15 +161,15 @@ contract PilotCurrentRegistry is AccessControl {
         return _inspect(tenant, id, a, b, c, signals);
     }
 
-    function consume(bytes32 tenant, bytes32 id, uint256[2] calldata a, uint256[2][2] calldata b,
+    function mirror(bytes32 tenant, bytes32 id, bytes32 receiptId, uint256[2] calldata a, uint256[2][2] calldata b,
         uint256[2] calldata c, uint256[8] calldata signals) external {
         Approval storage approved = _statements[id];
         if (!approved.exists || msg.sender != approved.statement.consumer) revert UnauthorizedConsumer();
-        if (consumed[tenant][signals[3]]) revert AlreadyConsumed();
+        if (mirroredReceipts[tenant][signals[3]] != bytes32(0)) revert AlreadyMirrored();
         if (!_inspect(tenant, id, a, b, c, signals)) revert InvalidProof();
         Head memory decision = _currentHead(tenant, Kind.Authorization, approved.statement.pins[7], approved.statement.evaluatedAt);
-        if (decision.value != 1) revert AuthorizationUnavailable();
-        consumed[tenant][signals[3]] = true;
-        emit AuthorizationConsumed(tenant, id, signals[3]);
+        if (decision.value != 1 || decision.digest != receiptId) revert AuthorizationUnavailable();
+        mirroredReceipts[tenant][signals[3]] = receiptId;
+        emit AuthorizationMirrored(tenant, id, receiptId, signals[3]);
     }
 }

@@ -180,3 +180,22 @@ def test_historical_compromise_and_key_expiry(case):
             FactTrustStore(authorities).verify_for_context(approvals, **{**args, "now": args["now"] + 2})
     with pytest.raises(FactTrustError):
         FactTrustStore([authority]).verify_for_context(approvals, **args, verified_at=args["now"] - 1)
+
+
+def test_current_cutoff_preserves_signed_expiry_and_inclusive_age(case):
+    _, authority, approvals, args, _ = case
+    observed = approvals[0].approval.fact.observed_at
+    age = args["now"] - observed + 2
+    short = authority.model_copy(update={"max_observation_age_seconds": age})
+    trust = FactTrustStore([short])
+    cutoff = trust.current_valid_until(approvals, **args)
+    assert cutoff == observed + age + 1
+    assert trust.verify_for_context(approvals, **{**args, "now": cutoff - 1}).facts == tuple(
+        a.approval.fact for a in approvals
+    )
+    with pytest.raises(FactTrustError):
+        trust.verify_for_context(approvals, **{**args, "now": cutoff})
+    compromised = short.model_copy(update={"compromised_at": cutoff - 1})
+    assert FactTrustStore([compromised]).current_valid_until(approvals, **args) == cutoff - 1
+    with pytest.raises(FactTrustError):
+        trust.current_valid_until(approvals, **args, verified_at=args["now"] + 1)

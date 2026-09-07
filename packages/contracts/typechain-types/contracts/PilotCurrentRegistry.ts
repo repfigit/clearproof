@@ -98,13 +98,14 @@ export interface PilotCurrentRegistryInterface extends Interface {
     nameOrSignature:
       | "DEFAULT_ADMIN_ROLE"
       | "artifactManifestDigest"
-      | "consume"
-      | "consumed"
+      | "consumptionOwner"
       | "getRoleAdmin"
       | "grantRole"
       | "hasRole"
       | "head"
       | "inspect"
+      | "mirror"
+      | "mirroredReceipts"
       | "publishHead"
       | "publishStatement"
       | "publisherEpochs"
@@ -120,7 +121,7 @@ export interface PilotCurrentRegistryInterface extends Interface {
 
   getEvent(
     nameOrSignatureOrTopic:
-      | "AuthorizationConsumed"
+      | "AuthorizationMirrored"
       | "HeadPublished"
       | "PublisherChanged"
       | "RoleAdminChanged"
@@ -138,19 +139,8 @@ export interface PilotCurrentRegistryInterface extends Interface {
     values?: undefined
   ): string;
   encodeFunctionData(
-    functionFragment: "consume",
-    values: [
-      BytesLike,
-      BytesLike,
-      [BigNumberish, BigNumberish],
-      [[BigNumberish, BigNumberish], [BigNumberish, BigNumberish]],
-      [BigNumberish, BigNumberish],
-      BigNumberish[]
-    ]
-  ): string;
-  encodeFunctionData(
-    functionFragment: "consumed",
-    values: [BytesLike, BigNumberish]
+    functionFragment: "consumptionOwner",
+    values?: undefined
   ): string;
   encodeFunctionData(
     functionFragment: "getRoleAdmin",
@@ -178,6 +168,22 @@ export interface PilotCurrentRegistryInterface extends Interface {
       [BigNumberish, BigNumberish],
       BigNumberish[]
     ]
+  ): string;
+  encodeFunctionData(
+    functionFragment: "mirror",
+    values: [
+      BytesLike,
+      BytesLike,
+      BytesLike,
+      [BigNumberish, BigNumberish],
+      [[BigNumberish, BigNumberish], [BigNumberish, BigNumberish]],
+      [BigNumberish, BigNumberish],
+      BigNumberish[]
+    ]
+  ): string;
+  encodeFunctionData(
+    functionFragment: "mirroredReceipts",
+    values: [BytesLike, BigNumberish]
   ): string;
   encodeFunctionData(
     functionFragment: "publishHead",
@@ -239,8 +245,10 @@ export interface PilotCurrentRegistryInterface extends Interface {
     functionFragment: "artifactManifestDigest",
     data: BytesLike
   ): Result;
-  decodeFunctionResult(functionFragment: "consume", data: BytesLike): Result;
-  decodeFunctionResult(functionFragment: "consumed", data: BytesLike): Result;
+  decodeFunctionResult(
+    functionFragment: "consumptionOwner",
+    data: BytesLike
+  ): Result;
   decodeFunctionResult(
     functionFragment: "getRoleAdmin",
     data: BytesLike
@@ -249,6 +257,11 @@ export interface PilotCurrentRegistryInterface extends Interface {
   decodeFunctionResult(functionFragment: "hasRole", data: BytesLike): Result;
   decodeFunctionResult(functionFragment: "head", data: BytesLike): Result;
   decodeFunctionResult(functionFragment: "inspect", data: BytesLike): Result;
+  decodeFunctionResult(functionFragment: "mirror", data: BytesLike): Result;
+  decodeFunctionResult(
+    functionFragment: "mirroredReceipts",
+    data: BytesLike
+  ): Result;
   decodeFunctionResult(
     functionFragment: "publishHead",
     data: BytesLike
@@ -286,20 +299,23 @@ export interface PilotCurrentRegistryInterface extends Interface {
   ): Result;
 }
 
-export namespace AuthorizationConsumedEvent {
+export namespace AuthorizationMirroredEvent {
   export type InputTuple = [
     tenant: BytesLike,
     statementId: BytesLike,
+    receiptId: BytesLike,
     nullifier: BigNumberish
   ];
   export type OutputTuple = [
     tenant: string,
     statementId: string,
+    receiptId: string,
     nullifier: bigint
   ];
   export interface OutputObject {
     tenant: string;
     statementId: string;
+    receiptId: string;
     nullifier: bigint;
   }
   export type Event = TypedContractEvent<InputTuple, OutputTuple, OutputObject>;
@@ -481,24 +497,7 @@ export interface PilotCurrentRegistry extends BaseContract {
 
   artifactManifestDigest: TypedContractMethod<[], [string], "view">;
 
-  consume: TypedContractMethod<
-    [
-      tenant: BytesLike,
-      id: BytesLike,
-      a: [BigNumberish, BigNumberish],
-      b: [[BigNumberish, BigNumberish], [BigNumberish, BigNumberish]],
-      c: [BigNumberish, BigNumberish],
-      signals: BigNumberish[]
-    ],
-    [void],
-    "nonpayable"
-  >;
-
-  consumed: TypedContractMethod<
-    [arg0: BytesLike, arg1: BigNumberish],
-    [boolean],
-    "view"
-  >;
+  consumptionOwner: TypedContractMethod<[], [string], "view">;
 
   getRoleAdmin: TypedContractMethod<[role: BytesLike], [string], "view">;
 
@@ -530,6 +529,26 @@ export interface PilotCurrentRegistry extends BaseContract {
       signals: BigNumberish[]
     ],
     [boolean],
+    "view"
+  >;
+
+  mirror: TypedContractMethod<
+    [
+      tenant: BytesLike,
+      id: BytesLike,
+      receiptId: BytesLike,
+      a: [BigNumberish, BigNumberish],
+      b: [[BigNumberish, BigNumberish], [BigNumberish, BigNumberish]],
+      c: [BigNumberish, BigNumberish],
+      signals: BigNumberish[]
+    ],
+    [void],
+    "nonpayable"
+  >;
+
+  mirroredReceipts: TypedContractMethod<
+    [arg0: BytesLike, arg1: BigNumberish],
+    [string],
     "view"
   >;
 
@@ -604,26 +623,8 @@ export interface PilotCurrentRegistry extends BaseContract {
     nameOrSignature: "artifactManifestDigest"
   ): TypedContractMethod<[], [string], "view">;
   getFunction(
-    nameOrSignature: "consume"
-  ): TypedContractMethod<
-    [
-      tenant: BytesLike,
-      id: BytesLike,
-      a: [BigNumberish, BigNumberish],
-      b: [[BigNumberish, BigNumberish], [BigNumberish, BigNumberish]],
-      c: [BigNumberish, BigNumberish],
-      signals: BigNumberish[]
-    ],
-    [void],
-    "nonpayable"
-  >;
-  getFunction(
-    nameOrSignature: "consumed"
-  ): TypedContractMethod<
-    [arg0: BytesLike, arg1: BigNumberish],
-    [boolean],
-    "view"
-  >;
+    nameOrSignature: "consumptionOwner"
+  ): TypedContractMethod<[], [string], "view">;
   getFunction(
     nameOrSignature: "getRoleAdmin"
   ): TypedContractMethod<[role: BytesLike], [string], "view">;
@@ -660,6 +661,28 @@ export interface PilotCurrentRegistry extends BaseContract {
       signals: BigNumberish[]
     ],
     [boolean],
+    "view"
+  >;
+  getFunction(
+    nameOrSignature: "mirror"
+  ): TypedContractMethod<
+    [
+      tenant: BytesLike,
+      id: BytesLike,
+      receiptId: BytesLike,
+      a: [BigNumberish, BigNumberish],
+      b: [[BigNumberish, BigNumberish], [BigNumberish, BigNumberish]],
+      c: [BigNumberish, BigNumberish],
+      signals: BigNumberish[]
+    ],
+    [void],
+    "nonpayable"
+  >;
+  getFunction(
+    nameOrSignature: "mirroredReceipts"
+  ): TypedContractMethod<
+    [arg0: BytesLike, arg1: BigNumberish],
+    [string],
     "view"
   >;
   getFunction(
@@ -731,11 +754,11 @@ export interface PilotCurrentRegistry extends BaseContract {
   ): TypedContractMethod<[], [string], "view">;
 
   getEvent(
-    key: "AuthorizationConsumed"
+    key: "AuthorizationMirrored"
   ): TypedContractEvent<
-    AuthorizationConsumedEvent.InputTuple,
-    AuthorizationConsumedEvent.OutputTuple,
-    AuthorizationConsumedEvent.OutputObject
+    AuthorizationMirroredEvent.InputTuple,
+    AuthorizationMirroredEvent.OutputTuple,
+    AuthorizationMirroredEvent.OutputObject
   >;
   getEvent(
     key: "HeadPublished"
@@ -781,15 +804,15 @@ export interface PilotCurrentRegistry extends BaseContract {
   >;
 
   filters: {
-    "AuthorizationConsumed(bytes32,bytes32,uint256)": TypedContractEvent<
-      AuthorizationConsumedEvent.InputTuple,
-      AuthorizationConsumedEvent.OutputTuple,
-      AuthorizationConsumedEvent.OutputObject
+    "AuthorizationMirrored(bytes32,bytes32,bytes32,uint256)": TypedContractEvent<
+      AuthorizationMirroredEvent.InputTuple,
+      AuthorizationMirroredEvent.OutputTuple,
+      AuthorizationMirroredEvent.OutputObject
     >;
-    AuthorizationConsumed: TypedContractEvent<
-      AuthorizationConsumedEvent.InputTuple,
-      AuthorizationConsumedEvent.OutputTuple,
-      AuthorizationConsumedEvent.OutputObject
+    AuthorizationMirrored: TypedContractEvent<
+      AuthorizationMirroredEvent.InputTuple,
+      AuthorizationMirroredEvent.OutputTuple,
+      AuthorizationMirroredEvent.OutputObject
     >;
 
     "HeadPublished(bytes32,uint8,bytes32,uint64,bytes32)": TypedContractEvent<

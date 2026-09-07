@@ -93,6 +93,24 @@ class ValuationTrustStore:
         now: int,
         verified_at: int | None = None,
     ) -> ValuationApproval:
+        return self._verify_with_validity(
+            signed, transfer, registry, tenant_id=tenant_id, now=now, verified_at=verified_at
+        )[0]
+
+    def current_valid_until(self, signed, transfer, registry, *, tenant_id: str, now: int) -> int:
+        """Exclusive scheduled cutoff after authentication; trust changes still require revalidation."""
+        return self._verify_with_validity(signed, transfer, registry, tenant_id=tenant_id, now=now)[1]
+
+    def _verify_with_validity(
+        self,
+        signed: SignedValuationApproval,
+        transfer: Transfer,
+        registry: AssetRegistry,
+        *,
+        tenant_id: str,
+        now: int,
+        verified_at: int | None = None,
+    ) -> tuple[ValuationApproval, int]:
         """Use the authenticated tenant and an operator clock, not request-supplied values.
 
         No latest-quote claim, provider fetch, policy approval or key-revocation
@@ -141,7 +159,15 @@ class ValuationTrustStore:
                 )
             except InvalidSignature:
                 raise ValuationTrustError("Valuation approval signature is invalid") from None
-            return approval
+            return approval, min(
+                quote.expires_at,
+                quote.observed_at + authority.max_observation_age_seconds + 1,
+                *(
+                    a.compromised_at
+                    for a in self._authorities
+                    if a.key_id == approval.key_id and a.compromised_at is not None
+                ),
+            )
         raise ValuationTrustError("Valuation approval has no trusted authority in scope")
 
 

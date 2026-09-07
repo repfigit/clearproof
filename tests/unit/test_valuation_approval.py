@@ -193,3 +193,16 @@ def test_historical_compromise_and_key_expiry(case):
             )
     with pytest.raises(ValuationTrustError):
         ValuationTrustStore([authority]).verify_for_transfer(signed, transfer, registry, **args, verified_at=True)
+
+
+def test_authenticated_current_cutoff_matches_age_and_compromise(case):
+    _, authority, signed, transfer, registry = case
+    trust = ValuationTrustStore([authority])
+    args = dict(tenant_id=transfer.tenant_id, now=transfer.created_at + 10)
+    cutoff = trust.current_valid_until(signed, transfer, registry, **args)
+    assert cutoff == transfer.valuation.observed_at + authority.max_observation_age_seconds + 1
+    assert trust.verify_for_transfer(signed, transfer, registry, **{**args, "now": cutoff - 1}) == signed.approval
+    with pytest.raises(ValuationTrustError):
+        trust.current_valid_until(signed, transfer, registry, **{**args, "now": cutoff})
+    compromised = authority.model_copy(update={"compromised_at": args["now"] + 1})
+    assert ValuationTrustStore([compromised]).current_valid_until(signed, transfer, registry, **args) == args["now"] + 1

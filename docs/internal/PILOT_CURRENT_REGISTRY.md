@@ -1,11 +1,11 @@
 # Development current-state registry
 
 `PilotCurrentRegistry` composes the eight-signal pairing verifier with approved
-statement bindings, versioned tenant checkpoints, caller restrictions and a local
-nullifier consumption map. This implements contract-side checkpoint mechanics;
-it does not yet establish complete acceptance parity with the authenticated Python
-services. The bridge that validates real source evidence and publishes these
-checkpoints remains required work.
+statement bindings, versioned tenant checkpoints and receipt-bound audit mirrors.
+PostgreSQL is the pilot's authorization and replay authority. The contract cannot
+create another authorization. A local preparation service authenticates retained
+receipts and current evidence; chain publication and complete shared adversarial
+acceptance tests remain required work.
 
 ## Trust boundary
 
@@ -36,8 +36,8 @@ Pins identify typed checkpoint scopes, exact digests and exact revisions:
 | 3 | Credential | Wallet enrollment, eligibility, subject binding and revocation |
 | 4 | Policy | Current reviewed activation, units, jurisdiction and version |
 | 5 | Valuation | Approved exact asset, amount conversion and current signed quote |
-| 6 | Participants | Independently authenticated participant/VASP state |
-| 7 | Authorization | ALLOW decision, information approval and recipient requirements |
+| 6 | Participants | Retained signed policy facts, evaluated under the selected policy |
+| 7 | Authorization | Exact consumed receipt ID, signed ALLOW decision, information approval and recipient requirements |
 
 Those are publisher obligations, not operations implemented by `publishHead`.
 Heads record a digest, value, monotonically increasing revision, validity interval,
@@ -52,29 +52,63 @@ credential revocation and correct policy reactivation times through the bridge.
 Every `setPublisher` call increments the tenant's epoch, including reassigning the
 same address. This invalidates old statements and heads until they are republished
 under the new epoch. Setting zero disables publication and inspection. Epoch
-changes do not clear nullifier consumption. Choose these changes deliberately.
+changes do not clear recorded receipt mirrors. Choose these changes deliberately.
 
-## Inspection and consumption
+## Inspection and receipt mirroring
 
 `inspect` is a view call. It checks the statement's tenant and publisher epoch,
-current enabled heads 0–6, their exact pins and validity at evaluation/current time,
-expected projection and issuer/sanctions root values, exact evaluation time,
-future bounded proof expiry, nonzero nullifier, actual chain ID and this registry's
-address. The pairing verifier checks the constrained proof and canonical scalars.
-A successful view call does not require an ALLOW checkpoint or spend a nullifier.
+current enabled heads 0–6, their exact pins, expected projection and issuer/sanctions
+root values, exact evaluation time, future bounded proof expiry, nonzero nullifier,
+actual chain ID and this registry's address. Heads 0–5 must cover evaluation and
+remain current. Participant facts and receipt approvals may be produced after
+proof evaluation and must cover the current block time. The pairing verifier
+checks the constrained proof and canonical scalars. A successful view does not
+require an ALLOW checkpoint or record a mirror.
 
-`consume` requires the statement's designated caller, an unconsumed tenant/nullifier,
+`mirror` requires the designated caller, an as-yet unmirrored tenant/nullifier,
 all inspection checks, successful pairing, and an exact current enabled ALLOW head
-at index 7. That head's scope must be the statement context digest. Only then is
-consumption written and an event emitted. Invalid pairing, stale state, wrong caller
-or unavailable/non-ALLOW approval cannot consume. Subsequent consumption rejects,
-while repeated inspection can remain valid. No payment, envelope delivery or
-settlement is executed.
+at index 7. Its scope is the statement context digest and its digest must equal
+the caller's receipt ID. The contract records that ID and emits
+`AuthorizationMirrored`; wrong receipt IDs and duplicate mirrors reject. Inspection
+can remain valid after mirroring. No payment, delivery or settlement is executed.
+This replaces the development `consume` ABI; regenerate clients from the current
+contract. No deployed production compatibility is asserted.
 
-This map is local to the registry. It is not synchronized atomically with the
-Python database's consumption map. The eventual integration must explicitly choose
-and enforce an authoritative consumption path; it must not offer the same logical
-authorization for independent consumption in both stores.
+`consumptionOwner()` returns `postgresql`. Only the Python authorization service
+creates the authoritative consumption. A contract mirror is an audit record of that
+existing receipt; applications must never treat it as a second executable grant.
+The database and chain are not atomic. Failed or delayed mirroring does not undo
+or repeat database authorization. The publisher remains trusted to attest truthfully
+that the receipt exists and was consumed; Solidity cannot query PostgreSQL.
+
+## Authenticated preparation
+
+`AuthorizationMirrorService.prepare` requires independently configured trust,
+consumer, server transfer/context and private information. It checks export,
+decryption, inspection, policy-read and tenant-admin permissions. Within one tenant
+transaction it verifies the retained receipt/proof/envelope identities, exact
+nullifier-to-proof consumption, signed decision, information approval, recipient
+binding and current enrollment, roots, policy, facts, valuation and real pairing.
+The current result must still be ALLOW. A missing consumption or expired authorization
+cannot produce a plan, even if a signed historical receipt exists.
+
+The returned `clearproof-authorization-mirror-plan-v1` contains opaque digests,
+proof/signals, eight head candidates and the pinned consumer. It includes no raw
+information, source signatures or envelope. It writes no records, assigns no chain
+revisions and makes no RPC calls. `publication_state` is `not-published` and
+`contract_effect` is `audit-mirror-only`. This bounded profile requires at least
+one retained external fact; the policy determines how true/false facts affect ALLOW.
+
+Candidate validity is capped by proof and source expiry, policy source validity,
+recipient validity and authenticated fact/quote observation-age limits. Age limits
+are inclusive integer seconds, so their exclusive deadline is observation time
+plus maximum age plus one. Signed evidence is never rewritten to shorten expiry.
+`publish_before` is the earliest candidate deadline, not a promise that sources or
+trust will remain unchanged. Preparation is an as-of snapshot: the eventual writer
+must revalidate current trust and durable state immediately before publication,
+reconcile exact chain revisions/epochs, and invalidate superseded checkpoints.
+Known future changes to other authority inventories also require that revalidation;
+the preparation service is not an authority revocation scheduler.
 
 ## Evidence and remaining work
 
@@ -92,8 +126,13 @@ supersession and restoration, disabled credentials/approval, expiry and publishe
 replacement. The fresh-artifact builder invokes this suite using its own Python
 interpreter and artifact outputs.
 
-To complete CP-007, implement the authenticated publisher/exporter and shared
-adversarial tests against the Python service's actual enrollment, facts, policy,
-valuation, information and recipient authorities. Resolve source freshness and
-consumption ownership explicitly. These contracts and synthetic tests remain
-unapproved development infrastructure and establish no production or legal assurance.
+The real PostgreSQL authorization test independently exercises preparation from an
+actual consumed receipt, same-clock/reconnect stability, read-only counts, exact
+consumption presence, source age cutoff, invalid information/signers, role denial
+and expiry. It does not yet feed that plan to the EVM test.
+
+To complete CP-007, implement the publication writer and join these gates with
+shared adversarial tests against actual enrollment, facts, policy, valuation,
+information and recipient authorities. Reconcile uncertain transaction outcomes
+without creating another authorization. These contracts and tests remain unapproved
+development infrastructure and establish no production or legal assurance.

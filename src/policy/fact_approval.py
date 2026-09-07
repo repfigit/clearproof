@@ -108,6 +108,26 @@ class FactTrustStore:
         now: int,
         verified_at: int | None = None,
     ) -> PolicyFacts:
+        return self._verify_with_validity(
+            approvals, transfer=transfer, context=context, tenant_id=tenant_id, now=now, verified_at=verified_at
+        )[0]
+
+    def current_valid_until(self, approvals: tuple[SignedFactApproval, ...], **kwargs) -> int:
+        """Exclusive scheduled cutoff after authentication; trust changes still require revalidation."""
+        if kwargs.get("verified_at") is not None:
+            raise FactTrustError("A current cutoff cannot use a historical review clock")
+        return self._verify_with_validity(approvals, **kwargs)[1]
+
+    def _verify_with_validity(
+        self,
+        approvals: tuple[SignedFactApproval, ...],
+        *,
+        transfer: Transfer,
+        context: VerificationContext,
+        tenant_id: str,
+        now: int,
+        verified_at: int | None = None,
+    ) -> tuple[PolicyFacts, int]:
         """Authenticate evidence; missing/false facts remain missing/false, never ALLOW.
 
         Keys, scopes and clock are independent operator configuration. A signature
@@ -125,6 +145,7 @@ class FactTrustStore:
         if type(review_at) is not int or not now <= review_at < 2**53:
             raise FactTrustError("Invalid fact review time")
         unique = {}
+        valid_until = transfer.expires_at
         for value in approvals:
             signed = SignedFactApproval.model_validate(value)
             approval, fact = signed.approval, signed.approval.fact
@@ -162,6 +183,16 @@ class FactTrustStore:
                 )
             except InvalidSignature:
                 raise FactTrustError("Fact signature is invalid") from None
+            valid_until = min(
+                valid_until,
+                fact.expires_at,
+                fact.observed_at + max(a.max_observation_age_seconds for a in matching) + 1,
+                *(
+                    a.compromised_at
+                    for a in self._authorities
+                    if a.key_id == approval.key_id and a.compromised_at is not None
+                ),
+            )
             prior = unique.get(fact.predicate)
             if prior is not None and prior != signed:
                 raise FactTrustError("Conflicting attestations for one predicate")
@@ -170,4 +201,4 @@ class FactTrustStore:
             tenant_id=tenant_id,
             transfer_digest=transfer.digest,
             facts=tuple(unique[p].approval.fact for p in sorted(unique)),
-        )
+        ), valid_until

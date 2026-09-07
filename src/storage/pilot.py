@@ -314,12 +314,16 @@ class PilotTransaction:
             raise ReplayConflict("Authorization is already consumed")
 
     async def is_consumed(self, nullifier: str) -> bool:
+        return await self.consumed_proof_id(nullifier) is not None
+
+    async def consumed_proof_id(self, nullifier: str) -> str | None:
         self._check_open()
         self._principal.require("proof:inspect")
         if type(nullifier) is not str or not re.fullmatch(r"[0-9a-f]{64}", nullifier):
             raise ValueError("Expected canonical 32-byte nullifier")
         result = await self._conn.execute(
-            "SELECT 1 FROM pilot_consumptions WHERE tenant_id=%s AND nullifier=%s",
+            "SELECT proof_id FROM pilot_consumptions WHERE tenant_id=%s AND nullifier=%s",
             (self._principal.tenant_id, nullifier),
         )
-        return await result.fetchone() is not None
+        row = await result.fetchone()
+        return row[0] if row is not None else None

@@ -55,36 +55,55 @@ const g2 = (p: string[][]): [G1, G1] => [[p[0][1], p[0][0]], [p[1][1], p[1][0]]]
     await registry.connect(publisher).publishStatement(tenant, statement);
     const a = g1(bundle.proof.pi_a), b = g2(bundle.proof.pi_b), c = g1(bundle.proof.pi_c);
     const signals: string[] = bundle.signals;
+    const receiptId = pins[7].digest;
     const approve = (allow = true) => registry.connect(publisher).publishHead(tenant, 7, pins[7].scope,
       pins[7].digest, allow ? 1 : 0, 0, evaluatedAt, bundle.valid_until, true);
-    return { registry, pairing, tenant, publisher, consumer, outsider, statement, id, pins, bundle, a, b, c, signals, approve };
+    return { registry, pairing, tenant, publisher, consumer, outsider, statement, id, pins, bundle, a, b, c, signals, approve, receiptId };
   }
 
-  it("inspects without approval or consumption, then consumes only with ALLOW and the designated caller", async function () {
-    const { registry, tenant, consumer, outsider, id, a, b, c, signals, approve } = await loadFixture(fixture);
+  it("inspects read-only, then mirrors only the approved receipt with its designated caller", async function () {
+    const { registry, tenant, consumer, outsider, id, a, b, c, signals, approve, receiptId } = await loadFixture(fixture);
     expect(await registry.inspect(tenant, id, a, b, c, signals)).to.equal(true);
-    expect(await registry.consumed(tenant, signals[3])).to.equal(false);
-    await expect(registry.connect(consumer).consume(tenant, id, a, b, c, signals)).to.be.revertedWithCustomError(registry, "InvalidState");
+    expect(await registry.mirroredReceipts(tenant, signals[3])).to.equal(ethers.ZeroHash);
+    await expect(registry.connect(consumer).mirror(tenant, id, receiptId, a, b, c, signals)).to.be.revertedWithCustomError(registry, "InvalidState");
     await approve();
-    await expect(registry.connect(outsider).consume(tenant, id, a, b, c, signals)).to.be.revertedWithCustomError(registry, "UnauthorizedConsumer");
-    await expect(registry.connect(consumer).consume(tenant, id, a, b, c, signals))
-      .to.emit(registry, "AuthorizationConsumed").withArgs(tenant, id, signals[3]);
-    expect(await registry.consumed(tenant, signals[3])).to.equal(true);
-    await expect(registry.connect(consumer).consume(tenant, id, a, b, c, signals)).to.be.revertedWithCustomError(registry, "AlreadyConsumed");
+    expect(await registry.consumptionOwner()).to.equal("postgresql");
+    await expect(registry.connect(consumer).mirror(tenant, id, ethers.id("wrong-receipt"), a, b, c, signals))
+      .to.be.revertedWithCustomError(registry, "AuthorizationUnavailable");
+    await expect(registry.connect(outsider).mirror(tenant, id, receiptId, a, b, c, signals)).to.be.revertedWithCustomError(registry, "UnauthorizedConsumer");
+    await expect(registry.connect(consumer).mirror(tenant, id, receiptId, a, b, c, signals))
+      .to.emit(registry, "AuthorizationMirrored").withArgs(tenant, id, receiptId, signals[3]);
+    expect(await registry.mirroredReceipts(tenant, signals[3])).to.equal(receiptId);
+    await expect(registry.connect(consumer).mirror(tenant, id, receiptId, a, b, c, signals)).to.be.revertedWithCustomError(registry, "AlreadyMirrored");
     expect(await registry.inspect(tenant, id, a, b, c, signals)).to.equal(true);
+  });
+
+  it("accepts participant and receipt evidence produced after proof evaluation", async function () {
+    const { registry, tenant, publisher, consumer, statement, pins, a, b, c, signals, receiptId } = await loadFixture(fixture);
+    const issuedAt = await time.latest();
+    expect(issuedAt).to.be.greaterThan(Number(statement.evaluatedAt));
+    await registry.connect(publisher).publishHead(tenant, 6, pins[6].scope, pins[6].digest,
+      0, 1, issuedAt, statement.validUntil, true);
+    const updated = { ...statement, pins: pins.map((pin, i) => i === 6 ? { ...pin, revision: 2 } : pin) };
+    const id = await registry.statementId(tenant, updated);
+    await registry.connect(publisher).publishStatement(tenant, updated);
+    await registry.connect(publisher).publishHead(tenant, 7, pins[7].scope, receiptId,
+      1, 0, issuedAt, statement.validUntil, true);
+    await registry.connect(consumer).mirror(tenant, id, receiptId, a, b, c, signals);
+    expect(await registry.mirroredReceipts(tenant, signals[3])).to.equal(receiptId);
   });
 
   it("keeps a non-ALLOW authorization separate from a valid current proof", async function () {
-    const { registry, tenant, consumer, id, a, b, c, signals, approve } = await loadFixture(fixture);
+    const { registry, tenant, consumer, id, a, b, c, signals, approve, receiptId } = await loadFixture(fixture);
     await approve(false);
     expect(await registry.inspect(tenant, id, a, b, c, signals)).to.equal(true);
-    await expect(registry.connect(consumer).consume(tenant, id, a, b, c, signals))
+    await expect(registry.connect(consumer).mirror(tenant, id, receiptId, a, b, c, signals))
       .to.be.revertedWithCustomError(registry, "AuthorizationUnavailable");
-    expect(await registry.consumed(tenant, signals[3])).to.equal(false);
+    expect(await registry.mirroredReceipts(tenant, signals[3])).to.equal(ethers.ZeroHash);
   });
 
-  it("rejects untrusted publication, foreign scope, changed context and invalid proof without consuming", async function () {
-    const { registry, tenant, publisher, consumer, outsider, statement, id, pins, a, b, c, signals, approve } = await loadFixture(fixture);
+  it("rejects untrusted publication, foreign scope, changed context and invalid proof without recording a mirror", async function () {
+    const { registry, tenant, publisher, consumer, outsider, statement, id, pins, a, b, c, signals, approve, receiptId } = await loadFixture(fixture);
     await expect(registry.connect(outsider).publishStatement(tenant, statement)).to.be.revertedWithCustomError(registry, "UnauthorizedPublisher");
     await expect(registry.connect(publisher).publishStatement(tenant, statement)).to.be.revertedWithCustomError(registry, "StatementExists");
     await expect(registry.connect(outsider).publishHead(tenant, 0, pins[0].scope, pins[0].digest, 1, 1,
@@ -98,8 +117,8 @@ const g2 = (p: string[][]): [G1, G1] => [[p[0][1], p[0][0]], [p[1][1], p[1][0]]]
     const q = 21888242871839275222246405745257275088696311157297823662689037894645226208583n;
     const changedC: G1 = [c[0], String(q - BigInt(c[1]))];
     expect(await registry.inspect(tenant, id, a, b, changedC, signals)).to.equal(false);
-    await expect(registry.connect(consumer).consume(tenant, id, a, b, changedC, signals)).to.be.revertedWithCustomError(registry, "InvalidProof");
-    expect(await registry.consumed(tenant, signals[3])).to.equal(false);
+    await expect(registry.connect(consumer).mirror(tenant, id, receiptId, a, b, changedC, signals)).to.be.revertedWithCustomError(registry, "InvalidProof");
+    expect(await registry.mirroredReceipts(tenant, signals[3])).to.equal(ethers.ZeroHash);
   });
 
   for (let kind = 0; kind < 7; kind++) {
@@ -111,7 +130,7 @@ const g2 = (p: string[][]): [G1, G1] => [[p[0][1], p[0][0]], [p[1][1], p[1][0]]]
       await registry.connect(publisher).publishHead(tenant, kind, pins[kind].scope, pins[kind].digest,
         bundle.heads[kind].value, 2, statement.evaluatedAt, statement.validUntil, true);
       await expect(registry.inspect(tenant, id, a, b, c, signals)).to.be.revertedWithCustomError(registry, "InvalidState");
-      expect(await registry.consumed(tenant, signals[3])).to.equal(false);
+      expect(await registry.mirroredReceipts(tenant, signals[3])).to.equal(ethers.ZeroHash);
     });
   }
 
@@ -133,15 +152,15 @@ const g2 = (p: string[][]): [G1, G1] => [[p[0][1], p[0][0]], [p[1][1], p[1][0]]]
   });
 
   it("rejects disabled credential and revoked ALLOW checkpoints", async function () {
-    const { registry, tenant, publisher, consumer, statement, pins, id, a, b, c, signals, approve } = await loadFixture(fixture);
+    const { registry, tenant, publisher, consumer, statement, pins, id, a, b, c, signals, approve, receiptId } = await loadFixture(fixture);
     await approve();
     await registry.connect(publisher).publishHead(tenant, 7, pins[7].scope, pins[7].digest,
       1, 1, statement.evaluatedAt, statement.validUntil, false);
     expect(await registry.inspect(tenant, id, a, b, c, signals)).to.equal(true);
-    await expect(registry.connect(consumer).consume(tenant, id, a, b, c, signals)).to.be.revertedWithCustomError(registry, "InvalidState");
+    await expect(registry.connect(consumer).mirror(tenant, id, receiptId, a, b, c, signals)).to.be.revertedWithCustomError(registry, "InvalidState");
     await registry.connect(publisher).publishHead(tenant, 3, pins[3].scope, pins[3].digest,
       0, 1, statement.evaluatedAt, statement.validUntil, false);
     await expect(registry.inspect(tenant, id, a, b, c, signals)).to.be.revertedWithCustomError(registry, "InvalidState");
-    expect(await registry.consumed(tenant, signals[3])).to.equal(false);
+    expect(await registry.mirroredReceipts(tenant, signals[3])).to.equal(ethers.ZeroHash);
   });
 });

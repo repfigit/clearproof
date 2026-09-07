@@ -53,6 +53,7 @@ The eight-signal layout exposes no separate SAR decision signal.
 
 The separate [current-state registry](PILOT_CURRENT_REGISTRY.md) now composes this
 pairing verifier with publisher-approved statement/checkpoint versions, time and
-audience checks, designated consumers and local nullifier consumption. Its
-participant/authorization fixtures are synthetic; the authenticated source bridge
-and complete API/contract acceptance parity remain open.
+audience checks, designated callers and receipt-bound audit mirrors. PostgreSQL
+owns authorization consumption. A preparation service checks retained consumed
+receipts and current evidence; the EVM participant/authorization fixtures remain
+synthetic. Publication and complete API/contract acceptance parity remain open.

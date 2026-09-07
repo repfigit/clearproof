@@ -1927,6 +1927,17 @@ async def test_durable_current_inspection_real_pairing_and_revocation(db, monkey
             receipts = await asyncio.gather(authorize(key=winning_key), authorize(key=winning_key))
             assert receipts[0] == receipts[1]
             receipt = receipts[0]
+            await check_authorization_mirror(
+                db,
+                principal,
+                configuration,
+                verifier,
+                receipt,
+                trust,
+                decision_authority,
+                payload_args,
+                now,
+            )
             assert await authorize_http(winning_key) == receipt
             assert (await invoke_authorization({"idempotency_key": "http-second-spend"})).status_code == 409
             assert (await invoke_authorization({"idempotency_key": winning_key, "fact_ids": []})).status_code == 409
@@ -4071,3 +4082,93 @@ async def exercise_authorization_cli(app, headers, body, receipt):
             await asyncio.wait_for(task, 10)
         finally:
             sock.close()
+
+
+async def check_authorization_mirror(
+    db, principal, configuration, verifier, receipt, fact_trust, decision_authority, payload, now
+):
+    import json
+
+    from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
+
+    from src.protocol.decision_attestation import DecisionAuthority, DecisionTrustStore
+    from src.services.authorization_mirror import AuthorizationMirrorService
+
+    exporter = Principal.model_validate({**principal.model_dump(), "roles": (*principal.roles, "evidence:export")})
+    consumer = "0x" + "ab" * 20
+    service = AuthorizationMirrorService(db, cipher(), exporter, verifier, configuration, consumer=consumer)
+    arguments = dict(
+        pii=payload["pii"],
+        fact_trust=fact_trust,
+        decision_trust=DecisionTrustStore([decision_authority]),
+        information_trust=payload["information_trust"],
+        recipient_trust=payload["recipient_trust"],
+        now=now,
+    )
+    async with db.connection() as conn:
+        before = (await (await conn.execute("SELECT count(*) FROM pilot_records")).fetchone())[0]
+    plan = await service.prepare(receipt["receipt_id"], **arguments)
+    assert plan["consumption_owner"] == "postgresql" and plan["contract_effect"] == "audit-mirror-only"
+    assert plan["publication_state"] == "not-published" and plan["assurance"] == "development-unapproved"
+    assert plan["receipt_id"] == receipt["receipt_id"] and plan["nullifier"] == receipt["nullifier"]
+    assert plan["consumer"] == consumer and plan["context_digest"] == configuration.context.digest
+    assert len(plan["heads"]) == 8 and [h["kind"] for h in plan["heads"]] == list(range(8))
+    assert plan["heads"][7]["digest"] == receipt["receipt_id"]
+    assert plan["heads"][7]["scope"] == plan["context_digest"] and plan["heads"][7]["value"] == "1"
+    assert plan["public_signals"][0] == str(int(plan["public_signals"][0]))
+    assert all(h["valid_from"] <= now < h["valid_until"] for h in plan["heads"])
+    from src.policy.fact_approval import FactTrustStore
+
+    short_trust = FactTrustStore(
+        [a.model_copy(update={"max_observation_age_seconds": 1}) for a in fact_trust._authorities]
+    )
+    bounded = await service.prepare(receipt["receipt_id"], **{**arguments, "fact_trust": short_trust})
+    assert bounded["heads"][6]["valid_until"] == now + 2
+    assert bounded["publish_before"] == now + 2
+    with pytest.raises(ValueError):
+        await service.prepare(receipt["receipt_id"], **{**arguments, "fact_trust": short_trust, "now": now + 2})
+    serialized = json.dumps(plan)
+    assert "Synthetic José Originator" not in serialized and "Synthetic Recipient Ltd" not in serialized
+    assert "payload_digest" not in serialized and "payload_base64" not in serialized and "signature" not in serialized
+    assert await service.prepare(receipt["receipt_id"], **arguments) == plan
+    await db.close()
+    await db.connect()
+    assert await service.prepare(receipt["receipt_id"], **arguments) == plan
+    for identity, changes in [
+        ("00" * 32, {}),
+        (receipt["receipt_id"], {"pii": b"{}"}),
+        (receipt["receipt_id"], {"now": receipt["expires_at"]}),
+    ]:
+        with pytest.raises(ValueError):
+            await service.prepare(identity, **{**arguments, **changes})
+    wrong_authority = DecisionAuthority.model_validate(
+        {
+            **decision_authority.model_dump(),
+            "public_key": Ed25519PrivateKey.generate().public_key().public_bytes_raw().hex(),
+        }
+    )
+    with pytest.raises(ValueError):
+        await service.prepare(
+            receipt["receipt_id"], **{**arguments, "decision_trust": DecisionTrustStore([wrong_authority])}
+        )
+    restricted = AuthorizationMirrorService(db, cipher(), principal, verifier, configuration, consumer=consumer)
+    with pytest.raises(HTTPException):
+        await restricted.prepare(receipt["receipt_id"], **arguments)
+    # A signed receipt is insufficient if its actual authoritative consumption is absent.
+    async with db.connection() as conn:
+        await conn.execute(
+            "DELETE FROM pilot_consumptions WHERE tenant_id=%s AND nullifier=%s",
+            (principal.tenant_id, receipt["nullifier"]),
+        )
+    try:
+        with pytest.raises(ValueError, match="consumption"):
+            await service.prepare(receipt["receipt_id"], **arguments)
+    finally:
+        async with db.connection() as conn:
+            await conn.execute(
+                "INSERT INTO pilot_consumptions (tenant_id,nullifier,proof_id) VALUES (%s,%s,%s)",
+                (principal.tenant_id, receipt["nullifier"], receipt["proof_id"]),
+            )
+    async with db.connection() as conn:
+        assert (await (await conn.execute("SELECT count(*) FROM pilot_records")).fetchone())[0] == before
+        assert (await (await conn.execute("SELECT count(*) FROM pilot_consumptions")).fetchone())[0] == 1
