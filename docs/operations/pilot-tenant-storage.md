@@ -73,3 +73,34 @@ to prevent a revocation racing that decision. `ProofAuthorizationService` runs
 these checks through `_inspect_transaction` before recording the encrypted proof,
 receipt and nullifier in the same idempotent tenant transaction. Exact retries
 return the historical receipt; they are not a fresh current-policy decision.
+
+### Witness preparation from retained issuance
+
+`ProofPreparationService` uses the same database, principal, cipher and
+`CurrentStatementConfiguration` as current inspection. Call
+`prepare_witness(credential_id, secret=..., sanctions_tree=..., now=...)` from a
+trusted local integration with `proof:generate`, `policy:read` and
+`evidence:decrypt`. This service method is not a public holder-secret endpoint.
+
+It loads the accepted, unrevoked enrollment and current policy/root heads in one
+tenant transaction. Issuance and issuer membership paths are reconstructed from
+the registrar's retained `root-source` inventories, checked against their signed
+source digests, scope and root values. Enrollment after a publication is
+insufficient: the exact credential must appear in that published inventory. The
+caller supplies a sanctions tree whose root must match the approved sanctions
+head. Independently configured trust, artifact identity, valuation and current
+statement checks also apply; a stored signature alone is insufficient.
+
+The return value contains private witness inputs and the holder secret. Keep it
+in the trusted prover's memory or an authenticated encrypted envelope; never log
+it or write real holder data to a plaintext witness file. Run proof generation
+after the method returns and releases the transaction. Preparation does not
+consume authorization or reserve a root. Authorization rechecks current state
+after proving, so an intervening revocation or head change can reject the proof.
+
+`test_durable_registrar_witness_real_proof` exercises accepted enrollment,
+registrar publication, reconnect, reconstructed witness, actual development
+proof generation and current pairing inspection. It also checks unpublished
+enrollment, wrong holder/sanctions inventory, missing sources, tenant/role
+boundaries, revocation and advanced root heads. Its plaintext snarkjs input is
+explicitly public synthetic fixture data, not a production proving transport.

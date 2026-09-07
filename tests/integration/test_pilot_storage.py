@@ -1542,6 +1542,224 @@ async def exercise_investigation_cli(app, token, scope, expected_queue, expected
 
 
 @pytest.mark.skipif(not os.getenv("CLEARPROOF_PILOT_TEST_ARTIFACTS"), reason="requires fresh synthetic pilot artifacts")
+async def test_durable_registrar_witness_real_proof(db, tmp_path, monkeypatch):
+    """Enroll -> registrar -> reconnect -> private witness -> real proof -> current inspection."""
+    import hashlib
+    import json
+    import runpy
+    import shutil
+    import subprocess
+    from pathlib import Path
+
+    from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
+    from eth_account import Account
+
+    from src.policy.diff import PolicyCase
+    from src.policy.evaluator import PolicyFacts
+    from src.protocol.credential import PilotCredential
+    from src.protocol.enrollment import EnrollmentConsent
+    from src.protocol.root_snapshot import RootTrustError, SignedRootSnapshot, root_scope_id
+    from src.protocol.transfer import VerificationContext
+    from src.prover.pilot_artifacts import inspect_artifacts
+    from src.prover.pilot_roots import CurrentRootPins
+    from src.prover.pilot_verifier import PilotPairingVerifier
+    from src.registry.pilot_sanctions import PilotSanctionsTree
+    from src.services.enrollment import EnrollmentIneligible, EnrollmentService, RevocationRequest
+    from src.services.policy_activation import PolicyActivationRequest, PolicyActivationService
+    from src.services.policy_review import PolicyReviewRequest, PolicyReviewService, ReviewedCase
+    from src.services.proof_inspection import CurrentStatementConfiguration
+    from src.services.proof_preparation import ProofPreparationService
+    from src.services.registrar import PilotRegistrar
+    from src.services.root_publication import RootPublicationService
+    from src.storage.pilot import PilotTransaction
+
+    root = Path(os.environ["CLEARPROOF_PILOT_TEST_ARTIFACTS"])
+    artifacts = inspect_artifacts(root, trusted_digest=(root / "development-manifest-pin.txt").read_text().strip())
+    helper = runpy.run_path(str(Path(__file__).parents[1] / "unit/test_pilot_compliance.py"))["synthetic_case"]
+    # Discard the helper's unrelated witness and replace both issuance approvals.
+    _, _, inputs = helper(artifact_manifest_digest=artifacts.manifest.digest, with_trust=True)
+    credential, now = inputs.pop("credential"), inputs.pop("now")
+    principal = Principal(
+        tenant_id=credential.tenant_id,
+        actor_id="durable-prover",
+        roles=(*ROLES, "policy:activate", "policy:read"),
+        issuer_dids=(credential.issuer_did,),
+    )
+    reader = PilotStore(db, cipher(), principal)
+    pins = inputs["root_pins"]
+    enrollment = EnrollmentService(
+        db, cipher(), principal, chain_id=pins.chain_id, registry_address=pins.registry_address
+    )
+    wallet = Account.from_key(bytes([8]) * 32)
+
+    async def enroll(value, key):
+        consent = EnrollmentConsent(
+            credential=value,
+            chain_id=pins.chain_id,
+            registry_address=pins.registry_address,
+            consent_expires_at=min(value.issued_at + 600, value.expires_at),
+        )
+        await enrollment.enroll(
+            consent,
+            "0x" + wallet.sign_message(consent.signing_message()).signature.hex(),
+            idempotency_key=key,
+            now=value.issued_at,
+        )
+
+    await enroll(credential, "enroll")
+    registrar = PilotRegistrar(
+        db,
+        cipher(),
+        principal,
+        inputs["root_trust"],
+        Ed25519PrivateKey.from_private_bytes(bytes([7]) * 32),
+        issuers=(credential.issuer_did,),
+        chain_id=pins.chain_id,
+        registry_address=pins.registry_address,
+    )
+    await registrar.refresh(expected_revision=0, idempotency_key="registrar", now=now, ttl=credential.expires_at - now)
+    async with reader.transaction() as tx:
+        for name in ("issuance", "issuers"):
+            snapshot = inputs[name].snapshot
+            inputs[name] = SignedRootSnapshot.model_validate(await tx.get(snapshot.kind, root_scope_id(snapshot)))
+    inputs["root_pins"] = CurrentRootPins.model_validate(
+        {
+            **pins.model_dump(),
+            "issuance_digest": inputs["issuance"].snapshot.digest,
+            "issuer_digest": inputs["issuers"].snapshot.digest,
+        }
+    )
+    inputs["context"] = VerificationContext.model_validate(
+        {
+            **inputs["context"].model_dump(),
+            "issuance_snapshot_digest": inputs["issuance"].snapshot.digest,
+            "issuer_snapshot_digest": inputs["issuers"].snapshot.digest,
+        }
+    )
+    await RootPublicationService(db, cipher(), principal, inputs["root_trust"]).publish(
+        inputs["sanctions"], idempotency_key="sanctions", now=now
+    )
+    policy = inputs["policy_trust"].for_transfer(
+        inputs["transfer"], inputs["context"], tenant_id=principal.tenant_id, now=now
+    )
+    case = PolicyCase(
+        case_id="durable-witness",
+        transfer=inputs["transfer"],
+        context=inputs["context"],
+        facts=PolicyFacts(tenant_id=principal.tenant_id, transfer_digest=inputs["transfer"].digest, facts=()),
+        evaluated_at=now,
+    )
+    await PolicyReviewService(db, cipher(), principal).approve(
+        PolicyReviewRequest(policy=policy, cases=(ReviewedCase(case=case, expected="INDETERMINATE"),)),
+        idempotency_key="review",
+        now=now,
+    )
+    await PolicyActivationService(db, cipher(), principal).activate(
+        PolicyActivationRequest(policy_digest=policy.digest), idempotency_key="activate", now=now
+    )
+    runtime = Path(__file__).parents[2] / "node_modules/snarkjs/build/snarkjs.min.js"
+    verifier = PilotPairingVerifier.load(
+        artifacts,
+        bundle_path=runtime,
+        bundle_sha256=hashlib.sha256(runtime.read_bytes()).hexdigest(),
+        node=Path(shutil.which("node")),
+    )
+
+    def service(who=principal):
+        return ProofPreparationService(db, cipher(), who, verifier, CurrentStatementConfiguration(**inputs))
+
+    async def prepare():
+        return await service().prepare_witness(
+            credential.credential_nonce, secret="123456", sanctions_tree=PilotSanctionsTree([]), now=now
+        )
+
+    witness = await prepare()
+    assert witness["credential_commitment"] == credential.commitment
+    await db.close()
+    await db.connect()
+    assert await prepare() == witness
+    with pytest.raises(ValueError, match="holder"):
+        await service().prepare_witness(
+            credential.credential_nonce, secret="654321", sanctions_tree=PilotSanctionsTree([]), now=now
+        )
+    with pytest.raises(RootTrustError, match="inventory roots"):
+        await service().prepare_witness(
+            credential.credential_nonce,
+            secret="123456",
+            sanctions_tree=PilotSanctionsTree(["0x" + "9" * 40]),
+            now=now,
+        )
+    with pytest.raises(ValueError, match="tenant"):
+        service(Principal.model_validate({**principal.model_dump(), "tenant_id": "foreign"}))
+    with pytest.raises(HTTPException) as denied:
+        await service(
+            Principal.model_validate({**principal.model_dump(), "roles": ("evidence:decrypt",)})
+        ).prepare_witness(credential.credential_nonce, secret="123456", sanctions_tree=PilotSanctionsTree([]), now=now)
+    assert denied.value.status_code == 403
+    original_get = PilotTransaction.get
+
+    async def missing_source(tx, kind, record_id):
+        return None if kind == "root-source" else await original_get(tx, kind, record_id)
+
+    with monkeypatch.context() as patch:
+        patch.setattr(PilotTransaction, "get", missing_source)
+        with pytest.raises(RootTrustError, match="source is missing"):
+            await prepare()
+
+    async def altered_source(tx, kind, record_id):
+        value = await original_get(tx, kind, record_id)
+        return {**value, "tenant_id": "foreign"} if kind == "root-source" else value
+
+    with monkeypatch.context() as patch:
+        patch.setattr(PilotTransaction, "get", altered_source)
+        with pytest.raises(RootTrustError, match="inconsistent"):
+            await prepare()
+    alternate = PilotCredential.model_validate({**credential.model_dump(), "credential_nonce": "cd" * 32})
+    await enroll(alternate, "enroll-after-publication")
+    with pytest.raises(RootTrustError, match="absent"):
+        await service().prepare_witness(
+            alternate.credential_nonce, secret="123456", sanctions_tree=PilotSanctionsTree([]), now=now
+        )
+    # Only public synthetic fixture data is written for snarkjs. No production holder data.
+    (tmp_path / "synthetic.json").write_text(json.dumps(witness))
+    subprocess.run(
+        [
+            str(verifier.node),
+            str(Path(__file__).parents[2] / "node_modules/snarkjs/cli.js"),
+            "groth16",
+            "fullprove",
+            str(tmp_path / "synthetic.json"),
+            str(root / "pilot_compliance_js/pilot_compliance.wasm"),
+            str(root / "UNAPPROVED-development.zkey"),
+            str(tmp_path / "proof.json"),
+            str(tmp_path / "public.json"),
+        ],
+        check=True,
+        capture_output=True,
+        timeout=120,
+    )
+    proof, signals = (tmp_path / "proof.json").read_bytes(), json.loads((tmp_path / "public.json").read_text())
+    assert (await service().inspect(credential.credential_nonce, proof, signals, now=now)).cryptographic_valid
+    async with db.connection() as conn:
+        assert (await (await conn.execute("SELECT count(*) FROM pilot_consumptions")).fetchone())[0] == 0
+    await enrollment.revoke(
+        RevocationRequest(credential_id=credential.credential_nonce, idempotency_key="revoke", reason_code="withdrawn"),
+        now=now,
+    )
+    with pytest.raises(EnrollmentIneligible, match="revoked"):
+        await prepare()
+    with pytest.raises(EnrollmentIneligible, match="revoked"):
+        await service().inspect(credential.credential_nonce, proof, signals, now=now)
+    await registrar.refresh(
+        expected_revision=1, idempotency_key="advance", now=now + 1, ttl=credential.expires_at - now - 1
+    )
+    with pytest.raises(RootTrustError, match="head differs"):
+        await service().prepare_witness(
+            alternate.credential_nonce, secret="123456", sanctions_tree=PilotSanctionsTree([]), now=now + 1
+        )
+
+
+@pytest.mark.skipif(not os.getenv("CLEARPROOF_PILOT_TEST_ARTIFACTS"), reason="requires fresh synthetic pilot artifacts")
 @pytest.mark.parametrize("mutation", ["root", "revocation", "cancel", "policy", "activation", "authorization"])
 async def test_durable_current_inspection_real_pairing_and_revocation(db, monkeypatch, mutation, tmp_path, mirror_evm):
     import hashlib

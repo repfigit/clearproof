@@ -72,6 +72,13 @@ class ProofInspectionService:
             return await self._inspect_transaction(tx, credential_id, proof, signals, now=now)
 
     async def _inspect_transaction(self, tx: PilotTransaction, credential_id, proof, signals, *, now):
+        credential = await self._load_current_credential(tx, credential_id, now=now)
+        return await inspect_current_statement(
+            self._verifier, proof, signals=signals, credential=credential, now=now, **self._inputs
+        )
+
+    async def _load_current_credential(self, tx: PilotTransaction, credential_id: str, *, now: int):
+        """Shared durable selection for preparation and verification under the tenant lock."""
         configured_policy = self._inputs["policy_trust"].for_transfer(
             self._inputs["transfer"], self._context, tenant_id=self._principal.tenant_id, now=now
         )
@@ -95,9 +102,7 @@ class ProofInspectionService:
             retained = SignedRootSnapshot.model_validate(head.value)
             if head.revision != signed.snapshot.revision or retained != signed:
                 raise RootTrustError("Retained root head differs from configured current approval")
-        return await inspect_current_statement(
-            self._verifier, proof, signals=signals, credential=credential, now=now, **self._inputs
-        )
+        return credential
 
     async def evaluate(
         self,
