@@ -7,13 +7,16 @@ export default withNextra({
   reactStrictMode: true,
   // This package resolves its Markdown/YAML assets relative to its compiled module.
   serverExternalPackages: ['@clearproof/content'],
-  // Keep the workspace symlink external too: relocating its CommonJS __dirname
-  // makes the content routes look for assets beside the generated route bundle.
+  outputFileTracingRoot: path.join(process.cwd(), '../..'),
   webpack(config, { isServer }) {
     if (isServer) {
-      config.externals.push({ '@clearproof/content': 'commonjs @clearproof/content' });
+      // Next 15's external-package matcher only matches node_modules paths;
+      // npm workspaces resolve this package to packages/content instead.
+      config.externals = [
+        { '@clearproof/content': 'commonjs @clearproof/content' },
+        ...(Array.isArray(config.externals) ? config.externals : [config.externals].filter(Boolean)),
+      ];
     }
     return config;
   },
-  outputFileTracingRoot: path.join(process.cwd(), '../..'),
 });

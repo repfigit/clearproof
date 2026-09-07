@@ -23,18 +23,21 @@ Remove these overrides after upgrading to a fixed Nextra release and checking
 all pages, including the 404 page. Development uses Webpack to avoid the current
 Turbopack MDX import-alias failure in this monorepo.
 
+The content API keeps `@clearproof/content` external to the server bundle so its
+Markdown/YAML paths remain relative to the package. The explicit Webpack external
+also covers npm workspace symlinks, which Next 15's package matcher misses.
+Check `/api/content/manifest` and `/api/content/topics/quickstart` after building
+and after deployment; successful page generation alone does not exercise them.
+
+For a local prebuilt Vercel deployment, build from `apps/docs` with the `docs`
+project linked. Copy its `.vercel/project.json` and `.vercel/output` into a real
+`.vercel` directory at the repository root, preserving internal output symlinks.
+Run `vercel deploy --prebuilt --prod` from that root so traced workspace paths
+resolve correctly. Do not make the root `.vercel` directory itself a symlink.
+Verify the public domain and content API after the deployment becomes ready.
+
 Before updating public claims, check authenticated repository visibility,
 unauthenticated npm access and clean installation, the deployment manifest and
 actual testnet bytecode. Source features, published packages, deployed contracts
 and planned work are separate states. Audit, performance, interoperability and
 regulatory claims require their own evidence.
-
-
-For a local prebuilt Vercel deployment, build in `apps/docs`, then stage its
-`.vercel/output` at the monorepo root and deploy from that root. Traced file-map
-paths refer to root workspace dependencies. Preserve the previous output until
-the new deployment is verified. Both `serverExternalPackages` and the explicit
-server Webpack external keep `@clearproof/content` at its original package path;
-bundling its CommonJS `__dirname` relocates Markdown/YAML lookups. Check the
-manifest, quickstart topic and signal content endpoints in addition to static
-pages before considering a documentation deployment successful.
