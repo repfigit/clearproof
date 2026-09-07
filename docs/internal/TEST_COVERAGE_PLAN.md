@@ -439,3 +439,17 @@ still need completion and final merged-main verification.
   persistence evidence. Whole-repository figures are not refreshed by this run.
 - Outstanding scope remains the other Python gaps, SDK branches, Solidity,
   docs rendering, operational scripts and review/CI/merge/main verification.
+
+## Eighteenth checkpoint
+
+- Added discovery publisher HTTP tests for optional metadata, configured exchange
+  endpoints and chain-list parsing. Real matching X25519 private/public keys are
+  accepted. Invalid domains/DIDs, chains, endpoints and malformed/noncanonical
+  keys produce a generic HTTP 503 without returning configuration details.
+- All 112 discovery unit tests pass. The publisher measures 69/69 statements and
+  22/22 branches (`discovery-publisher.log` and `.data`). Ruff and whitespace pass;
+  no production changes were needed. These ASGI tests exercise the publisher,
+  while outbound TLS/SSRF behavior remains covered by the separate transport suite.
+- Whole-repository percentages remain the last full combined report. Remaining
+  Python, SDK, Solidity, docs/browser, operational-script and publication work
+  is still required before claiming full test coverage.

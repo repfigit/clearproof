@@ -266,3 +266,74 @@ def test_numeric_chain_semantics_match_json_consumers():
 def test_rejects_low_order_and_noncanonical_x25519_points(integer):
     with pytest.raises(DiscoveryInvalid):
         decode_hpke_key(base64.urlsafe_b64encode(integer.to_bytes(32, "little")).decode())
+
+
+async def test_publisher_http_advertises_optional_metadata(publisher_env, monkeypatch):
+    from fastapi import FastAPI
+    from httpx import ASGITransport, AsyncClient
+
+    from src.api.routes.discovery import router
+
+    for name, value in {
+        "VASP_NAME": "Synthetic VASP",
+        "VASP_JURISDICTION": "840",
+        "COMPLIANCE_CONTACT": "synthetic-compliance@example.invalid",
+        "TECHNICAL_CONTACT": "synthetic-technical@example.invalid",
+        "SUPPORTED_CHAINS": "1, ,11155111,",
+        "CLEARPROOF_ENDPOINT": "https://beneficiary.example/exchange/v1",
+    }.items():
+        monkeypatch.setenv(name, value)
+    app = FastAPI()
+    app.include_router(router)
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        response = await client.get("/.well-known/clearproof.json")
+    assert response.status_code == 200
+    doc = response.json()
+    assert doc["vasp"]["name"] == "Synthetic VASP"
+    assert doc["vasp"]["jurisdiction"] == "840"
+    assert doc["contact"] == {
+        "compliance": "synthetic-compliance@example.invalid",
+        "technical": "synthetic-technical@example.invalid",
+    }
+    assert doc["clearproof"]["supportedChains"] == [1, 11155111]
+    assert doc["clearproof"]["endpoint"] == "https://beneficiary.example/exchange/v1"
+
+
+@pytest.mark.parametrize(
+    "name,value",
+    [
+        ("VASP_DOMAIN", ""),
+        ("VASP_DOMAIN", "https://beneficiary.example"),
+        ("VASP_DID", "did:web:other.example"),
+        ("SUPPORTED_CHAINS", "secret-invalid-chain"),
+        ("SUPPORTED_CHAINS", "1,1"),
+        ("CLEARPROOF_ENDPOINT", "http://beneficiary.example/exchange"),
+        ("VASP_HPKE_PRIVATE_KEY", "é-private-secret"),
+        ("VASP_HPKE_PRIVATE_KEY", base64.urlsafe_b64encode(b"short").decode()),
+        ("VASP_HPKE_PRIVATE_KEY", "!" + base64.urlsafe_b64encode(b"x" * 32).decode()),
+        ("VASP_HPKE_PUBLIC_KEY", "invalid-public-key"),
+    ],
+)
+async def test_publisher_http_configuration_errors_are_minimized(publisher_env, monkeypatch, name, value):
+    from fastapi import FastAPI
+    from httpx import ASGITransport, AsyncClient
+
+    from src.api.routes.discovery import router
+
+    monkeypatch.setenv(name, value)
+    app = FastAPI()
+    app.include_router(router)
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        response = await client.get("/.well-known/clearproof.json")
+    assert response.status_code == 503
+    assert response.json() == {"detail": "Discovery is not configured correctly"}
+
+
+def test_publisher_accepts_matching_private_and_public_keys(publisher_env, monkeypatch):
+    from src.api.routes.discovery import get_own_hpke_public_key
+    from src.sar.hpke_envelope import generate_keypair
+
+    private, public = generate_keypair()
+    monkeypatch.setenv("VASP_HPKE_PRIVATE_KEY", base64.urlsafe_b64encode(private).decode())
+    monkeypatch.setenv("VASP_HPKE_PUBLIC_KEY", base64.urlsafe_b64encode(public).decode())
+    assert get_own_hpke_public_key() == public
