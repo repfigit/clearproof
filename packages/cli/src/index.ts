@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 import { Command } from 'commander';
+import { counterpartyCommand } from './commands/counterparty.js';
 import { authorizeCurrentCommand } from './commands/authorize-current.js';
 import { observationCommand } from './commands/observation.js';
 import { inspectCurrentCommand } from './commands/inspect-current.js';
@@ -22,6 +23,7 @@ program
   .description('ZK Travel Rule Compliance Bridge — proof generation & verification')
   .version(pkg.version);
 
+program.addCommand(counterpartyCommand);
 program.addCommand(authorizeCurrentCommand);
 program.addCommand(observationCommand);
 program.addCommand(inspectCurrentCommand);

@@ -2027,7 +2027,9 @@ async def test_durable_current_inspection_real_pairing_and_revocation(db, monkey
                 == hashlib.sha256(bytes.fromhex(signed_information.signature)).hexdigest()
             )
             assert (await retained.get("receipt", receipt["receipt_id"]))["authorized_at"] == now
-            check_bilateral_scenarios(record, receipt, configuration, decision_authority, payload_args, private, now)
+            check_bilateral_scenarios(
+                record, receipt, configuration, decision_authority, payload_args, private, now, tmp_path
+            )
             assert (await service().inspect(credential.credential_nonce, proof, signals, now=now)).cryptographic_valid
             async with db.connection() as conn:
                 assert (await (await conn.execute("SELECT count(*) FROM pilot_records")).fetchone())[0] == baseline + 9
@@ -4217,7 +4219,7 @@ async def check_authorization_mirror(
         assert (await (await conn.execute("SELECT count(*) FROM pilot_consumptions")).fetchone())[0] == 1
 
 
-def check_bilateral_scenarios(record, receipt, configuration, decision_authority, payload, private, now):
+def check_bilateral_scenarios(record, receipt, configuration, decision_authority, payload, private, now, tmp_path):
     import copy
     import json
 
@@ -4275,6 +4277,8 @@ def check_bilateral_scenarios(record, receipt, configuration, decision_authority
     )
     with pytest.raises(ValueError):
         retired.receive(request, now=now)
+    if os.getenv("CLEARPROOF_POLICY_CLI_TEST") == "1":
+        check_bilateral_cli(request, configuration_args, authority, successor, new_private, now, tmp_path)
     for field in ("envelope", "authorization_request", "decision", "information_approval"):
         changed = copy.deepcopy(request)
         changed[field] = {}
@@ -4376,3 +4380,80 @@ async def check_durable_local_exchange(
         assert evidence["result"]["source_authenticity"] == "local-simulator"
         assert evidence["receipt_id"] == receipt["receipt_id"]
         assert (await (await conn.execute("SELECT count(*) FROM pilot_consumptions")).fetchone())[0] == 1
+
+
+def check_bilateral_cli(request, args, authority, successor, new_private, now, tmp_path):
+    """Built CLI consumes the actual encrypted authorization, with separate recipient configuration."""
+    import json
+    import shutil
+    import subprocess
+    import sys
+    from pathlib import Path
+
+    node = shutil.which("node")
+    cli = Path(__file__).resolve().parents[2] / "packages/cli/dist/index.js"
+    assert node and cli.is_file()
+    config = dict(
+        schema_version="clearproof-local-counterparty-configuration-v1",
+        transfer=args["transfer"].model_dump(mode="json"),
+        context=args["context"].model_dump(mode="json"),
+        decisions=[a.model_dump(mode="json") for a in args["decision_trust"]._keys.values()],
+        information=[a.model_dump(mode="json") for a in args["information_trust"]._keys.values()],
+        recipients=[authority.model_dump(mode="json")],
+    )
+    keys = {key: value.hex() for key, value in args["private_keys"].items()}
+    request_path, trust_path = tmp_path / "bilateral-request.json", tmp_path / "counterparty-trust.json"
+
+    def invoke(message=request, trust=config, secret_keys=keys, behavior="accept", clock=now, deadline=None):
+        request_path.write_text(json.dumps(message))
+        trust_path.write_text(json.dumps(trust))
+        command = [
+            node,
+            str(cli),
+            "counterparty",
+            "--python",
+            sys.executable,
+            "--request",
+            str(request_path),
+            "--trust",
+            str(trust_path),
+            "--observed-at",
+            str(clock),
+            "--behavior",
+            behavior,
+        ]
+        if deadline is not None:
+            command += ["--deadline", str(deadline)]
+        result = subprocess.run(
+            command, input=json.dumps({"keys": secret_keys}), text=True, capture_output=True, timeout=30
+        )
+        assert not result.stderr, result.stderr
+        assert all(key not in result.stdout for key in secret_keys.values())
+        return result.returncode, json.loads(result.stdout)
+
+    for behavior, outcome in (
+        ("accept", "accepted"),
+        ("reject", "rejected"),
+        ("request-information", "information-requested"),
+    ):
+        code, report = invoke(behavior=behavior)
+        assert code == 0 and report["outcome"] == outcome
+        assert report["source_authenticity"] == "local-simulator"
+        assert report["authorization"] == "not-created" and report["execution"] == "not-requested"
+    assert invoke(behavior="timeout", deadline=now + 1)[1]["outcome"] == "pending"
+    assert invoke(behavior="timeout", deadline=now + 1, clock=now + 1)[1]["outcome"] == "timeout"
+    assert invoke(message={**request, "profile": "unsupported-pilot-v99"})[1]["outcome"] == "unsupported-version"
+    overlap = {**config, "recipients": [authority.model_dump(mode="json"), successor.model_dump(mode="json")]}
+    rotated = {**keys, successor.key_id: new_private.private_bytes_raw().hex()}
+    assert invoke(trust=overlap, secret_keys=rotated)[1]["outcome"] == "accepted"
+    retired = {**config, "recipients": [successor.model_dump(mode="json")]}
+    assert invoke(trust=retired, secret_keys={successor.key_id: rotated[successor.key_id]})[0] == 2
+    for changed in (
+        {"secret_keys": {}},
+        {"clock": request["receipt"]["expires_at"]},
+        {"message": {**request, "envelope": {"private": "PRIVATE-MARKER"}}},
+        {"trust": {**config, "extra": "PRIVATE-MARKER"}},
+    ):
+        code, report = invoke(**changed)
+        assert code == 2 and report["outcome"] == "invalid-input"
+        assert "PRIVATE-MARKER" not in json.dumps(report)

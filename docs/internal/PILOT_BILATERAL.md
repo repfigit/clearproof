@@ -61,8 +61,8 @@ behavior produce identical request references and results.
 
 Results identify `source_authenticity=local-simulator`, development assurance,
 `authorization=not-created` and `execution=not-requested`. They are trusted only
-as local simulator results, not signed remote responses. The user-facing scenario command and complete clean-environment pilot remain
-required M5 work. No network communication, storage writes or funds movement occur
+as local simulator results, not signed remote responses. The CLI disposition command is described below. Complete clean-environment
+pilot packaging remains required M5 work. No network communication, storage writes or funds movement occur
 inside this simulator.
 
 ## Validation
@@ -99,3 +99,47 @@ Custody completion without an independent finality observation remains a finding
 Pending and unsupported-version counterparty states also produce actionable
 findings. These are local fixtures, not live Fireblocks deliveries or settlement
 proof. The independent Fireblocks adapter retains its existing ingestion boundary.
+
+## Run a local disposition from the CLI
+
+Build the source CLI with `npm run build --workspace=@clearproof/cli` and use a
+Python environment with this checkout installed. The command takes three separate
+inputs:
+
+- `--request`: the JSON object returned by `TRPBridge.build_pilot_request(record, receipt)` from an authorized retained record. It includes encrypted information, not plaintext person fields.
+- `--trust`: independently configured recipient expectations. The exact schema is `CounterpartyConfiguration` in `src/protocol/bridges/pilot_bilateral_cli.py`: `schema_version=clearproof-local-counterparty-configuration-v1`, the expected `transfer` and `context`, and nonempty arrays of public `decisions`, `information` and `recipients` authorities. Do not take these authorities from the request you are checking.
+- stdin: a JSON object `{"keys":{"<recipient-key-id>":"<64-hex-private-key>"}}`. Keep recipient private keys out of command arguments and public configuration files.
+
+For a protected local synthetic key file supplied by the operator:
+
+```bash
+node packages/cli/dist/index.js counterparty \
+  --python .venv/bin/python \
+  --request /absolute/local/bilateral-request.json \
+  --trust /absolute/local/counterparty-trust.json \
+  --observed-at "$SIMULATION_EPOCH" \
+  --behavior accept < /absolute/private/recipient-keys.json
+```
+
+`--observed-at` is an explicit simulation clock inside the receipt's validity
+window. Repeat with `--behavior reject` or `--behavior request-information` to
+exercise those dispositions. For `--behavior timeout --deadline EPOCH`, an
+observation before the deadline yields pending; at the deadline it yields timeout.
+The deadline must fall strictly inside the authorization window. An unsupported
+request profile yields unsupported-version. To exercise key rotation, configure
+both old and new authorities/keys during overlap, then remove the old authority
+and key: the original envelope must reject after retirement.
+
+Exit 0 means the simulator produced a disposition, including rejection or timeout;
+it does not mean the transfer is authorized or settled. Invalid messages, trust or
+keys exit 2 with a minimized error. Request/trust files must be bounded regular
+files; duplicate JSON keys and unsupported configuration fields reject. The
+command does not persist events or communicate with a remote counterparty.
+`LocalExchangeService` provides the separate durable ingestion path described above.
+
+The PostgreSQL/EVM acceptance runner invokes the built CLI against its actual
+real-proof authorization and encrypted envelope. It exercises the three business
+dispositions, pending/timeout, unsupported version, key overlap/retirement, expiry,
+missing keys and malformed input, with private-key and input-value redaction
+checks. This is executable scenario coverage; a fresh-checkout setup that retains
+all demo reports and evidence exports remains part of CP-017.

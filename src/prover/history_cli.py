@@ -4,9 +4,7 @@ import argparse
 import asyncio
 import base64
 import json
-import os
 import re
-import stat
 import sys
 import time
 from dataclasses import asdict
@@ -19,6 +17,7 @@ from pydantic import Field
 from src.policy.fact_approval import FactAuthority, FactTrustStore
 from src.policy.model import PilotPolicy, PolicyTrustStore
 from src.protocol.decision_attestation import DecisionAuthority, DecisionTrustStore
+from src.protocol.file_input import read_bounded
 from src.protocol.information_approval import InformationAuthority, InformationTrustStore
 from src.protocol.root_snapshot import RootAuthority, RootTrustStore
 from src.protocol.transfer import Epoch, Hex32, OpaqueId, Record
@@ -105,17 +104,6 @@ class HistoryReviewerConfiguration(Record):
         if self.timing is not None:
             values["timing_trust"] = self.timing.trust()
         return values
-
-
-def read_bounded(path: Path, limit: int) -> bytes:
-    fd = os.open(path, os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0) | getattr(os, "O_NONBLOCK", 0))
-    with os.fdopen(fd, "rb") as stream:
-        if not stat.S_ISREG(os.fstat(stream.fileno()).st_mode):
-            raise ValueError("Expected a regular input file")
-        raw = stream.read(limit + 1)
-    if len(raw) > limit:
-        raise ValueError("Input size limit")
-    return raw
 
 
 def load_reviewer_configuration(raw: bytes):
