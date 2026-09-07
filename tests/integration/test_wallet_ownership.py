@@ -160,7 +160,7 @@ async def test_real_http_lifecycle_and_auth_fail_closed(db, enrolled, monkeypatc
     # Use the real cipher factory without exposing keyring internals in production.
     monkeypatch.setattr(routes, "RecordCipher", lambda _: cipher())
     monkeypatch.setattr(routes, "load_keyring", lambda: None)
-    monkeypatch.setattr(routes.time, "time", lambda: 1100)
+    monkeypatch.setattr("src.services.wallet_ownership.time.time", lambda: 1100)
     overrides = app.dependency_overrides.copy()
     current = [principal]
     app.dependency_overrides[TenantPrincipalDependency] = lambda: current[0]
@@ -254,3 +254,45 @@ async def test_additive_wallet_migration_preserves_enrollment(db, enrolled):
     assert await service.store.get("credential", consent.credential.credential_nonce) == before
     c = await service.challenge(consent.credential.credential_nonce, now=1100)
     assert c.credential.commitment == consent.credential.commitment
+
+
+async def test_verification_samples_time_after_waiting_for_database_lock(db, enrolled):
+    wallet, consent, principal, _ = enrolled
+    clock = [1100]
+    service = WalletOwnershipService(
+        db,
+        cipher(),
+        principal,
+        chain_id=consent.chain_id,
+        registry_address=consent.registry_address,
+        clock=lambda: clock[0],
+    )
+    challenge = await service.challenge(consent.credential.credential_nonce)
+    clock[0] = challenge.expires_at - 1
+    pending = None
+    try:
+        async with service.store.transaction():
+            pending = asyncio.create_task(service.verify(challenge.nonce, sign(wallet, challenge)))
+            # Verify that this task actually reached the database lock before
+            # advancing time; a scheduling sleep alone would not exercise the race.
+            for _ in range(100):
+                async with db.connection() as conn:
+                    waiting = await (
+                        await conn.execute(
+                            "SELECT count(*) FROM pg_stat_activity WHERE datname=current_database() "
+                            "AND wait_event='advisory'"
+                        )
+                    ).fetchone()
+                if waiting[0]:
+                    break
+                await asyncio.sleep(0.01)
+            else:
+                pytest.fail("Verifier did not reach the held transaction lock")
+            clock[0] = challenge.expires_at
+        with pytest.raises(WalletOwnershipError):
+            await pending
+        assert await service.store.get("wallet-attestation", challenge.nonce) is None
+    finally:
+        if pending is not None and not pending.done():
+            pending.cancel()
+            await asyncio.gather(pending, return_exceptions=True)

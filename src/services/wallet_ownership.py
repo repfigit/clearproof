@@ -2,6 +2,8 @@
 
 import hashlib
 import secrets
+import time
+from typing import Callable
 
 from src.auth.principal import Principal
 from src.protocol.wallet_ownership import (
@@ -29,10 +31,26 @@ class WalletOwnershipService:
     # challenge creation. This bounds retained challenge growth and lookup work.
     DAILY_CHALLENGE_LIMIT = 256
 
-    def __init__(self, db, cipher, principal: Principal, *, chain_id: int, registry_address: str):
+    def __init__(
+        self,
+        db,
+        cipher,
+        principal: Principal,
+        *,
+        chain_id: int,
+        registry_address: str,
+        clock: Callable[[], int] | None = None,
+    ):
         self.principal = Principal.model_validate(principal)
         self.store = PilotStore(db, cipher, self.principal)
         self.chain_id, self.registry_address = chain_id, registry_address
+        self.clock = clock or (lambda: int(time.time()))
+
+    def _time(self, now: int | None) -> int:
+        value = self.clock() if now is None else now
+        if type(value) is not int or not 0 <= value < 2**53:
+            raise WalletOwnershipError("Invalid wallet evidence evaluation time")
+        return value
 
     async def _credential(self, tx, credential_id, now):
         credential = await load_unrevoked_enrollment(
@@ -54,8 +72,9 @@ class WalletOwnershipService:
         if actor and challenge.actor_id != self.principal.actor_id:
             raise WalletOwnershipError("Challenge belongs to another actor")
 
-    async def challenge(self, credential_id: str, *, now: int) -> WalletChallenge:
+    async def challenge(self, credential_id: str, *, now: int | None = None) -> WalletChallenge:
         async with self.store.transaction() as tx:
+            now = self._time(now)
             credential = await self._credential(tx, credential_id, now)
             bucket = "day-" + str(now // 86400)
             quota = await tx.read("wallet-quota", bucket)
@@ -84,19 +103,23 @@ class WalletOwnershipService:
             )
             return challenge
 
-    async def verify(self, nonce: str, signature: str, *, now: int) -> WalletAttestation:
+    async def verify(self, nonce: str, signature: str, *, now: int | None = None) -> WalletAttestation:
         async with self.store.transaction() as tx:
             stored = await tx.get("wallet-challenge", nonce)
             if stored is None:
                 raise WalletEvidenceNotFound("Wallet challenge not found")
             challenge = WalletChallenge.model_validate(stored)
             self._context(challenge, actor=True)
-            if challenge.nonce != nonce or not challenge.timestamp <= now < challenge.expires_at:
+            evaluated_at = self._time(now)
+            if challenge.nonce != nonce or not challenge.timestamp <= evaluated_at < challenge.expires_at:
                 raise WalletOwnershipError("Wallet challenge is expired or mismatched")
-            credential = await self._credential(tx, challenge.credential.credential_nonce, now)
+            credential = await self._credential(tx, challenge.credential.credential_nonce, evaluated_at)
             if credential != challenge.credential:
                 raise WalletOwnershipError("Challenge credential changed")
             challenge.verify_signature(signature)
+            now = self._time(now)
+            if not challenge.timestamp <= now < min(challenge.expires_at, credential.expires_at):
+                raise WalletOwnershipError("Wallet challenge or credential expired during verification")
             attestation = WalletAttestation(
                 attestation_id=nonce,
                 challenge=challenge,
@@ -122,6 +145,7 @@ class WalletOwnershipService:
 
     async def _active(self, tx, attestation_id, now):
         attestation = await self._attestation(tx, attestation_id)
+        now = self._time(now)
         if not attestation.issued_at <= now < attestation.expires_at:
             raise WalletOwnershipError("Wallet attestation is outside its validity interval")
         if await tx.get("wallet-revocation", attestation_id) is not None:
@@ -131,7 +155,7 @@ class WalletOwnershipService:
             raise WalletOwnershipError("Wallet attestation credential changed")
         return attestation
 
-    async def status(self, attestation_id: str, *, now: int) -> dict:
+    async def status(self, attestation_id: str, *, now: int | None = None) -> dict:
         async with self.store.transaction() as tx:
             attestation = await self._attestation(tx, attestation_id)
             # Eligibility errors do not become a successful verification flag.
@@ -148,9 +172,10 @@ class WalletOwnershipService:
                 "reason": reason,
             }
 
-    async def revoke(self, attestation_id: str, *, now: int) -> dict:
+    async def revoke(self, attestation_id: str, *, now: int | None = None) -> dict:
         async with self.store.transaction() as tx:
             attestation = await self._attestation(tx, attestation_id, revoke=True)
+            now = self._time(now)
             if now < attestation.issued_at:
                 raise WalletOwnershipError("Revocation precedes attestation")
             prior = await tx.get("wallet-revocation", attestation_id)
@@ -159,7 +184,7 @@ class WalletOwnershipService:
                 await tx.put("wallet-revocation", attestation_id, prior)
             return {"attestation_id": attestation_id, "revoked": True, "revoked_at": prior["revoked_at"]}
 
-    async def issue_extension(self, attestation_id: str, *, now: int) -> WalletCredentialExtension:
+    async def issue_extension(self, attestation_id: str, *, now: int | None = None) -> WalletCredentialExtension:
         async with self.store.transaction() as tx:
             attestation = await self._active(tx, attestation_id, now)
             extension = WalletCredentialExtension(

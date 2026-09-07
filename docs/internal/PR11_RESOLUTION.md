@@ -1,6 +1,6 @@
 # PR #11 resolution: versioned wallet ownership extension
 
-Status: implemented and locally verified. Remote CI and PR supersession remain pending.
+Implementation and local verification reference. Consult the replacement PR for current CI, merge and supersession status.
 
 PR #11 / AIF-67 requires five-minute EIP-191 challenges, 24-hour attestations,
 revocation, APIs, a committed verification flag at index 5 and a circuit constraint.

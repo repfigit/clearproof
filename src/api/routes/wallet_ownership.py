@@ -1,7 +1,6 @@
 """EOA wallet challenge/attestation extension, separate from legacy proof issuance."""
 
 import os
-import time
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import Field, ValidationError
@@ -64,7 +63,7 @@ async def invoke(operation):
 
 @router.post("/challenge", summary="Prepare a five-minute EOA signature challenge")
 async def challenge(request: ChallengeRequest, service=Depends(wallet_service)):
-    value = await invoke(service.challenge(request.credential_id, now=int(time.time())))
+    value = await invoke(service.challenge(request.credential_id))
     return {
         "challenge": value.model_dump(mode="json"),
         "message": value.message(),
@@ -78,7 +77,7 @@ async def challenge(request: ChallengeRequest, service=Depends(wallet_service)):
 
 @router.post("/verify", summary="Consume a challenge and retain a 24-hour attestation")
 async def verify(request: VerifyRequest, service=Depends(wallet_service)):
-    value = await invoke(service.verify(request.nonce, request.signature, now=int(time.time())))
+    value = await invoke(service.verify(request.nonce, request.signature))
     return {
         "attestation_id": value.attestation_id,
         "issued_at": value.issued_at,
@@ -89,17 +88,17 @@ async def verify(request: VerifyRequest, service=Depends(wallet_service)):
 
 @router.get("/attestations/{attestation_id}", summary="Check current wallet evidence eligibility")
 async def status(attestation_id: Hex32, service=Depends(wallet_service)):
-    return await invoke(service.status(attestation_id, now=int(time.time())))
+    return await invoke(service.status(attestation_id))
 
 
 @router.post("/revoke", summary="Revoke an attestation within its authenticated issuer scope")
 async def revoke(request: AttestationRequest, service=Depends(wallet_service)):
-    return await invoke(service.revoke(request.attestation_id, now=int(time.time())))
+    return await invoke(service.revoke(request.attestation_id))
 
 
 @router.post("/credential", summary="Issue a versioned wallet-ownership credential extension")
 async def credential(request: AttestationRequest, service=Depends(wallet_service)):
-    value = await invoke(service.issue_extension(request.attestation_id, now=int(time.time())))
+    value = await invoke(service.issue_extension(request.attestation_id))
     return {
         "extension": value.model_dump(mode="json"),
         "commitment": value.commitment,
