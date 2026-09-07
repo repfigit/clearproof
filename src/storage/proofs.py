@@ -2,10 +2,15 @@ from __future__ import annotations
 
 import logging
 import time
-from typing import Optional
+from collections.abc import Mapping
+from typing import Any, Optional
+
+from psycopg.rows import dict_row
+from psycopg.types.json import Jsonb
 
 from src.storage.database import Database
 from src.storage.models import StoredNullifier, StoredProof
+from src.storage.signals import validate_public_signals
 
 logger = logging.getLogger(__name__)
 
@@ -16,19 +21,20 @@ class ProofStore:
 
     async def get_by_id(self, proof_id: str) -> Optional[StoredProof]:
         async with self._db.connection() as conn:
-            async with conn.cursor() as cur:
+            async with conn.cursor(row_factory=dict_row) as cur:
                 await cur.execute("SELECT * FROM proofs WHERE proof_id = %s", (proof_id,))
                 row = await cur.fetchone()
                 return self._row_to_proof(row) if row else None
 
     async def get_by_transfer_id(self, transfer_id: str) -> Optional[StoredProof]:
         async with self._db.connection() as conn:
-            async with conn.cursor() as cur:
+            async with conn.cursor(row_factory=dict_row) as cur:
                 await cur.execute("SELECT * FROM proofs WHERE transfer_id = %s", (transfer_id,))
                 row = await cur.fetchone()
                 return self._row_to_proof(row) if row else None
 
     async def store(self, proof: StoredProof) -> None:
+        signals = validate_public_signals(proof.public_signals)
         async with self._db.connection() as conn:
             async with conn.cursor() as cur:
                 await cur.execute(
@@ -44,7 +50,7 @@ class ProofStore:
                         proof.proof_id,
                         proof.transfer_id,
                         proof.groth16_proof,
-                        str(proof.public_signals),
+                        Jsonb(signals),
                         proof.verification_key,
                         proof.originator_vasp_did,
                         proof.beneficiary_vasp_did,
@@ -59,22 +65,21 @@ class ProofStore:
     async def add_nullifier(self, nullifier: StoredNullifier) -> bool:
         async with self._db.connection() as conn:
             async with conn.cursor() as cur:
-                try:
-                    await cur.execute(
-                        """
-                        INSERT INTO nullifiers (nullifier_hash, credential_commitment, transfer_id, proof_id)
-                        VALUES (%s, %s, %s, %s)
-                        """,
-                        (
-                            nullifier.nullifier_hash,
-                            nullifier.credential_commitment,
-                            nullifier.transfer_id,
-                            nullifier.proof_id,
-                        ),
-                    )
-                    return True
-                except Exception:
-                    return False
+                await cur.execute(
+                    """
+                    INSERT INTO nullifiers (nullifier_hash, credential_commitment, transfer_id, proof_id)
+                    VALUES (%s, %s, %s, %s)
+                    ON CONFLICT (nullifier_hash) DO NOTHING
+                    RETURNING nullifier_hash
+                    """,
+                    (
+                        nullifier.nullifier_hash,
+                        nullifier.credential_commitment,
+                        nullifier.transfer_id,
+                        nullifier.proof_id,
+                    ),
+                )
+                return await cur.fetchone() is not None
 
     async def nullifier_exists(self, nullifier_hash: str) -> bool:
         async with self._db.connection() as conn:
@@ -114,11 +119,8 @@ class ProofStore:
                     "DELETE FROM idempotency_keys WHERE expires_at < %s",
                     (int(time.time()) - (max_age_hours * 3600),),
                 )
-                return await cur.rowcount
+                return cur.rowcount
 
     @staticmethod
-    def _row_to_proof(row) -> StoredProof:
-        columns = [desc[0] for desc in row.cursor.description]
-        d = dict(zip(columns, row))
-        d["public_signals"] = eval(d["public_signals"]) if isinstance(d["public_signals"], str) else d["public_signals"]
-        return StoredProof(**d)
+    def _row_to_proof(row: Mapping[str, Any]) -> StoredProof:
+        return StoredProof.model_validate(row)

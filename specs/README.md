@@ -6,7 +6,8 @@ repository's internals.
 
 ## Lifecycle
 
-Each spec carries front matter with a status field:
+Documents declare their status in their heading, front matter or inventory entry.
+The intended publication lifecycle is:
 
 | Status | Meaning |
 |--------|---------|
@@ -33,8 +34,17 @@ Any change to a `candidate` or `stable` spec requires:
 
 | Spec | Version | Status | Purpose |
 |------|---------|--------|---------|
-| [`well-known-clearproof.md`](well-known-clearproof.md) | 0.2.0 | draft | VASP discovery via `/.well-known/clearproof.json` |
+| [`well-known-clearproof.md`](well-known-clearproof.md) | 0.4.0 profile | development | Exact-identity discovery, HPKE keys and connection/egress policy |
+| [`transfer-evidence-v1.md`](transfer-evidence-v1.md) | v1 | development | Canonical transfer, verification context, projection and separated evidence results |
+| [`pilot-transfer-v2.md`](pilot-transfer-v2.md) | v2 profile | development | Eight-signal credential-bound current proof statement and v1 separation |
+| [`pilot-policy-v1.schema.json`](pilot-policy-v1.schema.json) | v1 schema | development | Bounded policy document structure, not legal approval |
+| [`history-reviewer-v1.schema.json`](history-reviewer-v1.schema.json) | v1 schema | development | Independently configured offline historical reviewer inputs |
 | [`specs.md`](specs.md) | — | internal | Agentic implementation specification (design doc, not an interop spec) |
+
+Development entries describe locally implemented profiles and do not imply
+candidate/stable status or third-party conformance. See the
+[pilot compatibility matrix](../docs/operations/pilot-compatibility.md) for
+software, discovery, proof, envelope, observation and storage boundaries.
 
 ## Hybrid Payload Format
 

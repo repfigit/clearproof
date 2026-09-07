@@ -1,0 +1,98 @@
+{
+  "assets": [
+    {
+      "asset_id": "eip155:31337/erc20:0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "symbol": "TESTUSD",
+      "decimals": 6
+    },
+    {
+      "asset_id": "eip155:31338/erc20:0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "symbol": "TESTUSD",
+      "decimals": 6
+    }
+  ],
+  "asset_registry_digest": "755028592d55bea408631a2edad85ea4daebda85cf1d439d6fd8d9fb5203e174",
+  "records": [
+    {
+      "domain": "clearproof/transfer/v1",
+      "value": {
+        "schema_version": "clearproof-transfer-v1",
+        "tenant_id": "tenant-a",
+        "transfer_id": "transfer-001",
+        "nonce": "1111111111111111111111111111111111111111111111111111111111111111",
+        "originator": {
+          "wallet": "0x1111111111111111111111111111111111111111",
+          "kind": "vasp",
+          "vasp_did": "did:web:originator.example"
+        },
+        "beneficiary": {
+          "wallet": "0x2222222222222222222222222222222222222222",
+          "kind": "self_hosted",
+          "vasp_did": null
+        },
+        "asset_id": "eip155:31337/erc20:0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "asset_registry_digest": "755028592d55bea408631a2edad85ea4daebda85cf1d439d6fd8d9fb5203e174",
+        "amount_base_units": "1234560000",
+        "valuation": {
+          "schema_version": "clearproof-valuation-v1",
+          "asset_id": "eip155:31337/erc20:0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "currency": "USD",
+          "numerator": "1",
+          "denominator": "10000",
+          "observed_at": 1788650000,
+          "expires_at": 1788650600,
+          "source_id": "synthetic-price",
+          "source_evidence_digest": "2222222222222222222222222222222222222222222222222222222222222222"
+        },
+        "usd_cents": "123456",
+        "jurisdiction": "US",
+        "policy_digest": "3333333333333333333333333333333333333333333333333333333333333333",
+        "created_at": 1788650000,
+        "expires_at": 1788650300
+      },
+      "canonical": "{\"amount_base_units\":\"1234560000\",\"asset_id\":\"eip155:31337/erc20:0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"asset_registry_digest\":\"755028592d55bea408631a2edad85ea4daebda85cf1d439d6fd8d9fb5203e174\",\"beneficiary\":{\"kind\":\"self_hosted\",\"vasp_did\":null,\"wallet\":\"0x2222222222222222222222222222222222222222\"},\"created_at\":1788650000,\"expires_at\":1788650300,\"jurisdiction\":\"US\",\"nonce\":\"1111111111111111111111111111111111111111111111111111111111111111\",\"originator\":{\"kind\":\"vasp\",\"vasp_did\":\"did:web:originator.example\",\"wallet\":\"0x1111111111111111111111111111111111111111\"},\"policy_digest\":\"3333333333333333333333333333333333333333333333333333333333333333\",\"schema_version\":\"clearproof-transfer-v1\",\"tenant_id\":\"tenant-a\",\"transfer_id\":\"transfer-001\",\"usd_cents\":\"123456\",\"valuation\":{\"asset_id\":\"eip155:31337/erc20:0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"currency\":\"USD\",\"denominator\":\"10000\",\"expires_at\":1788650600,\"numerator\":\"1\",\"observed_at\":1788650000,\"schema_version\":\"clearproof-valuation-v1\",\"source_evidence_digest\":\"2222222222222222222222222222222222222222222222222222222222222222\",\"source_id\":\"synthetic-price\"}}",
+      "digest": "e7868d07e8685e7ea0f6c22d4801b313910e58ebabfcbbbb778d14e7b547496b"
+    },
+    {
+      "domain": "clearproof/verification-context/v1",
+      "value": {
+        "schema_version": "clearproof-verification-context-v1",
+        "tenant_id": "tenant-a",
+        "transfer_digest": "e7868d07e8685e7ea0f6c22d4801b313910e58ebabfcbbbb778d14e7b547496b",
+        "deployment_chain_id": "31337",
+        "deployment_address": "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "policy_digest": "3333333333333333333333333333333333333333333333333333333333333333",
+        "artifact_manifest_digest": "4444444444444444444444444444444444444444444444444444444444444444",
+        "proof_profile": "pilot-v1",
+        "sanctions_snapshot_digest": "5555555555555555555555555555555555555555555555555555555555555555",
+        "issuer_snapshot_digest": "6666666666666666666666666666666666666666666666666666666666666666",
+        "issuance_snapshot_digest": "7777777777777777777777777777777777777777777777777777777777777777",
+        "revocation_snapshot_digest": "8888888888888888888888888888888888888888888888888888888888888888",
+        "evaluated_at": 1788650010,
+        "max_transfer_age_seconds": 300
+      },
+      "canonical": "{\"artifact_manifest_digest\":\"4444444444444444444444444444444444444444444444444444444444444444\",\"deployment_address\":\"0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"deployment_chain_id\":\"31337\",\"evaluated_at\":1788650010,\"issuance_snapshot_digest\":\"7777777777777777777777777777777777777777777777777777777777777777\",\"issuer_snapshot_digest\":\"6666666666666666666666666666666666666666666666666666666666666666\",\"max_transfer_age_seconds\":300,\"policy_digest\":\"3333333333333333333333333333333333333333333333333333333333333333\",\"proof_profile\":\"pilot-v1\",\"revocation_snapshot_digest\":\"8888888888888888888888888888888888888888888888888888888888888888\",\"sanctions_snapshot_digest\":\"5555555555555555555555555555555555555555555555555555555555555555\",\"schema_version\":\"clearproof-verification-context-v1\",\"tenant_id\":\"tenant-a\",\"transfer_digest\":\"e7868d07e8685e7ea0f6c22d4801b313910e58ebabfcbbbb778d14e7b547496b\"}",
+      "digest": "efd6ffa5de593a9557420d7256ee583372fac2621024910c8cc0165bedb665f2"
+    },
+    {
+      "domain": "clearproof/evidence-receipt/v1",
+      "value": {
+        "schema_version": "clearproof-evidence-receipt-v1",
+        "receipt_id": "receipt-001",
+        "tenant_id": "tenant-a",
+        "transfer_digest": "e7868d07e8685e7ea0f6c22d4801b313910e58ebabfcbbbb778d14e7b547496b",
+        "verification_context_digest": "efd6ffa5de593a9557420d7256ee583372fac2621024910c8cc0165bedb665f2",
+        "encrypted_envelope_digest": "9999999999999999999999999999999999999999999999999999999999999999",
+        "proof_digest": null,
+        "cryptographic_result": "not_evaluated",
+        "policy_result": "indeterminate",
+        "exchange_result": "not_sent",
+        "settlement_result": "not_observed",
+        "authorization_result": "not_requested",
+        "observed_at": 1788650010
+      },
+      "canonical": "{\"authorization_result\":\"not_requested\",\"cryptographic_result\":\"not_evaluated\",\"encrypted_envelope_digest\":\"9999999999999999999999999999999999999999999999999999999999999999\",\"exchange_result\":\"not_sent\",\"observed_at\":1788650010,\"policy_result\":\"indeterminate\",\"proof_digest\":null,\"receipt_id\":\"receipt-001\",\"schema_version\":\"clearproof-evidence-receipt-v1\",\"settlement_result\":\"not_observed\",\"tenant_id\":\"tenant-a\",\"transfer_digest\":\"e7868d07e8685e7ea0f6c22d4801b313910e58ebabfcbbbb778d14e7b547496b\",\"verification_context_digest\":\"efd6ffa5de593a9557420d7256ee583372fac2621024910c8cc0165bedb665f2\"}",
+      "digest": "1eb89f0618fc83dffa520bdbe572a641b33ef86c7d3bbb9c98cfd7c88be9bc39"
+    }
+  ]
+}

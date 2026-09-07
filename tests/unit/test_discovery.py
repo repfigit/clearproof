@@ -1,172 +1,268 @@
-"""
-Tests for counterparty discovery (src/protocol/discovery.py) and the
-well-known serving endpoint (src/api/routes/discovery.py).
-"""
+"""Cross-language profile vectors, publishing and cache trust boundaries."""
 
 from __future__ import annotations
 
+import asyncio
 import base64
+import copy
 import json
+from pathlib import Path
+from unittest.mock import AsyncMock
 
-import httpx
 import pytest
 
-from src.protocol.discovery import (
-    DiscoveryError,
-    clear_discovery_cache,
-    resolve_hpke_public_key,
+from src.protocol.discovery import DiscoveryClient
+from src.protocol.discovery_profile import (
+    DiscoveryInvalid,
+    DiscoveryUnavailable,
+    DiscoveryUnsupported,
+    decode_hpke_key,
+    parse_target,
+    validate_document,
 )
-from src.sar.hpke_envelope import derive_key_id, generate_keypair
+from src.protocol.discovery_transport import EgressPolicy, PinnedBackend
 
-b64e = lambda b: base64.urlsafe_b64encode(b).decode("ascii")  # noqa: E731
-
-
-def _mock_client(doc: dict | None, status: int = 200) -> httpx.AsyncClient:
-    def handler(request: httpx.Request) -> httpx.Response:
-        if doc is None:
-            return httpx.Response(status, text="not found")
-        return httpx.Response(status, text=json.dumps(doc))
-
-    return httpx.AsyncClient(transport=httpx.MockTransport(handler))
+FIXTURES = Path(__file__).resolve().parents[2] / "specs/fixtures"
+DOCUMENT = json.loads((FIXTURES / "discovery-0.4.0.json").read_text())
+INVALID = json.loads((FIXTURES / "discovery-invalid.json").read_text())
+NETWORK = json.loads((FIXTURES / "discovery-network.json").read_text())
 
 
-@pytest.fixture(autouse=True)
-def _flush_cache():
-    clear_discovery_cache()
-    yield
-    clear_discovery_cache()
+@pytest.mark.parametrize("case", INVALID, ids=lambda c: f"{c['path']}={c['value']}")
+def test_shared_invalid_vectors(case):
+    doc = copy.deepcopy(DOCUMENT)
+    parent = doc
+    parts = case["path"].split(".")
+    for part in parts[:-1]:
+        parent = parent[part]
+    parent[parts[-1]] = case["value"]
+    error = DiscoveryUnsupported if case["error"] == "unsupported" else DiscoveryInvalid
+    with pytest.raises(error):
+        validate_document(doc, parse_target("beneficiary.example"))
 
 
-@pytest.fixture()
-def counterparty_doc() -> dict:
-    _, pub = generate_keypair()
-    return {
-        "version": "0.3.0",
-        "vasp": {"did": "did:web:beneficiary.example"},
-        "clearproof": {
-            "endpoint": "https://beneficiary.example/clearproof/v1",
-            "hpkePublicKey": b64e(pub),
-            "hpkeKeyId": derive_key_id(pub),
-            "hpkeSuites": ["DHKEM_X25519_HKDF_SHA256/HKDF_SHA256/AES_256_GCM"],
-            "supportedChains": [1, 11155111],
-            "proofFormat": "groth16",
-        },
-    }
+def test_full_did_path_is_identity():
+    target = parse_target("did:web:beneficiary.example%3A8443:vasps:eu")
+    assert target.url == "https://beneficiary.example:8443/.well-known/clearproof.json"
+    doc = copy.deepcopy(DOCUMENT)
+    with pytest.raises(DiscoveryInvalid, match="identity"):
+        validate_document(doc, target)
+    doc["vasp"]["did"] = target.did
+    doc["clearproof"]["endpoint"] = "https://beneficiary.example:8443/clearproof/v1"
+    assert validate_document(doc, target) == doc
 
 
-class TestResolve:
-    async def test_resolves_hpke_key(self, counterparty_doc: dict) -> None:
-        client = _mock_client(counterparty_doc)
-        key = await resolve_hpke_public_key("did:web:beneficiary.example", http_client=client)
-        expected = base64.urlsafe_b64decode(counterparty_doc["clearproof"]["hpkePublicKey"])
-        assert key == expected
-
-    async def test_bare_domain_accepted(self, counterparty_doc: dict) -> None:
-        client = _mock_client(counterparty_doc)
-        key = await resolve_hpke_public_key("beneficiary.example", http_client=client)
-        assert key is not None
-
-    async def test_did_web_path_segments_ignored(self, counterparty_doc: dict) -> None:
-        client = _mock_client(counterparty_doc)
-        key = await resolve_hpke_public_key("did:web:beneficiary.example:vasps:eu", http_client=client)
-        assert key is not None
-
-    async def test_missing_hpke_key_returns_none(self) -> None:
-        doc = {"version": "0.2.0", "clearproof": {"endpoint": "https://x", "publicKey": "age1..."}}
-        client = _mock_client(doc)
-        assert await resolve_hpke_public_key("legacy.example", http_client=client) is None
-
-    async def test_404_raises_discovery_error(self) -> None:
-        client = _mock_client(None, status=404)
-        with pytest.raises(DiscoveryError, match="404"):
-            await resolve_hpke_public_key("unknown.example", http_client=client)
-
-    async def test_invalid_json_raises(self) -> None:
-        def handler(request: httpx.Request) -> httpx.Response:
-            return httpx.Response(200, text="{not json")
-
-        client = httpx.AsyncClient(transport=httpx.MockTransport(handler))
-        with pytest.raises(DiscoveryError, match="valid JSON"):
-            await resolve_hpke_public_key("broken.example", http_client=client)
-
-    async def test_wrong_key_length_raises(self) -> None:
-        doc = {"clearproof": {"hpkePublicKey": b64e(b"too-short")}}
-        client = _mock_client(doc)
-        with pytest.raises(DiscoveryError, match="32 bytes"):
-            await resolve_hpke_public_key("badkey.example", http_client=client)
-
-    async def test_cache_avoids_second_fetch(self, counterparty_doc: dict) -> None:
-        calls = 0
-
-        def handler(request: httpx.Request) -> httpx.Response:
-            nonlocal calls
-            calls += 1
-            return httpx.Response(200, text=json.dumps(counterparty_doc))
-
-        client = httpx.AsyncClient(transport=httpx.MockTransport(handler))
-        await resolve_hpke_public_key("cached.example", http_client=client)
-        await resolve_hpke_public_key("cached.example", http_client=client)
-        assert calls == 1
+@pytest.mark.parametrize(
+    "identity",
+    [
+        "127.0.0.1",
+        "169.254.169.254",
+        "2130706433",
+        "0x7f000001",
+        "[::1]",
+        "localhost",
+        "https://x.example/",
+        "x.example/other",
+        "x.example@evil.example",
+        "x.example?query",
+        "x.example#fragment",
+        "X.example",
+        "x.example.",
+        "x.example:443",
+        "x.example:0",
+        "x.example:65536",
+        "x.example\n",
+        "did:web:x.example:..",
+        "did:web:x.example%3a8443",
+        "did:web:x.example:alice\n",
+        "did:web:x.example:a%2fb",
+    ],
+)
+def test_ambiguous_or_unsupported_targets(identity):
+    with pytest.raises(DiscoveryInvalid):
+        parse_target(identity)
 
 
-class TestWellKnownServing:
-    async def test_document_contains_hpke_fields(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        priv, pub = generate_keypair()
-        monkeypatch.setenv("VASP_DOMAIN", "originator.example")
-        monkeypatch.setenv("VASP_HPKE_PRIVATE_KEY", b64e(priv))
-        monkeypatch.delenv("VASP_HPKE_PUBLIC_KEY", raising=False)
-
-        from src.api.routes.discovery import build_discovery_document
-
-        doc = build_discovery_document()
-        cp = doc["clearproof"]
-        assert cp["hpkePublicKey"] == b64e(pub)  # derived from private key
-        assert cp["hpkeKeyId"] == derive_key_id(pub)
-        assert cp["hpkeSuites"] == ["DHKEM_X25519_HKDF_SHA256/HKDF_SHA256/AES_256_GCM"]
-        assert cp["supportedChains"] == [1, 11155111]
-
-    async def test_explicit_public_key_preferred(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        _, pub = generate_keypair()
-        monkeypatch.setenv("VASP_DOMAIN", "originator.example")
-        monkeypatch.setenv("VASP_HPKE_PUBLIC_KEY", b64e(pub))
-
-        from src.api.routes.discovery import build_discovery_document
-
-        doc = build_discovery_document()
-        assert doc["clearproof"]["hpkePublicKey"] == b64e(pub)
-
-    async def test_missing_domain_raises(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        monkeypatch.delenv("VASP_DOMAIN", raising=False)
-        from src.api.routes.discovery import build_discovery_document
-
-        with pytest.raises(RuntimeError, match="VASP_DOMAIN"):
-            build_discovery_document()
-
-    async def test_document_without_hpke_key_omits_fields(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        monkeypatch.setenv("VASP_DOMAIN", "originator.example")
-        monkeypatch.delenv("VASP_HPKE_PUBLIC_KEY", raising=False)
-        monkeypatch.delenv("VASP_HPKE_PRIVATE_KEY", raising=False)
-
-        from src.api.routes.discovery import build_discovery_document
-
-        doc = build_discovery_document()
-        assert "hpkePublicKey" not in doc["clearproof"]
+@pytest.mark.parametrize("case", NETWORK, ids=lambda c: c["address"])
+def test_shared_network_policy(case):
+    assert EgressPolicy().permits("beneficiary.example", case["address"]) is case["allowed"]
 
 
-class TestRoundTripThroughDiscovery:
-    async def test_seal_to_discovered_key(self, counterparty_doc: dict) -> None:
-        """End-to-end: discover a counterparty key and seal an envelope to it."""
-        from src.sar.hpke_envelope import open_envelope, seal_envelope
+def test_private_policy_is_exact_and_defensively_copied():
+    config = {"beneficiary.example:8443": ["10.0.0.0/8"]}
+    policy = EgressPolicy(config)
+    config["beneficiary.example:8443"].append("127.0.0.0/8")
+    assert policy.permits("beneficiary.example:8443", "10.1.2.3")
+    assert not policy.permits("beneficiary.example", "10.1.2.3")
+    assert not policy.permits("other.example:8443", "10.1.2.3")
+    assert not policy.permits("beneficiary.example:8443", "127.0.0.1")
 
-        # The private key behind the published document (held by "counterparty").
-        # Regenerate to recover the pair: the doc fixture used a fresh pair, so
-        # here we build our own doc from a known pair instead.
-        priv, pub = generate_keypair()
-        doc = dict(counterparty_doc)
-        doc["clearproof"] = {**counterparty_doc["clearproof"], "hpkePublicKey": b64e(pub)}
-        client = _mock_client(doc)
 
-        key = await resolve_hpke_public_key("rt.example", http_client=client)
-        envelope = seal_envelope(b"pii payload", key, "proof-rt-1")
-        assert envelope["kid"] == derive_key_id(pub)
-        assert open_envelope(envelope, priv) == b"pii payload"
+async def test_backend_pins_the_actual_connected_ip():
+    resolver = AsyncMock(return_value=["8.8.8.8", "1.1.1.1"])
+    backend = PinnedBackend(parse_target("beneficiary.example"), EgressPolicy(), resolver)
+    connector = AsyncMock()
+    backend.backend = connector
+    await backend.connect_tcp("beneficiary.example", 443)
+    assert connector.connect_tcp.call_args.args == ("8.8.8.8", 443)
+    resolver.assert_awaited_once_with("beneficiary.example", 443)
+    resolver.return_value = ["8.8.8.8", "169.254.169.254"]
+    with pytest.raises(DiscoveryInvalid):
+        await backend.connect_tcp("beneficiary.example", 443)
+    assert connector.connect_tcp.await_count == 1
+
+
+async def test_cache_isolation_expiry_and_defensive_copy(monkeypatch):
+    clock = [100.0]
+    monkeypatch.setattr("src.protocol.discovery.time.monotonic", lambda: clock[0])
+    fetch = AsyncMock(return_value=DOCUMENT)
+    monkeypatch.setattr("src.protocol.discovery.fetch_document", fetch)
+    a, b = DiscoveryClient(cache_ttl=5), DiscoveryClient()
+    first = await a.discover("beneficiary.example")
+    first["clearproof"]["hpkeKeyId"] = "changed"
+    assert (await a.discover("did:web:beneficiary.example")) == DOCUMENT
+    assert fetch.await_count == 1
+    await b.discover("beneficiary.example")
+    assert fetch.await_count == 2
+    clock[0] = 105
+    await a.discover("beneficiary.example")
+    assert fetch.await_count == 3
+    a.clear_cache()
+    fetch.side_effect = DiscoveryUnavailable("offline")
+    with pytest.raises(DiscoveryUnavailable):
+        await a.discover("beneficiary.example")
+    fetch.side_effect = None
+    await a.discover("beneficiary.example")
+    assert fetch.await_count == 5
+
+
+async def test_invalidation_fences_inflight_response(monkeypatch):
+    entered, release = asyncio.Event(), asyncio.Event()
+
+    async def fetch(*args):
+        entered.set()
+        await release.wait()
+        return DOCUMENT
+
+    monkeypatch.setattr("src.protocol.discovery.fetch_document", fetch)
+    client = DiscoveryClient()
+    task = asyncio.create_task(client.discover("beneficiary.example"))
+    await entered.wait()
+    client.clear_cache()
+    release.set()
+    await task
+    assert not client._cache
+
+
+async def test_cache_zero_and_bounded_size(monkeypatch):
+    async def fetch(target, *args):
+        doc = copy.deepcopy(DOCUMENT)
+        doc["vasp"]["did"] = target.did
+        doc["clearproof"]["endpoint"] = f"https://{target.authority}/clearproof/v1"
+        return doc
+
+    monkeypatch.setattr("src.protocol.discovery.fetch_document", fetch)
+    client = DiscoveryClient(cache_ttl=0)
+    await client.discover("beneficiary.example")
+    assert not client._cache
+    bounded = DiscoveryClient()
+    for index in range(130):
+        await bounded.discover(f"{index}.example")
+    assert len(bounded._cache) == 128
+
+
+@pytest.mark.parametrize(
+    "option,value", [("cache_ttl", -1), ("cache_ttl", float("nan")), ("timeout", 0), ("timeout", 61)]
+)
+def test_invalid_options(option, value):
+    with pytest.raises(ValueError):
+        DiscoveryClient(**{option: value})
+
+
+@pytest.fixture
+def publisher_env(monkeypatch):
+    for name in (
+        "VASP_DID",
+        "VASP_HPKE_PRIVATE_KEY",
+        "CLEARPROOF_ENDPOINT",
+        "SUPPORTED_CHAINS",
+        "VASP_NAME",
+        "VASP_JURISDICTION",
+        "COMPLIANCE_CONTACT",
+        "TECHNICAL_CONTACT",
+    ):
+        monkeypatch.delenv(name, raising=False)
+    monkeypatch.setenv("VASP_DOMAIN", "beneficiary.example")
+    monkeypatch.setenv("VASP_HPKE_PUBLIC_KEY", DOCUMENT["clearproof"]["hpkePublicKey"])
+
+
+def test_python_publisher_reproduces_shared_fixture(publisher_env):
+    from src.api.routes.discovery import build_discovery_document
+
+    doc, expected = build_discovery_document(), copy.deepcopy(DOCUMENT)
+    doc.pop("updatedAt")
+    expected.pop("updatedAt")
+    assert doc == expected
+    assert validate_document(doc, parse_target("beneficiary.example")) == doc
+
+
+def test_publisher_rejects_missing_key_or_wrong_identity(publisher_env, monkeypatch):
+    from src.api.routes.discovery import build_discovery_document
+
+    monkeypatch.setenv("VASP_DID", "did:web:other.example")
+    with pytest.raises(RuntimeError, match="VASP_DID"):
+        build_discovery_document()
+    monkeypatch.delenv("VASP_DID")
+    monkeypatch.delenv("VASP_HPKE_PUBLIC_KEY")
+    with pytest.raises(RuntimeError, match="HPKE key"):
+        build_discovery_document()
+
+
+def test_publisher_requires_matching_keypair(publisher_env, monkeypatch):
+    from src.api.routes.discovery import build_discovery_document
+    from src.sar.hpke_envelope import generate_keypair
+
+    private, public = generate_keypair()
+    monkeypatch.setenv("VASP_HPKE_PRIVATE_KEY", base64.urlsafe_b64encode(private).decode())
+    with pytest.raises(RuntimeError, match="do not match"):
+        build_discovery_document()
+    monkeypatch.delenv("VASP_HPKE_PUBLIC_KEY")
+    assert decode_hpke_key(build_discovery_document()["clearproof"]["hpkePublicKey"]) == public
+
+
+async def test_api_default_cache_is_replaced_when_operator_policy_changes(monkeypatch):
+    import src.protocol.discovery as discovery
+
+    monkeypatch.setattr(discovery, "_default_client", DiscoveryClient())
+    monkeypatch.setattr(discovery, "_default_settings", ("{}", None, None))
+    monkeypatch.delenv("SSL_CERT_FILE", raising=False)
+    monkeypatch.delenv("SSL_CERT_DIR", raising=False)
+    monkeypatch.setenv("DISCOVERY_PRIVATE_DESTINATIONS", "{}")
+    fetch = AsyncMock(return_value=DOCUMENT)
+    monkeypatch.setattr(discovery, "fetch_document", fetch)
+    await discovery.resolve_hpke_public_key("beneficiary.example")
+    await discovery.resolve_hpke_public_key("beneficiary.example")
+    assert fetch.await_count == 1
+    monkeypatch.setenv("DISCOVERY_PRIVATE_DESTINATIONS", '{"beneficiary.example":["10.0.0.0/8"]}')
+    await discovery.resolve_hpke_public_key("beneficiary.example")
+    assert fetch.await_count == 2
+    assert fetch.call_args.args[1].permits("beneficiary.example", "10.1.2.3")
+    monkeypatch.setenv("DISCOVERY_PRIVATE_DESTINATIONS", '{"beneficiary.example":"10.0.0.0/8"}')
+    with pytest.raises(DiscoveryInvalid, match="operator"):
+        await discovery.resolve_hpke_public_key("beneficiary.example")
+    assert fetch.await_count == 2
+
+
+def test_numeric_chain_semantics_match_json_consumers():
+    doc = copy.deepcopy(DOCUMENT)
+    doc["clearproof"]["supportedChains"] = [1.0]
+    assert validate_document(doc, parse_target("beneficiary.example")) == doc
+    doc["clearproof"]["supportedChains"] = [10**400]
+    with pytest.raises(DiscoveryInvalid):
+        validate_document(doc, parse_target("beneficiary.example"))
+
+
+@pytest.mark.parametrize("integer", [0, 1, 2**255 - 20, 2**255 - 19, 2**255 - 18, 2**255 + 9])
+def test_rejects_low_order_and_noncanonical_x25519_points(integer):
+    with pytest.raises(DiscoveryInvalid):
+        decode_hpke_key(base64.urlsafe_b64encode(integer.to_bytes(32, "little")).decode())
