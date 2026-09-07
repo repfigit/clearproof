@@ -262,3 +262,45 @@ including measured records, missing cases, baseline disagreements and foreign-te
 unavailability. Reporting leaves encrypted record counts and consumption unchanged.
 Cohort discovery/pagination, deterministic bilateral scenarios, complete onboarding
 and commercial preparation remain open.
+
+### Discover observations for a cohort
+
+`POST /pilot/proof/observations/list` accepts a private JSON body such as
+`{"limit":32}` or `{"limit":32,"after":"<64 lowercase hex observation ID>"}`.
+It requires `policy:read` and `evidence:decrypt`; tenant identity comes from the
+verified token. Query selectors, extra fields, invalid IDs, and limits outside
+1–64 reject. The default limit is 32. No current inspection target is needed.
+Each returned observation is decrypted and checked against its canonical ID and
+tenant before the page is returned. Legacy v1 and timed v2 records are preserved.
+
+The source SDK exposes `listObservations(origin, token, requestBytes)`. The built
+CLI accepts the same request on stdin:
+
+```bash
+printf '%s' '{"limit":32}' | node packages/cli/dist/index.js observation list --api-url http://127.0.0.1:8000
+```
+
+Supply `CLEARPROOF_API_TOKEN` through the environment. Successful listing exits 0;
+input, permission, transport or validation failures exit 2 with a generic error.
+The SDK checks record digests, ascending unique IDs, request/response selector
+agreement and continuation consistency. The selected API remains the authority
+for which tenant records exist; these checks do not prove population completeness.
+The shared client bounds responses to 2 MiB; reduce the page limit if large records
+exceed that transport limit.
+
+The response profile is `clearproof-observation-page-v1`, with scope
+`live-retained-tenant-observations`, order `observation-id-ascending`, the normalized
+`after` and `limit`, `observations`, and `next_after`. Pass a non-null `next_after`
+in the next request. Null means no further row was found by that page's scan.
+The cursor is an exclusive ID boundary, not a credential or a timestamp. Passing
+an ID from another tenant cannot grant access to that tenant's records.
+
+Pagination is a live scan, not a snapshot across requests. IDs are digests, not
+chronological sequence numbers: concurrent insertions before an already consumed
+boundary can be missed, and retention changes can remove later records. For a
+reproducible cohort, pause ingestion for the selection window or save an explicit
+reviewed list of case/observation IDs and submit that list to `observations/report`.
+Do not infer an end-to-end arrival rate, unobserved cases, or population-wide
+coverage from discovered records. Listing performs no writes or authorization
+consumption; creating the cohort and supplying baseline labels remain explicit
+operator actions.

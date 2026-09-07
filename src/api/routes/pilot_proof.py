@@ -13,7 +13,12 @@ from src.protocol.transfer import Hex32, OpaqueId, Record
 from src.prover.pilot_artifacts import strict_json
 from src.prover.pilot_verifier import PilotPairingVerifier, PilotProof, public_signals
 from src.services.enrollment import EnrollmentNotFound
-from src.services.observation_report import ObservationCohort, observation_cohort_report
+from src.services.observation_report import (
+    ObservationCohort,
+    ObservationPageRequest,
+    list_observations,
+    observation_cohort_report,
+)
 from src.services.proof_inspection import CurrentStatementConfiguration, ProofInspectionService
 from src.services.proof_observation import ProofObservationService, read_observation
 from src.storage.keyring import load_keyring
@@ -213,3 +218,24 @@ async def report_observations(request: Request, principal: Principal = Depends(T
         return await observation_cohort_report(db, cipher, principal, cohort)
     except (KeyError, ValueError, RuntimeError, TypeError, RecordIntegrityError):
         raise HTTPException(status_code=503, detail="Observation cohort cannot be read") from None
+
+
+@router.post("/observations/list", summary="Discover retained tenant observations with bounded live pagination")
+async def discover_observations(request: Request, principal: Principal = Depends(TenantPrincipalDependency)):
+    for role in ("policy:read", "evidence:decrypt"):
+        principal.require(role)
+    raw = await read_private_body(request, limit=1024)
+    try:
+        strict_json(raw, limit=1024)
+        page = ObservationPageRequest.model_validate_json(raw)
+        if request.query_params:
+            raise ValueError("Selectors belong in the private body")
+    except (ValueError, TypeError, RecursionError):
+        raise HTTPException(status_code=422, detail="Invalid observation page") from None
+    db = getattr(request.app.state, "db", None)
+    if db is None or not db.is_ready:
+        raise HTTPException(status_code=503, detail="Pilot database is unavailable")
+    try:
+        return await list_observations(db, RecordCipher(load_keyring()), principal, page)
+    except (KeyError, ValueError, RuntimeError, TypeError, RecordIntegrityError):
+        raise HTTPException(status_code=503, detail="Observation page cannot be read") from None

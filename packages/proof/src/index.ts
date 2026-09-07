@@ -23,3 +23,6 @@ export type { ObservationRequest, ObservationReport, ObservationReportV1, Observ
 
 export { reportObservationCohort } from './observation-cohort.js';
 export type { ObservationCohortRequest, ObservationCohortReport } from './observation-cohort.js';
+
+export { listObservations } from './observation-page.js';
+export type { ObservationPageRequest, ObservationPage } from './observation-page.js';

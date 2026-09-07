@@ -153,3 +153,40 @@ async def observation_cohort_report(
                     value, tenant_id=principal.tenant_id, observation_id=case.observation_id
                 )
     return summarize_observations(cohort, records)
+
+
+class ObservationPageRequest(Record):
+    after: Hex32 | None = None
+    limit: int = Field(default=32, ge=1, le=64)
+
+
+async def list_observations(
+    db: Database,
+    cipher: RecordCipher,
+    principal: Principal,
+    request: ObservationPageRequest,
+) -> dict:
+    """Live keyset discovery, not a frozen population or chronological feed."""
+    principal = Principal.model_validate(principal)
+    for role in ("policy:read", "evidence:decrypt"):
+        principal.require(role)
+    request = ObservationPageRequest.model_validate(request)
+    observations = []
+    async with PilotStore(db, cipher, principal).transaction() as tx:
+        ids = await tx.record_ids("observation", after=request.after, limit=request.limit + 1)
+        for observation_id in ids[: request.limit]:
+            value = await tx.get("observation", observation_id)
+            if value is None:
+                raise ValueError("Observation disappeared during scan")
+            observations.append(
+                decode_observation(value, tenant_id=principal.tenant_id, observation_id=observation_id).report()
+            )
+    return {
+        "schema_version": "clearproof-observation-page-v1",
+        "scope": "live-retained-tenant-observations",
+        "order": "observation-id-ascending",
+        "after": request.after,
+        "limit": request.limit,
+        "observations": observations,
+        "next_after": ids[request.limit - 1] if len(ids) > request.limit else None,
+    }

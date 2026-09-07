@@ -3545,6 +3545,22 @@ async def exercise_observation_cli(app, headers, body, reports):
             assert stderr == b""
         from httpx import AsyncClient
 
+        listed = []
+        page_body = {"limit": 3}
+        for _ in range(32):
+            code, stdout, stderr = await invoke("list", page_body, roles=["policy:read", "evidence:decrypt"])
+            assert code == 0 and stderr == b"", stderr.decode()
+            page = json.loads(stdout)
+            listed.extend(page["observations"])
+            if page["next_after"] is None:
+                break
+            page_body["after"] = page["next_after"]
+        else:
+            pytest.fail("CLI observation pagination did not terminate")
+        assert all(r in listed for r in reports)
+        assert len({r["observation_id"] for r in listed}) == len(listed)
+        code, stdout, stderr = await invoke("list", {}, tenant_id="foreign")
+        assert code == 0 and json.loads(stdout)["observations"] == [] and stderr == b""
         cohort = {
             "cohort_id": "cli-cohort",
             "cases": [
@@ -3567,6 +3583,8 @@ async def exercise_observation_cli(app, headers, body, reports):
         )
         assert code == 0 and json.loads(stdout)["observed_count"] == 0 and stderr == b""
         for operation, payload, claims in [
+            ("list", {}, {"roles": ["policy:read"]}),
+            ("list", {"after": "PRIVATE-MARKER"}, {}),
             ("report", cohort, {"roles": ["evidence:decrypt"]}),
             ("report", dict(cohort, private="PRIVATE-MARKER"), {}),
             ("create", dict(body, fact_ids=[]), {}),
@@ -3609,6 +3627,56 @@ async def check_observation_cohort_http(app, headers, reports):
     body = dict(cohort_id="synthetic-cohort", cases=cases)
     reader = headers(roles=["policy:read", "evidence:decrypt"])
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        path = "/pilot/proof/observations/list"
+        first = await client.post(path, json={"limit": 2}, headers=reader)
+        assert first.status_code == 200, first.text
+        page = first.json()
+        assert page["scope"] == "live-retained-tenant-observations"
+        assert page["order"] == "observation-id-ascending" and page["after"] is None
+        discovered = []
+        for _ in range(64):
+            discovered.extend(page["observations"])
+            if page["next_after"] is None:
+                break
+            assert page["next_after"] == page["observations"][-1]["observation_id"]
+            following = await client.post(path, json={"limit": 2, "after": page["next_after"]}, headers=reader)
+            assert following.status_code == 200, following.text
+            page = following.json()
+        else:
+            pytest.fail("Observation pagination did not terminate")
+        ids = [item["observation_id"] for item in discovered]
+        assert ids == sorted(set(ids))
+        assert all(item in discovered for item in reports)
+        assert {item["schema_version"] for item in discovered} == {
+            "clearproof-proof-observation-v1",
+            "clearproof-proof-observation-v2",
+        }
+        complete = await client.post(path, json={"limit": 64}, headers=reader)
+        assert complete.json()["observations"] == discovered and complete.json()["next_after"] is None
+        assert (await client.post(path, json={"limit": 2}, headers=reader)).json() == first.json()
+        end = await client.post(path, json={"after": "ff" * 32}, headers=reader)
+        assert end.json()["observations"] == [] and end.json()["next_after"] is None
+        foreign_page = await client.post(
+            path,
+            json={"after": ids[0]},
+            headers=headers(tenant_id="foreign", roles=["policy:read", "evidence:decrypt"]),
+        )
+        assert foreign_page.status_code == 200 and foreign_page.json()["observations"] == []
+        assert (await client.post(path, json={})).status_code == 401
+        for roles in (["policy:read"], ["evidence:decrypt"], ["usage:read"]):
+            assert (await client.post(path, json={}, headers=headers(roles=roles))).status_code == 403
+        for bad in (
+            {"limit": 0},
+            {"limit": 65},
+            {"limit": True},
+            {"after": "PRIVATE-MARKER"},
+            {"tenant_id": "foreign"},
+            {"limit": "2"},
+        ):
+            rejected = await client.post(path, json=bad, headers=reader)
+            assert rejected.status_code == 422 and "PRIVATE-MARKER" not in rejected.text
+        assert (await client.post(path + "?tenant_id=foreign", json={}, headers=reader)).status_code == 422
+        assert (await client.post(path, content=b"x" * 1025, headers=reader)).status_code == 413
         result = await client.post("/pilot/proof/observations/report", json=body, headers=reader)
         assert result.status_code == 200, result.text
         report = result.json()
