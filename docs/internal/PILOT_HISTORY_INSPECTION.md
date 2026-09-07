@@ -63,6 +63,15 @@ Reports separate `integrity_valid`, `cryptographic_valid`, `statement_valid`,
 interval. A check not run remains unset. Proof expiry at reviewer time does not
 prevent historical review; operator and reviewer clocks remain distinct.
 
+The evidence keeps decision time (`receipt.authorized_at`), source observation
+times in the retained signed facts/valuation/status, capture time
+(`evidence_manifest.captured_at`) and review time (`verified_at`) in separate
+fields. The pilot captures status and decision in the same transaction, so their
+clock values may coincide. Export and timestamp attachment also retain their own
+times. None of these operator fields becomes an independent timestamp merely
+because it is signed; the RFC 3161 observation supplies a separately verified
+existence interval with an explicit accuracy bound.
+
 The real-proof PostgreSQL test reviews an expired synthetic record after later
 policy activation and revocation. It covers all outcomes, missing trust layers,
 changed manifest/root/key/policy/envelope/signals, missing records, invalid source

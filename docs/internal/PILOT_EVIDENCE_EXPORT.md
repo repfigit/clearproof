@@ -33,17 +33,19 @@ outcome when authority evidence is missing. The exported proof includes a signed
 trust is required to authenticate it. HPKE base mode does not authenticate the
 exporter.
 Captured/local clocks and local revocation absence remain explicitly labeled.
-Complete historical authority and authenticated timing/status evidence,
-supported/contradicted/indeterminate reporting and the public `verify-history`
-command remain required CP-015 work.
+The offline inspector implements independent statement, fact, decision, status,
+timing and information trust checks. The source
+[`verify-history` command](PILOT_VERIFY_HISTORY_CLI.md) returns supported,
+contradicted or indeterminate under those configured authorities. Export alone
+does not run those checks or grant trust to the captured configuration.
 
 The real-proof/PostgreSQL test exports after later policy activation and revocation,
 then confirms the bundle still contains the original activation revision and
 captured bytes. It covers missing export permission, recipient scope/expiry,
 wrong keys/binding, corrupted ciphertext, missing chunks and unchanged record and
 consumption counts. A fresh Python process decrypts the encrypted artifact after
-the database closes, with socket connections disabled, and reports only the
-receipt ID and evidence count.
+the database closes, with Python socket connections disabled, and reproduces the
+scoped historical result without printing private evidence.
 
 When a verified [timestamp record](PILOT_HISTORY_TIMING.md) has been attached,
 export includes it alongside the immutable receipt/proof. Attachment is separate
