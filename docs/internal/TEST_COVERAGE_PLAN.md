@@ -340,3 +340,22 @@ still need completion and final merged-main verification.
 - Remaining sanctions work includes artifact validation and field-range boundary
   behavior. Other Python, SDK, Solidity, docs and operational-script coverage
   requirements remain active; this checkpoint does not establish full coverage.
+
+## Thirteenth checkpoint
+
+- Artifact tests reproduced loss of declared depth during reload/rebuild and
+  acceptance of invalid depth values. Loading now validates and retains the
+  artifact's depth, preserving the selected root/profile when rebuilt.
+- Tests also reproduced gap witnesses whose neighbors did not bracket the query.
+  Those cases now reject instead of returning an unusable witness. The unreachable
+  empty-leaf branch was removed: two sentinels are always inserted before it.
+- Sixteen artifact tests cover missing/malformed files, stale-age boundaries,
+  metadata-only legacy files without witness layers, invalid depths, reload/root
+  preservation and absent bracketing leaves. The affected registry/builder/real
+  API proof/compliance regression passes 65 tests. The sanctions registry measures
+  113/113 lines and 36/36 branches; Ruff, whitespace and REUSE checks pass.
+- This does not establish authenticity of a loaded root or solve the legacy
+  circuit's 252-bit key range restriction. Whole-tree consistency, configured
+  root trust and remaining profile boundary behavior still require review/tests.
+  Full combined coverage and outstanding Python/SDK/contracts/docs/scripts work
+  remain part of the active objective.

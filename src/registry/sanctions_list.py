@@ -135,7 +135,9 @@ class SanctionsMerkleTree:
         """
         with open(path) as f:
             data = json.load(f)
-        tree = cls()
+        if data["depth"] is None:
+            raise ValueError("Merkle depth must be an integer between 1 and 32")
+        tree = cls(depth=data["depth"])
         tree.root = data["root"]
         tree.sorted_leaves = [int(leaf) for leaf in data["sorted_leaves"]]
         tree.sorted_addresses = data.get("sorted_addresses", [])
@@ -165,12 +167,6 @@ class SanctionsMerkleTree:
         if self._target_depth is not None and len(hashed) > 2**self._target_depth:
             raise ValueError("Merkle tree exceeds configured depth")
         self.sorted_leaves = hashed
-
-        if not hashed:
-            self.root = "0"
-            self._tree = [["0"]]
-            self.depth = 0
-            return self.root
 
         # Determine depth (next power of 2)
         n = len(hashed)
@@ -238,26 +234,8 @@ class SanctionsMerkleTree:
             else:
                 break
 
-        if left_idx == -1:
-            # addr_hash is smaller than all leaves — boundary gap proof
-            # using minimum sentinel (0) at position 0 as left neighbor.
-            return {
-                "left_neighbor": self.sorted_leaves[0],  # sentinel: 0
-                "right_neighbor": self.sorted_leaves[1],
-                "left_path": self._get_merkle_path(0),
-                "right_path": self._get_merkle_path(1),
-            }
-
-        if left_idx >= len(self.sorted_leaves) - 1:
-            # addr_hash is larger than all leaves — boundary gap proof
-            # using maximum sentinel (2^252 - 1) at last position as right neighbor.
-            last = len(self.sorted_leaves) - 1
-            return {
-                "left_neighbor": self.sorted_leaves[last - 1],
-                "right_neighbor": self.sorted_leaves[last],  # sentinel: 2^252 - 1
-                "left_path": self._get_merkle_path(last - 1),
-                "right_path": self._get_merkle_path(last),
-            }
+        if left_idx < 0 or left_idx >= len(self.sorted_leaves) - 1:
+            raise ValueError("Wallet hash is not bracketed by retained sanctions leaves")
 
         return {
             "left_neighbor": self.sorted_leaves[left_idx],
