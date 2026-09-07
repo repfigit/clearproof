@@ -53,8 +53,8 @@ exercise every supported test layer with its required local dependencies.
 
 Python: API startup/shutdown, proof route error paths and
 remaining validation branches. The current combined report
-still has 548 missed lines and 381 missed branches. Subprocess coverage must also be captured before interpreting child
-CLI modules as unexecuted.
+has 493 missed lines and 343 missed branches after the fifteenth checkpoint.
+Subprocess coverage is captured in this combined report.
 
 CLI: source line/branch/function/statement coverage is now 100%, enforced by CI.
 Keep the actual artifact/service acceptance tests alongside mocked boundary tests.
@@ -374,3 +374,30 @@ still need completion and final merged-main verification.
 - This is module-level evidence. Overall Python coverage still requires a fresh
   combined service/artifact run, and the remaining SDK, contracts, docs, scripts
   and publication requirements remain open.
+
+## Fifteenth checkpoint
+
+- Refreshed the complete Python run with PostgreSQL, both real proving profiles
+  and policy CLI acceptance enabled: 1318 passed, one checkpoint test skipped.
+  That checkpoint passed separately on its owned local EVM. Combined same-source
+  coverage is 7850/8343 lines (94.09%) and 1733/2076 branches (83.48%), including
+  subprocesses and generated protobuf modules. PostgreSQL was stopped afterward.
+  Reports: `full-coverage-python-seventh.log`,
+  `full-coverage-checkpoint-seventh.log`, `full-coverage-combined-seventh.json`.
+- Added the docs workspace's first test/coverage commands and 47 tests against
+  real catalogue data and NextResponse. Every catalogue entry is served and
+  missing/traversal-like/prototype-name slugs return bounded JSON 404 responses;
+  successful and error responses retain the expected cache and content headers.
+  All four content API handlers measure 100% in every coverage metric.
+- Explicit Oxc JSX transformation prevents the layout from being silently
+  discarded by coverage parsing. All authored TS/TSX modules are included:
+  21/26 lines (80.76%), 4/6 functions (66.66%) and 6/6 branches. Layout/MDX wrapper
+  execution and actual MDX/browser rendering remain unproven by this report.
+- Docs tests, standalone typecheck and production build pass; the build generated
+  all 21 static pages. CI runs and uploads the docs coverage report. The README
+  documents test scope, and generated TypeScript build metadata is ignored.
+  REUSE and whitespace checks pass. No coverage PR has been published yet.
+- Largest authored Python line gaps now include pilot proof/discovery routes,
+  pilot verifier/storage and evidence export. SDK residual branches, Solidity,
+  docs rendering, operational scripts and the final review/merge/main verification
+  remain outstanding. These results do not establish full repository coverage.

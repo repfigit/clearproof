@@ -131,6 +131,8 @@ jobs:
         run: npm run test:coverage --workspace=@clearproof/cli
       - name: SDK tests and source coverage
         run: npm run test:coverage --workspace=@clearproof/proof
+      - name: Docs content API tests and source coverage
+        run: npm run test:coverage --workspace=@clearproof/docs
       - uses: actions/upload-artifact@v4
         if: always()
         with:
@@ -139,6 +141,7 @@ jobs:
             packages/content/coverage/
             packages/cli/coverage/
             packages/proof/coverage/
+            apps/docs/coverage/
           if-no-files-found: error
 
   hardhat-tests:

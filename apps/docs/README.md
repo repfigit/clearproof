@@ -13,6 +13,13 @@ npm run build --workspace @clearproof/docs
 npm run dev --workspace @clearproof/docs
 ```
 
+Run `npm run test:coverage --workspace @clearproof/docs` after building the
+content package. These tests invoke the content API handlers with the real
+catalogue and Next.js responses, checking every listed entry and unknown-slug
+errors. Coverage includes all authored TS/TSX modules so untested layout and
+MDX-component code remains visible. This report does not measure MDX page
+rendering, browser interactions or deployment tracing; check those separately.
+
 Use Node.js 24 LTS to match the Vercel project. Run one docs build or development
 server at a time because they share `.next` output.
 

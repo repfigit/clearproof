@@ -50,6 +50,7 @@ graphify-out/
 # Next.js
 .next/
 .vercel/
+*.tsbuildinfo
 
 # Hardhat
 packages/contracts/cache/
