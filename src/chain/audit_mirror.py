@@ -40,23 +40,24 @@ class AuditMirror:
         zero_hash = "0" * 64
         if not self._path.exists():
             return zero_hash
-        try:
-            with open(self._path, "rb") as f:
-                # Seek to find last non-empty line
-                f.seek(0, 2)
-                size = f.tell()
-                if size == 0:
-                    return zero_hash
-                # Read last chunk (up to 4 KB is more than enough for one JSON line)
-                chunk_size = min(4096, size)
-                f.seek(size - chunk_size)
-                chunk = f.read()
-                lines = chunk.strip().split(b"\n")
-                last_line = lines[-1]
-                return hashlib.sha256(last_line).hexdigest()
-        except Exception:
-            logger.warning("Could not read audit mirror tail; starting fresh hash chain")
-            return zero_hash
+        # Read backwards until a complete non-empty record is available. Records
+        # can exceed a chunk; hashing only the last 4 KB would fork the chain.
+        # I/O errors propagate: an unreadable existing log must not start anew.
+        with open(self._path, "rb") as f:
+            f.seek(0, 2)
+            position = f.tell()
+            fragment = b""
+            while position:
+                size = min(4096, position)
+                position -= size
+                f.seek(position)
+                lines = (f.read(size) + fragment).split(b"\n")
+                complete = lines[1:] if position else lines
+                for line in reversed(complete):
+                    if line:
+                        return hashlib.sha256(line).hexdigest()
+                fragment = lines[0]
+        return zero_hash
 
     # -- public API ------------------------------------------------------------
 
@@ -84,10 +85,11 @@ class AuditMirror:
             "prev_hash": self._prev_hash,
         }
         line = json.dumps(entry, separators=(",", ":"), sort_keys=True)
-        self._prev_hash = hashlib.sha256(line.encode()).hexdigest()
+        next_hash = hashlib.sha256(line.encode()).hexdigest()
 
         with open(self._path, "a") as f:
             f.write(line + "\n")
+        self._prev_hash = next_hash
 
         logger.debug("Audit mirror: %s recorded (hash=%s)", event_type, self._prev_hash[:12])
 
@@ -114,12 +116,7 @@ class AuditMirror:
                         return False
 
                     if record.get("prev_hash") != prev_hash:
-                        logger.error(
-                            "Audit mirror integrity: hash mismatch at line %d (expected %s, got %s)",
-                            lineno,
-                            prev_hash[:12],
-                            record.get("prev_hash", "")[:12],
-                        )
+                        logger.error("Audit mirror integrity: hash mismatch at line %d", lineno)
                         return False
 
                     prev_hash = hashlib.sha256(raw_line.encode()).hexdigest()

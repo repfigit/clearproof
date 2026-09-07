@@ -125,6 +125,8 @@ jobs:
         run: cd packages/proof && npx tsc
       - run: cd packages/proof && npx tsc --noEmit
       - run: cd packages/cli && npx tsc
+      - name: Content parser and catalogue coverage
+        run: npm run test:coverage --workspace=@clearproof/content
       - name: All CLI tests and source coverage
         run: npm run test:coverage --workspace=@clearproof/cli
       - name: SDK tests and source coverage
@@ -134,6 +136,7 @@ jobs:
         with:
           name: typescript-coverage
           path: |
+            packages/content/coverage/
             packages/cli/coverage/
             packages/proof/coverage/
           if-no-files-found: error

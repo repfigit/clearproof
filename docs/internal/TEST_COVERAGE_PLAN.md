@@ -51,14 +51,13 @@ exercise every supported test layer with its required local dependencies.
 
 ## Next uncovered behavior to address
 
-Python: SIWE authentication, chain audit mirror/writer, issuer registry, snarkjs
-prover, gRPC failure paths, keyring rotation, API startup/shutdown and proof route
-error paths. The combined baseline still has 1128 missed lines and 534 missed
-branches. Subprocess coverage must also be captured before interpreting child
+Python: chain writer, snarkjs prover, gRPC failure paths, keyring rotation,
+API startup/shutdown and proof route error paths. The current combined report
+still has 927 missed lines and 468 missed branches. Subprocess coverage must also be captured before interpreting child
 CLI modules as unexecuted.
 
-CLI: prove/verify/demo, discovery commands, historical verification, rendering,
-recipes/help/explain and remaining doctor/policy/investigation branches.
+CLI: prove/verify/demo, entrypoint execution, artifact discovery and remaining
+doctor/policy/investigation/report transport branches.
 
 Solidity: router administration/timelocks, oracle updates, VASP administration,
 registry validation failures and cryptographic rejection branches. Retest normal
@@ -68,6 +67,31 @@ bytecode must not be committed.
 These figures describe an intermediate worktree, not a released coverage claim.
 The full goal remains open.
 
-Content/docs: measure parser, topic, recipe and signal modules; test docs routes
-and rendering. Existing content tests check recipe text only. Browser/server
-behavior and operational scripts remain part of the coverage inventory.
+Docs: test routes and rendering. Browser/server behavior and operational scripts
+remain part of the coverage inventory; the shared content modules now have a
+100% source coverage gate.
+
+
+## Second checkpoint
+
+- Python: 1152 passed in the full run, plus the checkpoint test passed separately
+  on its owned EVM. Current combined coverage is 7363/8290 lines (88.82%) and
+  1582/2050 branches (77.17%). SIWE service, auth HTTP routes, issuer registry
+  and file audit mirror each have 100% measured line/branch coverage.
+- Real SIWE tests exposed invalid nonce characters and equality-at-expiry bugs.
+  Nonces now use 256 bits encoded as hexadecimal; expired nonces/sessions reject
+  at the exact TTL boundary. HTTP tests verify real signing, protected access,
+  replay rejection, session expiry and nonce rate limits.
+- File audit tests exposed truncated tail hashing for records over 4 KB, blank
+  tail handling, premature state advancement on failed writes and silent chain
+  reset after read failures. These paths are repaired, and hash mismatch logging
+  no longer includes caller-controlled values.
+- Shared content: 11 tests, 106/106 lines, 67/67 branches, 16/16 functions.
+  CI now runs this package's tests with a 100% coverage gate and retains reports.
+- CLI: 89 tests, 329/432 lines (76.15%), 201/238 branches (84.45%). New tests
+  exercise packaged help and signal explanations, rendering, diagnostics,
+  interactive recipes and history/counterparty process lifecycle handling.
+
+Remaining integrity investigations include interleaved file-audit writers and
+prover subprocess timeout/rejection handling. A 100% module coverage result does
+not by itself prove these behavioral properties. The full objective remains open.

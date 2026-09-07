@@ -49,7 +49,8 @@ class SIWEAuth:
 
     async def generate_nonce(self) -> str:
         """Generate and store a random nonce with TTL."""
-        nonce = secrets.token_urlsafe(32)
+        # EIP-4361 requires at least eight ASCII alphanumeric characters.
+        nonce = secrets.token_hex(32)
 
         if self.redis is not None:
             await self.redis.setex(f"siwe:nonce:{nonce}", _NONCE_TTL_SECONDS, "1")
@@ -71,7 +72,7 @@ class SIWEAuth:
         created_at = _nonce_store.pop(nonce, None)
         if created_at is None:
             return False
-        if time.time() - created_at > _NONCE_TTL_SECONDS:
+        if time.time() - created_at >= _NONCE_TTL_SECONDS:
             return False
         return True
 
@@ -79,7 +80,7 @@ class SIWEAuth:
     def _purge_expired_nonces() -> None:
         """Remove expired nonces from the in-memory store."""
         now = time.time()
-        expired = [k for k, v in _nonce_store.items() if now - v > _NONCE_TTL_SECONDS]
+        expired = [k for k, v in _nonce_store.items() if now - v >= _NONCE_TTL_SECONDS]
         for k in expired:
             del _nonce_store[k]
 
@@ -169,7 +170,7 @@ class SIWEAuth:
 
         # Check expiry
         expires_at = datetime.fromisoformat(session["expires_at"])
-        if datetime.now(timezone.utc) > expires_at:
+        if datetime.now(timezone.utc) >= expires_at:
             del _session_store[token]
             return None
 
