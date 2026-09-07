@@ -1,4 +1,5 @@
-import { ethers, run } from "hardhat";
+import { ethers, run, network as selectedNetwork } from "hardhat";
+import { prepareLegacyVerifier } from "./legacy-verifier";
 import { readFileSync } from "fs";
 import { resolve } from "path";
 
@@ -6,35 +7,11 @@ async function main() {
   const [deployer] = await ethers.getSigners();
   console.log("Deploying with account:", deployer.address);
 
-  // 1. VerifierRouter
-  console.log("\nDeploying VerifierRouter...");
-  const VerifierRouter = await ethers.getContractFactory("VerifierRouter");
-  const timelockPeriod = 24 * 60 * 60; // 24 hours in seconds
-  const verifierRouter = await VerifierRouter.deploy(timelockPeriod);
-  await verifierRouter.waitForDeployment();
+  const { router: verifierRouter, verifier, selector: verifierSelector, activation, timelockPeriod } =
+    await prepareLegacyVerifier();
   const verifierRouterAddr = await verifierRouter.getAddress();
-  console.log("VerifierRouter deployed to:", verifierRouterAddr);
-
-  // 2. Groth16Verifier
-  console.log("\nDeploying Groth16Verifier...");
-  const Verifier = await ethers.getContractFactory("Groth16Verifier");
-  const verifier = await Verifier.deploy();
-  await verifier.waitForDeployment();
   const verifierAddr = await verifier.getAddress();
-  console.log("Groth16Verifier deployed to:", verifierAddr);
-
-  // 3. Register the verifier with the router
-  console.log("\nRegistering verifier with router...");
-  const verifierSelector = ethers.keccak256(ethers.toUtf8Bytes("groth16-bn254-v1"));
-  let tx = await verifierRouter.registerVerifier(verifierSelector, verifierAddr, "Groth16 BN254 v1");
-  await tx.wait();
-  console.log("Verifier registered with selector:", verifierSelector);
-
-  // 4. Activate the verifier
-  console.log("\nActivating verifier...");
-  tx = await verifierRouter.activateVerifier(verifierSelector, "Groth16 BN254 v1");
-  await tx.wait();
-  console.log("Verifier activated");
+  console.log("Verifier registration pending until chain timestamp:", activation.activateAfter);
 
   // 5. VASPRegistry
   console.log("Deploying VASPRegistry...");
@@ -112,7 +89,7 @@ async function main() {
   // Write deployment addresses to file for downstream tools
   const fs = await import("fs");
   const deployment = {
-    network: process.env.HARDHAT_NETWORK || "localhost",
+    network: selectedNetwork.name,
     chainId: (await ethers.provider.getNetwork()).chainId.toString(),
     timestamp: new Date().toISOString(),
     contracts: {
@@ -123,21 +100,25 @@ async function main() {
       ComplianceRegistry: registryAddr,
     },
     deployer: deployer.address,
+    verifierActivation: activation,
   };
-  const outPath = `deployments/${deployment.network}.json`;
-  fs.mkdirSync("deployments", { recursive: true });
+  const outputDir = process.env.CLEARPROOF_DEPLOYMENTS_DIR || resolve(__dirname, "../deployments");
+  const outPath = resolve(outputDir, `${deployment.network}.json`);
+  fs.mkdirSync(outputDir, { recursive: true });
   fs.writeFileSync(outPath, JSON.stringify(deployment, null, 2));
   console.log(`\nAddresses written to ${outPath}`);
 
   // Verify on Etherscan if API key is set
-  if (process.env.ETHERSCAN_API_KEY || process.env.BASESCAN_API_KEY) {
+  if (!["hardhat", "localhost"].includes(selectedNetwork.name) &&
+      (process.env.ETHERSCAN_API_KEY || process.env.BASESCAN_API_KEY)) {
     console.log("\nVerifying contracts on block explorer...");
     try {
       await run("verify:verify", { address: verifierRouterAddr, constructorArguments: [timelockPeriod] });
       await run("verify:verify", { address: verifierAddr, constructorArguments: [] });
       await run("verify:verify", { address: vaspRegistryAddr, constructorArguments: [deployer.address] });
       await run("verify:verify", { address: sanctionsOracleAddr, constructorArguments: [deployer.address, initialRoot, initialLeafCount] });
-      await run("verify:verify", { address: registryAddr, constructorArguments: [verifierRouterAddr, verifierSelector, vaspRegistryAddr, sanctionsOracleAddr] });
+      await run("verify:verify", { address: registryAddr, constructorArguments: [verifierRouterAddr, verifierSelector, vaspRegistryAddr, sanctionsOracleAddr,
+        thresholdConfig.default.tier2, thresholdConfig.default.tier3, thresholdConfig.default.tier4] });
       console.log("All contracts verified!");
     } catch (e: any) {
       console.log("Verification failed (can retry later):", e.message?.slice(0, 100));

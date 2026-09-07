@@ -8,6 +8,14 @@
     "skipLibCheck": true,
     "resolveJsonModule": true
   },
-  "include": ["./scripts", "./test", "./hardhat.config.ts"],
-  "files": ["./hardhat.config.ts"]
+  "include": [
+    "./scripts",
+    "./test",
+    "./hardhat.config.ts",
+    "./typechain-types",
+    "../proof/src/snarkjs.d.ts"
+  ],
+  "files": [
+    "./hardhat.config.ts"
+  ]
 }

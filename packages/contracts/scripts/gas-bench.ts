@@ -1,6 +1,9 @@
-import { ethers } from "hardhat";
+import { ethers, network } from "hardhat";
+import { prepareLegacyVerifier } from "./legacy-verifier";
+import thresholds from "../../../config/jurisdiction_thresholds.json";
 
 async function main() {
+  if (network.name !== "hardhat") throw new Error("Gas benchmark requires the ephemeral Hardhat network");
   const [deployer] = await ethers.getSigners();
 
   // Deploy SanctionsOracle
@@ -22,11 +25,11 @@ async function main() {
   console.log("VASPRegistry deploy gas:", r2!.gasUsed.toString());
 
   // Deploy ComplianceRegistry
+  const { router, selector } = await prepareLegacyVerifier();
   const Compliance = await ethers.getContractFactory("ComplianceRegistry");
   const comp = await Compliance.deploy(
-    deployer.address,
-    deployer.address,
-    deployer.address,
+    await router.getAddress(), selector, await vasp.getAddress(), await oracle.getAddress(),
+    thresholds.default.tier2, thresholds.default.tier3, thresholds.default.tier4,
   );
   const compDeployed = await comp.waitForDeployment();
   const r3 = await compDeployed.deploymentTransaction()!.wait();
