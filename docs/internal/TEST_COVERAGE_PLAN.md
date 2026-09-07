@@ -316,3 +316,27 @@ still need completion and final merged-main verification.
 - Fixed-depth registry/artifact compatibility, remaining Python validation
   branches, SDK's seven branches, Solidity, docs and operational script coverage
   remain part of the active objective.
+
+## Twelfth checkpoint
+
+- Both registry builders now accept an explicit depth. Zero-subtree extension
+  preserves real authentication paths without allocating the full fixed-size
+  leaf array. Invalid depth and over-capacity requests reject; capacity tests
+  verify that previous tree state remains intact. Defaults preserve prior roots.
+- The legacy API's operator-managed issuer registry uses depth 10. The sanctions
+  build script accepts `--depth 20` for the corresponding legacy circuit profile;
+  build-script version is 1.2.0. Native and operational builder roots agree, and
+  serialized sparse layers reload with the correct authentication paths.
+- The actual API circuit test now uses real issuer/sanctions builders and a real
+  sanctions artifact reload instead of supplied witness mocks. Actual proof
+  generation/verification, roots, verification key and timestamps pass.
+- Fixed-depth/helper/registry/API/compliance regression: 105 tests pass. The new
+  extension helper measures 17/17 lines and 8/8 branches in the focused report.
+  The CLI exposes the depth option and rejects invalid depths before building.
+  Ruff, whitespace and REUSE pass. Full combined coverage remains to be refreshed.
+- Only synthetic local trees were built during tests. Selecting a different
+  depth changes the root; operators must publish/relay the chosen root consistently
+  on deployed chains. Existing published roots and proving artifacts were not changed.
+- Remaining sanctions work includes artifact validation and field-range boundary
+  behavior. Other Python, SDK, Solidity, docs and operational-script coverage
+  requirements remain active; this checkpoint does not establish full coverage.

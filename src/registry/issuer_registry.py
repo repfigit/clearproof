@@ -14,6 +14,7 @@ from __future__ import annotations
 import math
 from typing import Any
 
+from src.registry.merkle_depth import extend_depth, validate_depth
 from src.registry.poseidon import poseidon_hash
 
 # ---------------------------------------------------------------------------
@@ -50,7 +51,9 @@ class IssuerRegistry:
     a credential's issuer is in the trusted set.
     """
 
-    def __init__(self) -> None:
+    def __init__(self, *, depth: int | None = None) -> None:
+        validate_depth(depth)
+        self._target_depth = depth
         self._issuers: list[str] = []  # ordered list of DIDs
         self._leaf_hashes: list[str] = []
         self._tree: list[list[str]] = []
@@ -69,6 +72,8 @@ class IssuerRegistry:
         """
         if did in self._issuers:
             raise ValueError(f"Issuer already registered: {did}")
+        if self._target_depth is not None and len(self._issuers) >= 2**self._target_depth:
+            raise ValueError("Merkle tree exceeds configured depth")
         self._issuers.append(did)
         return await self._rebuild()
 
@@ -156,7 +161,11 @@ class IssuerRegistry:
             self._tree.append(next_level)
             current = next_level
 
-        self.root = current[0]
+        if self._target_depth is not None:
+            self.root = await extend_depth(self._tree, self._target_depth, _poseidon_hash)
+            self.depth = self._target_depth
+        else:
+            self.root = current[0]
         return self.root
 
     def _get_merkle_path(self, index: int) -> dict[str, list]:

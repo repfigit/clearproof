@@ -15,6 +15,7 @@ import math
 import os
 from typing import Any
 
+from src.registry.merkle_depth import extend_depth, validate_depth
 from src.registry.poseidon import poseidon_hash
 
 # ---------------------------------------------------------------------------
@@ -82,7 +83,9 @@ class SanctionsMerkleTree:
     # Default: 86400 (24 hours) — matches OFAC SDN daily update cadence.
     MAX_TREE_AGE_SECONDS = int(os.environ.get("SANCTIONS_TREE_MAX_AGE", "86400"))
 
-    def __init__(self) -> None:
+    def __init__(self, *, depth: int | None = None) -> None:
+        validate_depth(depth)
+        self._target_depth = depth
         self.sorted_leaves: list[int] = []
         self.sorted_addresses: list[str] = []
         self._tree: list[list[str]] = []  # tree[level][index] = hash string
@@ -159,6 +162,8 @@ class SanctionsMerkleTree:
         hashed.sort()
         # Insert boundary sentinels (H-6)
         hashed = [0] + hashed + [self._MAX_SENTINEL]
+        if self._target_depth is not None and len(hashed) > 2**self._target_depth:
+            raise ValueError("Merkle tree exceeds configured depth")
         self.sorted_leaves = hashed
 
         if not hashed:
@@ -186,7 +191,11 @@ class SanctionsMerkleTree:
             self._tree.append(next_level)
             current = next_level
 
-        self.root = current[0]
+        if self._target_depth is not None:
+            self.root = await extend_depth(self._tree, self._target_depth, _poseidon_hash)
+            self.depth = self._target_depth
+        else:
+            self.root = current[0]
         return self.root
 
     def get_root(self) -> str:

@@ -40,13 +40,14 @@ import httpx
 # this script is run directly (`python scripts/build_sanctions_tree.py`).
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
+from src.registry.merkle_depth import extend_depth, validate_depth  # noqa: E402
 from src.registry.poseidon import poseidon_hash as _native_poseidon_hash  # noqa: E402
 
 # ---------------------------------------------------------------------------
 # Build script version — increment on any change to normalization or tree logic
 # ---------------------------------------------------------------------------
 
-BUILD_SCRIPT_VERSION = "1.1.0"
+BUILD_SCRIPT_VERSION = "1.2.0"
 
 # ---------------------------------------------------------------------------
 # Project root / Poseidon helper
@@ -310,7 +311,7 @@ async def fetch_eu_sanctions_xml(client: httpx.AsyncClient) -> tuple[list[str], 
 # Merkle tree builder (deterministic)
 # ---------------------------------------------------------------------------
 
-async def build_merkle_tree(addresses: list[str]) -> dict[str, Any]:
+async def build_merkle_tree(addresses: list[str], *, target_depth: int | None = None) -> dict[str, Any]:
     """
     Build a sorted Poseidon Merkle tree from a deduplicated, normalized address list.
 
@@ -322,6 +323,7 @@ async def build_merkle_tree(addresses: list[str]) -> dict[str, Any]:
     5. Zero-padding uses 0 for empty leaves
     6. Tree always padded to next power of 2
     """
+    validate_depth(target_depth)
     seen: set[str] = set()
     unique: list[str] = []
     for addr in addresses:
@@ -347,6 +349,8 @@ async def build_merkle_tree(addresses: list[str]) -> dict[str, Any]:
 
     n = len(sorted_hashes)
     depth = max(1, math.ceil(math.log2(n))) if n > 1 else 1
+    if target_depth is not None and depth > target_depth:
+        raise ValueError("Merkle tree exceeds configured depth")
     padded_size = 2 ** depth
 
     leaf_strs = [str(h) for h in sorted_hashes] + ["0"] * (padded_size - n)
@@ -363,6 +367,10 @@ async def build_merkle_tree(addresses: list[str]) -> dict[str, Any]:
         print(f"  Built tree level {level + 1}/{depth}")
 
     root = current[0]
+    if target_depth is not None:
+        root = await extend_depth(tree_layers, target_depth, poseidon_hash)
+        depth = target_depth
+        padded_size = 2 ** depth
     print(f"  Root hash: {root}")
 
     return {
@@ -434,7 +442,8 @@ async def verify_tree() -> bool:
 # Main
 # ---------------------------------------------------------------------------
 
-async def main(offline: bool = False, verify: bool = False) -> None:
+async def main(offline: bool = False, verify: bool = False, target_depth: int | None = None) -> None:
+    validate_depth(target_depth)
     if verify:
         ok = await verify_tree()
         sys.exit(0 if ok else 1)
@@ -495,7 +504,7 @@ async def main(offline: bool = False, verify: bool = False) -> None:
 
     print(f"\nTotal unique normalized addresses: {len(deduped)}")
 
-    tree_data = await build_merkle_tree(deduped)
+    tree_data = await build_merkle_tree(deduped, target_depth=target_depth)
 
     print("\nGenerating test vectors ...")
     test_vectors = await generate_test_vectors(KNOWN_OFAC_ADDRESSES[:10])
@@ -537,7 +546,10 @@ async def main(offline: bool = False, verify: bool = False) -> None:
     test_vector_output = {
         "build_script_version": BUILD_SCRIPT_VERSION,
         "domain_tag": SANCTIONS_DOMAIN_TAG,
-        "description": "Test vectors for sanctions tree leaf hashing. Any operator can verify these to confirm their Poseidon implementation and normalization match.",
+        "description": (
+            "Test vectors for sanctions tree leaf hashing. Any operator can verify these "
+            "to confirm their Poseidon implementation and normalization match."
+        ),
         "vectors": test_vectors,
     }
     with open(TEST_VECTORS_PATH, "w") as f:
@@ -555,5 +567,6 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Build sanctions Merkle tree (deterministic)")
     parser.add_argument("--offline", action="store_true", help="Skip HTTP fetches; use only hardcoded addresses")
     parser.add_argument("--verify", action="store_true", help="Verify existing tree against test vectors")
+    parser.add_argument("--depth", type=int, help="Explicit circuit depth (legacy compliance: 20); changes the root")
     args = parser.parse_args()
-    asyncio.run(main(offline=args.offline, verify=args.verify))
+    asyncio.run(main(offline=args.offline, verify=args.verify, target_depth=args.depth))

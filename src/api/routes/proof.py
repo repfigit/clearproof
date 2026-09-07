@@ -36,7 +36,7 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/proof", tags=["proof"])
 
-_issuer_registry = IssuerRegistry()
+_issuer_registry = IssuerRegistry(depth=10)
 _prover = SnarkJSProver()
 _audit_log = AuditLog()
 
