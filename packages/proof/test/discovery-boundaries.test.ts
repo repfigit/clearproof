@@ -1,7 +1,7 @@
 import { beforeEach, expect, it, vi } from 'vitest';
 import { lookup } from 'node:dns/promises';
 import { EgressPolicy, resolveAddresses } from '../src/discovery-transport.js';
-import { clearDiscoveryCache } from '../src/discovery.js';
+import { clearDiscoveryCache, discoverVASP } from '../src/discovery.js';
 
 vi.mock('node:dns/promises', () => ({ lookup: vi.fn() }));
 beforeEach(() => { vi.mocked(lookup).mockReset(); });
@@ -23,4 +23,11 @@ it('rejects malformed operator CIDRs and noncanonical authorities', () => {
     { 'operator.example': '127.0.0.1/8' }]) {
     expect(() => new EgressPolicy(policy as Record<string, string[]>)).toThrow();
   }
+});
+
+it('rejects invalid identity inputs before default-client DNS', async () => {
+  for (const identity of [null, 'x'.repeat(513), 'https://operator.example']) {
+    await expect(discoverVASP(identity as string)).rejects.toMatchObject({ code: 'invalid' });
+  }
+  expect(lookup).not.toHaveBeenCalled();
 });

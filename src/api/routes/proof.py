@@ -261,7 +261,7 @@ async def generate_proof(
     )
 
     # 5. Build circuit inputs
-    issuer_registry = IssuerRegistry()
+    issuer_registry = _issuer_registry
     issuer_did_int = _encode_did(credential.issuer_did)
     commitment = _cred_registry.get_commitment(request.credential_id)
     commitment_int = int(commitment, 16) if commitment.startswith("0x") else int(commitment)
@@ -273,9 +273,9 @@ async def generate_proof(
     if sanctions_root is None:
         raise RuntimeError("Sanctions tree not built — run build_sanctions_tree.py first")
 
-    issuer_root = issuer_registry.root
-    if issuer_root is None:
-        issuer_root = "0" * 64
+    issuer_root = issuer_registry.get_root()
+    issuer_witness = await issuer_registry.generate_membership_witness(credential.issuer_did)
+    sanctions_witness = await sanctions_tree.generate_nonmembership_witness(request.wallet_address)
 
     transfer_id_hash = hashlib.sha256(
         f"{request.wallet_address}:{request.destination_wallet}:{request.amount_usd}".encode()
@@ -290,39 +290,42 @@ async def generate_proof(
     else:
         domain_contract_hash = 0
 
+    generated_at = int(time.time())
+    expires_at = generated_at + 3600
     circuit_inputs = {
-        "issuer_did": [issuer_did_int],
-        "kyc_tier": [_encode_kyc_tier(credential.kyc_tier)],
-        "sanctions_clear": [1 if credential.sanctions_clear else 0],
-        "issued_at": [credential.issued_at],
-        "expires_at": [credential.expires_at],
-        "wallet_address_hash": [int(wallet_hash, 16)],
-        "amount_usd": [int(request.amount_usd)],
-        # Must come from the shared accessor: these are unconstrained public
-        # inputs, so every verifier re-derives them from the same table. The
-        # previous inline .get(..., 10000/100000/1000000) fallbacks diverged
-        # from JURISDICTION_TIERS["DEFAULT"] and skipped case normalization,
-        # so a lowercase or unlisted jurisdiction produced thresholds no
-        # verifier would ever agree with.
-        "tier2_threshold": [_thresholds["tier2"]],
-        "tier3_threshold": [_thresholds["tier3"]],
-        "tier4_threshold": [_thresholds["tier4"]],
-        "transfer_timestamp": [int(time.time())],
-        "jurisdiction_code": [_encode_jurisdiction(request.jurisdiction)],
-        "credential_commitment": [commitment_int],
-        "sanctions_root": [int(sanctions_root, 16) if isinstance(sanctions_root, str) else sanctions_root],
-        "issuer_root": [int(issuer_root, 16) if isinstance(issuer_root, str) else issuer_root],
-        "domain_chain_id": [int(os.getenv("DOMAIN_CHAIN_ID", "11155111"))],
-        "domain_contract_hash": [domain_contract_hash],
-        "transfer_id_hash": [int(transfer_id_hash[:16], 16)],
-        "credential_nullifier": [
-            int(credential_nullifier, 16) if isinstance(credential_nullifier, str) else credential_nullifier
-        ],
-        "proof_expires_at": [int(time.time()) + 3600],
-        "amount_tier": [tier],
-        "sar_review_flag": [1 if sar_result.review_flagged else 0],
-        "is_compliant": [1 if credential.sanctions_clear else 0],
+        "issuer_did": issuer_did_int,
+        "kyc_tier": _encode_kyc_tier(credential.kyc_tier),
+        "sanctions_clear": int(credential.sanctions_clear),
+        "issued_at": credential.issued_at,
+        "expires_at": credential.expires_at,
+        "wallet_address_hash": int(wallet_hash),
+        "actual_amount": int(request.amount_usd),
+        "tier2_threshold": _thresholds["tier2"],
+        "tier3_threshold": _thresholds["tier3"],
+        "tier4_threshold": _thresholds["tier4"],
+        "transfer_timestamp": generated_at,
+        "jurisdiction_code": _encode_jurisdiction(request.jurisdiction),
+        "credential_commitment": commitment_int,
+        "sanctions_tree_root": int(sanctions_root),
+        "issuer_tree_root": int(issuer_root),
+        "domain_chain_id": int(os.getenv("DOMAIN_CHAIN_ID", "11155111")),
+        "domain_contract_hash": domain_contract_hash,
+        "transfer_id_hash": int(transfer_id_hash[:16], 16),
+        "credential_nullifier": int(credential_nullifier),
+        "proof_expires_at": expires_at,
+        "amount_tier": tier,
+        "issuer_path_elements": issuer_witness["siblings"],
+        "issuer_path_indices": issuer_witness["indices"],
+        "left_key": sanctions_witness["left_neighbor"],
+        "right_key": sanctions_witness["right_neighbor"],
+        "left_path_elements": sanctions_witness["left_path"]["siblings"],
+        "left_path_indices": sanctions_witness["left_path"]["indices"],
+        "right_path_elements": sanctions_witness["right_path"]["siblings"],
+        "right_path_indices": sanctions_witness["right_path"]["indices"],
     }
+
+    # Preserve field integers across JSON/JavaScript without Number rounding.
+    circuit_inputs = {name: str(value) if isinstance(value, int) else value for name, value in circuit_inputs.items()}
 
     # 9. Generate proof
     proof_result, public_signals = await _prover.fullprove(circuit_inputs)
@@ -341,8 +344,8 @@ async def generate_proof(
         beneficiary_vasp_did=request.destination_vasp_did,
         jurisdiction=request.jurisdiction,
         amount_tier=tier,
-        proof_generated_at=int(time.time()),
-        proof_expires_at=int(time.time()) + 3600,
+        proof_generated_at=generated_at,
+        proof_expires_at=expires_at,
     )
 
     # 11. Encrypt PII
@@ -426,8 +429,8 @@ async def generate_proof(
                     beneficiary_vasp_did=request.destination_vasp_did,
                     jurisdiction=request.jurisdiction,
                     amount_tier=tier,
-                    proof_generated_at=int(time.time()),
-                    proof_expires_at=int(time.time()) + 3600,
+                    proof_generated_at=generated_at,
+                    proof_expires_at=expires_at,
                     is_expired=False,
                 )
             )

@@ -53,7 +53,7 @@ exercise every supported test layer with its required local dependencies.
 
 Python: API startup/shutdown, proof route error paths and
 remaining validation branches. The current combined report
-still has 632 missed lines and 410 missed branches. Subprocess coverage must also be captured before interpreting child
+still has 548 missed lines and 381 missed branches. Subprocess coverage must also be captured before interpreting child
 CLI modules as unexecuted.
 
 CLI: source line/branch/function/statement coverage is now 100%, enforced by CI.
@@ -267,3 +267,34 @@ still need completion and final merged-main verification.
   generated circuit-input layout still needs an actual-artifact acceptance test;
   passing database tests does not establish valid real proof generation. Full
   coverage remains active for that path and all other outstanding requirements.
+
+## Tenth checkpoint
+
+- A new API test invokes actual SnarkJS with matching development artifacts and
+  explicit depth-10 issuer/depth-20 sanctions witnesses. It reproduced outdated
+  signal names, array-wrapped scalars, missing Merkle paths, an empty replacement
+  issuer registry and decimal hashes interpreted as hex in API witness assembly.
+- The route now consumes its configured issuer registry and both witnesses, uses
+  the existing circuit's scalar names, preserves field integers as decimal strings
+  across JavaScript JSON parsing and captures one timestamp/expiry pair for the
+  proof and stored metadata. No circuit, key or verifier was changed.
+- Actual API proof generation and verification pass, including matching public
+  roots and timestamp metadata. The existing development-circuit CI script now
+  includes this test. API/compliance regression: 103 tests pass.
+- This test supplies matching fixed-depth witness providers. Ordinary dynamic-depth
+  registry/tree builders still need compatibility checks before claiming that
+  their default artifacts can feed the fixed-depth legacy circuit. Issuer trust
+  must remain operator-configured; credentials must not auto-enroll their issuers.
+- SDK: 211 tests pass; 400/400 lines, 89/89 functions, 513/517 statements (99.22%)
+  and 664/671 branches (98.95%). Added coverage includes default discovery input
+  rejection, malformed profiles, noncanonical key encoding, all-zero agreement
+  defense and mixed-cohort denominators. Seven branches remain to inspect.
+- SDK build, Ruff, whitespace and REUSE pass. Full Python coverage is being
+  refreshed with all configured services/artifacts; the separate local-EVM
+  checkpoint test passed. This remains progress, not full-goal completion.
+
+- Full Python run: 1246 passed, plus the separate local-EVM checkpoint passed.
+  Combined coverage is 7768/8316 lines (93.41%) and 1681/2062 branches (81.52%),
+  including child processes and generated modules. PostgreSQL was stopped after
+  verification. The next largest authored gaps include sanctions registry logic,
+  pilot proof routes, policy model validation and the in-memory SAR audit log.

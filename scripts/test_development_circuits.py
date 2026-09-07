@@ -186,6 +186,7 @@ def main():
         "pytest",
         "tests/integration/test_pilot_pairing.py",
         "tests/integration/test_legacy_verifier.py",
+        "tests/integration/test_api_real_circuit.py",
         "-q",
         env={
             **os.environ,

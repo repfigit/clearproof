@@ -31,7 +31,24 @@ def generation(db, monkeypatch, sample_compliance_proof):
     )
     registry = SimpleNamespace(get=Mock(return_value=credential), get_commitment=Mock(return_value="123"))
     monkeypatch.setattr(proof, "_check_sanctions_staleness", AsyncMock())
-    monkeypatch.setattr(proof.SanctionsMerkleTree, "load", Mock(return_value=SimpleNamespace(root="123")))
+    path = {"siblings": ["0"] * 20, "indices": [0] * 20}
+    monkeypatch.setattr(
+        proof,
+        "_issuer_registry",
+        SimpleNamespace(get_root=Mock(return_value="123"), generate_membership_witness=AsyncMock(return_value=path)),
+    )
+    monkeypatch.setattr(
+        proof.SanctionsMerkleTree,
+        "load",
+        Mock(
+            return_value=SimpleNamespace(
+                root="123",
+                generate_nonmembership_witness=AsyncMock(
+                    return_value={"left_neighbor": 0, "right_neighbor": 999, "left_path": path, "right_path": path}
+                ),
+            )
+        ),
+    )
     monkeypatch.setattr(proof, "_poseidon_hash", AsyncMock(return_value="123"))
     monkeypatch.setattr(proof, "_load_vk", Mock(return_value={}))
     monkeypatch.setattr(

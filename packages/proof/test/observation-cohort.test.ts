@@ -92,3 +92,28 @@ it('normalizes optional labels, sorts selected cases and rejects duplicate refer
   expect(() => normalizeCohort({ cohort_id: 'sample', cases: [input.cases[0],
     { ...input.cases[0], case_id: 'another' }] })).toThrow();
 });
+
+it('keeps failed pairing and unobserved cases out of agreement and latency denominators', () => {
+  const selected = { cohort_id: 'mixed', cases: [
+    { case_id: 'failed', observation_id: 'a'.repeat(64), baseline_outcome: 'ALLOW' },
+    { case_id: 'missing', observation_id: null },
+    { case_id: 'observed', observation_id: 'b'.repeat(64), baseline_outcome: 'DENY' },
+  ] };
+  const mixed = { ...report(), cohort_id: 'mixed',
+    cohort_digest: recordDigest('clearproof/observation-cohort/v1', normalizeCohort(selected)),
+    case_count: 3, observed_count: 2, missing_count: 1, failed_pairing_count: 1,
+    distinct_observed_transfers: 2, baseline_label_count: 2, comparable_count: 1,
+    agreement_count: 1, disagreement_count: 0, latency_status: 'partial',
+    latency: { ...report().latency, unmeasured_observed_count: 1, unmeasured_case_count: 2 },
+    cases: [
+      { case_id: 'failed', status: 'observed', outcome: null, cryptographic_valid: false,
+        baseline_outcome: 'ALLOW', agrees_with_baseline: null },
+      { case_id: 'missing', status: 'not-observed', outcome: null, cryptographic_valid: null,
+        baseline_outcome: null, agrees_with_baseline: null },
+      { case_id: 'observed', status: 'observed', outcome: 'DENY', cryptographic_valid: true,
+        baseline_outcome: 'DENY', agrees_with_baseline: true },
+    ],
+  };
+  expect(validateCohortReport(mixed, selected)).toEqual(mixed);
+  expect(() => validateCohortReport({ ...mixed, comparable_count: 2 }, selected)).toThrow();
+});
