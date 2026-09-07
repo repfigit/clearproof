@@ -30,6 +30,7 @@ def synthetic_case(
     with_trust=False,
     authorization=False,
     evaluated_at=None,
+    deployment_address=None,
 ):
     fixture = json.loads((ROOT / "specs/fixtures/transfer-v1.json").read_text())
     if evaluated_at is not None:
@@ -66,6 +67,8 @@ def synthetic_case(
     context = VerificationContext.model_validate(
         {**fixture["records"][1]["value"], "proof_profile": "pilot-transfer-v2"}
     )
+    if deployment_address is not None:
+        context = VerificationContext.model_validate({**context.model_dump(), "deployment_address": deployment_address})
     if artifact_manifest_digest is not None:
         context = VerificationContext.model_validate(
             {**context.model_dump(), "artifact_manifest_digest": artifact_manifest_digest}

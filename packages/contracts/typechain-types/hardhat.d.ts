@@ -54,6 +54,10 @@ declare module "hardhat/types/runtime" {
       signerOrOptions?: ethers.Signer | FactoryOptions
     ): Promise<Contracts.ISanctionsRootReceiver__factory>;
     getContractFactory(
+      name: "PilotCurrentRegistry",
+      signerOrOptions?: ethers.Signer | FactoryOptions
+    ): Promise<Contracts.PilotCurrentRegistry__factory>;
+    getContractFactory(
       name: "PilotGroth16Verifier",
       signerOrOptions?: ethers.Signer | FactoryOptions
     ): Promise<Contracts.PilotGroth16Verifier__factory>;
@@ -133,6 +137,11 @@ declare module "hardhat/types/runtime" {
       signer?: ethers.Signer
     ): Promise<Contracts.ISanctionsRootReceiver>;
     getContractAt(
+      name: "PilotCurrentRegistry",
+      address: string | ethers.Addressable,
+      signer?: ethers.Signer
+    ): Promise<Contracts.PilotCurrentRegistry>;
+    getContractAt(
       name: "PilotGroth16Verifier",
       address: string | ethers.Addressable,
       signer?: ethers.Signer
@@ -209,6 +218,10 @@ declare module "hardhat/types/runtime" {
       signerOrOptions?: ethers.Signer | DeployContractOptions
     ): Promise<Contracts.ISanctionsRootReceiver>;
     deployContract(
+      name: "PilotCurrentRegistry",
+      signerOrOptions?: ethers.Signer | DeployContractOptions
+    ): Promise<Contracts.PilotCurrentRegistry>;
+    deployContract(
       name: "PilotGroth16Verifier",
       signerOrOptions?: ethers.Signer | DeployContractOptions
     ): Promise<Contracts.PilotGroth16Verifier>;
@@ -287,6 +300,11 @@ declare module "hardhat/types/runtime" {
       args: any[],
       signerOrOptions?: ethers.Signer | DeployContractOptions
     ): Promise<Contracts.ISanctionsRootReceiver>;
+    deployContract(
+      name: "PilotCurrentRegistry",
+      args: any[],
+      signerOrOptions?: ethers.Signer | DeployContractOptions
+    ): Promise<Contracts.PilotCurrentRegistry>;
     deployContract(
       name: "PilotGroth16Verifier",
       args: any[],

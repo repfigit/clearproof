@@ -6,6 +6,7 @@ export * as bench from "./bench";
 export { ComplianceRegistry__factory } from "./ComplianceRegistry__factory";
 export { Groth16Verifier__factory } from "./Groth16Verifier__factory";
 export { ISanctionsRootReceiver__factory } from "./ISanctionsRootReceiver__factory";
+export { PilotCurrentRegistry__factory } from "./PilotCurrentRegistry__factory";
 export { PilotGroth16Verifier__factory } from "./PilotGroth16Verifier__factory";
 export { PilotRootCheckpoint__factory } from "./PilotRootCheckpoint__factory";
 export { SanctionsOracle__factory } from "./SanctionsOracle__factory";

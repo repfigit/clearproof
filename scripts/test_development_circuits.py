@@ -204,12 +204,14 @@ def main():
         "--network",
         "hardhat",
         "test/PilotGroth16Verifier.test.ts",
+        "test/PilotCurrentRegistry.test.ts",
         "test/E2E.test.ts",
         cwd=contracts,
         env={
             **os.environ,
             "CLEARPROOF_PILOT_TEST_ARTIFACTS": str(pilot),
             "CLEARPROOF_LEGACY_TEST_ARTIFACTS": str(output / "legacy"),
+            "CLEARPROOF_TEST_PYTHON": sys.executable,
         },
     )
     print("Development round trips passed; artifacts remain unapproved:", output, flush=True)
