@@ -138,3 +138,14 @@ def test_lock_timeout_never_appends_without_ownership(tmp_path):
     assert path.read_bytes() == original
     mirror.record("after-release", {})
     assert mirror.verify_integrity()
+
+
+def test_legacy_crlf_records_remain_valid_after_append(tmp_path):
+    path = tmp_path / "mirror.jsonl"
+    mirror = AuditMirror(str(path))
+    mirror.record("first", {})
+    mirror.record("second", {})
+    path.write_bytes(path.read_bytes().replace(b"\n", b"\r\n") + b"\r\n")
+    assert mirror.verify_integrity()
+    AuditMirror(str(path)).record("third", {})
+    assert mirror.verify_integrity()

@@ -122,3 +122,26 @@ File-lock API reference: [Portalocker quickstart](https://portalocker.readthedoc
 Locks coordinate cooperating writers; these tests cover the local filesystem.
 The remaining Python, SDK, contracts, docs and operational-script requirements
 still need completion and final merged-main verification.
+
+## Fourth checkpoint in progress
+
+- Keyring rotation, legacy CRLF audit append compatibility and real chain ABI/signing
+  regressions pass in focused tests. These changes still need the next full
+  PostgreSQL/artifact regression and combined coverage measurement.
+- Legacy verification now follows SnarkJS's exit status rather than searching
+  stdout for `OK`. Both entry points share verification-key-only behavior, private
+  temporary directories and owned subprocess cleanup. Timeout/cancellation reaps
+  children before deleting files; POSIX cleanup includes the process group.
+  `npx --no-install` prevents implicit package installation. Tool output is discarded
+  because it may include witness data.
+- Eleven focused verifier/process tests pass with 100% measured line and branch
+  coverage of the standalone verifier and process helper. Tests include actual
+  child timeout/cancellation, cancellation during creation, spawn failure,
+  platform cleanup and an already-exited process race. The actual installed
+  SnarkJS also accepts the committed development proof and rejects altered public
+  signals through both entry points (one integration test, four CLI executions).
+- Proof generation still uses the old subprocess lifecycle and requires its own
+  cleanup, failure and actual round-trip tests. The verifier coverage result does
+  not establish full prover coverage or completion of the overall goal.
+- Broader unit regression: 950 tests pass. Ruff, diff whitespace checks and REUSE
+  licensing checks pass. Full service/artifact coverage totals are not yet refreshed.

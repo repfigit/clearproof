@@ -64,7 +64,7 @@ class ChainWriter:
 
     async def _send_tx(self, tx_func: Any) -> str:
         """Build, sign, and send a contract transaction. Returns tx hash hex."""
-        nonce = await self._w3.eth.get_transaction_count(self._account.address)
+        nonce = await self._w3.eth.get_transaction_count(self._account.address, "pending")
         chain_id = await self._w3.eth.chain_id
 
         tx = await tx_func.build_transaction(
@@ -116,7 +116,7 @@ class ChainWriter:
             _pB,
             _pC,
             _pubSignals,
-            vasp_did_hash,
+            vasp_did_hash.to_bytes(32, "big"),
         )
         return await self._send_tx(tx_func)
 

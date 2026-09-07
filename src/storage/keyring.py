@@ -56,6 +56,8 @@ class KeyRing:
         self._active = active_key
         self._versions: dict[str, KeyVersion] = {active_key.version_id: active_key}
         for k in rotated_keys or []:
+            if k.version_id in self._versions:
+                raise ValueError("Duplicate encryption key version")
             self._versions[k.version_id] = k
 
     @property
@@ -74,13 +76,15 @@ class KeyRing:
         return self._versions.get(version_id)
 
     def add_version(self, key: KeyVersion) -> None:
+        if key.version_id in self._versions:
+            raise ValueError("Duplicate encryption key version")
         self._versions[key.version_id] = key
         if key.is_active:
             self._active = key
 
     def retire_version(self, version_id: str) -> bool:
         key = self._versions.get(version_id)
-        if key and not key.retired and not key.is_expired:
+        if key and key is not self._active and not key.retired and not key.is_expired:
             key.retired = True
             return True
         return False

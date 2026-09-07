@@ -61,6 +61,8 @@ class AuditMirror:
             lines = (f.read(size) + fragment).split(b"\n")
             complete = lines[1:] if position else lines
             for line in reversed(complete):
+                # Match text-mode verification of legacy Windows CRLF records.
+                line = line.rstrip(b"\r")
                 if line:
                     return hashlib.sha256(line).hexdigest()
             fragment = lines[0]

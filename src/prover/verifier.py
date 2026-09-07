@@ -17,6 +17,8 @@ import tempfile
 from pathlib import Path
 from typing import Any
 
+from src.prover._subprocess import run_tool
+
 
 async def verify_proof(
     proof_json: dict[str, Any],
@@ -43,35 +45,23 @@ async def verify_proof(
     # Strip any metadata we may have injected
     proof_clean = {k: v for k, v in proof_json.items() if not k.startswith("_")}
 
-    proof_fd = tempfile.NamedTemporaryFile(mode="w", suffix="_proof.json", delete=False)
-    public_fd = tempfile.NamedTemporaryFile(mode="w", suffix="_public.json", delete=False)
-    proof_path = Path(proof_fd.name)
-    public_path = Path(public_fd.name)
-
-    try:
-        json.dump(proof_clean, proof_fd)
-        proof_fd.close()
-        json.dump(public_json, public_fd)
-        public_fd.close()
-
-        # Uses create_subprocess_exec (argument-list, no shell injection)
-        proc = await asyncio.create_subprocess_exec(
-            "npx",
-            "snarkjs",
-            "groth16",
-            "verify",
-            str(vk),
-            str(public_path),
-            str(proof_path),
-            stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.PIPE,
-        )
-        stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=timeout)
-        return "OK" in stdout.decode()
-
-    except asyncio.TimeoutError:
-        return False
-
-    finally:
-        proof_path.unlink(missing_ok=True)
-        public_path.unlink(missing_ok=True)
+    with tempfile.TemporaryDirectory(prefix="clearproof-verify-") as directory:
+        proof_path = Path(directory) / "proof.json"
+        public_path = Path(directory) / "public.json"
+        proof_path.write_text(json.dumps(proof_clean))
+        public_path.write_text(json.dumps(public_json))
+        try:
+            returncode = await run_tool(
+                "npx",
+                "--no-install",
+                "snarkjs",
+                "groth16",
+                "verify",
+                str(vk),
+                str(public_path),
+                str(proof_path),
+                timeout=timeout,
+            )
+            return returncode == 0
+        except asyncio.TimeoutError:
+            return False
