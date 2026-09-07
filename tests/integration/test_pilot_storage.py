@@ -47,6 +47,24 @@ async def db(monkeypatch):
             await conn.execute(sql.SQL("DROP SCHEMA {} CASCADE").format(sql.Identifier(schema)))
 
 
+@pytest.fixture
+async def mirror_evm(request):
+    url = os.getenv("CLEARPROOF_MIRROR_TEST_RPC")
+    if not url or request.node.callspec.params.get("mutation") != "authorization":
+        yield None
+        return
+    from pathlib import Path
+
+    from tests.integration.pilot_mirror_evm import LocalAuthorizationEVM
+
+    evm = LocalAuthorizationEVM(url)
+    try:
+        await evm.deploy(Path(os.environ["CLEARPROOF_PILOT_TEST_ARTIFACTS"]))
+        yield evm
+    finally:
+        await evm.close()
+
+
 def cipher(key=b"a" * 32, old=None):
     return RecordCipher(KeyRing(KeyVersion("current", key, 0), [KeyVersion("old", old, 0)] if old else []))
 
@@ -1487,7 +1505,7 @@ async def exercise_investigation_cli(app, token, scope, expected_queue, expected
 
 @pytest.mark.skipif(not os.getenv("CLEARPROOF_PILOT_TEST_ARTIFACTS"), reason="requires fresh synthetic pilot artifacts")
 @pytest.mark.parametrize("mutation", ["root", "revocation", "cancel", "policy", "activation", "authorization"])
-async def test_durable_current_inspection_real_pairing_and_revocation(db, monkeypatch, mutation, tmp_path):
+async def test_durable_current_inspection_real_pairing_and_revocation(db, monkeypatch, mutation, tmp_path, mirror_evm):
     import hashlib
     import json
     import runpy
@@ -1520,6 +1538,7 @@ async def test_durable_current_inspection_real_pairing_and_revocation(db, monkey
         with_trust=True,
         authorization=mutation == "authorization",
         evaluated_at=int(time.time()) - 2 if mutation == "authorization" else None,
+        deployment_address=mirror_evm.address if mirror_evm else None,
     )
     credential, now = inputs.pop("credential"), inputs.pop("now")
     configuration = CurrentStatementConfiguration(**inputs)
@@ -1937,6 +1956,7 @@ async def test_durable_current_inspection_real_pairing_and_revocation(db, monkey
                 decision_authority,
                 payload_args,
                 now,
+                mirror_evm=mirror_evm,
             )
             assert await authorize_http(winning_key) == receipt
             assert (await invoke_authorization({"idempotency_key": "http-second-spend"})).status_code == 409
@@ -4085,7 +4105,7 @@ async def exercise_authorization_cli(app, headers, body, receipt):
 
 
 async def check_authorization_mirror(
-    db, principal, configuration, verifier, receipt, fact_trust, decision_authority, payload, now
+    db, principal, configuration, verifier, receipt, fact_trust, decision_authority, payload, now, *, mirror_evm=None
 ):
     import json
 
@@ -4095,7 +4115,7 @@ async def check_authorization_mirror(
     from src.services.authorization_mirror import AuthorizationMirrorService
 
     exporter = Principal.model_validate({**principal.model_dump(), "roles": (*principal.roles, "evidence:export")})
-    consumer = "0x" + "ab" * 20
+    consumer = mirror_evm.consumer.lower() if mirror_evm else "0x" + "ab" * 20
     service = AuthorizationMirrorService(db, cipher(), exporter, verifier, configuration, consumer=consumer)
     arguments = dict(
         pii=payload["pii"],
@@ -4154,6 +4174,12 @@ async def check_authorization_mirror(
     restricted = AuthorizationMirrorService(db, cipher(), principal, verifier, configuration, consumer=consumer)
     with pytest.raises(HTTPException):
         await restricted.prepare(receipt["receipt_id"], **arguments)
+    if mirror_evm:
+        import time
+
+        current = max(int(time.time()), (await mirror_evm.web3.eth.get_block("latest"))["timestamp"])
+        current_plan = await service.prepare(receipt["receipt_id"], **{**arguments, "now": current})
+        assert await mirror_evm.check(current_plan) == receipt["receipt_id"]
     # A signed receipt is insufficient if its actual authoritative consumption is absent.
     async with db.connection() as conn:
         await conn.execute(

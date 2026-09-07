@@ -33,6 +33,39 @@ before checking all scripts and tests. Run compilation/tests first on a clean
 checkout. CI runs typechecking after the Hardhat tests, and the fresh development
 builder runs both artifact-dependent EVM tests.
 
+## PostgreSQL authorization to local EVM
+
+After installing dependencies, building the SDK/CLI and compiling contracts, run:
+
+```bash
+npm run build --workspace=@clearproof/proof
+npm run build --workspace=@clearproof/cli
+npm run compile --workspace=@clearproof/contracts
+# DATABASE_URL must already identify a dedicated test PostgreSQL database.
+.venv/bin/python scripts/test_pilot_mirror.py /absolute/path/to/development/pilot
+```
+
+The runner requires a complete inspected development bundle; it does not generate
+or approve new keys. It starts an owned Hardhat node on a dynamically selected
+loopback port, checks chain ID 31337 and runs all durable pilot storage tests.
+Each test uses a unique database schema that is dropped afterward. The node and
+test process groups are cleaned up on success, failure or interruption, and node
+logs containing public development keys are kept in an ephemeral private file.
+Missing dependencies/artifacts, node startup errors and test failures fail the run.
+
+The authorization fixture deploys the matching verifier and registry before
+producing its real proof. After atomic PostgreSQL authorization it authenticates a
+fresh mirror plan, publishes its actual heads and statement, verifies and mirrors
+the receipt, and confirms the database consumption was not repeated. It exercises
+wrong receipt/caller, replay and checkpoint invalidation, then continues the
+existing restart, API/CLI and offline historical verification checks. This local
+integration uses synthetic credentials and source approvals. It is not a deployed
+publisher service, live source relay or production finality demonstration.
+
+CI invokes this command with the fresh pilot artifacts created by the isolated
+builder. The ordinary suite keeps EVM integration optional when no explicit
+`CLEARPROOF_MIRROR_TEST_RPC` is configured; use the runner to require this gate.
+
 ## Legacy deployment registration and activation
 
 `deploy.ts` and `deploy-multichain.ts` use the shared `prepareLegacyVerifier`

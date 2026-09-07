@@ -158,7 +158,22 @@ interpreter and artifact outputs.
 The real PostgreSQL authorization test independently exercises preparation from an
 actual consumed receipt, same-clock/reconnect stability, read-only counts, exact
 consumption presence, source age cutoff, invalid information/signers, role denial
-and expiry. It does not yet feed that plan to the EVM test.
+and expiry. With `CLEARPROOF_MIRROR_TEST_RPC` explicitly selecting a loopback
+Hardhat node, that same authorization fixture deploys the matching verifier and
+registry before proof generation. Its proof therefore binds the actual registry
+address. It re-prepares the consumed receipt at the current clock while PostgreSQL
+remains live, publishes all eight authenticated head candidates atomically, checks
+real pairing, mirrors the exact receipt and reads it back through a fresh contract
+client. Wrong receipt/caller and replay reject; disabling a checkpoint invalidates
+inspection while preserving the mirror. The database's final checks still require
+exactly one consumption and unchanged retained-record counts.
+
+`scripts/test_pilot_mirror.py` runs the full durable pilot suite with its own fresh
+loopback node, isolated test database schemas and cleanup of owned processes. The
+fresh-artifact CI job uses this runner. This is a synthetic local integration gate:
+it does not fetch live sources, implement a durable publisher process or establish
+shared database/chain finality. Checkpoint invalidation is explicitly submitted by
+the fixture; it does not demonstrate an automated source revocation relay.
 
 To complete CP-007, implement the publication writer and join these gates with
 shared adversarial tests against actual enrollment, facts, policy, valuation,
