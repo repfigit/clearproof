@@ -69,6 +69,9 @@ async def prepare_inspection(
     principal: Principal,
     model: type[InspectionBody],
     service_type: type[ProofInspectionService] = ProofInspectionService,
+    *,
+    target_attribute: str = "pilot_inspection_targets",
+    target_type: type[InspectionTarget] = InspectionTarget,
 ):
     raw = await read_private_body(request, limit=16384)
     try:
@@ -79,13 +82,13 @@ async def prepare_inspection(
         signals = public_signals(body.public_signals)
     except (ValueError, TypeError, RecursionError):
         raise HTTPException(status_code=422, detail="Invalid pilot proof input") from None
-    targets = getattr(request.app.state, "pilot_inspection_targets", None)
+    targets = getattr(request.app.state, target_attribute, None)
     if not isinstance(targets, dict):
         raise HTTPException(status_code=503, detail="Pilot inspection configuration is unavailable")
     target = targets.get((principal.tenant_id, body.target_id))
     if target is None:
         raise HTTPException(status_code=404, detail="Pilot inspection target is unavailable")
-    if not isinstance(target, InspectionTarget):
+    if not isinstance(target, target_type):
         raise HTTPException(status_code=503, detail="Pilot inspection configuration is unavailable")
     db = getattr(request.app.state, "db", None)
     if db is None or not db.is_ready:

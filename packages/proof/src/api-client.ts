@@ -1,7 +1,7 @@
 const INPUT_LIMIT = 1024 * 1024;
 const OUTPUT_LIMIT = 2 * 1024 * 1024;
 
-export type ReportPath = '/pilot/policy/diff' | '/pilot/policy/diff/stored' | '/pilot/events/investigate' | '/pilot/events/queue' | '/pilot/proof/inspect' | '/pilot/proof/observe' | '/pilot/proof/observations/read' | '/pilot/proof/observations/report' | '/pilot/proof/observations/list';
+export type ReportPath = '/pilot/policy/diff' | '/pilot/policy/diff/stored' | '/pilot/events/investigate' | '/pilot/events/queue' | '/pilot/proof/inspect' | '/pilot/proof/observe' | '/pilot/proof/observations/read' | '/pilot/proof/observations/report' | '/pilot/proof/observations/list' | '/pilot/proof/authorize';
 
 export function reportEndpoint(base: string, path: ReportPath): URL {
   const url = new URL(base);

@@ -13,6 +13,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from src.api.routes.auth import router as auth_router
+from src.api.routes.authorization import router as authorization_router
 from src.api.routes.credential import router as credential_router
 from src.api.routes.discovery import router as discovery_router
 from src.api.routes.enrollment import router as enrollment_router
@@ -113,6 +114,7 @@ def create_app() -> FastAPI:
     app.include_router(enrollment_router)
     app.include_router(policy_router)
     app.include_router(pilot_proof_router)
+    app.include_router(authorization_router)
     app.include_router(usage_router)
     app.include_router(events_router)
     app.include_router(fireblocks_router)

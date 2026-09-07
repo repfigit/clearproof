@@ -43,9 +43,10 @@ execute payments, guarantee settlement or supply audited production proving keys
 
 The draft source includes policy comparison, read-only investigation, authenticated
 current proof inspection/evaluation, durable observations and cohort reports,
-and encrypted evidence export/offline historical review. Real development proofs
+explicit local authorization through the API/source clients, and encrypted evidence
+export/offline historical review. Real development proofs
 and tenant/restart checks exist. The complete clean-environment pilot, deterministic
-bilateral scenario, current authorization API and contract parity remain unfinished.
+bilateral scenario and contract parity remain unfinished.
 Managed connectors, supported hosting, retention operations and an SLA are proposed
 services, not released products. Consult the implementation plan before each demo.
 

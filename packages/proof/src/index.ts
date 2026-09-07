@@ -26,3 +26,6 @@ export type { ObservationCohortRequest, ObservationCohortReport } from './observ
 
 export { listObservations } from './observation-page.js';
 export type { ObservationPageRequest, ObservationPage } from './observation-page.js';
+
+export { authorizeCurrentProof } from './authorization.js';
+export type { AuthorizationRequest, AuthorizationReceipt, AuthorizationReport } from './authorization.js';

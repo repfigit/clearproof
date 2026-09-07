@@ -1884,15 +1884,55 @@ async def test_durable_current_inspection_real_pairing_and_revocation(db, monkey
             async with db.connection() as conn:
                 assert (await (await conn.execute("SELECT count(*) FROM pilot_records")).fetchone())[0] == baseline
                 assert (await (await conn.execute("SELECT count(*) FROM pilot_consumptions")).fetchone())[0] == 0
+            (
+                invoke_authorization,
+                authorization_app,
+                authorization_headers,
+                authorization_body,
+            ) = await prepare_authorization_http(
+                db,
+                monkeypatch,
+                principal,
+                configuration,
+                verifier,
+                proof,
+                signals,
+                credential.credential_nonce,
+                refs,
+                trust,
+                payload_args,
+                now,
+            )
+
+            async def authorize_http(key):
+                response = await invoke_authorization({"idempotency_key": key})
+                if response.status_code == 409:
+                    raise ReplayConflict("Competing HTTP consumption")
+                assert response.status_code == 200, response.text
+                report = response.json()
+                assert report["schema_version"] == "clearproof-authorization-response-v1"
+                assert report["scope"] == "recorded-local-authorization"
+                assert report["assurance"] == "development-unapproved"
+                assert set(report) == {"schema_version", "scope", "assurance", "receipt"}
+                return report["receipt"]
+
             # Different request keys compete for the same real proof nullifier.
             contenders = ("consume-once", "competing-spend")
-            results = await asyncio.gather(*(authorize(key=k) for k in contenders), return_exceptions=True)
+            results = await asyncio.gather(
+                authorize_http(contenders[0]), authorize_http(contenders[1]), return_exceptions=True
+            )
             assert sum(isinstance(result, ReplayConflict) for result in results) == 1
             assert sum(isinstance(result, dict) for result in results) == 1
             winning_key = contenders[next(i for i, result in enumerate(results) if isinstance(result, dict))]
             receipts = await asyncio.gather(authorize(key=winning_key), authorize(key=winning_key))
             assert receipts[0] == receipts[1]
             receipt = receipts[0]
+            assert await authorize_http(winning_key) == receipt
+            assert (await invoke_authorization({"idempotency_key": "http-second-spend"})).status_code == 409
+            assert (await invoke_authorization({"idempotency_key": winning_key, "fact_ids": []})).status_code == 409
+            assert (
+                await invoke_authorization({"idempotency_key": winning_key}, {"actor_id": "other-actor"})
+            ).status_code == 409
             assert receipt["execution"] == "not-requested" and receipt["outcome"] == "ALLOW"
             with pytest.raises(ReplayConflict):
                 await authorize(key="second-spend")
@@ -1917,6 +1957,17 @@ async def test_durable_current_inspection_real_pairing_and_revocation(db, monkey
                 )
                 == receipt
             )
+            from src.api.routes import authorization as authorization_route
+
+            monkeypatch.setattr(authorization_route, "inspection_time", lambda: credential.expires_at + 1)
+            assert await authorize_http(winning_key) == receipt
+            if os.getenv("CLEARPROOF_POLICY_CLI_TEST") == "1":
+                await exercise_authorization_cli(
+                    authorization_app,
+                    authorization_headers,
+                    {**authorization_body, "idempotency_key": winning_key},
+                    receipt,
+                )
             retained = PilotStore(db, cipher(), principal)
             record = await retained.get("proof", receipt["proof_id"])
             assert base64.b64decode(record["proof_base64"], validate=True) == proof
@@ -3803,3 +3854,220 @@ async def test_usage_inventory_scope_idempotency_and_read_only_api(db, monkeypat
         app.state.db = None
         assert (await client.get("/pilot/usage", headers=headers())).status_code == 503
     assert (await usage_inventory(db, usage_reader, now=1003)).counters == own.counters
+
+
+async def prepare_authorization_http(
+    db,
+    monkeypatch,
+    principal,
+    configuration,
+    verifier,
+    proof,
+    signals,
+    credential_id,
+    refs,
+    fact_trust,
+    payload_args,
+    now,
+):
+    """Exercise request/trust rejection; return an actual JWT HTTP client for consumption races."""
+    import json
+    import time
+    from dataclasses import replace
+
+    import jwt
+    from cryptography.hazmat.primitives import serialization
+    from cryptography.hazmat.primitives.asymmetric import ec
+    from httpx import ASGITransport, AsyncClient
+
+    from src.api.main import create_app
+    from src.api.middleware import auth
+    from src.api.routes import authorization
+    from src.api.routes.authorization import AuthorizationTarget
+    from src.services.authorization_input import SealedAuthorizationInformation
+
+    key = ec.generate_private_key(ec.SECP256R1())
+    monkeypatch.setattr(auth, "AUTH_MODE", "jwt")
+    monkeypatch.setattr(
+        auth,
+        "JWT_PUBLIC_KEY",
+        key.public_key()
+        .public_bytes(serialization.Encoding.PEM, serialization.PublicFormat.SubjectPublicKeyInfo)
+        .decode(),
+    )
+    monkeypatch.setenv("PII_MASTER_KEY", (b"a" * 32).hex())
+    monkeypatch.setattr(authorization, "inspection_time", lambda: now)
+    roles = ["proof:consume", "proof:generate", "proof:inspect", "policy:read", "evidence:decrypt"]
+
+    def headers(**changes):
+        claims = dict(
+            iss=auth.JWT_ISSUER,
+            aud=auth.JWT_AUDIENCE,
+            sub=principal.actor_id,
+            actor_id=principal.actor_id,
+            iat=int(time.time()),
+            tenant_id=principal.tenant_id,
+            roles=roles,
+            exp=int(time.time()) + 600,
+        )
+        return {"Authorization": "Bearer " + jwt.encode({**claims, **changes}, key, algorithm="ES256")}
+
+    sealed = SealedAuthorizationInformation.seal(
+        cipher(),
+        tenant_id=principal.tenant_id,
+        target_id="local-transfer",
+        pii=payload_args["pii"],
+        approval=payload_args["information_approval"],
+    )
+    assert payload_args["pii"] not in sealed.row["ciphertext"]
+    assert "payload" not in repr(sealed) and "approval" not in repr(sealed)
+    target = AuthorizationTarget(
+        configuration=configuration,
+        verifier=verifier,
+        fact_trust=fact_trust,
+        information=sealed,
+        information_trust=payload_args["information_trust"],
+        decision_signer=payload_args["decision_signer"],
+        recipient_trust=payload_args["recipient_trust"],
+        recipient_key_id=payload_args["recipient_key_id"],
+    )
+    app = create_app()
+    app.state.db = db
+    targets = {(principal.tenant_id, "local-transfer"): target}
+    app.state.pilot_authorization_targets = targets
+    body = dict(
+        target_id="local-transfer",
+        credential_id=credential_id,
+        proof_json=proof.decode(),
+        public_signals=signals,
+        fact_ids=list(refs),
+        idempotency_key="consume-once",
+    )
+    path = "/pilot/proof/authorize"
+
+    async def invoke(changes=None, claims=None, *, authenticated=True):
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            return await client.post(
+                path, json={**body, **(changes or {})}, headers=headers(**(claims or {})) if authenticated else {}
+            )
+
+    async with db.connection() as conn:
+        before = (await (await conn.execute("SELECT count(*) FROM pilot_records")).fetchone())[0]
+    assert (await invoke(authenticated=False)).status_code == 401
+    for missing in roles:
+        assert (await invoke(claims={"roles": [r for r in roles if r != missing]})).status_code == 403
+    assert (await invoke(claims={"tenant_id": "foreign"})).status_code == 404
+    assert (await invoke({"target_id": "missing"})).status_code == 404
+    assert (await invoke({"credential_id": "missing"})).status_code == 422  # Signed information binds credential.
+    for changes in (
+        {"now": now},
+        {"recipient_key_id": "PRIVATE-MARKER"},
+        {"pii": "PRIVATE-MARKER"},
+        {"decision_signer": "PRIVATE-MARKER"},
+        {"mode": "observation"},
+        {"public_signals": signals + ["0"]},
+        {"proof_json": "PRIVATE-MARKER"},
+    ):
+        rejected = await invoke(changes)
+        assert rejected.status_code == 422 and "PRIVATE-MARKER" not in rejected.text
+    assert (await invoke({"fact_ids": []})).status_code == 422
+    changed_proof = json.loads(proof)
+    changed_proof["pi_c"][0] = str(int(changed_proof["pi_c"][0]) + 1)
+    assert (await invoke({"proof_json": json.dumps(changed_proof)})).status_code == 422
+    # Sealed inputs bind both tenant and target name; neither can be relabeled.
+    targets[(principal.tenant_id, "renamed-target")] = target
+    assert (await invoke({"target_id": "renamed-target"})).status_code == 503
+    targets[(principal.tenant_id, "local-transfer")] = replace(target, fact_trust=None)
+    assert (await invoke()).status_code == 503
+    targets[(principal.tenant_id, "local-transfer")] = replace(
+        target,
+        information=SealedAuthorizationInformation({**sealed.row, "ciphertext": b"x" * len(sealed.row["ciphertext"])}),
+    )
+    assert (await invoke()).status_code == 503
+    targets[(principal.tenant_id, "local-transfer")] = target
+    app.state.pilot_authorization_targets = None
+    assert (await invoke()).status_code == 503
+    app.state.pilot_authorization_targets = targets
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        duplicate = json.dumps(body)[:-1] + ',"idempotency_key":"other"}'
+        assert (await client.post(path, content=duplicate, headers=headers())).status_code == 422
+        assert (await client.post(path, content=b"x" * 16385, headers=headers())).status_code == 413
+        assert (await client.post(path + "?tenant_id=foreign", json=body, headers=headers())).status_code == 422
+    async with db.connection() as conn:
+        assert (await (await conn.execute("SELECT count(*) FROM pilot_records")).fetchone())[0] == before
+        assert (await (await conn.execute("SELECT count(*) FROM pilot_consumptions")).fetchone())[0] == 0
+    return invoke, app, headers, body
+
+
+async def exercise_authorization_cli(app, headers, body, receipt):
+    """Built SDK checks the API's exact historical receipt; failures never imply rollback."""
+    import json
+    import shutil
+    import socket
+    from pathlib import Path
+
+    import uvicorn
+
+    node = shutil.which("node")
+    cli = Path(__file__).resolve().parents[2] / "packages/cli/dist/index.js"
+    assert node and cli.is_file()
+    sock = socket.socket()
+    sock.bind(("127.0.0.1", 0))
+    origin = f"http://127.0.0.1:{sock.getsockname()[1]}"
+    server = uvicorn.Server(uvicorn.Config(app, lifespan="off", access_log=False, log_level="error"))
+    task = asyncio.create_task(server.serve(sockets=[sock]))
+
+    async def invoke(payload, **claims):
+        process = await asyncio.create_subprocess_exec(
+            node,
+            str(cli),
+            "authorize-current",
+            "--api-url",
+            origin,
+            env={
+                "PATH": os.environ.get("PATH", ""),
+                "CLEARPROOF_API_TOKEN": headers(**claims)["Authorization"].removeprefix("Bearer "),
+            },
+            stdin=asyncio.subprocess.PIPE,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+        )
+        try:
+            stdout, stderr = await asyncio.wait_for(process.communicate(json.dumps(payload).encode()), 30)
+            return process.returncode, stdout, stderr
+        finally:
+            if process.returncode is None:
+                process.kill()
+            await process.wait()
+
+    try:
+        async with asyncio.timeout(10):
+            while not server.started:
+                if task.done():
+                    await task
+                    raise AssertionError("Authorization API stopped before startup")
+                await asyncio.sleep(0.01)
+        for _ in range(2):
+            code, stdout, stderr = await invoke(body)
+            assert code == 0 and stderr == b"", stderr.decode()
+            result = json.loads(stdout)
+            assert result["receipt"] == receipt
+            assert result["scope"] == "recorded-local-authorization"
+            assert result["receipt"]["execution"] == "not-requested"
+        for altered, claims in [
+            (dict(body, idempotency_key="cli-another-spend"), {}),
+            (dict(body, fact_ids=[]), {}),
+            (dict(body, pii="PRIVATE-MARKER"), {}),
+            (body, {"roles": ["proof:inspect", "evidence:decrypt"]}),
+            (body, {"tenant_id": "foreign"}),
+        ]:
+            code, stdout, stderr = await invoke(altered, **claims)
+            assert code == 2 and stdout == b""
+            assert b"retry only the same request and idempotency key" in stderr
+            assert b"PRIVATE-MARKER" not in stderr and origin.encode() not in stderr
+    finally:
+        server.should_exit = True
+        try:
+            await asyncio.wait_for(task, 10)
+        finally:
+            sock.close()
