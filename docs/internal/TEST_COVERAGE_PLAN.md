@@ -567,3 +567,16 @@ still need completion and final merged-main verification.
 - Other Python storage/lifecycle gaps, SDK branches, Solidity, docs/browser,
   operational scripts and final publication checks still prevent a full coverage
   completion claim. Full-suite totals have not been refreshed in this checkpoint.
+
+## Twenty-sixth checkpoint
+
+- Added six ASGI request-body tests for exact chunked limits, empty uploads,
+  over-limit early termination, deadline cancellation, client disconnect and
+  caller cancellation. The timeout test checks the configured ten-second value
+  and shortens only the test deadline while retaining real asyncio cancellation.
+- The upload/route regression passes 74 tests. The bounded upload helper measures
+  13/13 statements and 4/4 branches (`private-request-body.log`/`.data`). Ruff and
+  whitespace pass. No production changes were required. Partial private bodies
+  are not returned on disconnect, cancellation or limit/deadline failures.
+- Remaining Python, SDK, Solidity, docs/browser, operational-script and final
+  review/publication requirements still prevent full repository completion.
