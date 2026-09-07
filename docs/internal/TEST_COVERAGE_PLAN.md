@@ -359,3 +359,18 @@ still need completion and final merged-main verification.
   root trust and remaining profile boundary behavior still require review/tests.
   Full combined coverage and outstanding Python/SDK/contracts/docs/scripts work
   remain part of the active objective.
+
+## Fourteenth checkpoint
+
+- Added policy trust-boundary tests for malformed/non-ASCII source references,
+  source credentials/fragments, invalid review intervals, deployment IDs,
+  revision links, rule operator/threshold mismatches, duplicate or missing source
+  references, bounded inventories and duplicate current pins. Accepted HTTPS
+  references and all four coherent rule operators are also exercised.
+- The existing validators reject these inputs correctly; no production model
+  changes were necessary. The policy/evaluator/diff regression passes 87 tests.
+  The policy model measures 127/127 statements and 60/60 branches in the focused
+  report (`policy-validation.data`). Ruff and whitespace checks pass.
+- This is module-level evidence. Overall Python coverage still requires a fresh
+  combined service/artifact run, and the remaining SDK, contracts, docs, scripts
+  and publication requirements remain open.
