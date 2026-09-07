@@ -1,4 +1,7 @@
-import { describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { requestReport } from '../src/api-client.js';
+vi.mock('../src/api-client.js', () => ({ requestReport: vi.fn() }));
+beforeEach(() => { vi.mocked(requestReport).mockReset(); });
 import { recordDigest } from '../src/canonical.js';
 import { createObservation, readObservation, validateObservationReport } from '../src/observation.js';
 
@@ -63,4 +66,25 @@ describe('versioned observation duration', () => {
         observation_id: recordDigest('clearproof/proof-observation/v2', changed) })).toThrow();
     }
   });
+});
+
+it('routes creation and reads, and rejects a substituted observation on read', async () => {
+  const response = seal(record());
+  vi.mocked(requestReport).mockResolvedValue(response);
+  const create = Buffer.from('{}');
+  expect(await createObservation('https://operator.example', 'token', create)).toEqual(response);
+  expect(requestReport).toHaveBeenLastCalledWith('https://operator.example', 'token', '/pilot/proof/observe', create);
+  const read = Buffer.from(JSON.stringify({ observation_id: response.observation_id }));
+  expect(await readObservation('https://operator.example', 'token', read)).toEqual(response);
+  expect(requestReport).toHaveBeenLastCalledWith('https://operator.example', 'token', '/pilot/proof/observations/read', read);
+  await expect(readObservation('https://operator.example', 'token', Buffer.from('{"observation_id":"other"}')))
+    .rejects.toThrow('Observation request unavailable or rejected');
+});
+
+it('rejects empty and wrong-type observation input before transport', async () => {
+  for (const input of [Buffer.alloc(0), null as unknown as Uint8Array]) {
+    await expect(createObservation('https://operator.example', 'token', input)).rejects.toThrow('unavailable or rejected');
+    await expect(readObservation('https://operator.example', 'token', input)).rejects.toThrow('unavailable or rejected');
+  }
+  expect(requestReport).not.toHaveBeenCalled();
 });

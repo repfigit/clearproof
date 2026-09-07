@@ -30,7 +30,7 @@
   "scripts": {
     "build": "tsc",
     "test": "vitest run",
-    "test:coverage": "vitest run --coverage --coverage.include=\"src/**/*.ts\" --coverage.reporter=text --coverage.reporter=json-summary --coverage.reporter=lcov"
+    "test:coverage": "vitest run --coverage --coverage.include=\"src/**/*.ts\" --coverage.reporter=text --coverage.reporter=json-summary --coverage.reporter=lcov --coverage.thresholds.lines=100 --coverage.thresholds.functions=100"
   },
   "dependencies": {
     "snarkjs": "^0.7.6"

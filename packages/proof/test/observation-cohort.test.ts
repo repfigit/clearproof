@@ -1,6 +1,9 @@
-import { describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { requestReport } from '../src/api-client.js';
+vi.mock('../src/api-client.js', () => ({ requestReport: vi.fn() }));
+beforeEach(() => { vi.mocked(requestReport).mockReset(); });
 import { recordDigest } from '../src/canonical.js';
-import { normalizeCohort, validateCohortReport } from '../src/observation-cohort.js';
+import { normalizeCohort, reportObservationCohort, validateCohortReport } from '../src/observation-cohort.js';
 
 const input = { cohort_id: 'sample', cases: [{ case_id: 'case-a', observation_id: 'a'.repeat(64), baseline_outcome: 'ALLOW' }] };
 function report() {
@@ -45,4 +48,47 @@ describe('cohort client response binding', () => {
     expect(validateCohortReport(missing, input)).toEqual(missing);
     expect(() => validateCohortReport({ ...missing, latency: { ...missing.latency, total_duration_ns: 0 } }, input)).toThrow();
   });
+});
+
+it('sends the selected cohort and rejects a response for a different cohort', async () => {
+  const bytes = Buffer.from(JSON.stringify(input));
+  vi.mocked(requestReport).mockResolvedValue(report());
+  expect(await reportObservationCohort('https://operator.example', 'token', bytes)).toEqual(report());
+  expect(requestReport).toHaveBeenCalledWith('https://operator.example', 'token', '/pilot/proof/observations/report', bytes);
+  vi.mocked(requestReport).mockResolvedValue({ ...report(), cohort_id: 'substituted' });
+  await expect(reportObservationCohort('https://operator.example', 'token', bytes)).rejects.toThrow('unavailable or rejected');
+});
+
+it('validates cohort input before transport', async () => {
+  for (const bytes of [Buffer.alloc(0), Buffer.alloc(16385), Buffer.from('{'), Buffer.from('{}'),
+    null as unknown as Uint8Array]) {
+    await expect(reportObservationCohort('https://operator.example', 'token', bytes)).rejects.toThrow('unavailable or rejected');
+  }
+  expect(requestReport).not.toHaveBeenCalled();
+});
+
+it('rejects invalid pairing and missing-case status claims', () => {
+  for (const changes of [
+    { cryptographic_valid: 'true' }, { cryptographic_valid: false }, { outcome: 'UNKNOWN' },
+    { status: 'not-observed', cryptographic_valid: null, outcome: null },
+    { status: 'unavailable', cryptographic_valid: true, outcome: null },
+  ]) {
+    expect(() => validateCohortReport({ ...report(), cases: [{ ...report().cases[0], ...changes }] }, input)).toThrow();
+  }
+});
+
+it('normalizes optional labels, sorts selected cases and rejects duplicate references', () => {
+  const cases = [{ case_id: 'z', observation_id: null }, { case_id: 'a', observation_id: null },
+    { case_id: 'm', observation_id: 'b'.repeat(64), baseline_outcome: 'REVIEW' }];
+  expect(normalizeCohort({ cohort_id: 'sample', cases }).cases).toEqual([
+    { case_id: 'a', observation_id: null, baseline_outcome: null }, cases[2],
+    { case_id: 'z', observation_id: null, baseline_outcome: null },
+  ]);
+  for (const invalid of [null, { case_id: 'x', observation_id: 'bad' },
+    { case_id: 'x', observation_id: null, baseline_outcome: 'UNKNOWN' },
+    { case_id: 'x', observation_id: null, private: 'PRIVATE-MARKER' }]) {
+    expect(() => normalizeCohort({ cohort_id: 'sample', cases: [invalid] })).toThrow();
+  }
+  expect(() => normalizeCohort({ cohort_id: 'sample', cases: [input.cases[0],
+    { ...input.cases[0], case_id: 'another' }] })).toThrow();
 });

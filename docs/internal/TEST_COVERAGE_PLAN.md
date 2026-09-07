@@ -51,9 +51,9 @@ exercise every supported test layer with its required local dependencies.
 
 ## Next uncovered behavior to address
 
-Python: chain writer, snarkjs prover, gRPC failure paths, keyring rotation,
-API startup/shutdown and proof route error paths. The current combined report
-still has 927 missed lines and 467 missed branches. Subprocess coverage must also be captured before interpreting child
+Python: gRPC failure paths, API startup/shutdown, proof route error paths and
+remaining validation branches. The current combined report
+still has 779 missed lines and 432 missed branches. Subprocess coverage must also be captured before interpreting child
 CLI modules as unexecuted.
 
 CLI: source line/branch/function/statement coverage is now 100%, enforced by CI.
@@ -145,3 +145,32 @@ still need completion and final merged-main verification.
   not establish full prover coverage or completion of the overall goal.
 - Broader unit regression: 950 tests pass. Ruff, diff whitespace checks and REUSE
   licensing checks pass. Full service/artifact coverage totals are not yet refreshed.
+
+## Fifth checkpoint
+
+- Proof generation now shares owned process cleanup with verification and keeps
+  input, witness and output files inside a private temporary directory. Tests
+  reproduced private-input leakage from witness/prover stderr; errors now retain
+  stage and exit status without tool output. Real child tests cover timeout and
+  cancellation at each stage, alongside missing artifacts and malformed output.
+- Twenty-two focused tests pass with 100% measured line/branch coverage of the
+  legacy prover, standalone verifier and subprocess helper. Actual SnarkJS tests
+  also generate a fresh proof from cached development artifacts, accept it and
+  reject changed public signals. The existing development-circuit CI script now
+  runs these integration tests with its freshly generated legacy artifacts.
+- SDK: 197 tests pass; 400/400 source lines and 89/89 functions are covered.
+  CI's existing coverage command now enforces 100% lines/functions. Statements
+  remain 497/516 (96.31%) and branches 643/671 (95.82%); the SDK is not fully
+  covered yet. New tests exercise authorization request/receipt binding,
+  observation identity matching, cohort validation, DNS answer retention and
+  malformed operator egress configuration.
+- TypeScript SDK build passes. Full Python/PostgreSQL/artifact coverage is being
+  refreshed; the separate local EVM checkpoint test passed.
+
+- Full Python run: 1200 passed; the one skipped checkpoint passed separately on
+  the owned local EVM. Combined coverage is 7516/8295 lines (90.61%) and
+  1628/2060 branches (79.03%). Generated modules remain in the denominator.
+  The local PostgreSQL server was stopped after verification. Ruff, whitespace
+  and REUSE checks pass. Full coverage remains incomplete; subprocess coverage
+  capture, gRPC/API lifecycle branches, SDK branches, Solidity and docs/scripts
+  are still required before final CI/merge verification.

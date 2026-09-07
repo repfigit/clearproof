@@ -185,8 +185,13 @@ def main():
         "-m",
         "pytest",
         "tests/integration/test_pilot_pairing.py",
+        "tests/integration/test_legacy_verifier.py",
         "-q",
-        env={**os.environ, "CLEARPROOF_PILOT_TEST_ARTIFACTS": str(pilot)},
+        env={
+            **os.environ,
+            "CLEARPROOF_PILOT_TEST_ARTIFACTS": str(pilot),
+            "CLEARPROOF_LEGACY_TEST_ARTIFACTS": str(output / "legacy"),
+        },
     )
     # Exercise the same fresh eight-signal proof on the local EVM. Never deploy to
     # a configured remote network and never copy development keys into source.
