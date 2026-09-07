@@ -453,3 +453,21 @@ still need completion and final merged-main verification.
 - Whole-repository percentages remain the last full combined report. Remaining
   Python, SDK, Solidity, docs/browser, operational-script and publication work
   is still required before claiming full test coverage.
+
+## Nineteenth checkpoint
+
+- Added 38 ASGI tests for observation read/report/list routes. They verify invalid
+  and duplicate-key JSON rejection, private-body-only pagination selectors,
+  unavailable databases/encryption configuration, bounded storage-error responses,
+  missing observations and successful service result forwarding.
+- Each route requires both policy-read and evidence-decrypt roles, including for
+  a tenant administrator; denied requests never call the storage service. These
+  tests override authentication with explicit principals and mock service results,
+  while the existing JWT/PostgreSQL suites cover those separate boundaries.
+- All 38 tests pass; Ruff and whitespace checks pass. No production changes were
+  required. The focused report covers all three observation read handlers and
+  shows 103/164 statements for the complete pilot-proof route module; inspect,
+  evaluate and observe paths remain outside this focused invocation. Do not
+  interpret that partial report as repository-wide coverage or a regression.
+- Remaining route failure paths and the broader Python/SDK/contracts/docs/scripts
+  and publication requirements remain active.
