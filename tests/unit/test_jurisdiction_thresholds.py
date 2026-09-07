@@ -150,3 +150,25 @@ class TestCrossLanguageParity:
         for t in list(cfg["jurisdictions"].values()) + [cfg["default"]]:
             for value in t.values():
                 assert 0 <= value < 2**64
+
+    def test_default_is_at_least_as_strict_as_every_registered_jurisdiction(self):
+        """
+        AIF-97 — the default thresholds are the fail-to-strictest fallback for
+        unregistered jurisdiction codes. A lower tier escalates to Travel Rule
+        sooner, so `default.tierN <= jurisdiction.tierN` for every tier means
+        the prover cannot profit from claiming an unknown code: the fallback
+        is never looser than a registered jurisdiction.
+
+        If a new jurisdiction is added with a stricter threshold than the
+        default, this test fails and the default must be reviewed and lowered
+        to maintain the invariant; do not weaken a jurisdiction's policy
+        merely to satisfy this test.
+        """
+        cfg = _config()
+        default = cfg["default"]
+        for code, thresholds in cfg["jurisdictions"].items():
+            for tier in ("tier2", "tier3", "tier4"):
+                assert default[tier] <= thresholds[tier], (
+                    f"Default {tier} ({default[tier]}) is less strict than {code} {tier} "
+                    f"({thresholds[tier]}). The fail-to-strictest invariant is violated."
+                )
