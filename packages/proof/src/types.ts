@@ -56,7 +56,7 @@ export interface ProofResult {
   proofTime: number;
 }
 
-/**  
+/**
  * Result returned after verifying a Groth16 proof.
  */
 export interface VerifyResult {
@@ -67,7 +67,7 @@ export interface VerifyResult {
   /** Whether signals 8-10 match this verifier's table for signal 6. */
   thresholdsBound: boolean;
   /** Whether the jurisdiction code in the proof matches the expected jurisdiction */
-  jurisdictionMatchesVASP: boolean;
+  jurisdictionMatchesVASP: boolean | null;
   /** Decoded ISO 3166-1 alpha-2 code from signal 6, or null if malformed. */
   jurisdiction: string | null;
   /** Machine-readable rejection reasons; empty when `valid` is true. */

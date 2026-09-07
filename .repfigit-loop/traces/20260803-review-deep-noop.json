@@ -1,0 +1,12 @@
+{
+  "skill": "repfigit-review",
+  "ranAt": "2026-08-03T07:30:00Z",
+  "outcome": "no-work",
+  "issueId": null,
+  "prNumber": 0,
+  "failureCategory": "none",
+  "humanInterventions": 0,
+  "toolCalls": 14,
+  "verdictCycles": 0,
+  "notes": "deep gate script failed (REPO_DIR env unset in cron env); ran manually as deep tier. All 5 open PRs skipped: #11/#19/#23/#24 escalated at current SHA (state-file + marker dedup, needs-human-review label still present), #22 is draft. No reconciliation moves needed for 8 merged-PR-linked issues (all already Done)."
+}

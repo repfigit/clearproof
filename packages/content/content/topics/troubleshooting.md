@@ -22,26 +22,23 @@ circom --version
 
 If you see `command not found`, follow the [circom install guide](https://docs.circom.io/getting-started/installation/).
 
-## `PII_MASTER_KEY` entropy error at startup
+## `PII_MASTER_KEY` validation error at startup
 
-**Symptom:** API server refuses to start with `PII_MASTER_KEY entropy too low`.
+**Symptom:** API startup rejects a missing or insufficiently long `PII_MASTER_KEY`.
 
-**Fix:** The key must be at least 32 bytes (64 hex characters):
+**Fix:** Supply 64 hex characters or at least 32 UTF-8 bytes. Generate a random value for a disposable local evaluation:
 
 ```bash
-export PII_MASTER_KEY=$(openssl rand -hex 32)
+export PII_MASTER_KEY="$(openssl rand -hex 32)"
 ```
 
-Do not use short strings or predictable values -- the startup check will reject them.
+The startup check validates encoding and length, not randomness. Protect and retain the key when encrypted records must survive restart; changing it can prevent decryption of existing records.
 
 ## Proof generation returns 500
 
-**Symptom:** `POST /proof/generate` returns HTTP 500 with `missing runtime state`.
+**Symptom:** `POST /proof/generate` fails because runtime state or proving artifacts are unavailable.
 
-**Causes:**
-1. No credentials issued yet -- issue at least one via `POST /credential/issue`
-2. Sanctions tree not built -- run `python scripts/build_sanctions_tree.py --offline`
-3. Issuer registry empty -- the first credential issuance populates this automatically
+Check that the requested credential, trusted issuer root, sanctions witnesses and compatible artifacts are available to the running process. Starting the API, issuing one development credential or building an offline sanctions tree does not alone establish a complete generation workflow. See the quickstart and current project status.
 
 ## Sanctions oracle is stale
 
@@ -53,15 +50,15 @@ Do not use short strings or predictable values -- the startup check will reject 
 python scripts/relay_sanctions_root.py --network sepolia
 ```
 
-If running locally with Hardhat, advance time or use a longer grace period in tests.
+Check the configured grace period and actual root update time on each intended chain. Test fixtures may deliberately exercise stale state; do not bypass freshness checks to authorize a transfer.
 
 ## Nullifier already spent
 
-**Symptom:** `verifyAndRecord()` reverts with `NullifierAlreadySpent`.
+**Symptom:** The development `verifyAndRecord()` path reverts with `ProofAlreadyUsed` or `TransferAlreadyRecorded`.
 
-**Cause:** The same credential + transfer_id combination was used before. Each proof requires a unique `idempotency_key` to produce a unique `transfer_id_hash` and therefore a unique nullifier.
+**Cause:** The nullifier or transfer reference has already been recorded in the target registry.
 
-**Fix:** Use a different `idempotency_key` for each transfer attempt.
+**Fix:** Inspect the original transaction and transfer state before retrying. Preserve the same transfer identity across retries; do not create a new idempotency key just to bypass duplicate protection. API/registry transfer-hash consistency remains planned work.
 
 ## WASM prover not found
 
@@ -73,7 +70,7 @@ If running locally with Hardhat, advance time or use a longer grace period in te
 bash scripts/compile_circuits.sh
 ```
 
-The SDK expects artifacts at `artifacts/compliance_js/compliance.wasm` relative to the repo root.
+Pass the actual compatible WASM, proving-key and verification-key paths to the SDK. The repository's development build writes the WASM under `artifacts/compliance_js/`; public package installation alone is not a complete proving setup.
 
 ## Hardhat tests fail with `HH700`
 

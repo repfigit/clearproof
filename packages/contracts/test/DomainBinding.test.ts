@@ -29,7 +29,7 @@ describe("Domain Binding Adversarial Test", function () {
     await vaspRegistry.waitForDeployment();
 
     // Deploy SanctionsOracle
-    const initialRoot = ethers.keccak256(ethers.toUtf8Bytes("sanctions-root"));
+    const initialRoot = ethers.zeroPadValue(ethers.toBeHex(12345n), 32);
     const SanctionsOracle = await ethers.getContractFactory("SanctionsOracle");
     const sanctionsOracle = await SanctionsOracle.deploy(admin.address, initialRoot, 50);
     await sanctionsOracle.waitForDeployment();
@@ -51,7 +51,7 @@ describe("Domain Binding Adversarial Test", function () {
   }
 
   it("should reject proofs with wrong contract address", async function () {
-    const { registry, vaspRegistry, vaspWallet } = await deployAll();
+    const { registry, vaspRegistry, sanctionsOracle, vaspWallet } = await deployAll();
 
     // Register a VASP
     const didHash = ethers.keccak256(ethers.toUtf8Bytes("did:web:vasp.example"));
@@ -61,12 +61,13 @@ describe("Domain Binding Adversarial Test", function () {
     const dummyProof = getDummyProof();
     
     // Modify the domain_contract_hash (pubSignals[12]) to a wrong value
-    dummyProof.pubSignals[12] = BigInt(ethers.keccak256(ethers.toUtf8Bytes("wrong-contract-address")));
+    dummyProof.pubSignals[11] = (await ethers.provider.getNetwork()).chainId;
+    dummyProof.pubSignals[12] = 1n;
 
     const transferId = ethers.keccak256(ethers.toUtf8Bytes("transfer-wrong-contract"));
 
     await expect(
-      registry.verifyAndRecord(
+      registry.connect(vaspWallet).verifyAndRecord(
         transferId,
         dummyProof.pA,
         dummyProof.pB,
@@ -78,7 +79,7 @@ describe("Domain Binding Adversarial Test", function () {
   });
 
   it("should reject proofs with wrong chain ID", async function () {
-    const { registry, vaspRegistry, vaspWallet } = await deployAll();
+    const { registry, vaspRegistry, sanctionsOracle, vaspWallet } = await deployAll();
 
     // Register a VASP
     const didHash = ethers.keccak256(ethers.toUtf8Bytes("did:web:vasp.example"));
@@ -93,7 +94,7 @@ describe("Domain Binding Adversarial Test", function () {
     const transferId = ethers.keccak256(ethers.toUtf8Bytes("transfer-wrong-chain"));
 
     await expect(
-      registry.verifyAndRecord(
+      registry.connect(vaspWallet).verifyAndRecord(
         transferId,
         dummyProof.pA,
         dummyProof.pB,
@@ -104,8 +105,8 @@ describe("Domain Binding Adversarial Test", function () {
     ).to.be.revertedWithCustomError(registry, "WrongChain");
   });
 
-  it("should accept proofs with correct domain binding", async function () {
-    const { registry, vaspRegistry, vaspWallet } = await deployAll();
+  it("reaches the pairing check with correct domain binding", async function () {
+    const { registry, vaspRegistry, sanctionsOracle, vaspWallet } = await deployAll();
 
     // Register a VASP
     const didHash = ethers.keccak256(ethers.toUtf8Bytes("did:web:vasp.example"));
@@ -119,15 +120,24 @@ describe("Domain Binding Adversarial Test", function () {
     
     // Set the correct contract address hash
     const BN128_R = 21888242871839275222246405745257275088548364400416034343698204186575808495617n;
-    const contractHash = BigInt(ethers.keccak256(ethers.toUtf8Bytes(await registry.getAddress()))) % BN128_R;
+    const contractHash = BigInt(ethers.keccak256(ethers.solidityPacked(["address"], [await registry.getAddress()]))) % BN128_R;
     dummyProof.pubSignals[12] = contractHash;
 
     const transferId = ethers.keccak256(ethers.toUtf8Bytes("transfer-correct-domain"));
+    const now = BigInt(await time.latest());
+    dummyProof.pubSignals[2] = BigInt(await sanctionsOracle.currentRoot());
+    dummyProof.pubSignals[3] = BigInt(await vaspRegistry.issuerMerkleRoot());
+    dummyProof.pubSignals[5] = now;
+    dummyProof.pubSignals[6] = 0x5553n;
+    dummyProof.pubSignals[8] = 250n;
+    dummyProof.pubSignals[9] = 1000n;
+    dummyProof.pubSignals[10] = 10000n;
+    dummyProof.pubSignals[13] = BigInt(ethers.keccak256(transferId)) % BN128_R;
+    dummyProof.pubSignals[15] = now + 3600n;
 
-    // This should fail with ProofVerificationFailed instead of domain binding errors
-    // because we're using a dummy proof that won't actually verify
+    // Invalid curve points must reach the pairing precompile after all context checks.
     await expect(
-      registry.verifyAndRecord(
+      registry.connect(vaspWallet).verifyAndRecord(
         transferId,
         dummyProof.pA,
         dummyProof.pB,
@@ -135,7 +145,7 @@ describe("Domain Binding Adversarial Test", function () {
         dummyProof.pubSignals,
         didHash
       )
-    ).to.be.revertedWithCustomError(registry, "ProofVerificationFailed");
+    ).to.be.revertedWith("Pairing: ecpairing failed");
   });
 });
 

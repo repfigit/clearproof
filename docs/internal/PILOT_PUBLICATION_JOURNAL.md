@@ -1,0 +1,207 @@
+# Development publication journal
+
+`PublicationJournal` retains encrypted signed transaction bytes before an operator
+attempts publication. It is a persistence and broadcast boundary, not a source
+approval service or a finality verifier. PostgreSQL remains the authorization
+consumption authority; a journal entry or RPC response never creates a second
+transfer authorization.
+
+## Reservation
+
+The caller constructs a `PublicationBinding` from an independently authenticated
+mirror preparation and approved transaction builder. It binds the consumed receipt,
+statement, publish/mirror phase, chain, registry, sender, exact calldata SHA-256,
+semantic plan digest, approved runtime SHA-256 and expiry. The builder must verify
+that the calldata implements that phase and statement. The journal does not decode
+contract calls or independently approve the supplied plan/runtime pins.
+
+`reserve` requires tenant-admin, evidence-decryption and proof-inspection roles.
+It accepts bounded signed EIP-1559 type-2 transactions, recovers the actual sender,
+and compares chain, destination, zero transferred value and exact calldata digest.
+The transaction hash is computed from the signed bytes. The receipt must exist in
+the tenant's encrypted store, have its exact canonical identity and ALLOW outcome,
+and match the authoritative nullifier-to-proof consumption. Intent expiry cannot
+exceed the retained receipt expiry. Current source approval is separately required
+before broadcasting.
+
+Migration 17 adds `pilot_publications`. Signed bytes are split into bounded hex
+chunks within the existing 64 KiB canonical/encrypted record envelope. Public
+operational metadata reserves `(chain_id, sender, nonce)` across tenants and one
+phase per tenant/receipt. Exact reservation retries return the same identity;
+a different transaction for that phase or an already reserved account nonce fails.
+The sender is an operator transaction account, not a customer wallet selector.
+Nonce coordination is limited to this database: the operator must separately
+control use of the account by other applications and databases.
+
+## Broadcast and uncertain outcomes
+
+`broadcast_once` loads the retained intent, calls the writer's independent source
+and chain revalidation callback, and commits a broadcast claim under the tenant
+lock before invoking `send_raw`. The callback must raise on failed validation and
+must check the current clock, source evidence, destination/runtime, epochs and
+revisions. No transaction is sent if revalidation fails.
+
+Only the first claimant invokes the sender. A crash before send, timeout after
+send, cancellation, incorrect returned hash or successful RPC response leaves the
+claim set. The journal never clears it or automatically allocates another nonce,
+bumps fees or resends. A pre-send crash requires the explicit recovery checks below; a claim does not prove that the node received the
+transaction.
+
+`inspect` works after reconnect and expiry and returns the binding, exact retained
+transaction hash and claim state. Its chain outcome is always `not-established`.
+The read-only reconciler below queries that hash against independent chain policy
+and distinguishes pending, included, noncanonical and confirmed execution. A
+journal row alone is insufficient evidence for any chain outcome. Durable observation history is described below; worker action transitions and
+replacement identification remain unimplemented. Database reservation and chain state are
+not atomic, and the journal does not schedule source invalidation.
+
+## Validation and accounting
+
+The PostgreSQL tests cover encrypted reservation, exact retry, expiry, reconnect,
+foreign-tenant reads, global nonce conflicts, phase conflicts, competing claims,
+failed revalidation, lost responses and incorrect RPC hashes. The joined real EVM
+gate signs its publish and mirror transactions with public local Hardhat test keys.
+Publication is accepted by the node but its response is deliberately lost; after
+reconnecting PostgreSQL the gate finds the transaction by its retained hash,
+checks successful inclusion and registry state, and confirms no second send occurs.
+This demonstrates local recovery evidence, not a durable production worker or
+production finality policy.
+
+The existing `/pilot/usage` inventory counts `pilot_records` and authoritative
+consumptions. It does not include journal rows or their ciphertext in its retained
+record/byte counters. Publication accounting and retention are separate follow-up
+work; these counts are not invoices.
+
+## Read-only chain reconciliation
+
+`PublicationReconciler` consumes the retained journal identity and a separately
+configured `PublicationChainPolicy`. That policy pins the chain ID, registry
+address, runtime SHA-256, observation tag, minimum confirmations and maximum block
+age. A pin copied from an untrusted RPC is not an independent approval. The local
+EVM fixture captures its pin from its own newly deployed test contract; production
+operators must use independently reviewed deployment evidence.
+
+The reconciler checks both the policy and retained binding, recovers the journal's
+account nonce, and compares the observed transaction's hash, sender, destination,
+chain, nonce, zero value and calldata digest. A receipt must bind the same transaction
+and inclusion block. Its block hash must match the provider's canonical block and
+contain the exact transaction at the receipt's index. Runtime is checked at the
+observation anchor and inclusion block. Before returning an included outcome, both
+headers and the receipt are read again to reject a changing observation.
+
+A successful transaction also requires exactly one matching registry event and
+matching registry state at inclusion. Publication binds the tenant and statement
+ID; mirroring binds the tenant, statement, receipt and retained nullifier. Event
+presence alone cannot prove the state lookup, and a successful EVM receipt alone
+cannot prove the intended registry operation occurred.
+
+| Status | Meaning at this provider observation |
+| --- | --- |
+| `not-found` | The retained hash was not found; this does not establish that it was never sent or that its nonce is reusable. |
+| `pending` | The exact transaction is known without inclusion or a receipt. |
+| `noncanonical` | Reported inclusion disagrees with the canonical block at that height. |
+| `awaiting-confirmations` | Inclusion and execution were observed, but the selected confirmation policy is not met. |
+| `confirmed-success` | Matching successful execution, event and registry state meet the selected confirmation policy. |
+| `confirmed-failure` | Matching reverted execution meets the selected confirmation policy. |
+
+The default tag is `finalized`. Unsupported tags fail; there is no automatic
+fallback. With `latest`, confirmations are depth observations, not consensus
+finality. With `safe` or `finalized`, depth is measured relative to that selected
+anchor. Reports retain the tag and block hashes so those assurances remain distinct.
+The RPC/provider remains trusted for chain data; this is not a consensus light client.
+
+Every report sets `current_authorization=not-evaluated` and
+`resubmission=not-authorized`. Registry effects describe inclusion-time state,
+not fresh source eligibility or continued current-head approval. Reconciliation
+neither clears a broadcast claim nor writes journal state, sends a transaction,
+allocates another nonce or authorizes a transfer. Explicit recovery of a missing hash after a pre-send crash is described below.
+Identifying replacement hashes and controlled fee/nonce replacement remain worker
+tasks.
+
+The joined EVM gate exercises not-found, one-block awaiting-confirmations and
+two-block confirmed-success for both actual publication and mirroring. Unit tests
+cover pending, reverted and noncanonical observations, missing/wrong events, scope
+and calldata substitutions, missing state, stale blocks and reorg during read-back.
+
+## Durable reconciliation history
+
+`PublicationRecoveryService.observe` performs a fresh reconciliation and then
+records the successful observation through `PublicationHistory`. RPC errors,
+inconsistent observations and changed/mismatched confirmation policy raise before
+any history entry is written. The stored policy digest commits to the independently
+configured policy used by the reconciler; retain that policy configuration for
+later review.
+
+Migration 18 adds encrypted `pilot_publication_observations`, linked to the
+retained intent. Each immutable entry binds tenant, intent, sequence, previous
+observation ID, observation clock, policy digest and the complete typed report.
+The report validator checks phase, inclusion fields, execution/effect consistency,
+confirmation arithmetic and the prohibition on transfer/resubmission authorization.
+It also binds the exact retained transaction hash and phase before insertion.
+The history storage primitive accepts operator-supplied reports; the recovery
+service is the path that obtains them from the configured reconciler.
+
+Appending and choosing the next sequence occur under the tenant transaction lock.
+An identical latest report at the same clock and policy returns the same entry.
+An older clock rejects and requires a fresh observation. New observations can
+have a lower block height or weaker result: a prior confirmed observation never
+becomes a permanent current-state flag. Previous success and subsequent absence,
+reorg evidence or a stricter policy remain separate retained records.
+
+`page(intent_id, after=0, limit=32)` provides bounded sequence pagination (maximum
+64 entries per page), validates encrypted identities and predecessor linkage, and
+works after database reconnect. It returns `current_chain_state=not-established`:
+history is evidence of observations, not a cached permission to act. Reading or
+appending does not clear the broadcast claim, reserve another nonce or send an
+RPC transaction. Worker action transitions and controlled replacement remain open.
+
+The joined real EVM test retains the not-found, awaiting-confirmations and
+confirmed-success sequence for both publication and mirroring. PostgreSQL tests
+cover exact retry, reconnect, pagination, foreign tenant isolation, encrypted
+content, rejected substitution/status/clock/policy, and preserving a later missing
+observation after confirmed success. Journal and history rows remain outside the
+existing `/pilot/usage` retained-record counters.
+
+## Explicit recovery of an unsent claim
+
+`PublicationRecoveryService.rebroadcast_missing` handles a claim that may have
+crashed before RPC send. The caller explicitly supplies the intent ID and expected
+attempt count. This is separate from ordinary `broadcast_once`, which continues
+to reject a previously claimed intent. A reconciliation report alone grants no
+permission to retry.
+
+Recovery requires all of these fresh preconditions:
+
+- The retained attempt count is exactly the requested count and the intent has not expired.
+- Reconciliation against the pinned policy finds the retained hash absent. Pending, included, reverted or noncanonical observations do not qualify.
+- The independent source revalidation callback still approves the original binding.
+- The latest runtime matches the policy, and both the canonical and pending account nonce equal the retained nonce.
+- Simulating the original calldata, sender, gas limit and zero value against the observed latest block succeeds.
+- The latest block hash and selected policy remain unchanged during preflight.
+
+Only then does the journal atomically claim the next attempt and submit the exact
+retained signed bytes. It does not sign a new transaction, change fees, change
+calldata, release the reserved nonce or create a new authorization. The whole
+recovery operation has a 30-second timeout; cancellation after claiming preserves
+the attempt. The contract still enforces current epochs, revisions and expiry at
+execution; preflight is not an atomic lock across PostgreSQL and the chain.
+
+Migration 19 adds a bounded attempt counter, backfills existing claims as attempt
+one and constrains its consistency with the claim flag. At most three attempts
+can be claimed for an intent: the initial attempt and two explicit recoveries.
+A failed preflight does not consume an attempt. A crash or uncertain response
+after claiming does. Concurrent requests for the same expected count cannot both
+claim it. Exhaustion requires operator review; there is no automatic reset.
+
+The owned EVM gate retains its lost-response-after-publication scenario and adds
+a crash-before-send for mirroring. After reconnect, recovery submits identical
+bytes and confirms the retained hash. A later recovery request for the included
+transaction rejects without incrementing attempts. PostgreSQL tests cover
+concurrent/repeated attempts, the cap and preflight failures for known transactions,
+nonce advancement, runtime mismatch, failed simulation, expiry, source invalidation
+and a changing block.
+
+This does not discover an unknown replacement transaction or permit fee/nonce
+replacement. A transaction known by another provider may still be absent at the
+selected provider; replaying identical signed bytes preserves its hash and nonce.
+Account use outside this journal remains an operator coordination responsibility.

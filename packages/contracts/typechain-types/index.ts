@@ -28,6 +28,12 @@ export type { ISanctionsRootReceiver } from "./contracts/ISanctionsRootReceiver"
 export { ISanctionsRootReceiver__factory } from "./factories/contracts/ISanctionsRootReceiver__factory";
 export type { MockVerifier } from "./contracts/MockVerifier";
 export { MockVerifier__factory } from "./factories/contracts/MockVerifier__factory";
+export type { PilotCurrentRegistry } from "./contracts/PilotCurrentRegistry";
+export { PilotCurrentRegistry__factory } from "./factories/contracts/PilotCurrentRegistry__factory";
+export type { PilotGroth16Verifier } from "./contracts/PilotGroth16Verifier";
+export { PilotGroth16Verifier__factory } from "./factories/contracts/PilotGroth16Verifier__factory";
+export type { PilotRootCheckpoint } from "./contracts/PilotRootCheckpoint";
+export { PilotRootCheckpoint__factory } from "./factories/contracts/PilotRootCheckpoint__factory";
 export type { SanctionsOracle } from "./contracts/SanctionsOracle";
 export { SanctionsOracle__factory } from "./factories/contracts/SanctionsOracle__factory";
 export type { SanctionsRootRelay } from "./contracts/SanctionsRootRelay";

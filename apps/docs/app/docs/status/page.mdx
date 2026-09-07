@@ -1,0 +1,33 @@
+# Project status
+
+Last checked: **September 7, 2026**.
+
+**Pilot-stage, pre-production software.** Published npm packages: **0.3.0**. Development checkout: **0.4.0**. Main GitHub repository: **public**.
+
+The implementation below is on an unreleased development branch. Local acceptance evidence does not make it available in the published packages or the historical Sepolia deployments.
+
+## Available components and limits
+
+| Area | Current development status |
+| --- | --- |
+| Public installation | Proof SDK 0.3.0 installation verified; CLI 0.3.0 depends on `@clearproof/content`, which remains unavailable from the public npm registry |
+| Proof components | Credential-bound Groth16 v2 statement, holder-secret and issuer membership checks, exact transfer projection and valuation arithmetic tested with real development proofs |
+| API and storage | Encrypted tenant-scoped records, signed enrollment, revocation, transactional authorization and restart/retry isolation tested with PostgreSQL |
+| Verification | Matching eight-signal statement checked in Python and Solidity; API/SDK trust the configured server, PostgreSQL owns consumption and contracts mirror receipts under publisher-validated checkpoints |
+| Encryption | Recipient HPKE, independently scoped key authority, signed information approval and transfer/context binding; key rotation and altered-envelope rejection covered locally |
+| Policy workflows | Explained ALLOW, DENY, REVIEW and INDETERMINATE outcomes; stored policy comparison, separate approval/activation history and reviewed rollback |
+| Investigations | Read-only timelines and paginated queues join counterparty, custody, chain and evidence observations, preserving duplicates, ordering and unresolved conflicts |
+| Historical evidence | Encrypted exports with independently configured source/decision/status/timing trust, real proof verification and offline policy replay; missing trust remains indeterminate |
+| Observation onboarding | Non-authorizing observations, selected-cohort coverage/disagreement/timing reports and a disposable database/test-chain acceptance command |
+| Provider and bilateral work | Bounded Fireblocks signature/event adapter tested with synthetic signatures; local simulated bilateral dispositions. Live provider access, automated signing-key refresh and remote TRP conformance remain open |
+| Deployment and assurance | Historical Sepolia deployments only; no completed independent circuit/contract audit or production trusted setup |
+
+The clean-checkout workflow installs locked dependencies, builds source workspaces, generates explicitly unapproved development artifacts and exercises real PostgreSQL, CLI/API and local EVM paths. Retained encrypted exports can be reviewed after the services stop. These are controlled synthetic tests with configured authorities, not proof of live source truth or legal compliance.
+
+## Adoption and commercial next steps
+
+The proposed commercial direction is managed integrations and recurring operational workflows around portable evidence. Pilot briefs, interview questions, a measurement worksheet and hypothetical pricing experiments are prepared. No customer adoption, willingness to pay, revenue or service-level commitment is established.
+
+Customer-dependent issuer/wallet support, live provider integration, ongoing re-screening feeds, commercial validation and independently reviewed production operations remain separate follow-on gates. The [repository is now public](https://github.com/repfigit/clearproof). The local pilot remains on the unreleased `feat/adoption-pilot-foundation` branch; updated package distribution is not yet available.
+
+See [security](/docs/security), [testnet contracts](/docs/contracts) and [quickstart](/docs/quickstart).

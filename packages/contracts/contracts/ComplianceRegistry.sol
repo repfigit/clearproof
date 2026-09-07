@@ -218,15 +218,7 @@ contract ComplianceRegistry is AccessControl, Pausable {
         // M-1: Transfer binding (proof bound to this transfer)
         if (uint256(keccak256(abi.encodePacked(transferId))) % BN128_R != _pubSignals[13]) revert TransferIDMismatch();
 
-        // AIF-98: Jurisdiction code verification
-        // Check that the jurisdiction code in the proof matches the VASP's registered jurisdiction
-        uint256 claimedJurisdictionCode = _pubSignals[6];
-        (, string memory jurisdiction,,,) = vaspRegistry.vasps(vaspDidHash);
-        uint256 expectedJurisdictionCode = _encodeJurisdiction(jurisdiction);
-
-        if (claimedJurisdictionCode != expectedJurisdictionCode) {
-            emit JurisdictionCodeMismatch(transferId, claimedJurisdictionCode, expectedJurisdictionCode);
-        }
+        _observeJurisdiction(transferId, vaspDidHash, _pubSignals[6]);
 
         // AIF-79: Threshold binding (prover cannot choose its own tier boundaries)
         _checkThresholds(_pubSignals);
@@ -281,14 +273,23 @@ contract ComplianceRegistry is AccessControl, Pausable {
         _unpause();
     }
 
+    /// @dev Informational legacy observation; zero expected code means unverified.
+    function _observeJurisdiction(bytes32 transferId, bytes32 didHash, uint256 claimed) internal {
+        (, string memory jurisdiction,,,) = vaspRegistry.vasps(didHash);
+        uint256 expected = _encodeJurisdiction(jurisdiction);
+        if (expected == 0 || claimed != expected) {
+            emit JurisdictionCodeMismatch(transferId, claimed, expected);
+        }
+    }
+
     function _encodeJurisdiction(string memory code) internal pure returns (uint256) {
         bytes memory codeBytes = bytes(code);
-        require(codeBytes.length == 2, "Jurisdiction code must be 2 characters");
+        if (codeBytes.length != 2) return 0;
         uint8 hi = uint8(codeBytes[0]);
         uint8 lo = uint8(codeBytes[1]);
         // Check that both characters are uppercase ASCII letters
-        require(hi >= 0x41 && hi <= 0x5A, "First character must be uppercase ASCII");
-        require(lo >= 0x41 && lo <= 0x5A, "Second character must be uppercase ASCII");
+        if (hi < 0x41 || hi > 0x5A) return 0;
+        if (lo < 0x41 || lo > 0x5A) return 0;
         return (uint256(hi) << 8) | uint256(lo);
     }
 }

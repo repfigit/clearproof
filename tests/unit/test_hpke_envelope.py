@@ -92,6 +92,31 @@ class TestKeyIsolation:
 
 
 class TestBindingAndTamper:
+    @pytest.mark.parametrize("field", ["enc", "ct"])
+    @pytest.mark.parametrize("mutation", ["ignored-character", "whitespace", "padding", "pad-bits"])
+    def test_noncanonical_encoding_rejected(self, recipient_keypair, field, mutation):
+        import base64
+
+        priv, pub = recipient_keypair
+        envelope = seal_envelope(b"pii", pub, "proof-encoding")
+        original = envelope[field]
+        if mutation == "ignored-character":
+            altered = "!" + original
+        elif mutation == "whitespace":
+            altered = original + "\n"
+        elif mutation == "padding":
+            altered = original + "="
+        else:
+            alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_"
+            position = len(original.rstrip("=")) - 1
+            altered = original[:position] + alphabet[alphabet.index(original[position]) + 1] + original[position + 1 :]
+        # These representations decode to the original bytes in the permissive
+        # decoder, so they would otherwise decrypt successfully despite mutation.
+        assert base64.urlsafe_b64decode(altered) == base64.urlsafe_b64decode(original)
+        envelope[field] = altered
+        with pytest.raises(ValueError, match="decryption failed"):
+            open_envelope(envelope, priv)
+
     def test_aad_mismatch_fails(self, recipient_keypair: tuple[bytes, bytes]) -> None:
         """Ciphertext cannot be replayed inside a different transfer envelope."""
         priv, pub = recipient_keypair
@@ -134,9 +159,7 @@ class TestBindingAndTamper:
 
 
 class TestFreshness:
-    def test_ephemeral_randomness(
-        self, recipient_keypair: tuple[bytes, bytes]
-    ) -> None:
+    def test_ephemeral_randomness(self, recipient_keypair: tuple[bytes, bytes]) -> None:
         """Same plaintext + same recipient -> different enc/ct (fresh ephemeral key)."""
         _, pub = recipient_keypair
         e1 = seal_envelope(b"same plaintext", pub, "proof-030")

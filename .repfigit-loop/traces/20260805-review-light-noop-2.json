@@ -1,0 +1,12 @@
+{
+  "skill": "repfigit-review",
+  "ranAt": "2026-08-05T03:30:00Z",
+  "outcome": "no-work",
+  "issueId": null,
+  "prNumber": 0,
+  "failureCategory": "none",
+  "humanInterventions": 0,
+  "toolCalls": 14,
+  "verdictCycles": 0,
+  "notes": "Light (TIER-1) tick on clearproof: gate wrapper failed again (REPO_DIR unset — AIF-117, still live). Ran pass directly. Reconciliation: 8 merged-PR issues (AIF-95/79/66/70/69/68/72/74) all already Done — nothing to move. No stale open PRs: #24/#23/#11/#19 reviewed at head SHA (escalated, needs-human-review hard gate), #22 is draft. No TIER-1 candidate. Commented the recurring wiring gap on AIF-117 (job script points at generic env wrapper, not the baked positional one). No verdict posted."
+}

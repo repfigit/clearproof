@@ -1,0 +1,126 @@
+[
+  {
+    "address": "8.8.8.8",
+    "allowed": true
+  },
+  {
+    "address": "1.1.1.1",
+    "allowed": true
+  },
+  {
+    "address": "2606:4700:4700::1111",
+    "allowed": true
+  },
+  {
+    "address": "127.0.0.1",
+    "allowed": false
+  },
+  {
+    "address": "169.254.169.254",
+    "allowed": false
+  },
+  {
+    "address": "10.0.0.1",
+    "allowed": false
+  },
+  {
+    "address": "172.16.0.1",
+    "allowed": false
+  },
+  {
+    "address": "192.168.1.1",
+    "allowed": false
+  },
+  {
+    "address": "100.64.0.1",
+    "allowed": false
+  },
+  {
+    "address": "0.0.0.0",
+    "allowed": false
+  },
+  {
+    "address": "224.0.0.1",
+    "allowed": false
+  },
+  {
+    "address": "255.255.255.255",
+    "allowed": false
+  },
+  {
+    "address": "192.0.2.1",
+    "allowed": false
+  },
+  {
+    "address": "198.18.0.1",
+    "allowed": false
+  },
+  {
+    "address": "198.51.100.1",
+    "allowed": false
+  },
+  {
+    "address": "203.0.113.1",
+    "allowed": false
+  },
+  {
+    "address": "::1",
+    "allowed": false
+  },
+  {
+    "address": "::",
+    "allowed": false
+  },
+  {
+    "address": "::ffff:127.0.0.1",
+    "allowed": false
+  },
+  {
+    "address": "::ffff:8.8.8.8",
+    "allowed": false
+  },
+  {
+    "address": "64:ff9b::a9fe:a9fe",
+    "allowed": false
+  },
+  {
+    "address": "fe80::1",
+    "allowed": false
+  },
+  {
+    "address": "fe80::1%eth0",
+    "allowed": false
+  },
+  {
+    "address": "fc00::1",
+    "allowed": false
+  },
+  {
+    "address": "ff02::1",
+    "allowed": false
+  },
+  {
+    "address": "2001:db8::1",
+    "allowed": false
+  },
+  {
+    "address": "2002:7f00:1::",
+    "allowed": false
+  },
+  {
+    "address": "3fff::1",
+    "allowed": false
+  },
+  {
+    "address": "127.1",
+    "allowed": false
+  },
+  {
+    "address": "2130706433",
+    "allowed": false
+  },
+  {
+    "address": "0x7f000001",
+    "allowed": false
+  }
+]

@@ -1,0 +1,12 @@
+{
+  "skill": "repfigit-review",
+  "ranAt": "2026-08-05T00:00:00Z",
+  "outcome": "no-work",
+  "issueId": null,
+  "prNumber": 0,
+  "failureCategory": "none",
+  "humanInterventions": 0,
+  "toolCalls": 6,
+  "verdictCycles": 0,
+  "notes": "Deep-tier tick: all open non-draft PRs (#11, #19, #23, #24) skipped via state file (escalated at current headRefOid); all carry needs-human-review labels and are blocked by the hard gate regardless. Draft PR #22 skipped. Merged-PR reconciliation: AIF-95, AIF-79, AIF-66, AIF-80 all already completed — nothing to move."
+}

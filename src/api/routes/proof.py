@@ -18,13 +18,12 @@ import time
 import uuid
 from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, Field
 
 from src.api.dependencies import get_credential_registry
 from src.api.middleware.auth import JWTAuthDependency
 from src.api.middleware.rate_limit import RateLimiter
-from src.chain.reader import ChainReader, get_chain_reader
 from src.prover.snarkjs_prover import SnarkJSProver
 from src.registry.credential_registry import CredentialRegistry
 from src.registry.issuer_registry import IssuerRegistry
@@ -64,10 +63,52 @@ class ProofGenerateRequest(BaseModel):
         None,
         description=(
             "Beneficiary VASP's X25519 public key (base64url, 32 bytes) for HPKE v2 "
-            "envelope encryption (RFC 9180). When omitted, falls back to "
-            "BENEFICIARY_HPKE_PUBLIC_KEY env var, then to legacy v1 shared-key AES-256-GCM."
+            "envelope encryption (RFC 9180). When omitted, use operator configuration "
+            "or strict counterparty discovery. Lookup failures reject the request."
         ),
     )
+
+
+async def _resolve_recipient_key(request: ProofGenerateRequest) -> bytes | None:
+    """Choose encryption before proving; failures cannot select legacy encryption."""
+    from src.protocol.discovery import (
+        DiscoveryError,
+        DiscoveryUnavailable,
+        resolve_hpke_public_key,
+    )
+    from src.protocol.discovery_profile import decode_hpke_key
+
+    mode = os.getenv("PII_ENVELOPE_MODE", "hpke-v2")
+    configured_key = os.getenv("BENEFICIARY_HPKE_PUBLIC_KEY")
+    if mode == "legacy-v1":
+        if request.beneficiary_hpke_public_key is not None or configured_key:
+            raise HTTPException(status_code=422, detail="HPKE key conflicts with operator-selected legacy-v1 mode")
+        return None
+    if mode != "hpke-v2":
+        raise HTTPException(status_code=503, detail="Invalid PII_ENVELOPE_MODE configuration")
+    key = request.beneficiary_hpke_public_key
+    if key is None:
+        key = configured_key
+    if key is not None:
+        try:
+            return decode_hpke_key(key)
+        except DiscoveryError as exc:
+            raise HTTPException(status_code=422, detail="Invalid beneficiary HPKE public key") from exc
+    if not request.destination_vasp_did or os.getenv("HPKE_DISCOVERY_ENABLED", "1") == "0":
+        raise HTTPException(status_code=422, detail="HPKE v2 requires a beneficiary key or enabled DID discovery")
+    try:
+        resolved = await resolve_hpke_public_key(request.destination_vasp_did)
+        if resolved is None:
+            raise DiscoveryError("Discovery supplied no HPKE key")
+        return resolved
+    except DiscoveryUnavailable as exc:
+        raise HTTPException(
+            status_code=503, detail="Counterparty discovery unavailable; retry without changing encryption"
+        ) from exc
+    except DiscoveryError as exc:
+        raise HTTPException(
+            status_code=422, detail="Counterparty discovery invalid or unsupported; HPKE key required"
+        ) from exc
 
 
 class ProofVerifyRequest(BaseModel):
@@ -151,18 +192,6 @@ def _get_db_from_app() -> Optional[Database]:
     return _get_db(_app)
 
 
-def _get_chain_from_app():
-    """Get chain reader from app state, or create a new one if not available."""
-    try:
-        from src.api.main import app as _app
-        chain_reader = getattr(getattr(_app.state, "chain_reader", None), "reader", None) if hasattr(_app, "state") else None
-        if chain_reader is None:
-            chain_reader = get_chain_reader()
-        return chain_reader
-    except Exception:
-        return None
-
-
 def _check_sanctions_staleness(db: Optional[Database]) -> None:
     if db is None:
         return
@@ -226,6 +255,8 @@ async def generate_proof(
     # 4b. Check credential expiry
     if int(time.time()) > credential.expires_at:
         raise HTTPException(status_code=410, detail="Credential expired")
+
+    recipient_pubkey = await _resolve_recipient_key(request)
 
     # 4c. Evaluate SAR flags
     sar_result = evaluate_sar_flags(
@@ -332,31 +363,6 @@ async def generate_proof(
         }
     ).encode()
 
-    # Prefer HPKE v2 envelopes (per-recipient keys, RFC 9180) when a
-    # beneficiary public key is available; fall back to legacy v1 shared-key
-    # AES-256-GCM during the migration window (SOTA plan item #1).
-    # Key resolution precedence:
-    #   1. explicit request field
-    #   2. BENEFICIARY_HPKE_PUBLIC_KEY env var (static counterparty config)
-    #   3. well-known discovery from destination_vasp_did (spec 0.3.0),
-    #      fail-open to v1 on discovery errors during the migration window
-    recipient_pubkey: bytes | None = None
-    hpke_pubkey_b64 = request.beneficiary_hpke_public_key or os.getenv("BENEFICIARY_HPKE_PUBLIC_KEY")
-    if hpke_pubkey_b64:
-        try:
-            recipient_pubkey = base64.urlsafe_b64decode(hpke_pubkey_b64.encode("ascii"))
-        except Exception:
-            raise HTTPException(status_code=422, detail="beneficiary_hpke_public_key is not valid base64url")
-        if len(recipient_pubkey) != 32:
-            raise HTTPException(status_code=422, detail="beneficiary_hpke_public_key must be 32 bytes (X25519)")
-    elif request.destination_vasp_did and os.getenv("HPKE_DISCOVERY_ENABLED", "1") != "0":
-        from src.protocol.discovery import DiscoveryError, resolve_hpke_public_key
-
-        try:
-            recipient_pubkey = await resolve_hpke_public_key(request.destination_vasp_did)
-        except DiscoveryError as exc:
-            logger.warning("HPKE discovery failed for %s: %s", request.destination_vasp_did, exc)
-
     pii_envelope: dict | None = None
     if recipient_pubkey is not None:
         from src.sar.hpke_envelope import seal_envelope
@@ -366,11 +372,6 @@ async def generate_proof(
         nonce = b""
         encryption_algorithm = "HPKE-X25519-HKDF-SHA256-AES-256-GCM"
     else:
-        logger.warning(
-            "No beneficiary HPKE key available — falling back to v1 shared-key "
-            "AES-256-GCM envelope. Set beneficiary_hpke_public_key or "
-            "BENEFICIARY_HPKE_PUBLIC_KEY to enable v2."
-        )
         keyring = load_keyring()
         active_key = keyring.active_key
         derived_key = derive_key(active_key.key_bytes, f"clearproof-pii-{proof_id}".encode())
@@ -476,6 +477,7 @@ async def generate_proof(
 @router.post("/verify", response_model=ProofVerifyResponse, summary="Verify ZK compliance proof")
 async def verify_proof(
     request: ProofVerifyRequest,
+    http_request: Request,
     _auth: dict = Depends(JWTAuthDependency),
     _rl: None = Depends(_proof_verify_limiter),
 ):
@@ -493,7 +495,7 @@ async def verify_proof(
     if not valid:
         rejection_reasons.append("groth16_invalid")
 
-    from src.prover.tier_mapping import decode_jurisdiction, thresholds_match_jurisdiction, jurisdiction_matches_vasp
+    from src.prover.tier_mapping import decode_jurisdiction, jurisdiction_matches_vasp, thresholds_match_jurisdiction
 
     # Public signals arrive from a counterparty VASP: treat every element as
     # untrusted input, not as a well-formed integer.
@@ -518,30 +520,25 @@ async def verify_proof(
         valid = False
         rejection_reasons.append("threshold_mismatch")
 
-    # Jurisdiction code verification - Check that the jurisdiction in the proof 
-    # matches the expected jurisdiction for the VASP
-    # First get the VASP jurisdiction from the chain
-    chain_reader = _get_chain_from_app()
-    if chain_reader:
+    # Optional read-only observation from an operator-selected chain reader.
+    # The requested VASP identity is caller supplied, not a proved credential claim.
+    chain_reader = getattr(http_request.app.state, "chain_reader", None)
+    jurisdiction_matches = None
+    if chain_reader is not None:
         try:
-            vasp_info = await chain_reader.get_vasp_info(request.originator_vasp_did)
-            expected_jurisdiction = vasp_info[1]  # jurisdiction is at index 1: (wallet, jurisdiction, discoveryEndpoint, active, registeredAt)
-            jurisdiction_matches = jurisdiction_matches_vasp(signals, expected_jurisdiction)
+            vasp_info = await asyncio.wait_for(chain_reader.get_vasp_info(request.originator_vasp_did), timeout=5)
+            if len(vasp_info) == 5 and vasp_info[3] is True and vasp_info[4] > 0:
+                expected = vasp_info[1]
+                if isinstance(expected, str) and len(expected) == 2 and expected.isascii() and expected.isupper():
+                    jurisdiction_matches = jurisdiction_matches_vasp(signals, expected)
         except Exception:
-            # If we can't get the jurisdiction from chain, fall back to always True
-            # to avoid breaking existing functionality
-            jurisdiction_matches = True
-    else:
-        # No chain reader available, fall back to always True
-        jurisdiction_matches = True
-        
+            # Missing/failed lookup is unverified, never a successful match.
+            pass
     attestations["jurisdiction_matches_vasp"] = jurisdiction_matches
-    # Observe, do not enforce: the mismatch flag is surfaced but does NOT
-    # cause the proof to be rejected (AIF-98 scope: "observe, do not enforce")
-    if not jurisdiction_matches:
-        rejection_reasons.append("jurisdiction_mismatch")
-    # 'valid' must NOT depend on jurisdiction_matches — the issue scope is
-    # to surface the check without changing the set of proofs that succeed.
+    attestations["jurisdiction_observation"] = (
+        "unverified" if jurisdiction_matches is None else "match" if jurisdiction_matches else "mismatch"
+    )
+    # AIF-98 is observational. It does not alter legacy proof acceptance.
 
     if attestations["amount_tier"] != request.expected_amount_tier:
         valid = False

@@ -5,40 +5,32 @@ order: 8
 cli-topic: gdpr
 ---
 
-# GDPR Data-Minimization by Design
+# Privacy and data minimization
 
-## The tension
+clearproof explores reducing disclosure by separating verification of specific predicates from encrypted exchange of required personal information. This is an architectural objective, not a GDPR exemption or a compliance certification.
 
-The EU Transfer of Funds Regulation (TFR) requires VASPs to transmit originator and beneficiary information with every transfer. GDPR simultaneously requires data minimization: personal data must be limited to what is necessary.
+## Encryption and proofs have different roles
 
-These obligations pull in opposite directions. Transmit everything and you violate minimization. Transmit nothing and you violate the TFR.
+A proof can establish its encoded statement without exposing every private witness value. Encrypted personal information can travel to an authorized recipient. The recipient may still need to obtain, verify and retain information under applicable requirements.
 
-## The resolution
+For covered EU crypto transfers, the Transfer of Funds Regulation sets information and missing-information obligations. An amount tier does not define a blanket exemption from those obligations. [EU Regulation 2023/1113, Articles 14–17](https://eur-lex.europa.eu/eli/reg/2023/1113/oj/eng)
 
-clearproof splits "prove compliance" from "transmit raw data" into separate operations, as recommended by [INATBA's 2025 ZKP-for-GDPR working paper](https://inatba.org/workstreams/data-protection/) and [a16z's privacy-preserving regulatory frameworks analysis](https://a16zcrypto.com/posts/article/privacy-preserving-regulatory-frameworks/).
+Encrypted personal data remains personal data. Keeping it off-chain and limiting disclosure must be considered alongside purpose, access, retention and governance. [EDPB Guidelines 02/2025, final version 2, July 7, 2026](https://www.edpb.europa.eu/system/files/2026-07/edpb_guidelines_202502_blockchain_v2_en.pdf)
 
-**The ZK proof attests.** A Groth16 proof (192 bytes) provides machine-verifiable evidence that sanctions screening, credential validation, and amount checks all passed. The proof exposes 16 public signals: compliance status, amount tier (not the exact amount), jurisdiction code, credential commitment, sanctions tree root, and domain binding parameters. No personal data appears in any public signal.
+## What remains visible
 
-**Minimal encrypted data travels.** PII is encrypted with AES-256-GCM using HKDF-derived keys and envelope-bound associated data. The ciphertext cannot be replayed across transfers. The counterparty decrypts only when legally required for record-keeping or suspicious activity reporting.
+Current public proof metadata includes amount tier, jurisdiction, timestamps, roots, credential commitments, transfer references and a review signal. Commitments and hashes are not automatically anonymous: linkage to other records or public transactions can identify or correlate people.
 
-**The counterparty verifies first, decrypts only if needed.** The proof is publicly verifiable (under 1ms) without any key material. Decryption of PII is a separate step triggered by legal obligation, not automatic processing.
+A named advisory field may be omitted from a bridge while still appearing in the public-signal array. Confidential advisory handling is part of the planned proof-version work.
 
-## What the proof reveals (and what it doesn't)
+## Deployment questions
 
-The 16 public signals contain: compliance status, amount tier (1-4), jurisdiction (ISO country code), credential commitment (Poseidon hash), credential nullifier (one-time use), sanctions/issuer tree roots, domain binding (chain ID + contract hash), transfer binding (transfer ID hash), timestamp, and expiration. No field contains name, address, account number, or any personal identifier.
+- Which facts actually need a private predicate proof?
+- Which recipient is authorized to receive each piece of information?
+- How are credentials, source data and recipient keys authenticated?
+- What can repeated commitments, timestamps and status checks reveal?
+- How are retention, access, deletion, incident handling and evidence export implemented?
 
-## What the counterparty receives
+Measure disclosure and operational data copying in the intended deployment. Neither encryption, ZK, nor explorer verification independently establishes compliance.
 
-The hybrid payload: ZK proof (192 bytes, publicly verifiable) + AES-256-GCM encrypted PII (IVMS101 originator data). The counterparty can verify the proof independently, then decrypt PII only when legally required. Envelope binding prevents cross-transfer replay. Domain binding prevents cross-chain replay.
-
-## Data-flow accuracy
-
-Every claim traces to code:
-- Encryption: `src/sar/encryption.py` (AES-256-GCM, 12-byte nonce, HKDF-SHA256, envelope_id as AAD)
-- Hybrid payload: `src/protocol/hybrid_payload.py` (encrypted_pii, pii_nonce, pii_associated_data)
-- Public signals: `circuits/compliance.circom` (16 signals, no PII)
-- SAR flag exclusion: `src/protocol/hybrid_payload.py` (excluded from bridge payloads per BSA anti-tipping-off)
-
-## Positioning, not certification
-
-This describes how the architecture aligns with GDPR data-minimization principles. It does not constitute legal advice or compliance certification. VASPs should consult their own data protection counsel regarding specific obligations.
+Read [current assurance limits](/docs/security).

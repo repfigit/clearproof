@@ -1,0 +1,12 @@
+{
+  "skill": "repfigit-review",
+  "ranAt": "2026-08-05T00:00:00Z",
+  "outcome": "skipped",
+  "issueId": null,
+  "prNumber": null,
+  "failureCategory": "none",
+  "humanInterventions": 0,
+  "toolCalls": 12,
+  "verdictCycles": 0,
+  "notes": "DEEP review cron: gate script failed (REPO_DIR unset in cron env). Ran gate logic manually: all open non-draft PRs (#11, #19, #23, #24) have current SHAs recorded in review-state.json with verdict=escalated; #22 is draft. No TIER-3 PR needs fresh review. Reconciliation: all linked AIF issues from merged PRs already in completed state."
+}

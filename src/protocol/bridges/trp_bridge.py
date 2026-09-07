@@ -1,19 +1,9 @@
-"""
-TRP/OpenVASP REST bridge — translates a hybrid payload into TRP v3 wire format.
+"""Legacy experimental TRP-shaped payload builder and explicit local bilateral profile.
 
-TRP workflow:
-  1. Originator obtains beneficiary Travel Address from their VASP.
-  2. POST to the Travel Address endpoint with transfer + identity data.
-  3. Beneficiary VASP responds with confirmation or rejection.
-
-Wire format (JSON over HTTPS POST):
-  - Top-level ``asset``, ``amount``, ``originator``, ``beneficiary`` fields
-    follow the TRP v3 specification.
-  - ``originatorPersons`` and ``beneficiaryPersons`` arrays are left empty
-    because PII is replaced by the ZK proof + encrypted PII bundle.
-  - The ``extensions.zk_travel_rule`` object carries the ZK proof reference
-    and encrypted PII.  Legacy (non-ZK) parsers silently ignore extensions,
-    so the message remains backwards-compatible.
+The legacy body omits mandatory person data and uses ambiguous symbol/SLIP-44
+mapping. It is not evidence of TRP conformance or negotiated extension support.
+Use build_pilot_request only with the matching local counterparty simulator;
+that profile validates encrypted identity semantics without claiming live TRP interoperability.
 """
 
 from __future__ import annotations
@@ -31,12 +21,18 @@ _SLIP44_MAP: dict[str, int] = {
     "BTC": 0,
     "ETH": 60,
     "USDC": 60,  # ERC-20 on Ethereum
-    "USDT": 195,  # Tron-native default; Ethereum variant also acceptable
+    "USDT": 195,  # Historical default; this does not identify every USDT deployment
 }
 
 
 class TRPBridge:
-    """Translates hybrid payloads into TRP v3 JSON request bodies."""
+    """Legacy formatting plus a separately versioned local bilateral exchange boundary."""
+
+    @staticmethod
+    def build_pilot_request(record: dict, receipt: dict) -> dict:
+        from src.protocol.bridges.pilot_bilateral import build_pilot_request
+
+        return build_pilot_request(record, receipt)
 
     def build_trp_request(
         self,
@@ -68,9 +64,8 @@ class TRPBridge:
         Returns
         -------
         dict
-            TRP v3-compatible JSON body.  The ``extensions.zk_travel_rule``
-            field is silently ignored by legacy parsers that do not understand
-            ZK proofs.
+            Experimental legacy JSON body. Extension acceptance and required
+            TRP identity semantics are not established by this formatter.
         """
         return {
             "asset": {
@@ -88,7 +83,7 @@ class TRPBridge:
             # Encrypted PII alongside the message for regulatory record-keeping
             "ivms101_encrypted": base64.b64encode(hybrid_payload.encrypted_pii).decode("ascii"),
             "ivms101_encryption_algorithm": hybrid_payload.encryption_algorithm,
-            # Extension field — non-breaking for legacy parsers
+            # Experimental extension; remote acceptance must be negotiated
             "extensions": {
                 "zk_travel_rule": {
                     "version": "1.0",
@@ -115,7 +110,7 @@ class TRPBridge:
         """
         Map an asset symbol to its SLIP-44 registered coin type.
 
-        Falls back to 60 (Ethereum) for unrecognised symbols, which is
-        appropriate for the majority of ERC-20 tokens.
+        Retains the historical fallback to 60 for unknown symbols. This is not
+        an exact asset/chain identifier and must not establish pilot transfer identity.
         """
         return _SLIP44_MAP.get(asset.upper(), 60)

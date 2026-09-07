@@ -3,6 +3,7 @@ import path from 'path';
 import fs from 'fs';
 import { generateProof } from '@clearproof/proof';
 import type { ComplianceInput } from '@clearproof/proof';
+import { defaultArtifactsDir, requireArtifactPaths } from '../legacy-artifacts.js';
 
 export const proveCommand = new Command('prove')
   .description('Generate a ZK compliance proof from an input JSON file')
@@ -10,22 +11,19 @@ export const proveCommand = new Command('prove')
   .option(
     '--artifacts <dir>',
     'Path to circuit artifacts directory',
-    path.resolve(__dirname, '../../../../artifacts'),
+    defaultArtifactsDir(),
   )
   .option('--output <file>', 'Write proof JSON to this file (default: stdout)')
   .action(
     async (opts: { input: string; artifacts: string; output?: string }) => {
+      const artifactsDir = path.resolve(opts.artifacts);
+      let selected;
+      try { selected = requireArtifactPaths(artifactsDir); }
+      catch (error) { console.error((error as Error).message); process.exitCode = 2; return; }
+      const { wasmPath, zkeyPath } = selected;
       const inputData: ComplianceInput = JSON.parse(
         fs.readFileSync(path.resolve(opts.input), 'utf-8'),
       );
-
-      const artifactsDir = path.resolve(opts.artifacts);
-      const wasmPath = path.join(
-        artifactsDir,
-        'compliance_js',
-        'compliance.wasm',
-      );
-      const zkeyPath = path.join(artifactsDir, 'compliance_final.zkey');
 
       console.error(`Generating proof (artifacts: ${artifactsDir})...`);
 

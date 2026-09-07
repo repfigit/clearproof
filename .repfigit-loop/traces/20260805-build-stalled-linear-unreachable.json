@@ -1,0 +1,12 @@
+{
+  "skill": "repfigit-build",
+  "ranAt": "2026-08-05T00:00:00Z",
+  "outcome": "stalled",
+  "issueId": "AIF-122",
+  "prNumber": 0,
+  "failureCategory": "tool-loop",
+  "humanInterventions": 0,
+  "toolCalls": 12,
+  "verdictCycles": 0,
+  "notes": "Linear API unreachable after 3 consecutive failures. Cannot claim issue AIF-122."
+}

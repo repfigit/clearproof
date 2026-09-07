@@ -35,9 +35,9 @@ export async function verifyProof(
   const proofValid = await snarkjs.groth16.verify(vkey, publicSignals, proof);
 
   const thresholdsBound = thresholdsMatchJurisdiction(publicSignals);
-  const jurisdictionMatchesVASP = expectedJurisdiction 
+  const jurisdictionMatchesVASP = expectedJurisdiction
     ? thresholdsJurisdictionMatchesVASP(publicSignals, expectedJurisdiction)
-    : true; // If no expected jurisdiction provided, assume it matches
+    : null; // Missing expected jurisdiction is unverified, not a match.
 
   const rejectionReasons: string[] = [];
   if (!proofValid) rejectionReasons.push('groth16_invalid');

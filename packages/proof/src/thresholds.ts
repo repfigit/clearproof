@@ -63,7 +63,7 @@ export function getThresholds(jurisdiction: string): Thresholds {
 
 /**
  * Check if the jurisdiction code in the public signals matches an expected jurisdiction.
- * 
+ *
  * @param publicSignals The full 16-element array of public signals
  * @param expectedJurisdiction The expected jurisdiction code (e.g. "US", "EU")
  * @returns true if the jurisdiction codes match, false otherwise

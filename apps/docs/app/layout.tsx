@@ -9,7 +9,7 @@ export const metadata = {
     default: 'clearproof docs',
   },
   description:
-    'Documentation for clearproof — ZK infrastructure for compliant value transfer.',
+    'Development documentation for clearproof: pilot-stage proof components, encrypted transfer information, current limitations and planned workflows.',
 };
 
 const navbar = (
@@ -26,7 +26,6 @@ const navbar = (
         >proof</span></span>
       </span>
     }
-    projectLink="https://github.com/repfigit/clearproof"
   >
     <a href="https://clearproof.world" style={{ fontSize: '0.875rem' }}>
       clearproof.world
@@ -51,8 +50,9 @@ export default async function RootLayout({
       <body>
         <Layout
           navbar={navbar}
+          editLink={null}
+          feedback={{ content: null }}
           pageMap={await getPageMap()}
-          docsRepositoryBase="https://github.com/repfigit/clearproof/tree/main/apps/docs"
           footer={footer}
         >
           {children}

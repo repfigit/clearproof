@@ -1,0 +1,1149 @@
+{
+  "$defs": {
+    "CurrentRootPins": {
+      "additionalProperties": false,
+      "description": "Operator/current-state configuration. Never accept these pins from a proof request.",
+      "properties": {
+        "tenant_id": {
+          "maxLength": 64,
+          "minLength": 1,
+          "pattern": "^[a-z0-9][a-z0-9_-]{0,63}$",
+          "title": "Tenant Id",
+          "type": "string"
+        },
+        "chain_id": {
+          "maximum": 9007199254740991,
+          "minimum": 1,
+          "title": "Chain Id",
+          "type": "integer"
+        },
+        "registry_address": {
+          "maxLength": 42,
+          "minLength": 42,
+          "pattern": "^0x[0-9a-f]{40}$",
+          "title": "Registry Address",
+          "type": "string"
+        },
+        "issuer_did": {
+          "maxLength": 512,
+          "title": "Issuer Did",
+          "type": "string"
+        },
+        "issuance_digest": {
+          "maxLength": 64,
+          "minLength": 64,
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Issuance Digest",
+          "type": "string"
+        },
+        "issuer_digest": {
+          "maxLength": 64,
+          "minLength": 64,
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Issuer Digest",
+          "type": "string"
+        },
+        "sanctions_digest": {
+          "maxLength": 64,
+          "minLength": 64,
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Sanctions Digest",
+          "type": "string"
+        }
+      },
+      "required": [
+        "tenant_id",
+        "chain_id",
+        "registry_address",
+        "issuer_did",
+        "issuance_digest",
+        "issuer_digest",
+        "sanctions_digest"
+      ],
+      "title": "CurrentRootPins",
+      "type": "object"
+    },
+    "DecisionAuthority": {
+      "additionalProperties": false,
+      "properties": {
+        "tenant_id": {
+          "maxLength": 64,
+          "minLength": 1,
+          "pattern": "^[a-z0-9][a-z0-9_-]{0,63}$",
+          "title": "Tenant Id",
+          "type": "string"
+        },
+        "chain_id": {
+          "maximum": 9007199254740991,
+          "minimum": 1,
+          "title": "Chain Id",
+          "type": "integer"
+        },
+        "registry_address": {
+          "maxLength": 42,
+          "minLength": 42,
+          "pattern": "^0x[0-9a-f]{40}$",
+          "title": "Registry Address",
+          "type": "string"
+        },
+        "public_key": {
+          "maxLength": 64,
+          "minLength": 64,
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Public Key",
+          "type": "string"
+        },
+        "not_before": {
+          "maximum": 9007199254740991,
+          "minimum": 0,
+          "title": "Not Before",
+          "type": "integer"
+        },
+        "not_after": {
+          "maximum": 9007199254740991,
+          "minimum": 0,
+          "title": "Not After",
+          "type": "integer"
+        },
+        "compromised_at": {
+          "anyOf": [
+            {
+              "maximum": 9007199254740991,
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Compromised At"
+        }
+      },
+      "required": [
+        "tenant_id",
+        "chain_id",
+        "registry_address",
+        "public_key",
+        "not_before",
+        "not_after"
+      ],
+      "title": "DecisionAuthority",
+      "type": "object"
+    },
+    "ExportBinding": {
+      "additionalProperties": false,
+      "properties": {
+        "tenant_id": {
+          "maxLength": 64,
+          "minLength": 1,
+          "pattern": "^[a-z0-9][a-z0-9_-]{0,63}$",
+          "title": "Tenant Id",
+          "type": "string"
+        },
+        "receipt_id": {
+          "maxLength": 64,
+          "minLength": 64,
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Receipt Id",
+          "type": "string"
+        },
+        "reviewer_id": {
+          "maxLength": 64,
+          "minLength": 1,
+          "pattern": "^[a-z0-9][a-z0-9_-]{0,63}$",
+          "title": "Reviewer Id",
+          "type": "string"
+        },
+        "key_id": {
+          "maxLength": 128,
+          "minLength": 1,
+          "title": "Key Id",
+          "type": "string"
+        },
+        "exported_at": {
+          "maximum": 9007199254740991,
+          "minimum": 0,
+          "title": "Exported At",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "tenant_id",
+        "receipt_id",
+        "reviewer_id",
+        "key_id",
+        "exported_at"
+      ],
+      "title": "ExportBinding",
+      "type": "object"
+    },
+    "FactAuthority": {
+      "additionalProperties": false,
+      "properties": {
+        "public_key": {
+          "maxLength": 64,
+          "minLength": 64,
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Public Key",
+          "type": "string"
+        },
+        "tenant_id": {
+          "maxLength": 64,
+          "minLength": 1,
+          "pattern": "^[a-z0-9][a-z0-9_-]{0,63}$",
+          "title": "Tenant Id",
+          "type": "string"
+        },
+        "chain_id": {
+          "maximum": 9007199254740991,
+          "minimum": 1,
+          "title": "Chain Id",
+          "type": "integer"
+        },
+        "registry_address": {
+          "maxLength": 42,
+          "minLength": 42,
+          "pattern": "^0x[0-9a-f]{40}$",
+          "title": "Registry Address",
+          "type": "string"
+        },
+        "source_ids": {
+          "items": {
+            "maxLength": 64,
+            "minLength": 1,
+            "pattern": "^[a-z0-9][a-z0-9_-]{0,63}$",
+            "type": "string"
+          },
+          "maxItems": 16,
+          "minItems": 1,
+          "title": "Source Ids",
+          "type": "array"
+        },
+        "predicates": {
+          "items": {
+            "maxLength": 64,
+            "minLength": 1,
+            "pattern": "^[a-z0-9][a-z0-9_-]{0,63}$",
+            "type": "string"
+          },
+          "maxItems": 4,
+          "minItems": 1,
+          "title": "Predicates",
+          "type": "array"
+        },
+        "not_before": {
+          "maximum": 9007199254740991,
+          "minimum": 0,
+          "title": "Not Before",
+          "type": "integer"
+        },
+        "not_after": {
+          "maximum": 9007199254740991,
+          "minimum": 0,
+          "title": "Not After",
+          "type": "integer"
+        },
+        "compromised_at": {
+          "anyOf": [
+            {
+              "maximum": 9007199254740991,
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Compromised At"
+        },
+        "max_lifetime_seconds": {
+          "maximum": 86400,
+          "minimum": 1,
+          "title": "Max Lifetime Seconds",
+          "type": "integer"
+        },
+        "max_observation_age_seconds": {
+          "maximum": 86400,
+          "minimum": 1,
+          "title": "Max Observation Age Seconds",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "public_key",
+        "tenant_id",
+        "chain_id",
+        "registry_address",
+        "source_ids",
+        "predicates",
+        "not_before",
+        "not_after",
+        "max_lifetime_seconds",
+        "max_observation_age_seconds"
+      ],
+      "title": "FactAuthority",
+      "type": "object"
+    },
+    "HistoryStatusAuthority": {
+      "additionalProperties": false,
+      "description": "Independent approval of the signer as status authority for this issuer.",
+      "properties": {
+        "tenant_id": {
+          "maxLength": 64,
+          "minLength": 1,
+          "pattern": "^[a-z0-9][a-z0-9_-]{0,63}$",
+          "title": "Tenant Id",
+          "type": "string"
+        },
+        "chain_id": {
+          "maximum": 9007199254740991,
+          "minimum": 1,
+          "title": "Chain Id",
+          "type": "integer"
+        },
+        "registry_address": {
+          "maxLength": 42,
+          "minLength": 42,
+          "pattern": "^0x[0-9a-f]{40}$",
+          "title": "Registry Address",
+          "type": "string"
+        },
+        "public_key": {
+          "maxLength": 64,
+          "minLength": 64,
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Public Key",
+          "type": "string"
+        },
+        "not_before": {
+          "maximum": 9007199254740991,
+          "minimum": 0,
+          "title": "Not Before",
+          "type": "integer"
+        },
+        "not_after": {
+          "maximum": 9007199254740991,
+          "minimum": 0,
+          "title": "Not After",
+          "type": "integer"
+        },
+        "compromised_at": {
+          "anyOf": [
+            {
+              "maximum": 9007199254740991,
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Compromised At"
+        },
+        "registry_id": {
+          "maxLength": 64,
+          "minLength": 64,
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Registry Id",
+          "type": "string"
+        },
+        "issuer_did": {
+          "maxLength": 512,
+          "title": "Issuer Did",
+          "type": "string"
+        }
+      },
+      "required": [
+        "tenant_id",
+        "chain_id",
+        "registry_address",
+        "public_key",
+        "not_before",
+        "not_after",
+        "registry_id",
+        "issuer_did"
+      ],
+      "title": "HistoryStatusAuthority",
+      "type": "object"
+    },
+    "InformationAuthority": {
+      "additionalProperties": false,
+      "properties": {
+        "public_key": {
+          "maxLength": 64,
+          "minLength": 64,
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Public Key",
+          "type": "string"
+        },
+        "tenant_id": {
+          "maxLength": 64,
+          "minLength": 1,
+          "pattern": "^[a-z0-9][a-z0-9_-]{0,63}$",
+          "title": "Tenant Id",
+          "type": "string"
+        },
+        "chain_id": {
+          "maximum": 9007199254740991,
+          "minimum": 1,
+          "title": "Chain Id",
+          "type": "integer"
+        },
+        "registry_address": {
+          "maxLength": 42,
+          "minLength": 42,
+          "pattern": "^0x[0-9a-f]{40}$",
+          "title": "Registry Address",
+          "type": "string"
+        },
+        "source_ids": {
+          "items": {
+            "maxLength": 64,
+            "minLength": 1,
+            "pattern": "^[a-z0-9][a-z0-9_-]{0,63}$",
+            "type": "string"
+          },
+          "maxItems": 16,
+          "minItems": 1,
+          "title": "Source Ids",
+          "type": "array"
+        },
+        "not_before": {
+          "maximum": 9007199254740991,
+          "minimum": 0,
+          "title": "Not Before",
+          "type": "integer"
+        },
+        "not_after": {
+          "maximum": 9007199254740991,
+          "minimum": 0,
+          "title": "Not After",
+          "type": "integer"
+        },
+        "max_lifetime_seconds": {
+          "maximum": 86400,
+          "minimum": 1,
+          "title": "Max Lifetime Seconds",
+          "type": "integer"
+        },
+        "compromised_at": {
+          "anyOf": [
+            {
+              "maximum": 9007199254740991,
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Compromised At"
+        }
+      },
+      "required": [
+        "public_key",
+        "tenant_id",
+        "chain_id",
+        "registry_address",
+        "source_ids",
+        "not_before",
+        "not_after",
+        "max_lifetime_seconds"
+      ],
+      "title": "InformationAuthority",
+      "type": "object"
+    },
+    "PilotPolicy": {
+      "additionalProperties": false,
+      "properties": {
+        "schema_version": {
+          "const": "clearproof-pilot-policy-v1",
+          "default": "clearproof-pilot-policy-v1",
+          "title": "Schema Version",
+          "type": "string"
+        },
+        "policy_id": {
+          "maxLength": 64,
+          "minLength": 1,
+          "pattern": "^[a-z0-9][a-z0-9_-]{0,63}$",
+          "title": "Policy Id",
+          "type": "string"
+        },
+        "revision": {
+          "maximum": 9007199254740991,
+          "minimum": 1,
+          "title": "Revision",
+          "type": "integer"
+        },
+        "previous_digest": {
+          "anyOf": [
+            {
+              "maxLength": 64,
+              "minLength": 64,
+              "pattern": "^[0-9a-f]{64}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Previous Digest"
+        },
+        "tenant_id": {
+          "maxLength": 64,
+          "minLength": 1,
+          "pattern": "^[a-z0-9][a-z0-9_-]{0,63}$",
+          "title": "Tenant Id",
+          "type": "string"
+        },
+        "chain_id": {
+          "maxLength": 39,
+          "minLength": 1,
+          "pattern": "^(0|[1-9][0-9]{0,38})$",
+          "title": "Chain Id",
+          "type": "string"
+        },
+        "registry_address": {
+          "maxLength": 42,
+          "minLength": 42,
+          "pattern": "^0x[0-9a-f]{40}$",
+          "title": "Registry Address",
+          "type": "string"
+        },
+        "jurisdiction": {
+          "maxLength": 2,
+          "minLength": 2,
+          "pattern": "^[A-Z]{2}$",
+          "title": "Jurisdiction",
+          "type": "string"
+        },
+        "asset_registry_digest": {
+          "maxLength": 64,
+          "minLength": 64,
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Asset Registry Digest",
+          "type": "string"
+        },
+        "effective_from": {
+          "maximum": 9007199254740991,
+          "minimum": 0,
+          "title": "Effective From",
+          "type": "integer"
+        },
+        "effective_until": {
+          "maximum": 9007199254740991,
+          "minimum": 0,
+          "title": "Effective Until",
+          "type": "integer"
+        },
+        "tier_thresholds_usd_cents": {
+          "maxItems": 3,
+          "minItems": 3,
+          "prefixItems": [
+            {
+              "maxLength": 39,
+              "minLength": 1,
+              "pattern": "^(0|[1-9][0-9]{0,38})$",
+              "type": "string"
+            },
+            {
+              "maxLength": 39,
+              "minLength": 1,
+              "pattern": "^(0|[1-9][0-9]{0,38})$",
+              "type": "string"
+            },
+            {
+              "maxLength": 39,
+              "minLength": 1,
+              "pattern": "^(0|[1-9][0-9]{0,38})$",
+              "type": "string"
+            }
+          ],
+          "title": "Tier Thresholds Usd Cents",
+          "type": "array"
+        },
+        "sources": {
+          "items": {
+            "$ref": "#/$defs/PolicySource"
+          },
+          "maxItems": 16,
+          "minItems": 1,
+          "title": "Sources",
+          "type": "array"
+        },
+        "rules": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/PolicyRule"
+          },
+          "maxItems": 64,
+          "title": "Rules",
+          "type": "array"
+        }
+      },
+      "required": [
+        "policy_id",
+        "revision",
+        "tenant_id",
+        "chain_id",
+        "registry_address",
+        "jurisdiction",
+        "asset_registry_digest",
+        "effective_from",
+        "effective_until",
+        "tier_thresholds_usd_cents",
+        "sources"
+      ],
+      "title": "PilotPolicy",
+      "type": "object"
+    },
+    "PolicyRule": {
+      "additionalProperties": false,
+      "properties": {
+        "rule_id": {
+          "maxLength": 64,
+          "minLength": 1,
+          "pattern": "^[a-z0-9][a-z0-9_-]{0,63}$",
+          "title": "Rule Id",
+          "type": "string"
+        },
+        "predicate": {
+          "maxLength": 64,
+          "minLength": 1,
+          "pattern": "^[a-z0-9][a-z0-9_-]{0,63}$",
+          "title": "Predicate",
+          "type": "string"
+        },
+        "operator": {
+          "enum": [
+            "is_true",
+            "is_false",
+            "at_least",
+            "below"
+          ],
+          "title": "Operator",
+          "type": "string"
+        },
+        "threshold_usd_cents": {
+          "anyOf": [
+            {
+              "maxLength": 39,
+              "minLength": 1,
+              "pattern": "^(0|[1-9][0-9]{0,38})$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Threshold Usd Cents"
+        },
+        "effect": {
+          "enum": [
+            "ALLOW",
+            "REVIEW",
+            "DENY"
+          ],
+          "title": "Effect",
+          "type": "string"
+        },
+        "source_ids": {
+          "items": {
+            "maxLength": 64,
+            "minLength": 1,
+            "pattern": "^[a-z0-9][a-z0-9_-]{0,63}$",
+            "type": "string"
+          },
+          "maxItems": 16,
+          "minItems": 1,
+          "title": "Source Ids",
+          "type": "array"
+        }
+      },
+      "required": [
+        "rule_id",
+        "predicate",
+        "operator",
+        "effect",
+        "source_ids"
+      ],
+      "title": "PolicyRule",
+      "type": "object"
+    },
+    "PolicySource": {
+      "additionalProperties": false,
+      "properties": {
+        "source_id": {
+          "maxLength": 64,
+          "minLength": 1,
+          "pattern": "^[a-z0-9][a-z0-9_-]{0,63}$",
+          "title": "Source Id",
+          "type": "string"
+        },
+        "kind": {
+          "enum": [
+            "synthetic",
+            "reviewed-reference"
+          ],
+          "title": "Kind",
+          "type": "string"
+        },
+        "reference": {
+          "maxLength": 1024,
+          "minLength": 1,
+          "title": "Reference",
+          "type": "string"
+        },
+        "evidence_digest": {
+          "maxLength": 64,
+          "minLength": 64,
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Evidence Digest",
+          "type": "string"
+        },
+        "reviewed_at": {
+          "maximum": 9007199254740991,
+          "minimum": 0,
+          "title": "Reviewed At",
+          "type": "integer"
+        },
+        "valid_until": {
+          "maximum": 9007199254740991,
+          "minimum": 0,
+          "title": "Valid Until",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "source_id",
+        "kind",
+        "reference",
+        "evidence_digest",
+        "reviewed_at",
+        "valid_until"
+      ],
+      "title": "PolicySource",
+      "type": "object"
+    },
+    "RootAuthority": {
+      "additionalProperties": false,
+      "description": "Pinned verification key and scope, supplied outside untrusted evidence.",
+      "properties": {
+        "public_key": {
+          "maxLength": 64,
+          "minLength": 64,
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Public Key",
+          "type": "string"
+        },
+        "tenant_id": {
+          "maxLength": 64,
+          "minLength": 1,
+          "pattern": "^[a-z0-9][a-z0-9_-]{0,63}$",
+          "title": "Tenant Id",
+          "type": "string"
+        },
+        "chain_id": {
+          "maximum": 9007199254740991,
+          "minimum": 1,
+          "title": "Chain Id",
+          "type": "integer"
+        },
+        "registry_address": {
+          "maxLength": 42,
+          "minLength": 42,
+          "pattern": "^0x[0-9a-f]{40}$",
+          "title": "Registry Address",
+          "type": "string"
+        },
+        "kinds": {
+          "items": {
+            "enum": [
+              "issuance-root",
+              "issuer-root",
+              "sanctions-root"
+            ],
+            "type": "string"
+          },
+          "maxItems": 3,
+          "minItems": 1,
+          "title": "Kinds",
+          "type": "array"
+        },
+        "issuer_dids": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "maxItems": 256,
+          "title": "Issuer Dids",
+          "type": "array"
+        },
+        "not_before": {
+          "maximum": 9007199254740991,
+          "minimum": 0,
+          "title": "Not Before",
+          "type": "integer"
+        },
+        "not_after": {
+          "maximum": 9007199254740991,
+          "minimum": 0,
+          "title": "Not After",
+          "type": "integer"
+        },
+        "compromised_at": {
+          "anyOf": [
+            {
+              "maximum": 9007199254740991,
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Compromised At"
+        }
+      },
+      "required": [
+        "public_key",
+        "tenant_id",
+        "chain_id",
+        "registry_address",
+        "kinds",
+        "not_before",
+        "not_after"
+      ],
+      "title": "RootAuthority",
+      "type": "object"
+    },
+    "StatementConfiguration": {
+      "additionalProperties": false,
+      "properties": {
+        "policies": {
+          "items": {
+            "$ref": "#/$defs/PilotPolicy"
+          },
+          "maxItems": 256,
+          "minItems": 1,
+          "title": "Policies",
+          "type": "array"
+        },
+        "policy_pins": {
+          "items": {
+            "maxLength": 64,
+            "minLength": 64,
+            "pattern": "^[0-9a-f]{64}$",
+            "type": "string"
+          },
+          "maxItems": 256,
+          "minItems": 1,
+          "title": "Policy Pins",
+          "type": "array"
+        },
+        "root_pins": {
+          "$ref": "#/$defs/CurrentRootPins"
+        },
+        "roots": {
+          "items": {
+            "$ref": "#/$defs/RootAuthority"
+          },
+          "maxItems": 256,
+          "minItems": 1,
+          "title": "Roots",
+          "type": "array"
+        },
+        "valuations": {
+          "items": {
+            "$ref": "#/$defs/ValuationAuthority"
+          },
+          "maxItems": 256,
+          "minItems": 1,
+          "title": "Valuations",
+          "type": "array"
+        }
+      },
+      "required": [
+        "policies",
+        "policy_pins",
+        "root_pins",
+        "roots",
+        "valuations"
+      ],
+      "title": "StatementConfiguration",
+      "type": "object"
+    },
+    "TimingConfiguration": {
+      "additionalProperties": false,
+      "properties": {
+        "certificate_der_base64": {
+          "maxLength": 21848,
+          "minLength": 1,
+          "title": "Certificate Der Base64",
+          "type": "string"
+        },
+        "roots_der_base64": {
+          "items": {
+            "type": "string"
+          },
+          "maxItems": 16,
+          "minItems": 1,
+          "title": "Roots Der Base64",
+          "type": "array"
+        },
+        "policy_oid": {
+          "maxLength": 128,
+          "minLength": 3,
+          "title": "Policy Oid",
+          "type": "string"
+        },
+        "not_before": {
+          "maximum": 9007199254740991,
+          "minimum": 0,
+          "title": "Not Before",
+          "type": "integer"
+        },
+        "not_after": {
+          "maximum": 9007199254740991,
+          "minimum": 0,
+          "title": "Not After",
+          "type": "integer"
+        },
+        "max_accuracy_us": {
+          "default": 1000000,
+          "maximum": 60000000,
+          "minimum": 0,
+          "title": "Max Accuracy Us",
+          "type": "integer"
+        },
+        "max_delay_seconds": {
+          "default": 300,
+          "maximum": 3600,
+          "minimum": 1,
+          "title": "Max Delay Seconds",
+          "type": "integer"
+        },
+        "compromised_at": {
+          "anyOf": [
+            {
+              "maximum": 9007199254740991,
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Compromised At"
+        }
+      },
+      "required": [
+        "certificate_der_base64",
+        "roots_der_base64",
+        "policy_oid",
+        "not_before",
+        "not_after"
+      ],
+      "title": "TimingConfiguration",
+      "type": "object"
+    },
+    "ValuationAuthority": {
+      "additionalProperties": false,
+      "description": "Operator-configured source, catalog, asset and tenant scope for one key.",
+      "properties": {
+        "public_key": {
+          "maxLength": 64,
+          "minLength": 64,
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Public Key",
+          "type": "string"
+        },
+        "tenant_id": {
+          "maxLength": 64,
+          "minLength": 1,
+          "pattern": "^[a-z0-9][a-z0-9_-]{0,63}$",
+          "title": "Tenant Id",
+          "type": "string"
+        },
+        "asset_registry_digest": {
+          "maxLength": 64,
+          "minLength": 64,
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Asset Registry Digest",
+          "type": "string"
+        },
+        "asset_ids": {
+          "items": {
+            "type": "string"
+          },
+          "maxItems": 16,
+          "minItems": 1,
+          "title": "Asset Ids",
+          "type": "array"
+        },
+        "source_ids": {
+          "items": {
+            "maxLength": 64,
+            "minLength": 1,
+            "pattern": "^[a-z0-9][a-z0-9_-]{0,63}$",
+            "type": "string"
+          },
+          "maxItems": 16,
+          "minItems": 1,
+          "title": "Source Ids",
+          "type": "array"
+        },
+        "not_before": {
+          "maximum": 9007199254740991,
+          "minimum": 0,
+          "title": "Not Before",
+          "type": "integer"
+        },
+        "not_after": {
+          "maximum": 9007199254740991,
+          "minimum": 0,
+          "title": "Not After",
+          "type": "integer"
+        },
+        "compromised_at": {
+          "anyOf": [
+            {
+              "maximum": 9007199254740991,
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Compromised At"
+        },
+        "max_quote_lifetime_seconds": {
+          "maximum": 86400,
+          "minimum": 1,
+          "title": "Max Quote Lifetime Seconds",
+          "type": "integer"
+        },
+        "max_observation_age_seconds": {
+          "maximum": 86400,
+          "minimum": 1,
+          "title": "Max Observation Age Seconds",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "public_key",
+        "tenant_id",
+        "asset_registry_digest",
+        "asset_ids",
+        "source_ids",
+        "not_before",
+        "not_after",
+        "max_quote_lifetime_seconds",
+        "max_observation_age_seconds"
+      ],
+      "title": "ValuationAuthority",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": {
+      "const": "clearproof-history-reviewer-v1",
+      "default": "clearproof-history-reviewer-v1",
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "binding": {
+      "$ref": "#/$defs/ExportBinding"
+    },
+    "artifact_manifest_digest": {
+      "maxLength": 64,
+      "minLength": 64,
+      "pattern": "^[0-9a-f]{64}$",
+      "title": "Artifact Manifest Digest",
+      "type": "string"
+    },
+    "runtime_sha256": {
+      "maxLength": 64,
+      "minLength": 64,
+      "pattern": "^[0-9a-f]{64}$",
+      "title": "Runtime Sha256",
+      "type": "string"
+    },
+    "statement": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/StatementConfiguration"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "facts": {
+      "default": [],
+      "items": {
+        "$ref": "#/$defs/FactAuthority"
+      },
+      "maxItems": 256,
+      "title": "Facts",
+      "type": "array"
+    },
+    "decisions": {
+      "default": [],
+      "items": {
+        "$ref": "#/$defs/DecisionAuthority"
+      },
+      "maxItems": 256,
+      "title": "Decisions",
+      "type": "array"
+    },
+    "statuses": {
+      "default": [],
+      "items": {
+        "$ref": "#/$defs/HistoryStatusAuthority"
+      },
+      "maxItems": 256,
+      "title": "Statuses",
+      "type": "array"
+    },
+    "information": {
+      "default": [],
+      "items": {
+        "$ref": "#/$defs/InformationAuthority"
+      },
+      "maxItems": 256,
+      "title": "Information",
+      "type": "array"
+    },
+    "timing": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/TimingConfiguration"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    }
+  },
+  "required": [
+    "binding",
+    "artifact_manifest_digest",
+    "runtime_sha256"
+  ],
+  "title": "HistoryReviewerConfiguration",
+  "type": "object"
+}

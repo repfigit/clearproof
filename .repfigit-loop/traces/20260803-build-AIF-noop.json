@@ -1,0 +1,12 @@
+{
+  "skill": "repfigit-build",
+  "ranAt": "2026-08-03T07:30:00.000Z",
+  "outcome": "no-work",
+  "issueId": null,
+  "prNumber": 0,
+  "failureCategory": "none",
+  "humanInterventions": 0,
+  "toolCalls": 3,
+  "verdictCycles": 0,
+  "notes": "no work in queue: no TIER-1 agent-ready unblocked issues for AIF/clearproof (AIF-122 has ≥4 ACs; AIF-35 blocked; others done/canceled/pyd-track)"
+}

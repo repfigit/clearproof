@@ -1,5 +1,6 @@
 export default {
   index: 'Introduction',
+  status: 'Project Status',
   quickstart: 'Quick Start',
   architecture: 'Architecture',
   'system-diagram': 'System Diagram',
