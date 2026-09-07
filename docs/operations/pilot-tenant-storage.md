@@ -45,14 +45,15 @@ fails closed. This does not implement a retention policy or automated re-encrypt
 Database administrators can delete rows or restore an older database. AEAD detects
 substitution and tampering, but cannot prove completeness or detect wholesale
 rollback. Historical evidence still requires independently trusted snapshots and
-verification anchors under the remaining pilot milestones.
+verification anchors; see [historical verification](../internal/PILOT_HISTORY_INSPECTION.md).
 
 Validation uses isolated real PostgreSQL schemas in
 `tests/integration/test_pilot_storage.py`, plus tampering tests in
-`tests/unit/test_pilot_cipher.py`. Test proof payloads are synthetic storage records,
-not cryptographic proofs. Restart coverage closes/recreates the database connection
-pool and constructs new store objects; it does not claim a PostgreSQL server crash
-or full API-process recovery test.
+`tests/unit/test_pilot_cipher.py`. Storage-only cases use synthetic records. The explicitly enabled real-artifact
+authorization cases also generate/verify actual development proofs and exercise
+encrypted export, reconnect and API/CLI paths. Connection-pool reconnect is
+distinct from the separate event-worker process-death test; neither establishes
+recovery from a PostgreSQL server crash or arbitrary host failure.
 
 ### Shared enrollment eligibility checks
 
@@ -68,4 +69,7 @@ already accepted credential's lifetime. Callers must still independently establi
 issuer/root authority, policy, valuation, transfer binding and proof validity.
 The loader neither authorizes a transfer nor consumes its nullifier. Current
 verification must run these checks in the same tenant transaction as consumption
-to prevent a revocation racing that decision; that service integration remains open.
+to prevent a revocation racing that decision. `ProofAuthorizationService` runs
+these checks through `_inspect_transaction` before recording the encrypted proof,
+receipt and nullifier in the same idempotent tenant transaction. Exact retries
+return the historical receipt; they are not a fresh current-policy decision.

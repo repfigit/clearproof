@@ -47,5 +47,7 @@ bypass attempts, and concurrent nullifier insertion. Missing proof references or
 database failures propagate; only a real duplicate nullifier returns `False`.
 
 Tenant isolation, durable credential issuance, atomic authorization consumption
-and complete evidence retention are subsequent pilot requirements. These storage
-checks do not establish those properties.
+and evidence retention are covered by the separate [pilot tenant storage](pilot-tenant-storage.md)
+and authorization tests. These legacy proof-storage checks alone do not establish
+those properties. The [owned local acceptance command](local-pilot-acceptance.md)
+runs both suites with isolated schemas.

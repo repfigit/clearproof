@@ -99,6 +99,7 @@ def main():
                     sys.executable,
                     "-m",
                     "pytest",
+                    "tests/integration/test_proof_storage.py",
                     "tests/integration/test_pilot_storage.py",
                     "tests/integration/test_publication_journal.py",
                     "-q",

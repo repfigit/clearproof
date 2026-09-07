@@ -135,6 +135,48 @@ trust configuration. Changing the clock asks a different historical trust questi
 See [offline verification](../internal/PILOT_VERIFY_HISTORY_CLI.md) for outcome
 semantics and CLI usage.
 
-Fresh-checkout service automation and the complete M0–M5 acceptance audit remain
-separate completion work. Live provider access, customer validation and production
+The complete requirement-by-requirement M0–M5 acceptance audit remains open. Live provider access, customer validation and production
 assurance remain F1–F5 follow-ons.
+
+
+## Workspace test behavior
+
+`npm run test:ts` executes test tasks every time. Test-result caching is disabled
+because untracked external artifact files and live test services are outside the
+usual source cache. The task explicitly passes pilot/legacy artifact directories,
+the selected test Python executable and the temporary directory to its children.
+Build results can still be cached. For the complete contract gate, set
+`CLEARPROOF_PILOT_TEST_ARTIFACTS`, `CLEARPROOF_LEGACY_TEST_ARTIFACTS` and
+`CLEARPROOF_TEST_PYTHON` to the generated profiles and installed Python environment
+before running the command. Without the artifact inputs, the separately marked
+real-artifact cases remain pending; that is not the full contract acceptance gate.
+
+The owned database command also runs the proof-storage parsing, migration and
+reconnect suite before the durable authorization/publication tests. All run in
+isolated schemas of the newly created cluster.
+
+
+## Verified clean-checkout checkpoint — September 6, 2026
+
+An independent clone with its own Python environment and dependency installation
+completed frozen installs, the full workspace build, fresh phase-two development
+setup and both proof-profile round trips. The Circom 2.2.2 binary matched the CI
+SHA-256 pin. The owned-service command then passed 76 PostgreSQL/EVM tests with
+these new artifacts and retained the nine expected report files. After the test
+process and owned PostgreSQL cluster exited, the documented offline example
+reproduced the exact historical report, with socket connections disabled.
+Inventory hashes, file permissions and reviewer-key/person-name exclusion checks
+also passed.
+
+The final Python run passed 963 tests with 90 service/optional tests skipped; the
+separate 76-test owned-service gate exercised the relevant database cases. The
+uncached workspace tests passed 159 SDK, 12 CLI, 2 content, 2 artifact-metadata and
+83 contract tests, including the artifact-dependent contract cases. SDK/contract
+noEmit checks passed. These were local results, not a claim of remote CI success.
+
+The host supplied Node 26.5.1, Python 3.12.13, uv 0.12.9, Circom 2.2.2 and
+PostgreSQL 18; npm 11.9.0 was used for the frozen Node install. This checkpoint
+validates the documented workflow with those host prerequisites. It is not a
+claim of bit-identical keys, production assurance or compatibility with every
+host/version. The run manifest itself still leaves clean-environment status
+unestablished because test success alone cannot prove the preceding setup steps.
