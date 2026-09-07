@@ -65,7 +65,11 @@ packages/contracts/cache/
 # Test
 .pytest_cache/
 htmlcov/
+coverage/
+coverage.json
+coverage.xml
 .coverage
+.coverage.*
 
 # Repfigit-loop machine-local state (PR review cache, routing decisions).
 # These churn on every pass and would otherwise leave the working tree dirty,

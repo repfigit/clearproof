@@ -3,7 +3,10 @@ from __future__ import annotations
 import hashlib
 import logging
 import time
-from typing import Optional
+from collections.abc import Mapping
+from typing import Any, Optional
+
+from psycopg.rows import dict_row
 
 from src.storage.database import Database
 from src.storage.models import StoredAuditEntry
@@ -82,7 +85,7 @@ class PersistentAuditLog:
         where = "WHERE " + " AND ".join(conditions) if conditions else ""
 
         async with self._db.connection() as conn:
-            async with conn.cursor() as cur:
+            async with conn.cursor(row_factory=dict_row) as cur:
                 await cur.execute(
                     f"SELECT * FROM audit_entries {where} ORDER BY sequence_number DESC LIMIT %s",
                     [*params, limit],
@@ -122,6 +125,5 @@ class PersistentAuditLog:
                 return (row[0] or 0) + 1
 
     @staticmethod
-    def _row_to_entry(row) -> StoredAuditEntry:
-        columns = [desc[0] for desc in row.cursor.description]
-        return StoredAuditEntry(**dict(zip(columns, row)))
+    def _row_to_entry(row: Mapping[str, Any]) -> StoredAuditEntry:
+        return StoredAuditEntry.model_validate(row)

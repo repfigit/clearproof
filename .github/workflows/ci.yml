@@ -89,7 +89,7 @@ jobs:
       - name: Real PostgreSQL proof storage, migration and parsing checks
         env:
           CLEARPROOF_POLICY_CLI_TEST: "1"
-        run: uv run python -m pytest tests/integration/test_proof_storage.py tests/integration/test_pilot_storage.py tests/integration/test_publication_journal.py tests/integration/test_wallet_ownership.py tests/unit/test_stored_signals.py tests/unit/test_pilot_cipher.py -q
+        run: uv run python -m pytest tests/integration/test_storage.py tests/integration/test_proof_storage.py tests/integration/test_pilot_storage.py tests/integration/test_publication_journal.py tests/integration/test_wallet_ownership.py tests/unit/test_stored_signals.py tests/unit/test_pilot_cipher.py -q
 
   python-tests:
     runs-on: ubuntu-latest
@@ -101,7 +101,15 @@ jobs:
           node-version: 20
       - run: npm ci
       - run: uv sync --frozen --all-extras
-      - run: uv run python -m pytest tests/ -v
+      - run: uv run python -m pytest tests/ -v --cov=src --cov-branch --cov-report=xml --cov-report=json
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: python-coverage
+          path: |
+            coverage.xml
+            coverage.json
+          if-no-files-found: error
 
   typescript-build:
     runs-on: ubuntu-latest
@@ -117,10 +125,18 @@ jobs:
         run: cd packages/proof && npx tsc
       - run: cd packages/proof && npx tsc --noEmit
       - run: cd packages/cli && npx tsc
-      - name: Policy CLI transport and built-command checks
-        run: cd packages/cli && npx vitest run test/policy.test.ts test/investigation.test.ts
-      - name: Off-chain parity tests (committed vector)
-        run: cd packages/proof && npx vitest run
+      - name: All CLI tests and source coverage
+        run: npm run test:coverage --workspace=@clearproof/cli
+      - name: SDK tests and source coverage
+        run: npm run test:coverage --workspace=@clearproof/proof
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: typescript-coverage
+          path: |
+            packages/cli/coverage/
+            packages/proof/coverage/
+          if-no-files-found: error
 
   hardhat-tests:
     runs-on: ubuntu-latest
