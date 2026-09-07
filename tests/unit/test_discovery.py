@@ -337,3 +337,48 @@ def test_publisher_accepts_matching_private_and_public_keys(publisher_env, monke
     monkeypatch.setenv("VASP_HPKE_PRIVATE_KEY", base64.urlsafe_b64encode(private).decode())
     monkeypatch.setenv("VASP_HPKE_PUBLIC_KEY", base64.urlsafe_b64encode(public).decode())
     assert get_own_hpke_public_key() == public
+
+
+@pytest.mark.parametrize("target", [None, 1, "a" * 513])
+def test_discovery_target_requires_bounded_string(target):
+    with pytest.raises(DiscoveryInvalid, match="Expected a canonical domain or did:web identifier"):
+        parse_target(target)
+
+
+@pytest.mark.parametrize("coordinate", [2**255 - 19, 2**255, 2**256 - 1])
+def test_discovery_key_rejects_noncanonical_x25519_coordinates(coordinate):
+    encoded = base64.urlsafe_b64encode(coordinate.to_bytes(32, "little")).decode()
+    with pytest.raises(DiscoveryInvalid, match="not a canonical X25519 point"):
+        decode_hpke_key(encoded)
+
+
+@pytest.mark.parametrize(
+    "document,message",
+    [
+        (None, "Discovery document must be an object"),
+        ([], "Discovery document must be an object"),
+        ({}, "Discovery version is required"),
+        ({"version": 4}, "Discovery version is required"),
+    ],
+)
+def test_discovery_document_requires_object_and_version(document, message):
+    with pytest.raises(DiscoveryInvalid, match=message):
+        validate_document(document, parse_target("beneficiary.example"))
+
+
+@pytest.mark.parametrize("capabilities", [None, [], "unsupported"])
+def test_discovery_document_requires_capability_object(capabilities):
+    document = {**DOCUMENT, "clearproof": capabilities}
+    with pytest.raises(DiscoveryInvalid, match="Missing clearproof capabilities"):
+        validate_document(document, parse_target("beneficiary.example"))
+
+
+def test_discovery_key_rejects_base64_padding_bit_alias():
+    encoded = DOCUMENT["clearproof"]["hpkePublicKey"].rstrip("=")
+    alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_"
+    last = alphabet.index(encoded[-1])
+    assert last % 4 == 0
+    alias = encoded[:-1] + alphabet[last + 1]
+    assert base64.urlsafe_b64decode(alias + "=") == base64.urlsafe_b64decode(encoded + "=")
+    with pytest.raises(DiscoveryInvalid, match="HPKE public key has noncanonical encoding"):
+        decode_hpke_key(alias)

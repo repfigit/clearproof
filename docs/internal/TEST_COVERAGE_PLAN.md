@@ -709,3 +709,16 @@ still need completion and final merged-main verification.
   and whitespace pass. No production or proving-artifact changes were required.
 - Remaining Python, SDK, Solidity, docs/browser, operational scripts and final
   publication checks leave full coverage incomplete. Overall figures await refresh.
+
+## Thirty-seventh checkpoint
+
+- Added 14 discovery-profile tests for bounded string targets, X25519 coordinate
+  range, document/version/capability shapes and base64 padding-bit aliases that
+  decode to identical bytes but are not canonical encodings.
+- All 126 discovery tests pass. Profile coverage is 95/96 statements and 45/46
+  branches (`discovery-profile-boundaries.log`/`.data`). The remaining DID
+  reconstruction inequality at line 77 appears unreachable after earlier
+  authority/path validation; that requires explicit review, not an unsupported
+  100% claim or removal solely to improve metrics. Ruff and whitespace pass.
+- No production changes were needed. Other Python, SDK, Solidity, docs/browser,
+  scripts and final review/publication requirements remain open.
