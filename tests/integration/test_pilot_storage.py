@@ -15,6 +15,7 @@ from src.storage.database import Database
 from src.storage.keyring import KeyRing, KeyVersion
 from src.storage.pilot import PilotStore, RecordConflict, ReplayConflict
 from src.storage.pilot_cipher import RecordCipher, RecordIntegrityError
+from tests.integration.pilot_outputs import retain_output
 
 pytestmark = pytest.mark.skipif(not os.getenv("DATABASE_URL"), reason="requires PostgreSQL")
 ROLES = (
@@ -851,6 +852,7 @@ async def test_policy_http_approval_and_stored_comparison_real_jwt(db, monkeypat
         assert comparison.cases[0].transfer.originator.wallet not in result.text
         repeated = await client.post("/pilot/policy/diff/stored", json=stored, headers=readonly)
         assert repeated.json() == result.json()
+        retain_output("policy-comparison.json", result.json())
         assert (await client.post("/pilot/policy/diff/stored", json=stored, headers=foreign)).status_code == 404
         duplicate = {**stored, "case_digests": stored["case_digests"] * 2}
         assert (await client.post("/pilot/policy/diff/stored", json=duplicate, headers=readonly)).status_code == 422
@@ -2647,6 +2649,11 @@ async def test_durable_current_inspection_real_pairing_and_revocation(db, monkey
                     ]
                 )
                 assert wrapped.returncode == 0 and json.loads(wrapped.stdout) == command_report
+            retain_output("history.encrypted.json", encrypted)
+            retain_output("reviewer-trust.json", reviewer_configuration)
+            retain_output("history-report.json", command_report)
+            retain_output("history-clock.json", {"verified_at": history_args["verified_at"]})
+            retain_output("reviewer-key.json", {"key": reviewer_private.hex()}, private=True)
             wrong_key = run_history_cli(prefix, generate_keypair()[0].hex())
             assert wrong_key.returncode == 2 and json.loads(wrong_key.stdout)["outcome"] == "indeterminate"
             partial_configuration = {k: v for k, v in reviewer_configuration.items() if k != "information"}
@@ -3779,6 +3786,8 @@ async def check_observation_cohort_http(app, headers, reports):
         assert report["outcome_counts"] == {"ALLOW": 1, "DENY": 1, "REVIEW": 1, "INDETERMINATE": 1}
         assert report["baseline_label_count"] == 5 and report["comparable_count"] == 3
         assert report["agreement_count"] == 2 and report["disagreement_count"] == 1
+        retain_output("observation-cohort.json", report)
+        retain_output("observations.json", reports[:4])
         assert (
             await client.post(
                 "/pilot/proof/observations/report", json=dict(body, cases=list(reversed(cases))), headers=reader
@@ -4374,6 +4383,7 @@ async def check_durable_local_exchange(
     assert combined.states["counterparty"] == "accepted" and combined.states["custody"] == "completed"
     assert "custody-completed-without-finality" in {f.reason for f in combined.findings}
     assert len(combined.timeline) == 4
+    retain_output("investigation.json", combined.model_dump(mode="json"))
     async with db.connection() as conn:
         local_event = await events.store.get("event", replies[0]["event_id"])
         evidence = await events.store.get("provider-evidence", local_event["evidence_records"][0])
@@ -4404,6 +4414,8 @@ def check_bilateral_cli(request, args, authority, successor, new_private, now, t
     keys = {key: value.hex() for key, value in args["private_keys"].items()}
     request_path, trust_path = tmp_path / "bilateral-request.json", tmp_path / "counterparty-trust.json"
 
+    dispositions = []
+
     def invoke(message=request, trust=config, secret_keys=keys, behavior="accept", clock=now, deadline=None):
         request_path.write_text(json.dumps(message))
         trust_path.write_text(json.dumps(trust))
@@ -4429,7 +4441,11 @@ def check_bilateral_cli(request, args, authority, successor, new_private, now, t
         )
         assert not result.stderr, result.stderr
         assert all(key not in result.stdout for key in secret_keys.values())
-        return result.returncode, json.loads(result.stdout)
+        report = json.loads(result.stdout)
+        dispositions.append(
+            {"behavior": behavior, "observed_at": clock, "exit_code": result.returncode, "result": report}
+        )
+        return result.returncode, report
 
     for behavior, outcome in (
         ("accept", "accepted"),
@@ -4457,3 +4473,5 @@ def check_bilateral_cli(request, args, authority, successor, new_private, now, t
         code, report = invoke(**changed)
         assert code == 2 and report["outcome"] == "invalid-input"
         assert "PRIVATE-MARKER" not in json.dumps(report)
+
+    retain_output("counterparty-scenarios.json", dispositions)

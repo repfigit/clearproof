@@ -2,6 +2,7 @@
 """Run the durable pilot suite with a fresh, owned local EVM and existing development artifacts."""
 
 import argparse
+import hashlib
 import json
 import os
 import signal
@@ -20,6 +21,7 @@ ROOT = Path(__file__).resolve().parents[1]
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("artifacts", type=Path, help="Inspected unapproved pilot artifact directory")
+    parser.add_argument("--output", type=Path, help="New private directory for synthetic reports and encrypted export")
     args = parser.parse_args()
     if not os.environ.get("DATABASE_URL"):
         parser.error("DATABASE_URL must identify the test PostgreSQL database")
@@ -27,6 +29,12 @@ def main():
     for name in ("verification-key.json", "development-manifest-pin.txt"):
         if not (directory / name).is_file():
             parser.error("The complete development artifact bundle is required")
+    output = None
+    if args.output is not None:
+        output = args.output.absolute()
+        output.mkdir(mode=0o700, exist_ok=False)
+        (output / "reports").mkdir(mode=0o700)
+        (output / "private").mkdir(mode=0o700)
     with socket.socket() as listener:
         listener.bind(("127.0.0.1", 0))
         port = listener.getsockname()[1]
@@ -37,6 +45,10 @@ def main():
         "CLEARPROOF_MIRROR_TEST_RPC": url,
         "CLEARPROOF_POLICY_CLI_TEST": "1",
     }
+    # Ignore inherited capture destinations; outputs require this command's explicit flag.
+    env.pop("CLEARPROOF_PILOT_RUN_OUTPUT", None)
+    if output is not None:
+        env["CLEARPROOF_PILOT_RUN_OUTPUT"] = str(output)
     # Hardhat logs contain its public development account keys; keep them private and ephemeral.
     with tempfile.TemporaryFile() as log:
         node = subprocess.Popen(
@@ -96,7 +108,10 @@ def main():
                 env=env,
                 start_new_session=True,
             )
-            return tests.wait(timeout=420)
+            code = tests.wait(timeout=420)
+            if code == 0 and output is not None:
+                finish_outputs(output, directory)
+            return code
         finally:
             for process in (tests, node):
                 if process is None:
@@ -106,6 +121,45 @@ def main():
                 except ProcessLookupError:
                     pass
                 process.wait()
+
+
+def finish_outputs(output, artifacts):
+    expected = {
+        "policy-comparison.json",
+        "history.encrypted.json",
+        "reviewer-trust.json",
+        "history-report.json",
+        "history-clock.json",
+        "observation-cohort.json",
+        "observations.json",
+        "investigation.json",
+        "counterparty-scenarios.json",
+    }
+    if {p.name for p in (output / "reports").iterdir()} != expected:
+        raise RuntimeError("Pilot gate passed but required retained outputs are missing or unexpected")
+    if not (output / "private/reviewer-key.json").is_file():
+        raise RuntimeError("Synthetic offline reviewer key was not retained")
+    inventory = []
+    for name in sorted(expected):
+        raw = (output / "reports" / name).read_bytes()
+        json.loads(raw)
+        inventory.append({"path": "reports/" + name, "bytes": len(raw), "sha256": hashlib.sha256(raw).hexdigest()})
+    manifest = dict(
+        schema_version="clearproof-local-pilot-run-v1",
+        outcome="acceptance-tests-passed",
+        assurance="development-unapproved",
+        source_authenticity="local-simulators-and-synthetic-fixtures",
+        scope="local-acceptance-suite",
+        clean_environment="not-established",
+        artifact_manifest_pin=(artifacts / "development-manifest-pin.txt").read_text().strip(),
+        reports=inventory,
+        private_material="private/reviewer-key.json; never publish this directory",
+    )
+    fd = os.open(output / "run.json", os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+    with os.fdopen(fd, "w") as stream:
+        json.dump(manifest, stream, sort_keys=True, indent=2)
+        stream.write("\n")
+    print("Retained synthetic reports and encrypted export; private reviewer key is separate", flush=True)
 
 
 if __name__ == "__main__":

@@ -143,3 +143,6 @@ dispositions, pending/timeout, unsupported version, key overlap/retirement, expi
 missing keys and malformed input, with private-key and input-value redaction
 checks. This is executable scenario coverage; a fresh-checkout setup that retains
 all demo reports and evidence exports remains part of CP-017.
+
+To retain the scenario results alongside policy, investigation and encrypted
+historical evidence outputs, use the [local acceptance command](../operations/local-pilot-acceptance.md).
