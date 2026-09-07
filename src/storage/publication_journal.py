@@ -177,6 +177,7 @@ class PublicationJournal:
                 "binding": value["binding"],
                 "transaction_hash": value["transaction_hash"],
                 "broadcast_claimed": row["broadcast_claimed"],
+                "account_nonce": row["nonce"],
                 "chain_outcome": "not-established",
             }
 

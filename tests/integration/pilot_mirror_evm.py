@@ -11,6 +11,7 @@ from eth_account import Account
 from web3 import AsyncHTTPProvider, AsyncWeb3
 from web3.exceptions import ContractLogicError
 
+from src.chain.publication_reconciliation import PublicationChainPolicy, PublicationReconciler
 from src.protocol.canonical import record_digest
 from src.storage.pilot import RecordConflict
 from src.storage.publication_journal import PublicationBinding
@@ -57,6 +58,7 @@ class LocalAuthorizationEVM:
         deployed = await self.send(factory.constructor(self.admin, deployed["contractAddress"]), self.admin)
         self.address = deployed["contractAddress"].lower()
         self.contract = self.web3.eth.contract(address=deployed["contractAddress"], abi=registry["abi"])
+        self.runtime_sha256 = hashlib.sha256(await self.web3.eth.get_code(self.contract.address)).hexdigest()
 
     async def send(self, operation, sender):
         transaction = await operation.transact({"from": sender})
@@ -86,11 +88,28 @@ class LocalAuthorizationEVM:
             sender=sender.lower(),
             calldata_digest=hashlib.sha256(bytes.fromhex(transaction["data"][2:])).hexdigest(),
             plan_digest=record_digest("clearproof/mirror-plan/v1", semantic_plan),
-            runtime_sha256=hashlib.sha256(await self.web3.eth.get_code(self.contract.address)).hexdigest(),
+            runtime_sha256=self.runtime_sha256,
             expires_at=plan["publish_before"],
         )
         identity = await journal.reserve(binding, bytes(signed.raw_transaction), now=int(time.time()))
         assert await journal.reserve(binding, bytes(signed.raw_transaction), now=int(time.time())) == identity
+        reconciler = PublicationReconciler(
+            self.web3,
+            journal,
+            PublicationChainPolicy(
+                chain_id=31337,
+                registry=self.address,
+                runtime_sha256=self.runtime_sha256,
+                block_tag="latest",
+                minimum_confirmations=2,
+            ),
+        )
+
+        async def observe():
+            now = max(int(time.time()), (await self.web3.eth.get_block("latest"))["timestamp"])
+            return await reconciler.reconcile(identity, now=now)
+
+        assert (await observe())["status"] == "not-found"
         sent = []
 
         async def send(raw):
@@ -117,6 +136,15 @@ class LocalAuthorizationEVM:
             bytes.fromhex(observed["transaction_hash"]), timeout=30
         )
         assert included["status"] == 1
+        assert (await observe())["status"] == "awaiting-confirmations"
+        await self.web3.provider.make_request("evm_mine", [])
+        confirmed = await observe()
+        assert confirmed["status"] == "confirmed-success" and confirmed["confirmations"] == 2
+        assert confirmed["registry_effect"] == (
+            "statement-published-at-inclusion" if phase == "publish" else "receipt-mirrored-at-inclusion"
+        )
+        assert confirmed["current_authorization"] == "not-evaluated"
+        assert confirmed["resubmission"] == "not-authorized"
         with pytest.raises(RecordConflict):
             await journal.broadcast_once(identity, revalidate=revalidate, send_raw=send)
         assert len(sent) == 1

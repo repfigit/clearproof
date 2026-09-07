@@ -108,7 +108,9 @@ runtime, transaction inclusion/finality, current epoch and heads, and the exact
 The [publication journal](PILOT_PUBLICATION_JOURNAL.md) retains the intended
 statement ID and signed transaction identity before a one-time broadcast claim.
 It preserves an uncertain outcome across reconnect and rejects an automatic second
-send. Chain reconciliation, finality and replacement orchestration remain required.
+send. Its read-only reconciler checks pinned-chain inclusion, confirmation policy,
+exact events and inclusion-time registry state. Durable worker transitions and
+replacement orchestration remain required.
 
 ## Authenticated preparation
 
