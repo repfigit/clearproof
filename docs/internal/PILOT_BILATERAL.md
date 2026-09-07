@@ -141,8 +141,10 @@ The PostgreSQL/EVM acceptance runner invokes the built CLI against its actual
 real-proof authorization and encrypted envelope. It exercises the three business
 dispositions, pending/timeout, unsupported version, key overlap/retirement, expiry,
 missing keys and malformed input, with private-key and input-value redaction
-checks. This is executable scenario coverage; a fresh-checkout setup that retains
-all demo reports and evidence exports remains part of CP-017.
+checks. This is executable scenario coverage. The documented fresh-checkout
+acceptance workflow also retains these reports and an encrypted evidence export;
+its reproducibility and remaining release checks are tracked separately in the
+[acceptance audit](../plans/adoption-pilot-acceptance-audit.md).
 
 To retain the scenario results alongside policy, investigation and encrypted
 historical evidence outputs, use the [local acceptance command](../operations/local-pilot-acceptance.md).

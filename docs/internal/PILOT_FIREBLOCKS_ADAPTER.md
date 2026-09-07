@@ -70,9 +70,12 @@ fixture based on the documented fields, not a captured customer/provider event.
 exercises verification, workspace/transaction/asset binding, byte tampering,
 wrong keys, key expiry, duplicate keys/JSON and unsupported headers. No real
 Fireblocks key, account, network transaction or production integration is used.
-Provider-to-durable-store integration is described below. Authenticated JWKS
-refresh, real fixture validation and the bilateral Travel Rule scenario remain
-open CP-013 work.
+Provider-to-durable-store integration is described below. The implemented
+[local bilateral scenario](PILOT_BILATERAL.md) separately checks mandatory
+message semantics with actual retained authorization evidence. Authenticated
+JWKS refresh, customer/provider-captured fixture validation and live account
+interoperability remain external integration gates; a synthetic schema fixture
+does not establish those results.
 
 ## Durable verified intake
 
