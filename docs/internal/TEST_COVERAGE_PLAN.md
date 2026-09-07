@@ -660,3 +660,15 @@ still need completion and final merged-main verification.
   establish current-head authority.
 - Remaining Python, SDK, Solidity, docs/browser, scripts and final publication
   checks still prevent a full repository completion claim.
+
+## Thirty-third checkpoint
+
+- Added 11 valuation-approval tests for signatures outside quote validity,
+  invalid authority intervals, duplicate asset/source scopes, bounded authority
+  inventories and digest binding to signature time without changing quote data.
+- All 33 valuation tests pass. Valuation approval measures 91/91 statements and
+  24/24 branches (`valuation-approval-complete.log`/`.data`). Ruff and whitespace
+  pass; no production changes were needed. Authentication of a signed quote does
+  not independently establish pricing truth.
+- Full repository coverage remains incomplete across remaining Python paths,
+  SDK branches, contracts, docs/browser, scripts and final publication checks.
