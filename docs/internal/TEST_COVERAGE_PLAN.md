@@ -684,3 +684,16 @@ still need completion and final merged-main verification.
 - Full repository coverage remains incomplete across remaining Python behavior,
   SDK branches, Solidity, docs/browser rendering, scripts and final publication
   checks. This module result does not update the whole-suite coverage figures.
+
+## Thirty-fifth checkpoint
+
+- Added six decision-attestation tests for invalid authority intervals, missing/
+  duplicate/excessive key inventories and mismatched real Ed25519 signing keys.
+  Rejection leaves the receipt unchanged; existing historical expiry, compromise,
+  signature and scope cases continue to pass.
+- All 16 tests pass. Decision attestation measures 75/75 statements and 10/10
+  branches (`decision-attestation-complete.log`/`.data`). Ruff and whitespace pass;
+  no production changes were needed. Operator-clock signatures remain separate
+  from independently trusted timestamp evidence.
+- Remaining Python, SDK, Solidity, docs/browser, scripts and publication checks
+  still leave the full repository coverage goal incomplete and active.
