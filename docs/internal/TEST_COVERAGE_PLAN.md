@@ -760,3 +760,17 @@ still need completion and final merged-main verification.
   services; HTTPS tests use an owned local server and certificate.
 - Full repository coverage remains incomplete across other Python paths,
   SDK branches, Solidity, docs/browser, scripts and final publication checks.
+
+## Forty-first checkpoint
+
+- Added seven bounded file-input tests for exact byte limits, empty input,
+  oversized input, FIFO rejection without a writer, symlinks and missing files.
+  Added four hybrid-payload envelope-version indicator cases; the indicator is
+  explicitly tested as version detection, not cryptographic validation.
+- All 34 focused tests pass, including existing nonce and TRP/TRISA serialization
+  tests. File input and hybrid payload measure 38/38 statements and 6/6 branches
+  combined (`file-hybrid-complete.log`/`.data`). Ruff and whitespace checks pass.
+  No production changes were needed.
+- Full repository coverage remains incomplete. A fresh full Python run is needed
+  to consolidate recent additions before addressing remaining cross-workspace
+  gaps and publication checks.
