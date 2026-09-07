@@ -808,3 +808,19 @@ still need completion and final merged-main verification.
   review. SDK branch, Solidity, docs/browser, operational-script coverage and
   final remote CI/merge verification remain unfinished. These local results do
   not establish full coverage or a published release.
+
+## Forty-third checkpoint
+
+- Added 41 PostgreSQL storage cases for noncanonical identifiers/nullifiers,
+  unsupported operations/kinds, safe-integer revisions, scan limits, source
+  sequences, non-object idempotent results and event scope capacity.
+- Invalid idempotent callback results roll back records and consumption and allow
+  the same request key to succeed on retry. Invalid revisions preserve existing
+  encrypted records; invalid event sequences roll back inserted events. Exactly
+  256 retained events are returned; 257 explicitly reject without truncation, and
+  a foreign tenant still sees no events.
+- All 63 storage tests pass; seven artifact-dependent tests are skipped in this
+  focused invocation and were exercised in the forty-second checkpoint's full
+  artifact-enabled suite. `src/storage/pilot.py` measures 183/183 statements and
+  42/42 branches (`pilot-storage-boundaries.log`/`.data`). Ruff and whitespace
+  pass; no production changes were required. The full goal remains incomplete.

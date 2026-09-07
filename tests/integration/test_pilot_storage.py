@@ -4729,3 +4729,122 @@ def check_bilateral_cli(request, args, authority, successor, new_private, now, t
         assert "PRIVATE-MARKER" not in json.dumps(report)
 
     retain_output("counterparty-scenarios.json", dispositions)
+
+
+@pytest.mark.parametrize("record_id", [None, 1, "", "UPPER", "../record", "a" * 65])
+async def test_storage_rejects_noncanonical_identifiers(db, record_id):
+    with pytest.raises(ValueError, match="Expected opaque record identifier"):
+        await store(db).read("proof", record_id)
+
+
+async def test_storage_rejects_unknown_kind_and_operation_before_callback(db):
+    target = store(db)
+    with pytest.raises(ValueError, match="Unsupported pilot record kind"):
+        await target.read("unknown-kind", "synthetic-id")
+
+    async def unexpected(tx):
+        pytest.fail("Unsupported operation must not invoke its callback")
+
+    with pytest.raises(ValueError, match="Unsupported pilot operation"):
+        await target.run_idempotent("unknown-operation", "synthetic-key", {}, unexpected)
+    async with target.transaction() as tx:
+        assert await tx.record_ids("proof") == []
+
+
+@pytest.mark.parametrize("result", [None, [], True])
+async def test_nonobject_idempotent_result_rolls_back_and_allows_retry(db, result):
+    target = store(db)
+
+    async def invalid(tx):
+        await tx.put("proof", "synthetic-proof", {"fixture": "synthetic"})
+        await tx.consume("a" * 64, "synthetic-proof")
+        return result
+
+    with pytest.raises(ValueError, match="Idempotent operation result must be an object"):
+        await target.run_idempotent("consume-proof", "synthetic-key", {}, invalid)
+    assert await target.get("proof", "synthetic-proof") is None
+    async with target.transaction() as tx:
+        assert not await tx.is_consumed("a" * 64)
+
+    async def retry(tx):
+        await tx.put("proof", "synthetic-proof", {"fixture": "synthetic"})
+        await tx.consume("a" * 64, "synthetic-proof")
+        return {"accepted": True}
+
+    assert await target.run_idempotent("consume-proof", "synthetic-key", {}, retry) == {"accepted": True}
+
+
+@pytest.mark.parametrize("revision", [True, "1", 0, -1, 2**53])
+async def test_storage_read_revision_rejects_invalid_safe_integer(db, revision):
+    with pytest.raises(ValueError, match="Revision must be a positive safe integer"):
+        await store(db).read("proof", "synthetic-proof", revision=revision)
+
+
+@pytest.mark.parametrize("revision", [True, "1", 0, -1, 2**53 - 1])
+async def test_storage_write_revision_rejects_invalid_successor_without_mutation(db, revision):
+    target = store(db)
+    async with target.transaction() as tx:
+        await tx.put("issuance-root", "synthetic-root", {"root": "original"})
+    with pytest.raises(ValueError, match="Expected revision must allow a positive safe-integer successor"):
+        async with target.transaction() as tx:
+            await tx.put("issuance-root", "synthetic-root", {"root": "replacement"}, expected_revision=revision)
+    snapshot = await target.read("issuance-root", "synthetic-root")
+    assert snapshot.revision == 1 and snapshot.value == {"root": "original"}
+
+
+@pytest.mark.parametrize("limit", [True, "1", 0, 257])
+async def test_storage_record_scan_rejects_invalid_limits(db, limit):
+    async with store(db).transaction() as tx:
+        with pytest.raises(ValueError, match="Scan limit must be"):
+            await tx.record_ids("event", limit=limit)
+
+
+@pytest.mark.parametrize("limit", [True, "1", 0, 17])
+async def test_storage_event_scope_scan_rejects_invalid_limits(db, limit):
+    async with store(db).transaction() as tx:
+        with pytest.raises(ValueError, match="Invalid scope page limit"):
+            await tx.event_scopes(after=None, limit=limit)
+
+
+@pytest.mark.parametrize("sequence", [True, "1", 0, -1, 2**53])
+async def test_storage_event_index_rejects_invalid_sequences(db, sequence):
+    target = store(db)
+    with pytest.raises(ValueError, match="Invalid source sequence"):
+        async with target.transaction() as tx:
+            await tx.put("event", "a" * 64, {"fixture": "synthetic"})
+            await tx.index_event("a" * 64, "b" * 64, "c" * 64, sequence)
+    assert await target.get("event", "a" * 64) is None
+    async with target.transaction() as tx:
+        assert await tx.event_ids("b" * 64) == []
+
+
+@pytest.mark.parametrize("nullifier", [None, 1, "", "a" * 63, "a" * 65, "A" * 64, "g" * 64])
+async def test_storage_rejects_noncanonical_consumption_nullifiers(db, nullifier):
+    async with store(db).transaction() as tx:
+        with pytest.raises(ValueError, match="Expected canonical 32-byte nullifier"):
+            await tx.consume(nullifier, "synthetic-proof")
+        with pytest.raises(ValueError, match="Expected canonical 32-byte nullifier"):
+            await tx.consumed_proof_id(nullifier)
+        assert not await tx.is_consumed("a" * 64)
+
+
+async def test_storage_event_capacity_rejects_overflow_without_truncating(db):
+    target = store(db)
+    scope, stream = "b" * 64, "c" * 64
+    async with target.transaction() as tx:
+        for sequence in range(1, 257):
+            record_id = f"{sequence:064x}"
+            await tx.put("event", record_id, {"fixture": "synthetic"})
+            await tx.index_event(record_id, scope, stream, sequence)
+        expected = [f"{sequence:064x}" for sequence in range(1, 257)]
+        assert await tx.event_ids(scope) == expected
+    # The low-level index admits a 257th retained record. Readers must reject
+    # the oversized scope explicitly rather than report an incomplete history.
+    async with target.transaction() as tx:
+        await tx.put("event", f"{257:064x}", {"fixture": "synthetic"})
+        await tx.index_event(f"{257:064x}", scope, stream, 257)
+    async with target.transaction() as tx:
+        with pytest.raises(ValueError, match="Transfer event capacity exceeded"):
+            await tx.event_ids(scope)
+    async with store(db, tenant="tenant-b").transaction() as tx:
+        assert await tx.event_ids(scope) == []
