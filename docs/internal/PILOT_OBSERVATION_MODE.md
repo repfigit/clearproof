@@ -3,8 +3,10 @@
 `ProofObservationService.observe` evaluates a current pilot-transfer-v2 proof and
 selected retained signed facts using the same tenant-transactional service as
 current policy evaluation. It atomically retains an encrypted observation and
-its encrypted idempotency result. This source service is a building block for
-observation onboarding; it is not yet a complete onboarding command or report UI.
+its encrypted idempotency result. The API and source CLI support creation,
+historical reads, paginated discovery and explicit-cohort reports. The
+[local acceptance workflow](../operations/local-pilot-acceptance.md) exercises
+these operations and retains the synthetic reports for review.
 
 Observation requires `observations:write`, `proof:inspect`, `policy:read` and
 `evidence:decrypt`. It does not require or grant `proof:generate` or `proof:consume`.
@@ -72,9 +74,10 @@ key rejection, transaction rollback, scope isolation, encrypted rows and exact
 retrieval after restart/expiry/authority replacement. Development proving keys
 remain outside the source package.
 
-Deterministic counterparty scenarios,
-integrated clean setup and paid-pilot usage
-reporting remain CP-016–018 work. This service alone does not close those gates.
+The separate [bilateral simulator](PILOT_BILATERAL.md) exercises local
+counterparty dispositions and joins duplicate/reordered custody events to the
+investigation. Neither a retained observation nor a simulator result establishes
+customer adoption or live interoperability.
 
 ## Authenticated API
 
@@ -104,8 +107,6 @@ idempotent creation, changed-request conflict, role/tenant isolation, rejected
 mode/clock/trust overrides, minimized errors, bounded reads and retrieval in a
 replacement app without current targets. Exactly four logical HTTP observations
 add eight encrypted observation/idempotency records and zero consumptions.
-Observation pagination and the complete onboarding
-scenario remain open; these API routes do not close CP-016–018 by themselves.
 
 ## Source SDK and CLI clients
 
@@ -144,7 +145,6 @@ The real PostgreSQL gate exercises built CLI creation of a fresh DENY observatio
 exact retries, reads across all four outcomes, request/role/tenant rejection and
 redacted errors. The SDK recomputes Python-generated observation digests. Creating
 a DENY observation successfully returns exit 0 and leaves consumption empty.
-Pagination, counterparties and clean onboarding remain open.
 
 ## Selected-cohort reporting
 
@@ -189,8 +189,6 @@ of one transfer still count as one distinct observed transfer.
 
 No record or consumption is written. Raw proof bytes, wallets, fact values and
 observation source references are omitted from the returned case summaries.
-Broader cohort discovery/pagination and integrated
-onboarding remain open.
 
 
 ## Versioned evaluation duration
@@ -260,8 +258,6 @@ facts; the client checks their consistency/bounds, not independent source truth.
 The built-command PostgreSQL gate compares CLI output with the actual API report,
 including measured records, missing cases, baseline disagreements and foreign-tenant
 unavailability. Reporting leaves encrypted record counts and consumption unchanged.
-Cohort discovery/pagination, deterministic bilateral scenarios, complete onboarding
-and commercial preparation remain open.
 
 ### Discover observations for a cohort
 
