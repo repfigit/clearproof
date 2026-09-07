@@ -697,3 +697,15 @@ still need completion and final merged-main verification.
   from independently trusted timestamp evidence.
 - Remaining Python, SDK, Solidity, docs/browser, scripts and publication checks
   still leave the full repository coverage goal incomplete and active.
+
+## Thirty-sixth checkpoint
+
+- Added 23 credential tests for canonical issuer identity, failed screening,
+  bounded list-based membership paths and exact direction types, evaluation-time
+  boundaries and wrong holder secrets. Synthetic roots are used only for early
+  validation tests; existing actual Circom witness checks remain in the same run.
+- All 52 credential tests pass. Credential encoding/witness preparation measures
+  76/76 statements and 24/24 branches (`credential-boundaries.log`/`.data`). Ruff
+  and whitespace pass. No production or proving-artifact changes were required.
+- Remaining Python, SDK, Solidity, docs/browser, operational scripts and final
+  publication checks leave full coverage incomplete. Overall figures await refresh.
