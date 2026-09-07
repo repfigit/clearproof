@@ -552,3 +552,18 @@ still need completion and final merged-main verification.
   legitimacy or source-to-binary reproducibility. Full repository coverage still
   requires remaining Python, SDK, Solidity, docs/browser, scripts and final
   publication verification work; the latest full-run percentages remain unchanged.
+
+## Twenty-fifth checkpoint
+
+- Added 12 encrypted-record tests for non-object inputs, missing active-key
+  inventory, authenticated noncanonical JSON, malformed decrypted JSON and a
+  content tag inconsistent with otherwise valid AEAD ciphertext. Fixtures contain
+  synthetic data and use real AES-GCM; internal key/AAD helpers deliberately
+  construct authenticated invalid rows to exercise post-decryption validation.
+- All 21 cipher tests pass. RecordCipher measures 60/60 statements and 14/14
+  branches (`pilot-cipher-complete.log`/`.data`). Ruff and whitespace pass.
+  No production changes were required. Record-size limits belong to callers and
+  database constraints, not this cipher's API, and remain separate test scope.
+- Other Python storage/lifecycle gaps, SDK branches, Solidity, docs/browser,
+  operational scripts and final publication checks still prevent a full coverage
+  completion claim. Full-suite totals have not been refreshed in this checkpoint.
