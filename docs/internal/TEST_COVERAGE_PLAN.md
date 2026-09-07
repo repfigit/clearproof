@@ -984,3 +984,18 @@ still need completion and final merged-main verification.
 - Full repository coverage remains incomplete; the latest full Python report is
   checkpoint 42, and remaining Python, SDK, Solidity, docs/scripts and remote
   publication requirements still need completion and verification.
+
+## Fifty-third checkpoint
+
+- Added three docs unit tests for the authored root-layout composition, page-map
+  failure propagation and MDX component override delegation. Nextra dependencies
+  are controlled; these tests do not establish browser hydration or MDX rendering.
+- All 50 docs tests pass with 26/26 lines/statements, 6/6 functions and 6/6 branches
+  across authored TS/TSX. Added 100% gates for those measured metrics and documented
+  the scope in `apps/docs/README.md`. Existing CI already runs this coverage command.
+- Evidence: `docs-layout-gate.log`, `docs-layout-coverage.log`, and
+  `docs-layout-typecheck.log`. TypeScript checking passes from the docs workspace;
+  whitespace checks pass. No product code changed.
+- MDX page/browser coverage, operational scripts and the other outstanding
+  repository requirements remain necessary. Full coverage is not established by
+  this source-unit gate. A fresh full Python regression is running separately.
