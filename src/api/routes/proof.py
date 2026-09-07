@@ -388,61 +388,81 @@ async def generate_proof(
         from src.storage.models import StoredCredential, StoredNullifier, StoredProof
         from src.storage.proofs import ProofStore
 
-        cred_store = CredentialStore(db)
-        await cred_store.upsert(
-            StoredCredential(
-                credential_id=request.credential_id,
-                issuer_did=credential.issuer_did,
-                subject_wallet=request.wallet_address,
-                jurisdiction=request.jurisdiction,
-                kyc_tier=credential.kyc_tier,
-                sanctions_clear=credential.sanctions_clear,
-                issued_at=credential.issued_at,
-                expires_at=credential.expires_at,
-                revoked=credential.revoked,
-                commitment=commitment,
+        async with db.transaction() as transaction:
+            async with transaction.connection() as conn:
+                # Serialize retries for this key, including requests that proved concurrently.
+                lock_id = int.from_bytes(
+                    hashlib.sha256(request.idempotency_key.encode()).digest()[:8], "big", signed=True
+                )
+                await conn.execute("SELECT pg_advisory_xact_lock(%s)", (lock_id,))
+            cached = await ProofStore(transaction).check_idempotency(request.idempotency_key)
+            if cached is not None:
+                return {"status": "already_generated", "result_hash": cached}
+            cred_store = CredentialStore(transaction)
+            await cred_store.upsert(
+                StoredCredential(
+                    credential_id=request.credential_id,
+                    issuer_did=credential.issuer_did,
+                    subject_wallet=request.wallet_address,
+                    jurisdiction=request.jurisdiction,
+                    kyc_tier=credential.kyc_tier,
+                    sanctions_clear=credential.sanctions_clear,
+                    issued_at=credential.issued_at,
+                    expires_at=credential.expires_at,
+                    revoked=credential.revoked,
+                    commitment=commitment,
+                )
             )
-        )
 
-        proof_store = ProofStore(db)
-        await proof_store.store(
-            StoredProof(
-                proof_id=proof_id,
+            proof_store = ProofStore(transaction)
+            await proof_store.store(
+                StoredProof(
+                    proof_id=proof_id,
+                    transfer_id=transfer_id,
+                    groth16_proof=json.dumps(proof_result),
+                    public_signals=[str(s) for s in public_signals],
+                    verification_key=json.dumps(_load_vk()),
+                    originator_vasp_did=_get_vasp_did(),
+                    beneficiary_vasp_did=request.destination_vasp_did,
+                    jurisdiction=request.jurisdiction,
+                    amount_tier=tier,
+                    proof_generated_at=int(time.time()),
+                    proof_expires_at=int(time.time()) + 3600,
+                    is_expired=False,
+                )
+            )
+
+            nullifier = StoredNullifier(
+                nullifier_hash=credential_nullifier,
+                credential_commitment=commitment,
                 transfer_id=transfer_id,
-                groth16_proof=json.dumps(proof_result),
-                public_signals=[str(s) for s in public_signals],
-                verification_key=json.dumps(_load_vk()),
-                originator_vasp_did=_get_vasp_did(),
-                beneficiary_vasp_did=request.destination_vasp_did,
-                jurisdiction=request.jurisdiction,
-                amount_tier=tier,
-                proof_generated_at=int(time.time()),
-                proof_expires_at=int(time.time()) + 3600,
-                is_expired=False,
+                proof_id=proof_id,
             )
-        )
+            if not await proof_store.add_nullifier(nullifier):
+                raise HTTPException(status_code=409, detail="Proof nullifier already recorded")
 
-        nullifier = StoredNullifier(
-            nullifier_hash=credential_nullifier,
-            credential_commitment=commitment,
-            transfer_id=transfer_id,
-            proof_id=proof_id,
-        )
-        await proof_store.add_nullifier(nullifier)
+            await proof_store.record_idempotency(
+                request.idempotency_key,
+                request.wallet_address,
+                hashlib.sha256(
+                    json.dumps(
+                        {
+                            **hybrid_payload.model_dump(exclude={"encrypted_pii", "pii_nonce"}),
+                            "encrypted_pii": base64.b64encode(hybrid_payload.encrypted_pii).decode("ascii"),
+                            "pii_nonce": base64.b64encode(hybrid_payload.pii_nonce).decode("ascii"),
+                        },
+                        sort_keys=True,
+                    ).encode()
+                ).hexdigest(),
+            )
 
-        await proof_store.record_idempotency(
-            request.idempotency_key,
-            request.wallet_address,
-            hashlib.sha256(json.dumps(hybrid_payload.model_dump()).encode()).hexdigest(),
-        )
-
-        audit = PersistentAuditLog(db)
-        await audit.append(
-            "proof_generated",
-            _get_vasp_did(),
-            transfer_id,
-            json.dumps({"proof_id": proof_id, "tier": tier}).encode(),
-        )
+            audit = PersistentAuditLog(transaction)
+            await audit.append(
+                "proof_generated",
+                _get_vasp_did(),
+                transfer_id,
+                json.dumps({"proof_id": proof_id, "tier": tier}).encode(),
+            )
 
     # 13. Log to in-memory audit
     _audit_log.append(

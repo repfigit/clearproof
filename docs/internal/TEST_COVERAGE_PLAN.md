@@ -246,3 +246,24 @@ still need completion and final merged-main verification.
 - Durable proof generation needs real PostgreSQL acceptance, including failure
   rollback and retries, before declaring its persistence paths covered. The full
   objective and all remaining workspaces remain open.
+
+## Ninth checkpoint
+
+- Real PostgreSQL generation exposed byte fields passed directly to JSON when
+  calculating the retry digest. Ciphertext and nonce now use explicit base64
+  encoding in that digest. No decrypted payload is added to persistence.
+- Injected audit failure then demonstrated partial commits. Database.transaction
+  now supplies one owned connection to cooperating stores. The route writes
+  credential, proof, nullifier, retry record and audit together, rechecking retries
+  under a transaction advisory lock. A conflicting nullifier rejects and rolls
+  back the new proof rather than silently ignoring the conflict.
+- Four new real PostgreSQL tests verify generation/retry, rollback followed by
+  successful retry, synchronized concurrent retries and nullifier conflict.
+  The dedicated PostgreSQL CI job includes this test file.
+- Storage/API focused regression: 96 tests pass. The proof route has 20 missed
+  lines in this focused measurement. Ruff, whitespace and REUSE pass; overall
+  percentages await a fresh full run after the recent API changes.
+- These persistence tests mock the cryptographic boundary. The legacy API's
+  generated circuit-input layout still needs an actual-artifact acceptance test;
+  passing database tests does not establish valid real proof generation. Full
+  coverage remains active for that path and all other outstanding requirements.
