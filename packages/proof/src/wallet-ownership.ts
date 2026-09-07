@@ -36,7 +36,9 @@ export interface ExpectedWalletOwnershipContext {
 
 /**
  * Validate the challenge against independently retained enrollment context and
- * return exact EIP-191 personal_sign text. Never pass context copied from the
+ * return exact EIP-191 personal_sign text. A 30-second client clock tolerance
+ * only affects message preparation; the server enforces exact validity.
+ * Never pass context copied from the
  * challenge as `expected`. Signing does not establish current proof eligibility.
  */
 export function walletOwnershipSigningMessage(
@@ -59,8 +61,8 @@ export function walletOwnershipSigningMessage(
       !Number.isSafeInteger(challenge.chain_id) || challenge.chain_id < 1 ||
       ![now, challenge.timestamp, challenge.expires_at].every(n => Number.isSafeInteger(n) && n >= 0) ||
       challenge.expires_at !== challenge.timestamp + 300 ||
-      now < challenge.timestamp || now >= challenge.expires_at ||
-      now < expected.credential.issued_at || now >= expected.credential.expires_at) {
+      now + 30 < challenge.timestamp || now - 30 >= challenge.expires_at ||
+      now + 30 < expected.credential.issued_at || now - 30 >= expected.credential.expires_at) {
     throw new Error('Wallet challenge context or validity failed');
   }
   return 'Clearproof wallet ownership verification v1\n' + encoded.toString('utf8');

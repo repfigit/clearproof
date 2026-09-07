@@ -20,7 +20,10 @@ describe('wallet signing context', () => {
   ])('rejects changed context', change => {
     expect(() => walletOwnershipSigningMessage({ ...challenge, ...change }, expected, 1200)).toThrow();
   });
-  it.each([1099, 1400, Number.NaN])('rejects invalid time %s', now => {
+  it.each([1070, 1099, 1100, 1399, 1400, 1429])('allows bounded client clock skew %s', now => {
+    expect(walletOwnershipSigningMessage(challenge, expected, now)).toBe(vector.message);
+  });
+  it.each([1069, 1430, Number.NaN])('rejects invalid time %s', now => {
     expect(() => walletOwnershipSigningMessage(challenge, expected, now)).toThrow();
   });
 });

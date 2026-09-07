@@ -52,6 +52,8 @@ const signature = await signer.signMessage(message); // EIP-191 signer supplied 
 Never populate the expected context by copying fields from an untrusted challenge.
 The helper returns text; it never receives a private key or submits a transaction.
 Its message matches the Python server byte for byte through a shared test vector.
+Message preparation tolerates 30 seconds of client clock skew in either direction;
+server verification still enforces the exact five-minute interval without tolerance.
 Only canonical 65-byte, low-s signatures with recovery values 27/28 are supported.
 Contract wallets/EIP-1271 are not supported by this profile.
 
