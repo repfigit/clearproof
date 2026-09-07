@@ -1,0 +1,12 @@
+{
+  "skill": "repfigit-review",
+  "ranAt": "2026-08-05T00:00:00Z",
+  "outcome": "no-work",
+  "issueId": null,
+  "prNumber": 0,
+  "failureCategory": "none",
+  "humanInterventions": 0,
+  "toolCalls": 9,
+  "verdictCycles": 0,
+  "notes": "Gate wrapper (repfigit-gate-review.sh) failed with REPO_DIR unset; invoked inner gate directly. Reconciliation: 8 recently-merged PRs (AIF-95/79/66/70/69/68/72/74) all already Done — no state changes. No stale open PRs: #24/#23/#11/#19 reviewed at head SHA (escalated/approved), #22 is draft. No TIER-2 candidate for standard cron. No verdict posted."
+}

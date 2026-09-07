@@ -1,0 +1,181 @@
+[
+  {
+    "name": "valid_proof",
+    "signals": {
+      "0": "0x123456789abcdef",
+      "1": "0xabcdef123456789",
+      "2": "0x111111111111111",
+      "3": "0x222222222222222"
+    },
+    "context": {
+      "sanctionsRoot": "0x123456789abcdef",
+      "issuerRoot": "0xabcdef123456789",
+      "timestamp": 1678886400,
+      "chainId": "0x1",
+      "contractHash": "0x111111111111111",
+      "transferId": "0xtransfer123",
+      "vaspId": "0xvasp456",
+      "senderAddress": "0xsender789",
+      "credentialId": "0xcred123",
+      "nullifier": "0xnullifier456"
+    },
+    "expected": {
+      "valid": true,
+      "reason": null
+    }
+  },
+  {
+    "name": "expired_proof",
+    "signals": {
+      "0": "0x123456789abcdef",
+      "1": "0xabcdef123456789",
+      "2": "0x111111111111111",
+      "3": "0x222222222222222"
+    },
+    "context": {
+      "sanctionsRoot": "0x123456789abcdef",
+      "issuerRoot": "0xabcdef123456789",
+      "timestamp": 1678800000,
+      "chainId": "0x1",
+      "contractHash": "0x111111111111111",
+      "transferId": "0xtransfer123",
+      "vaspId": "0xvasp456",
+      "senderAddress": "0xsender789",
+      "credentialId": "0xcred123",
+      "nullifier": "0xnullifier456"
+    },
+    "expected": {
+      "valid": false,
+      "reason": "Proof expired"
+    }
+  },
+  {
+    "name": "stale_root",
+    "signals": {
+      "0": "0x123456789abcdef",
+      "1": "0xabcdef123456789",
+      "2": "0x111111111111111",
+      "3": "0x222222222222222"
+    },
+    "context": {
+      "sanctionsRoot": "0x123456789abcdef",
+      "issuerRoot": "0xabcdef123456789",
+      "timestamp": 1678886400,
+      "chainId": "0x1",
+      "contractHash": "0x111111111111111",
+      "transferId": "0xtransfer123",
+      "vaspId": "0xvasp456",
+      "senderAddress": "0xsender789",
+      "credentialId": "0xcred123",
+      "nullifier": "0xnullifier456",
+      "rootAge": 691200
+    },
+    "expected": {
+      "valid": false,
+      "reason": "Sanctions root is stale"
+    }
+  },
+  {
+    "name": "wrong_chain",
+    "signals": {
+      "0": "0x123456789abcdef",
+      "1": "0xabcdef123456789",
+      "2": "0x111111111111111",
+      "3": "0x222222222222222"
+    },
+    "context": {
+      "sanctionsRoot": "0x123456789abcdef",
+      "issuerRoot": "0xabcdef123456789",
+      "timestamp": 1678886400,
+      "chainId": "0x89",
+      "contractHash": "0x111111111111111",
+      "transferId": "0xtransfer123",
+      "vaspId": "0xvasp456",
+      "senderAddress": "0xsender789",
+      "credentialId": "0xcred123",
+      "nullifier": "0xnullifier456"
+    },
+    "expected": {
+      "valid": false,
+      "reason": "Chain ID mismatch"
+    }
+  },
+  {
+    "name": "revoked_credential",
+    "signals": {
+      "0": "0x123456789abcdef",
+      "1": "0xabcdef123456789",
+      "2": "0x111111111111111",
+      "3": "0x222222222222222"
+    },
+    "context": {
+      "sanctionsRoot": "0x123456789abcdef",
+      "issuerRoot": "0xabcdef123456789",
+      "timestamp": 1678886400,
+      "chainId": "0x1",
+      "contractHash": "0x111111111111111",
+      "transferId": "0xtransfer123",
+      "vaspId": "0xvasp456",
+      "senderAddress": "0xsender789",
+      "credentialId": "0xcred123",
+      "nullifier": "0xnullifier456",
+      "revoked": true
+    },
+    "expected": {
+      "valid": false,
+      "reason": "Credential revoked"
+    }
+  },
+  {
+    "name": "inactive_vasp",
+    "signals": {
+      "0": "0x123456789abcdef",
+      "1": "0xabcdef123456789",
+      "2": "0x111111111111111",
+      "3": "0x222222222222222"
+    },
+    "context": {
+      "sanctionsRoot": "0x123456789abcdef",
+      "issuerRoot": "0xabcdef123456789",
+      "timestamp": 1678886400,
+      "chainId": "0x1",
+      "contractHash": "0x111111111111111",
+      "transferId": "0xtransfer123",
+      "vaspId": "0xvasp456",
+      "senderAddress": "0xsender789",
+      "credentialId": "0xcred123",
+      "nullifier": "0xnullifier456",
+      "vaspActive": false
+    },
+    "expected": {
+      "valid": false,
+      "reason": "VASP not active"
+    }
+  },
+  {
+    "name": "nullifier_spent",
+    "signals": {
+      "0": "0x123456789abcdef",
+      "1": "0xabcdef123456789",
+      "2": "0x111111111111111",
+      "3": "0x222222222222222"
+    },
+    "context": {
+      "sanctionsRoot": "0x123456789abcdef",
+      "issuerRoot": "0xabcdef123456789",
+      "timestamp": 1678886400,
+      "chainId": "0x1",
+      "contractHash": "0x111111111111111",
+      "transferId": "0xtransfer123",
+      "vaspId": "0xvasp456",
+      "senderAddress": "0xsender789",
+      "credentialId": "0xcred123",
+      "nullifier": "0xnullifier456",
+      "nullifierSpent": true
+    },
+    "expected": {
+      "valid": false,
+      "reason": "Nullifier already spent"
+    }
+  }
+]

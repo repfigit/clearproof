@@ -112,9 +112,9 @@ describe('cross-language parity', () => {
      * is never looser than a registered jurisdiction.
      *
      * If a new jurisdiction is added with a stricter threshold than the
-     * default, this test fails and the config must be amended — either the
-     * new jurisdiction's thresholds are raised, or the default is lowered
-     * to maintain the invariant.
+     * default, this test fails and the default must be reviewed and lowered
+     * to maintain the invariant; do not weaken a jurisdiction's policy
+     * merely to satisfy this test.
      */
     for (const [code, thresholds] of Object.entries(config.jurisdictions) as [string, { tier2: number; tier3: number; tier4: number }][]) {
       expect(DEFAULT_THRESHOLDS.tier2, `${code} tier2 stricter than default`).toBeLessThanOrEqual(thresholds.tier2);

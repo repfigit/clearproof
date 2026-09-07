@@ -1,0 +1,12 @@
+{
+  "skill": "repfigit-build",
+  "ranAt": "2026-08-05T07:36:43Z",
+  "outcome": "shipped",
+  "issueId": "AIF-124",
+  "prNumber": 25,
+  "failureCategory": "none",
+  "humanInterventions": 0,
+  "toolCalls": 37,
+  "verdictCycles": 0,
+  "notes": "AIF-124 shipped PR #25 - fixed missing REPO_DIR handling in repfigit gate scripts"
+}

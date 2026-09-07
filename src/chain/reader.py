@@ -1,14 +1,20 @@
 """Read on-chain state from VASPRegistry, SanctionsOracle, ComplianceRegistry.
 
 All reads use eth_call (no gas, no tx).
-Results can be cached in Redis with configurable TTL.
+Each reader owns a bounded in-memory cache for its immutable deployment configuration.
 """
 
+import asyncio
 import json
 import logging
+import math
 import os
-import time
+from collections import OrderedDict
+from collections.abc import Awaitable, Callable
+from copy import deepcopy
 from pathlib import Path
+from time import monotonic
+from types import MappingProxyType
 from typing import Any
 
 from web3 import AsyncWeb3
@@ -18,9 +24,7 @@ logger = logging.getLogger(__name__)
 
 _ABI_DIR = Path(__file__).parent / "abis"
 
-# In-memory cache for simple deployments (replaced by Redis in production)
-_cache: dict[str, tuple[float, Any]] = {}
-_CACHE_TTL_SECONDS = int(os.getenv("CHAIN_CACHE_TTL", "30"))
+_MISSING = object()
 
 
 def _load_abi(name: str) -> list[dict]:
@@ -28,20 +32,6 @@ def _load_abi(name: str) -> list[dict]:
     abi_path = _ABI_DIR / f"{name}.json"
     with open(abi_path, "r") as f:
         return json.load(f)
-
-
-def _cache_get(key: str) -> Any | None:
-    """Return cached value if still fresh, else None."""
-    if key in _cache:
-        ts, value = _cache[key]
-        if time.time() - ts < _CACHE_TTL_SECONDS:
-            return value
-        del _cache[key]
-    return None
-
-
-def _cache_set(key: str, value: Any) -> None:
-    _cache[key] = (time.time(), value)
 
 
 # ---------------------------------------------------------------------------
@@ -61,34 +51,123 @@ def get_chain_reader() -> "ChainReader":
         COMPLIANCE_REGISTRY_ADDRESS — ComplianceRegistry contract address
     """
     global _reader_instance
-    if _reader_instance is None:
-        rpc_url = os.environ.get("CHAIN_RPC_URL", "http://127.0.0.1:8545")
-        contracts = {
-            "vasp_registry": os.environ.get("VASP_REGISTRY_ADDRESS", ""),
-            "sanctions_oracle": os.environ.get("SANCTIONS_ORACLE_ADDRESS", ""),
-            "compliance_registry": os.environ.get("COMPLIANCE_REGISTRY_ADDRESS", ""),
-        }
-        _reader_instance = ChainReader(rpc_url, contracts)
+    rpc_url = os.environ.get("CHAIN_RPC_URL", "http://127.0.0.1:8545")
+    contracts = {
+        "vasp_registry": os.environ.get("VASP_REGISTRY_ADDRESS", ""),
+        "sanctions_oracle": os.environ.get("SANCTIONS_ORACLE_ADDRESS", ""),
+        "compliance_registry": os.environ.get("COMPLIANCE_REGISTRY_ADDRESS", ""),
+    }
+    ttl = float(os.getenv("CHAIN_CACHE_TTL", "30"))
+    if (
+        _reader_instance is None
+        or _reader_instance._rpc_url != rpc_url
+        or _reader_instance._addresses != contracts
+        or _reader_instance._cache_ttl != ttl
+    ):
+        _reader_instance = ChainReader(rpc_url, contracts, cache_ttl=ttl)
     return _reader_instance
 
 
 class ChainReader:
-    """Stateless reader for on-chain compliance state.
+    """Read on-chain compliance state with deployment-local caching.
 
     All reads use eth_call (no gas, no tx).
     Results are cached with configurable TTL.
     """
 
-    def __init__(self, rpc_url: str, contracts: dict[str, str]) -> None:
+    def __init__(
+        self, rpc_url: str, contracts: dict[str, str], *, cache_ttl: float | None = None, max_cache_entries: int = 512
+    ) -> None:
         """
         Args:
             rpc_url: Ethereum RPC endpoint.
             contracts: Mapping of contract name to deployed address, e.g.
                 {"vasp_registry": "0x...", "sanctions_oracle": "0x...", "compliance_registry": "0x..."}.
         """
+        ttl = float(os.getenv("CHAIN_CACHE_TTL", "30")) if cache_ttl is None else float(cache_ttl)
+        if not math.isfinite(ttl) or ttl < 0:
+            raise ValueError("Chain cache TTL must be finite and nonnegative")
+        if type(max_cache_entries) is not int or max_cache_entries < 1:
+            raise ValueError("Chain cache entry limit must be a positive integer")
+        self._rpc_url = rpc_url
         self._w3 = AsyncWeb3(AsyncHTTPProvider(rpc_url))
-        self._addresses = contracts
+        self._addresses = MappingProxyType(contracts.copy())
         self._contracts: dict[str, Any] = {}
+        self._cache_ttl = ttl
+        self._max_cache_entries = max_cache_entries
+        self._cache: OrderedDict[tuple, tuple[float, Any]] = OrderedDict()
+        self._generation = 0
+        self._inflight: dict[tuple, asyncio.Task] = {}
+
+    def invalidate_cache(self) -> None:
+        """Discard cached observations after state changes or a detected reorganization.
+
+        Earlier in-flight requests may still return to their original callers, but
+        cannot refill the cache or be joined by callers after invalidation.
+        """
+        self._generation += 1
+        self._cache.clear()
+
+    async def _read_cached(self, key: tuple, fetch: Callable[[], Awaitable[Any]]) -> Any:
+        if self._cache_ttl == 0:
+            return await fetch()
+        cached = self._cache.get(key, _MISSING)
+        if cached is not _MISSING:
+            expires_at, value = cached
+            if monotonic() < expires_at:
+                self._cache.move_to_end(key)
+                return deepcopy(value)
+            del self._cache[key]
+
+        generation = self._generation
+        inflight_key = (generation, key)
+        task = self._inflight.get(inflight_key)
+        if task is None or task.done():
+
+            async def load():
+                # Network time counts against the TTL; a slow reply cannot extend it.
+                expires_at = monotonic() + self._cache_ttl
+                value = await fetch()
+                if generation == self._generation and monotonic() < expires_at:
+                    self._cache[key] = (expires_at, deepcopy(value))
+                    self._cache.move_to_end(key)
+                    while len(self._cache) > self._max_cache_entries:
+                        self._cache.popitem(last=False)
+                return value
+
+            task = asyncio.create_task(load())
+            self._inflight[inflight_key] = task
+
+            def finished(done):
+                if self._inflight.get(inflight_key) is done:
+                    self._inflight.pop(inflight_key)
+                # Retrieve errors even if every waiter cancels.
+                if not done.cancelled():
+                    done.exception()
+
+            task.add_done_callback(finished)
+        return deepcopy(await asyncio.shield(task))
+
+    @staticmethod
+    def _hash_bytes(value: str) -> bytes:
+        if not isinstance(value, str):
+            raise ValueError("Chain identifier must be a 32-byte hexadecimal value")
+        encoded = value[2:] if value[:2].lower() == "0x" else value
+        if len(encoded) != 64:
+            raise ValueError("Chain identifier must be a 32-byte hexadecimal value")
+        try:
+            raw = bytes.fromhex(encoded)
+        except ValueError:
+            raise ValueError("Chain identifier must be a 32-byte hexadecimal value") from None
+        if len(raw) != 32:
+            raise ValueError("Chain identifier must be a 32-byte hexadecimal value")
+        return raw
+
+    @staticmethod
+    def _root_hex(value: bytes) -> str:
+        if not isinstance(value, bytes) or len(value) != 32:
+            raise ValueError("Chain root must contain exactly 32 bytes")
+        return "0x" + value.hex()
 
     # -- lazy contract helpers -------------------------------------------------
 
@@ -121,35 +200,23 @@ class ChainReader:
 
     async def get_sanctions_root(self) -> str:
         """Read current sanctions Merkle root from SanctionsOracle."""
-        cached = _cache_get("sanctions_root")
-        if cached is not None:
-            return cached
 
-        root: bytes = await self._sanctions_oracle.functions.currentRoot().call()
-        hex_root = "0x" + root.hex()
-        _cache_set("sanctions_root", hex_root)
-        return hex_root
+        async def fetch():
+            return self._root_hex(await self._sanctions_oracle.functions.currentRoot().call())
+
+        return await self._read_cached(("sanctions_root",), fetch)
 
     async def is_sanctions_stale(self) -> bool:
         """Check if sanctions root is past grace period."""
-        cached = _cache_get("sanctions_stale")
-        if cached is not None:
-            return cached
-
-        stale: bool = await self._sanctions_oracle.functions.isStale().call()
-        _cache_set("sanctions_stale", stale)
-        return stale
+        return await self._read_cached(("sanctions_stale",), self._sanctions_oracle.functions.isStale().call)
 
     async def get_issuer_root(self) -> str:
         """Read current issuer Merkle root from VASPRegistry."""
-        cached = _cache_get("issuer_root")
-        if cached is not None:
-            return cached
 
-        root: bytes = await self._vasp_registry.functions.issuerMerkleRoot().call()
-        hex_root = "0x" + root.hex()
-        _cache_set("issuer_root", hex_root)
-        return hex_root
+        async def fetch():
+            return self._root_hex(await self._vasp_registry.functions.issuerMerkleRoot().call())
+
+        return await self._read_cached(("issuer_root",), fetch)
 
     async def is_vasp_active(self, did_hash: str) -> bool:
         """Check if a VASP is registered and active.
@@ -157,15 +224,10 @@ class ChainReader:
         Args:
             did_hash: keccak256 hash of the VASP DID (hex string, 0x-prefixed).
         """
-        cache_key = f"vasp_active:{did_hash}"
-        cached = _cache_get(cache_key)
-        if cached is not None:
-            return cached
-
-        did_bytes = bytes.fromhex(did_hash.removeprefix("0x"))
-        active: bool = await self._vasp_registry.functions.isActive(did_bytes).call()
-        _cache_set(cache_key, active)
-        return active
+        did_bytes = self._hash_bytes(did_hash)
+        return await self._read_cached(
+            ("vasp_active", did_bytes), self._vasp_registry.functions.isActive(did_bytes).call
+        )
 
     async def is_credential_revoked(self, commitment: str) -> bool:
         """Check if a credential commitment has been revoked.
@@ -173,15 +235,10 @@ class ChainReader:
         Args:
             commitment: The credential commitment hash (hex string, 0x-prefixed).
         """
-        cache_key = f"cred_revoked:{commitment}"
-        cached = _cache_get(cache_key)
-        if cached is not None:
-            return cached
-
-        commitment_bytes = bytes.fromhex(commitment.removeprefix("0x"))
-        revoked: bool = await self._compliance_registry.functions.isRevoked(commitment_bytes).call()
-        _cache_set(cache_key, revoked)
-        return revoked
+        commitment_bytes = self._hash_bytes(commitment)
+        return await self._read_cached(
+            ("cred_revoked", commitment_bytes), self._compliance_registry.functions.isRevoked(commitment_bytes).call
+        )
 
     async def get_proof_record(self, transfer_id: str) -> dict | None:
         """Read a proof verification record from ComplianceRegistry.
@@ -192,27 +249,21 @@ class ChainReader:
         Returns:
             Dict with proof record fields, or None if no record exists.
         """
-        cache_key = f"proof_record:{transfer_id}"
-        cached = _cache_get(cache_key)
-        if cached is not None:
-            return cached
+        transfer_bytes = self._hash_bytes(transfer_id)
 
-        transfer_bytes = bytes.fromhex(transfer_id.removeprefix("0x"))
-        try:
+        async def fetch():
             record = await self._compliance_registry.functions.proofs(transfer_bytes).call()
-        except Exception:
-            logger.debug("No proof record found for transfer_id=%s", transfer_id)
-            return None
+            # The current public mapping returns (proofHash, timestamp, verified).
+            if len(record) != 3 or type(record[1]) is not int or type(record[2]) is not bool or record[1] < 0:
+                raise ValueError("Malformed chain proof record")
+            proof_hash = self._root_hex(record[0])
+            if record[1] == 0:
+                return None
+            return {
+                "transfer_id": "0x" + transfer_bytes.hex(),
+                "proof_hash": proof_hash,
+                "verified_at": record[1],
+                "verified": record[2],
+            }
 
-        # Contract returns a tuple: (transferId, proofHash, verifiedAt, verifier)
-        if not record or record[2] == 0:
-            return None
-
-        result = {
-            "transfer_id": "0x" + record[0].hex(),
-            "proof_hash": "0x" + record[1].hex(),
-            "verified_at": record[2],
-            "verifier": record[3],
-        }
-        _cache_set(cache_key, result)
-        return result
+        return await self._read_cached(("proof_record", transfer_bytes), fetch)

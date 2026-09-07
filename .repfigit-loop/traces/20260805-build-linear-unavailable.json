@@ -1,0 +1,12 @@
+{
+  "skill": "repfigit-build",
+  "ranAt": "2026-08-05T00:00:00Z",
+  "outcome": "blocked",
+  "issueId": null,
+  "prNumber": 0,
+  "failureCategory": "tool-loop",
+  "humanInterventions": 0,
+  "toolCalls": 8,
+  "verdictCycles": 0,
+  "notes": "Linear MCP tools unavailable — cannot list issues or claim work. Pass aborted at step 2 (pick)."
+}

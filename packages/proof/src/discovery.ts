@@ -1,120 +1,60 @@
-/**
- * VASP discovery module.
- *
- * Discovers clearproof-compatible VASPs via well-known metadata:
- * https://<domain>/.well-known/clearproof.json
- *
- * The well-known response is self-declared by the counterparty domain. If your
- * integration requires registry-backed identity assurance, compare the domain
- * and DID against an on-chain VASPRegistry entry before trusting it.
- *
- * Usage:
- *   import { discoverVASP, supportsChain } from '@clearproof/proof';
- *
- *   // Discover a specific counterparty by domain
- *   const info = await discoverVASP('exchange.example');
- *
- *   // Check chain support from the well-known response
- *   const canUseSepolia = await supportsChain('exchange.example', 11155111);
- */
+/** Constrained Node.js discovery. TLS metadata is self-declared, not registry assurance. */
+import { performance } from 'node:perf_hooks';
+import { DiscoveryError, parseTarget, validateDocument, type ClearproofDiscoveryInfo } from './discovery-profile.js';
+import { EgressPolicy, fetchDocument, resolveAddresses, type DiscoveryResolver } from './discovery-transport.js';
 
-export interface ClearproofDiscoveryInfo {
-  version: string;
-  vasp?: {
-    name?: string;
-    did?: string;
-    jurisdiction?: string;
-  };
-  clearproof: {
-    endpoint: string;
-    publicKey: string;
-    supportedChains: number[];
-    supportedVersions?: string[];
-    proofFormat?: string;
-  };
-  contact?: {
-    compliance?: string;
-    technical?: string;
-  };
-  updatedAt?: string;
-}
-
+export { DiscoveryError, EgressPolicy };
+export type { ClearproofDiscoveryInfo, DiscoveryResolver };
 export interface DiscoveryOptions {
-  /** Cache TTL in milliseconds (default: 3600000 = 1 hour) */
+  /** 0 disables caching; maximum 1 hour. Default 5 minutes. */
   cacheTtlMs?: number;
-  /** Request timeout in milliseconds (default: 10000) */
+  /** Whole-request deadline including DNS and response body, default 10 seconds. */
   timeoutMs?: number;
+  /** Operator-only exact authority -> CIDRs. Never populate from transfer requests. */
+  privateDestinations?: Readonly<Record<string, readonly string[]>>;
+  /** Operator DNS dependency; every answer is still checked and pinned. */
+  resolver?: DiscoveryResolver;
+  /** Operator CA bundle; certificate and original-hostname checks stay enabled. */
+  ca?: string;
 }
-
-// Simple in-memory cache
-const cache = new Map<string, { data: ClearproofDiscoveryInfo; expiresAt: number }>();
-
-/**
- * Discover a clearproof-compatible VASP by domain.
- *
- * Fetches https://<domain>/.well-known/clearproof.json and validates
- * the response against the expected schema.
- *
- * Returns null if the domain does not support clearproof (404 or invalid).
- */
-export async function discoverVASP(
-  domain: string,
-  options: DiscoveryOptions = {},
-): Promise<ClearproofDiscoveryInfo | null> {
-  const ttl = options.cacheTtlMs ?? 3_600_000;
-  const timeout = options.timeoutMs ?? 10_000;
-
-  // Check cache
-  const cached = cache.get(domain);
-  if (cached && cached.expiresAt > Date.now()) {
-    return cached.data;
+export class DiscoveryClient {
+  private readonly policy: EgressPolicy;
+  private readonly resolver: DiscoveryResolver;
+  private readonly ca?: string;
+  private readonly ttl: number;
+  private readonly timeout: number;
+  private generation = 0;
+  private readonly cache = new Map<string, { expires: number; data: ClearproofDiscoveryInfo }>();
+  constructor(options: DiscoveryOptions = {}) {
+    this.ttl = options.cacheTtlMs ?? 300_000;
+    this.timeout = options.timeoutMs ?? 10_000;
+    if (!Number.isFinite(this.ttl) || this.ttl < 0 || this.ttl > 3_600_000) throw new DiscoveryError('invalid', 'Cache TTL must be finite and between 0 and 3600000 ms');
+    if (!Number.isFinite(this.timeout) || this.timeout <= 0 || this.timeout > 60_000) throw new DiscoveryError('invalid', 'Timeout must be finite and between 0 and 60000 ms');
+    this.policy = new EgressPolicy(options.privateDestinations);
+    this.resolver = options.resolver ?? resolveAddresses;
+    this.ca = options.ca;
   }
-
-  const url = `https://${domain}/.well-known/clearproof.json`;
-
-  try {
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), timeout);
-
-    const resp = await fetch(url, { signal: controller.signal });
-    clearTimeout(timer);
-
-    if (!resp.ok) {
-      return null;
+  clearCache(): void { this.generation++; this.cache.clear(); }
+  async discover(identity: string): Promise<ClearproofDiscoveryInfo> {
+    const target = parseTarget(identity), now = performance.now(), generation = this.generation;
+    const cached = this.cache.get(target.did);
+    this.cache.delete(target.did);
+    if (cached && cached.expires > now) { this.cache.set(target.did, cached); return structuredClone(cached.data); }
+    const document = validateDocument(await fetchDocument(target, this.policy, this.resolver, this.timeout, this.ca), target);
+    if (this.ttl && now + this.ttl > performance.now() && generation === this.generation) {
+      this.cache.set(target.did, { expires: now + this.ttl, data: structuredClone(document) });
+      while (this.cache.size > 128) this.cache.delete(this.cache.keys().next().value!);
     }
-
-    const data = (await resp.json()) as ClearproofDiscoveryInfo;
-
-    // Validate required fields
-    if (!data.clearproof?.endpoint || !data.clearproof?.publicKey || !data.clearproof?.supportedChains) {
-      return null;
-    }
-
-    // Cache
-    cache.set(domain, { data, expiresAt: Date.now() + ttl });
-
-    return data;
-  } catch {
-    return null;
+    return document;
   }
 }
-
-/**
- * Check if a domain supports clearproof on a specific chain.
- */
-export async function supportsChain(
-  domain: string,
-  chainId: number,
-  options: DiscoveryOptions = {},
-): Promise<boolean> {
-  const info = await discoverVASP(domain, options);
-  if (!info) return false;
-  return info.clearproof.supportedChains.includes(chainId);
+const defaultClient = new DiscoveryClient();
+/** Unsupported, unavailable and invalid responses throw DiscoveryError with a distinct code. */
+export async function discoverVASP(identity: string, options?: DiscoveryOptions): Promise<ClearproofDiscoveryInfo> {
+  // Custom policy calls are isolated. Retain a DiscoveryClient for custom-policy caching.
+  return (options ? new DiscoveryClient(options) : defaultClient).discover(identity);
 }
-
-/**
- * Clear the discovery cache (useful for testing or forced refresh).
- */
-export function clearDiscoveryCache(): void {
-  cache.clear();
+export async function supportsChain(identity: string, chainId: number, options?: DiscoveryOptions): Promise<boolean> {
+  return (await discoverVASP(identity, options)).clearproof.supportedChains.includes(chainId);
 }
+export function clearDiscoveryCache(): void { defaultClient.clearCache(); }

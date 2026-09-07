@@ -160,15 +160,15 @@ class TestCrossLanguageParity:
         is never looser than a registered jurisdiction.
 
         If a new jurisdiction is added with a stricter threshold than the
-        default, this test fails and the config must be amended — either the
-        new jurisdiction's thresholds are raised, or the default is lowered
-        to maintain the invariant.
+        default, this test fails and the default must be reviewed and lowered
+        to maintain the invariant; do not weaken a jurisdiction's policy
+        merely to satisfy this test.
         """
         cfg = _config()
         default = cfg["default"]
         for code, thresholds in cfg["jurisdictions"].items():
             for tier in ("tier2", "tier3", "tier4"):
                 assert default[tier] <= thresholds[tier], (
-                    f"Default {tier} ({default[tier]}) is stricter than {code} {tier} "
+                    f"Default {tier} ({default[tier]}) is less strict than {code} {tier} "
                     f"({thresholds[tier]}). The fail-to-strictest invariant is violated."
                 )

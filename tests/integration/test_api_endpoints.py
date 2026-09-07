@@ -7,6 +7,7 @@ circuits or a Node.js subprocess.
 """
 
 import json
+import logging
 import os
 import time
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -46,7 +47,9 @@ async def test_health_returns_200(client: AsyncClient):
     assert resp.status_code == 200
     body = resp.json()
     assert body["status"] == "ok"
-    assert "version" in body
+    from importlib.metadata import version
+
+    assert body["version"] == version("clearproof")
     assert "timestamp" in body
 
 
@@ -184,7 +187,7 @@ def mock_registry():
     registry.get = MagicMock()
     registry.revoke = MagicMock()
     registry.get_commitment = MagicMock()
-    
+
     # Override the dependency
     app.dependency_overrides[get_credential_registry] = lambda: registry
     yield registry
@@ -193,8 +196,9 @@ def mock_registry():
 
 
 @pytest.mark.asyncio
-async def test_credential_issue_creates_credential(client: AsyncClient, mock_registry):
+async def test_credential_issue_creates_credential(client: AsyncClient, mock_registry, caplog):
     """POST /credential/issue with valid input should return the credential."""
+    caplog.set_level(logging.INFO, logger="src.api.routes.credential")
     mock_registry.issue.return_value = "0xdeadbeef"
     resp = await client.post(
         "/credential/issue",
@@ -211,6 +215,8 @@ async def test_credential_issue_creates_credential(client: AsyncClient, mock_reg
     assert body["credential_id"] is not None
     assert body["commitment"] == "0xdeadbeef"
     assert body["issuer_did"] == "did:web:issuer.example.com"
+    assert "Credential issued:" in caplog.text
+    assert "0x1234567890abcdef" not in caplog.text
 
 
 @pytest.mark.asyncio
@@ -273,9 +279,10 @@ async def test_credential_get_existing(client: AsyncClient, mock_registry):
 
 
 @pytest.mark.asyncio
-async def test_credential_revoke_success(client: AsyncClient, mock_registry):
+async def test_credential_revoke_success(client: AsyncClient, mock_registry, caplog):
     """POST /credential/revoke for an active credential returns revoked=true."""
     mock_cred = MagicMock()
+    caplog.set_level(logging.INFO, logger="src.api.routes.credential")
     mock_cred.revoked = False
 
     mock_registry.get.return_value = mock_cred
@@ -292,6 +299,8 @@ async def test_credential_revoke_success(client: AsyncClient, mock_registry):
     body = resp.json()
     assert body["revoked"] is True
     assert body["credential_id"] == "cred-123"
+    assert "Credential revoked:" in caplog.text
+    assert "Testing revocation" not in caplog.text
 
 
 @pytest.mark.asyncio
@@ -327,8 +336,10 @@ async def test_credential_revoke_already_revoked(client: AsyncClient, mock_regis
 
 
 @pytest.mark.asyncio
-async def test_proof_generate_happy_path(client: AsyncClient, mock_registry):
-    """POST /proof/generate with valid input should return a hybrid payload."""
+async def test_proof_generate_explicit_legacy_mode(client: AsyncClient, mock_registry, monkeypatch):
+    """Legacy encryption is available only through explicit operator selection."""
+    monkeypatch.setenv("PII_ENVELOPE_MODE", "legacy-v1")
+    monkeypatch.delenv("BENEFICIARY_HPKE_PUBLIC_KEY", raising=False)
     mock_credential = MagicMock()
     mock_credential.revoked = False
     mock_credential.sanctions_clear = True
@@ -518,3 +529,46 @@ async def test_rate_limiter_unit_returns_429():
         await limiter(mock_request)
     assert exc_info.value.status_code == 429
     assert "Rate limit" in exc_info.value.detail
+
+
+@pytest.mark.parametrize("failure,status", [("invalid", 422), ("unsupported", 422), ("unavailable", 503)])
+async def test_discovery_failure_stops_before_proving_or_encryption(
+    client, mock_registry, monkeypatch, failure, status
+):
+    from src.protocol.discovery_profile import DiscoveryInvalid, DiscoveryUnavailable, DiscoveryUnsupported
+
+    monkeypatch.setenv("PII_ENVELOPE_MODE", "hpke-v2")
+    monkeypatch.setenv("HPKE_DISCOVERY_ENABLED", "1")
+    monkeypatch.delenv("BENEFICIARY_HPKE_PUBLIC_KEY", raising=False)
+    credential = MagicMock(revoked=False, expires_at=int(time.time()) + 3600)
+    mock_registry.get.return_value = credential
+    error = {"invalid": DiscoveryInvalid, "unsupported": DiscoveryUnsupported, "unavailable": DiscoveryUnavailable}[
+        failure
+    ]
+    with (
+        patch(
+            "src.protocol.discovery.resolve_hpke_public_key", new_callable=AsyncMock, side_effect=error("lookup failed")
+        ),
+        patch("src.api.routes.proof._get_db_from_app", return_value=None),
+        patch("src.api.routes.proof._prover.fullprove", new_callable=AsyncMock) as prover,
+        patch("src.sar.encryption.encrypt_pii") as legacy,
+        patch("src.sar.hpke_envelope.seal_envelope") as hpke,
+    ):
+        response = await client.post(
+            "/proof/generate",
+            headers={"X-API-Key": API_KEY},
+            json={
+                "credential_id": "synthetic-credential",
+                "wallet_address": "0x" + "1" * 40,
+                "amount_usd": 100,
+                "asset": "USDC",
+                "destination_wallet": "0x" + "2" * 40,
+                "destination_vasp_did": "did:web:beneficiary.example",
+                "jurisdiction": "US",
+                "idempotency_key": "discovery-failure",
+            },
+        )
+        assert response.status_code == status
+        prover.assert_not_awaited()
+        legacy.assert_not_called()
+        hpke.assert_not_called()

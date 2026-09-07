@@ -1,17 +1,17 @@
 /**
  * Multi-chain deployment script.
  *
- * Deploys all 4 contracts + SanctionsRootRelay to one or more networks.
- * Reads target networks from CLI args or DEPLOY_NETWORKS env var.
+ * Deploys the legacy contracts, verifier router and relay to the selected Hardhat network.
+ * Verifier activation remains pending until its recorded timelock expires.
  *
  * Usage:
  *   # Single network (via hardhat --network)
  *   npx hardhat run scripts/deploy-multichain.ts --network arbitrum-sepolia
  *
- *   # Multiple networks (standalone, uses ethers directly)
- *   DEPLOY_NETWORKS=sepolia,base-sepolia,arbitrum-sepolia npx ts-node scripts/deploy-multichain.ts
+ *   # Repeat the command for each explicitly selected network.
  */
-import { ethers, run } from "hardhat";
+import { ethers, run, network as selectedNetwork } from "hardhat";
+import { prepareLegacyVerifier } from "./legacy-verifier";
 import * as fs from "fs";
 import * as path from "path";
 
@@ -34,7 +34,7 @@ function encodeJurisdiction(code: string): number {
 async function main() {
   const [deployer] = await ethers.getSigners();
   const network = await ethers.provider.getNetwork();
-  const networkName = process.env.HARDHAT_NETWORK || "localhost";
+  const networkName = selectedNetwork.name;
 
   console.log("╔══════════════════════════════════════════╗");
   console.log("║       clearproof multi-chain deploy      ║");
@@ -50,13 +50,10 @@ async function main() {
     process.exit(1);
   }
 
-  // 1. Groth16Verifier
-  console.log("[1/5] Deploying Groth16Verifier...");
-  const Verifier = await ethers.getContractFactory("Groth16Verifier");
-  const verifier = await Verifier.deploy();
-  await verifier.waitForDeployment();
+  const { router, verifier, selector, activation, timelockPeriod } = await prepareLegacyVerifier();
   const verifierAddr = await verifier.getAddress();
-  console.log(`  → ${verifierAddr}`);
+  const routerAddr = await router.getAddress();
+  console.log("Verifier registration pending until chain timestamp:", activation.activateAfter);
 
   // 2. VASPRegistry
   console.log("[2/5] Deploying VASPRegistry...");
@@ -80,7 +77,8 @@ async function main() {
   console.log("[4/5] Deploying ComplianceRegistry...");
   const Registry = await ethers.getContractFactory("ComplianceRegistry");
   const registry = await Registry.deploy(
-    verifierAddr,
+    routerAddr,
+    selector,
     vaspRegistryAddr,
     sanctionsOracleAddr,
     thresholdConfig.default.tier2,
@@ -121,6 +119,7 @@ async function main() {
     chainId: network.chainId.toString(),
     timestamp: new Date().toISOString(),
     contracts: {
+      VerifierRouter: routerAddr,
       Groth16Verifier: verifierAddr,
       VASPRegistry: vaspRegistryAddr,
       SanctionsOracle: sanctionsOracleAddr,
@@ -128,9 +127,10 @@ async function main() {
       SanctionsRootRelay: relayAddr,
     },
     deployer: deployer.address,
+    verifierActivation: activation,
   };
 
-  const deploymentsDir = path.resolve(__dirname, "../deployments");
+  const deploymentsDir = process.env.CLEARPROOF_DEPLOYMENTS_DIR || path.resolve(__dirname, "../deployments");
   fs.mkdirSync(deploymentsDir, { recursive: true });
   const outPath = path.join(deploymentsDir, `${networkName}.json`);
   fs.writeFileSync(outPath, JSON.stringify(deployment, null, 2));
@@ -145,13 +145,15 @@ async function main() {
 
   // Verify on block explorer
   const apiKey = getExplorerApiKey(networkName);
-  if (apiKey) {
+  if (apiKey && !["hardhat", "localhost"].includes(networkName)) {
     console.log("\nVerifying contracts on block explorer...");
     const verifyList = [
+      { address: routerAddr, constructorArguments: [timelockPeriod] },
       { address: verifierAddr, constructorArguments: [] },
       { address: vaspRegistryAddr, constructorArguments: [deployer.address] },
       { address: sanctionsOracleAddr, constructorArguments: [deployer.address, initialRoot, initialLeafCount] },
-      { address: registryAddr, constructorArguments: [verifierAddr, vaspRegistryAddr, sanctionsOracleAddr] },
+      { address: registryAddr, constructorArguments: [routerAddr, selector, vaspRegistryAddr, sanctionsOracleAddr,
+        thresholdConfig.default.tier2, thresholdConfig.default.tier3, thresholdConfig.default.tier4] },
       { address: relayAddr, constructorArguments: [deployer.address, sanctionsOracleAddr] },
     ];
     for (const v of verifyList) {

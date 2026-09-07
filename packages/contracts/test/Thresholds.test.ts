@@ -1,3 +1,4 @@
+import { routeVerifier } from "./helpers/verifier";
 import { expect } from "chai";
 import { ethers } from "hardhat";
 
@@ -46,9 +47,11 @@ async function deployAll() {
   const sanctionsOracle = await SanctionsOracle.deploy(admin.address, initialRoot, 50);
   await sanctionsOracle.waitForDeployment();
 
+  const { router, selector } = await routeVerifier(await verifier.getAddress());
   const Registry = await ethers.getContractFactory("ComplianceRegistry");
   const registry = await Registry.deploy(
-    await verifier.getAddress(),
+    await router.getAddress(),
+    selector,
     await vaspRegistry.getAddress(),
     await sanctionsOracle.getAddress(),
     DEFAULT_T.tier2,
@@ -127,12 +130,10 @@ describe("ComplianceRegistry — threshold binding (AIF-79)", function () {
     );
     const p = dummyProofParts();
 
-    // Proves _checkThresholds passed: execution reached the pairing check, which
-    // rejects the dummy proof points. Asserted as "not a threshold error" rather
-    // than on the pairing library's revert string, which is not our contract.
+    // The exact pairing-precompile rejection proves all earlier checks passed.
     await expect(
       registry.connect(vaspWallet).verifyAndRecord(transferId, p.pA, p.pB, p.pC, signals, didHash)
-    ).to.not.be.revertedWithCustomError(registry, "ThresholdMismatch");
+    ).to.be.revertedWith("Pairing: ecpairing failed");
   });
 
   it("rejects a prover-chosen tier2_threshold that would land any amount in tier 1", async function () {
@@ -213,7 +214,7 @@ describe("ComplianceRegistry — threshold binding (AIF-79)", function () {
     );
     await expect(
       registry.connect(vaspWallet).verifyAndRecord(transferId, p.pA, p.pB, p.pC, defaulted, didHash)
-    ).to.not.be.revertedWithCustomError(registry, "ThresholdMismatch");
+    ).to.be.revertedWith("Pairing: ecpairing failed");
   });
 
   describe("constructor-set default (AIF-95)", function () {
@@ -231,9 +232,11 @@ describe("ComplianceRegistry — threshold binding (AIF-79)", function () {
         50
       );
 
+      const { router, selector } = await routeVerifier(await verifier.getAddress());
       const Registry = await ethers.getContractFactory("ComplianceRegistry");
       const registry = await Registry.deploy(
-        await verifier.getAddress(),
+        await router.getAddress(),
+        selector,
         await vaspRegistry.getAddress(),
         await oracle.getAddress(),
         DEFAULT_T.tier2,
@@ -265,12 +268,14 @@ describe("ComplianceRegistry — threshold binding (AIF-79)", function () {
         50
       );
 
+      const { router, selector } = await routeVerifier(await verifier.getAddress());
       const Registry = await ethers.getContractFactory("ComplianceRegistry");
       // The constructor shares validation with the external setter, so it
       // cannot be used to install a table the setter would reject.
       await expect(
         Registry.deploy(
-          await verifier.getAddress(),
+          await router.getAddress(),
+          selector,
           await vaspRegistry.getAddress(),
           await oracle.getAddress(),
           5000n,

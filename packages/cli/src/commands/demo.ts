@@ -5,33 +5,8 @@ import path from 'path';
 import { generateProof, verifyProof, getThresholds } from '@clearproof/proof';
 import type { ComplianceInput } from '@clearproof/proof';
 
-export function defaultArtifactsDir(): string {
-  try {
-    // eslint-disable-next-line @typescript-eslint/no-var-requires
-    const circuits = require('@clearproof/circuits') as { artifacts?: { dir?: string } };
-    if (circuits.artifacts?.dir && fs.existsSync(circuits.artifacts.dir)) {
-      return circuits.artifacts.dir;
-    }
-  } catch {
-    // Fall back to monorepo artifacts for local development.
-  }
-  return path.resolve(__dirname, '../../../../artifacts');
-}
-
-export function resolveArtifactPaths(artifactsDir: string): {
-  wasmPath: string;
-  zkeyPath: string;
-  vkeyPath: string;
-} {
-  const resolvedArtifactsDir = path.resolve(artifactsDir);
-  const packagedWasmPath = path.join(resolvedArtifactsDir, 'compliance.wasm');
-  const compiledWasmPath = path.join(resolvedArtifactsDir, 'compliance_js', 'compliance.wasm');
-  return {
-    wasmPath: fs.existsSync(packagedWasmPath) ? packagedWasmPath : compiledWasmPath,
-    zkeyPath: path.join(resolvedArtifactsDir, 'compliance_final.zkey'),
-    vkeyPath: path.join(resolvedArtifactsDir, 'verification_key.json'),
-  };
-}
+import { defaultArtifactsDir, requireArtifactPaths } from '../legacy-artifacts.js';
+export { defaultArtifactsDir, resolveArtifactPaths } from '../legacy-artifacts.js';
 
 /**
  * Zero-subtree hashes for a Poseidon(2) Merkle tree: Z[0] = 0 (empty leaf),
@@ -156,9 +131,13 @@ export const demoCommand = new Command('demo')
   )
   .action(async (opts: { artifacts: string; export?: string }) => {
     const artifactsDir = path.resolve(opts.artifacts);
-    const { wasmPath, zkeyPath, vkeyPath } = resolveArtifactPaths(artifactsDir);
+    let selected;
+    try { selected = requireArtifactPaths(artifactsDir); }
+    catch (error) { console.error((error as Error).message); process.exitCode = 2; return; }
+    const { wasmPath, zkeyPath, vkeyPath } = selected;
 
-    console.log('=== ClearProof ZK Compliance Demo ===\n');
+    console.log('=== Clearproof legacy cryptographic demo (development only) ===\n');
+    console.log('This demo does not authorize a transfer or establish production compliance.');
     console.log(`Artifacts: ${artifactsDir}`);
     console.log(`Circuit:   compliance (sanctions_depth=20, issuer_depth=10)\n`);
 
