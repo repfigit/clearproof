@@ -824,3 +824,20 @@ still need completion and final merged-main verification.
   artifact-enabled suite. `src/storage/pilot.py` measures 183/183 statements and
   42/42 branches (`pilot-storage-boundaries.log`/`.data`). Ruff and whitespace
   pass; no production changes were required. The full goal remains incomplete.
+
+## Forty-fourth checkpoint
+
+- Added 28 chain-reader cases for invalid cache capacity, identifiers shortened
+  by hexadecimal whitespace decoding, malformed roots/records, missing deployment
+  configuration, invalid DIDs and RPC cancellation/retry.
+- An event-loop ordering test exercises a slow completed request being replaced
+  before its completion callback executes. The old callback preserves the new
+  in-flight request and the replacement result populates the cache. Malformed
+  replies are neither cached nor reported as absent records.
+- All 47 reader tests pass, including the existing actual Web3 ABI encoding and
+  decoding test with a controlled provider. Reader coverage is 153/153 statements
+  and 42/42 branches (`chain-reader-complete.log`/`.data`). No public RPC was
+  contacted, and no production changes were required. Ruff and whitespace pass.
+- Full repository coverage remains unfinished. The forty-second checkpoint is
+  still the last complete Python report; subsequent focused results must not be
+  presented as a newly measured repository-wide percentage.
