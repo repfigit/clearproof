@@ -283,3 +283,34 @@ def test_catalog_order_and_digest_do_not_depend_on_inventory_order(registry):
     assert reversed_registry.digest == registry.digest
     with pytest.raises(ValidationError):
         registry.definitions[0].decimals = 0
+
+
+@pytest.mark.parametrize(
+    "domain",
+    [
+        "clearproof/transfer/v0",
+        "clearproof/transfer/v01",
+        "other/transfer/v1",
+        "clearproof/Transfer/v1",
+        "clearproof/transfer/v1\n",
+        "clearproof/transfer/v1/extra",
+    ],
+)
+def test_digest_rejects_noncanonical_domains(domain):
+    with pytest.raises(ValueError, match="^Invalid commitment domain$"):
+        record_digest(domain, {"synthetic": True})
+
+
+@pytest.mark.parametrize("extra", [0, 1, 2])
+def test_canonical_serialized_byte_limit_includes_json_escaping(extra):
+    # Eight quoted strings have 25 bytes of array/quote/comma syntax. Quotation
+    # marks double on serialization, although each counts once during validation.
+    value = ['"' * 4096] * 7 + ['"' * 4083 + "a" * extra]
+    expected_size = 65535 + extra
+    if expected_size <= 65536:
+        encoded = canonical_bytes(value)
+        assert len(encoded) == expected_size
+        assert json.loads(encoded) == value
+    else:
+        with pytest.raises(ValueError, match="^Canonical record exceeds 64 KiB$"):
+            canonical_bytes(value)

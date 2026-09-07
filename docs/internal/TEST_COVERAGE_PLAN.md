@@ -620,3 +620,16 @@ still need completion and final merged-main verification.
 - Remaining repository scope includes other Python paths, SDK branches, Solidity,
   docs/browser rendering, scripts and final CI/review/merge verification. The full
   coverage objective remains active and overall percentages await a fresh run.
+
+## Thirtieth checkpoint
+
+- Added nine canonical-encoding tests for malformed commitment domains and the
+  serialized 64-KiB boundary. Quote-heavy records pass the structural budget but
+  expand during JSON escaping; tests verify 65535/65536-byte acceptance and
+  65537-byte rejection without changing production limits.
+- All 71 transfer/canonical tests pass. Canonical encoding measures 44/44
+  statements and 24/24 branches (`canonical-complete.log`/`.data`). Ruff and
+  whitespace pass; no production changes were needed.
+- This restricted ASCII record encoding remains distinct from general JSON
+  canonicalization. Other Python gaps and the SDK/contracts/docs/scripts plus
+  publication requirements still leave full repository coverage incomplete.
