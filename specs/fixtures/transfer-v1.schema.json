@@ -1,0 +1,224 @@
+{
+  "$defs": {
+    "Participant": {
+      "additionalProperties": false,
+      "properties": {
+        "wallet": {
+          "maxLength": 42,
+          "minLength": 42,
+          "pattern": "^0x[0-9a-f]{40}$",
+          "title": "Wallet",
+          "type": "string"
+        },
+        "kind": {
+          "enum": [
+            "vasp",
+            "self_hosted"
+          ],
+          "title": "Kind",
+          "type": "string"
+        },
+        "vasp_did": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Vasp Did"
+        }
+      },
+      "required": [
+        "wallet",
+        "kind",
+        "vasp_did"
+      ],
+      "title": "Participant",
+      "type": "object"
+    },
+    "Valuation": {
+      "additionalProperties": false,
+      "properties": {
+        "schema_version": {
+          "const": "clearproof-valuation-v1",
+          "title": "Schema Version",
+          "type": "string"
+        },
+        "asset_id": {
+          "maxLength": 100,
+          "title": "Asset Id",
+          "type": "string"
+        },
+        "currency": {
+          "const": "USD",
+          "title": "Currency",
+          "type": "string"
+        },
+        "numerator": {
+          "maxLength": 39,
+          "minLength": 1,
+          "pattern": "^(0|[1-9][0-9]{0,38})$",
+          "title": "Numerator",
+          "type": "string"
+        },
+        "denominator": {
+          "maxLength": 39,
+          "minLength": 1,
+          "pattern": "^(0|[1-9][0-9]{0,38})$",
+          "title": "Denominator",
+          "type": "string"
+        },
+        "observed_at": {
+          "maximum": 9007199254740991,
+          "minimum": 0,
+          "title": "Observed At",
+          "type": "integer"
+        },
+        "expires_at": {
+          "maximum": 9007199254740991,
+          "minimum": 0,
+          "title": "Expires At",
+          "type": "integer"
+        },
+        "source_id": {
+          "maxLength": 64,
+          "minLength": 1,
+          "pattern": "^[a-z0-9][a-z0-9_-]{0,63}$",
+          "title": "Source Id",
+          "type": "string"
+        },
+        "source_evidence_digest": {
+          "maxLength": 64,
+          "minLength": 64,
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Source Evidence Digest",
+          "type": "string"
+        }
+      },
+      "required": [
+        "schema_version",
+        "asset_id",
+        "currency",
+        "numerator",
+        "denominator",
+        "observed_at",
+        "expires_at",
+        "source_id",
+        "source_evidence_digest"
+      ],
+      "title": "Valuation",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": {
+      "const": "clearproof-transfer-v1",
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "tenant_id": {
+      "maxLength": 64,
+      "minLength": 1,
+      "pattern": "^[a-z0-9][a-z0-9_-]{0,63}$",
+      "title": "Tenant Id",
+      "type": "string"
+    },
+    "transfer_id": {
+      "maxLength": 64,
+      "minLength": 1,
+      "pattern": "^[a-z0-9][a-z0-9_-]{0,63}$",
+      "title": "Transfer Id",
+      "type": "string"
+    },
+    "nonce": {
+      "maxLength": 64,
+      "minLength": 64,
+      "pattern": "^[0-9a-f]{64}$",
+      "title": "Nonce",
+      "type": "string"
+    },
+    "originator": {
+      "$ref": "#/$defs/Participant"
+    },
+    "beneficiary": {
+      "$ref": "#/$defs/Participant"
+    },
+    "asset_id": {
+      "maxLength": 100,
+      "title": "Asset Id",
+      "type": "string"
+    },
+    "asset_registry_digest": {
+      "maxLength": 64,
+      "minLength": 64,
+      "pattern": "^[0-9a-f]{64}$",
+      "title": "Asset Registry Digest",
+      "type": "string"
+    },
+    "amount_base_units": {
+      "maxLength": 39,
+      "minLength": 1,
+      "pattern": "^(0|[1-9][0-9]{0,38})$",
+      "title": "Amount Base Units",
+      "type": "string"
+    },
+    "valuation": {
+      "$ref": "#/$defs/Valuation"
+    },
+    "usd_cents": {
+      "maxLength": 39,
+      "minLength": 1,
+      "pattern": "^(0|[1-9][0-9]{0,38})$",
+      "title": "Usd Cents",
+      "type": "string"
+    },
+    "jurisdiction": {
+      "maxLength": 2,
+      "minLength": 2,
+      "pattern": "^[A-Z]{2}$",
+      "title": "Jurisdiction",
+      "type": "string"
+    },
+    "policy_digest": {
+      "maxLength": 64,
+      "minLength": 64,
+      "pattern": "^[0-9a-f]{64}$",
+      "title": "Policy Digest",
+      "type": "string"
+    },
+    "created_at": {
+      "maximum": 9007199254740991,
+      "minimum": 0,
+      "title": "Created At",
+      "type": "integer"
+    },
+    "expires_at": {
+      "maximum": 9007199254740991,
+      "minimum": 0,
+      "title": "Expires At",
+      "type": "integer"
+    }
+  },
+  "required": [
+    "schema_version",
+    "tenant_id",
+    "transfer_id",
+    "nonce",
+    "originator",
+    "beneficiary",
+    "asset_id",
+    "asset_registry_digest",
+    "amount_base_units",
+    "valuation",
+    "usd_cents",
+    "jurisdiction",
+    "policy_digest",
+    "created_at",
+    "expires_at"
+  ],
+  "title": "Transfer",
+  "type": "object"
+}

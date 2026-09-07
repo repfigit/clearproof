@@ -1,3 +1,5 @@
+import { routeVerifier } from "./helpers/verifier";
+import { developmentVerifier } from "./helpers/development-verifier";
 /**
  * End-to-end integration test: generate proof (snarkjs) -> submit on-chain -> verify.
  *
@@ -17,7 +19,9 @@ import * as fs from "fs";
 import * as path from "path";
 
 // Resolve paths relative to monorepo root
-const ARTIFACTS_DIR = path.resolve(__dirname, "../../../artifacts");
+const ARTIFACTS_DIR = process.env.CLEARPROOF_LEGACY_TEST_ARTIFACTS
+  ? path.resolve(process.env.CLEARPROOF_LEGACY_TEST_ARTIFACTS)
+  : path.resolve(__dirname, "../../../artifacts");
 const WASM_PATH = path.join(ARTIFACTS_DIR, "compliance_js", "compliance.wasm");
 const ZKEY_PATH = path.join(ARTIFACTS_DIR, "compliance_final.zkey");
 const VKEY_PATH = path.join(ARTIFACTS_DIR, "verification_key.json");
@@ -28,7 +32,8 @@ describe("E2E: Prove -> Submit On-Chain -> Verify", function () {
 
   before(function () {
     // Skip if circuit artifacts are not built
-    if (!fs.existsSync(WASM_PATH) || !fs.existsSync(ZKEY_PATH)) {
+    if (![WASM_PATH, ZKEY_PATH, VKEY_PATH].every(file => fs.existsSync(file))) {
+      if (process.env.CLEARPROOF_LEGACY_TEST_ARTIFACTS) throw new Error("Explicit legacy test bundle is incomplete");
       this.skip();
     }
   });
@@ -40,7 +45,8 @@ describe("E2E: Prove -> Submit On-Chain -> Verify", function () {
     // ================================================================
     // 1. Deploy all contracts
     // ================================================================
-    const Verifier = await ethers.getContractFactory("Groth16Verifier");
+    const artifact = await developmentVerifier(VKEY_PATH);
+    const Verifier = new ethers.ContractFactory(artifact.abi, artifact.bytecode, admin);
     const verifier = await Verifier.deploy();
     await verifier.waitForDeployment();
 
@@ -53,9 +59,11 @@ describe("E2E: Prove -> Submit On-Chain -> Verify", function () {
     const sanctionsOracle = await SanctionsOracle.deploy(admin.address, sanctionsRoot, 10);
     await sanctionsOracle.waitForDeployment();
 
+    const { router, selector } = await routeVerifier(await verifier.getAddress());
     const Registry = await ethers.getContractFactory("ComplianceRegistry");
     const registry = await Registry.deploy(
-      await verifier.getAddress(),
+      await router.getAddress(),
+      selector,
       await vaspRegistry.getAddress(),
       await sanctionsOracle.getAddress(),
       250,
@@ -63,6 +71,9 @@ describe("E2E: Prove -> Submit On-Chain -> Verify", function () {
       10000
     );
     await registry.waitForDeployment();
+
+    // Match the explicit USD-cent witness thresholds; this is a synthetic policy.
+    await registry.setJurisdictionThresholds(0x5553, 25000, 300000, 1000000);
 
     // Register a VASP (admin is the VASP wallet)
     const vaspDid = ethers.keccak256(ethers.toUtf8Bytes("did:web:e2e-vasp.example"));
@@ -211,11 +222,13 @@ describe("E2E: Prove -> Submit On-Chain -> Verify", function () {
       actual_amount: "100000",
     };
 
-    const { proof, publicSignals } = await snarkjs.groth16.fullProve(
+    const { proof: rawProof, publicSignals } = await snarkjs.groth16.fullProve(
       circuitInput,
       WASM_PATH,
       ZKEY_PATH
     );
+
+    const proof = rawProof as { pi_a: string[]; pi_b: string[][]; pi_c: string[] };
 
     // Verify off-chain first
     const vkey = JSON.parse(fs.readFileSync(VKEY_PATH, "utf-8"));

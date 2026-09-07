@@ -1,6 +1,6 @@
 # Builder context
 
-## AIF-67 (PR #11) — 2026-07-28 — Fixed missing wallet_ownership_verified circuit input
+## AIF-122 (PR #11) — 2026-07-28 — Fixed missing wallet_ownership_verified circuit input
 
 - Architecture: Circuit inputs flow from TypeScript SDK (packages/proof/src/types.ts + prover.ts) → test vectors (tests/vectors/compliance/input.json) → demo CLI (packages/cli/src/commands/demo.ts). All three must stay in sync with circuits/*.circom signal declarations.
 - Patterns: When adding a new circuit input, must update: (1) ComplianceInput type, (2) prover mapping, (3) test vector JSON, (4) demo CLI DEMO_INPUT. Credential commitment is Poseidon hash of 6 fields (issuer_did, kyc_tier, sanctions_clear, issued_at, expires_at, wallet_ownership_verified). Nullifier = Poseidon(commitment, transfer_id_hash).
@@ -19,12 +19,42 @@
 - Patterns: When jurisdiction thresholds change, the demo must call `getThresholds(jurisdiction)` instead of hardcoding values. The actualAmount must be in the same scale as the thresholds (USD, not cents).
 - Gotchas: The demo test failure about missing artifacts is pre-existing (artifacts not compiled locally) — not related to threshold changes. CI compiles artifacts before running the smoke test.
 
+## AIF-122 — 2026-08-05 — Wrong-repo skip: string-utils doesn't exist in clearproof
+
+- Architecture: AIF-122 references a `string-utils` library with `shout`/`whisper` functions — this repo (clearproof) is a ZK infrastructure project, not a general utility library. The issue likely belongs to a different builder in the same Linear team.
+- Patterns: Wrong-repo issues should be unassigned, labeled `agent-ready` removed, moved back to Backlog, and commented with reason. This is a skip (step 8a), not a block.
+- Gotchas: Gate script failure masked this as wrong repo from the start. Manual classification needed when gate is broken.
+
+## AIF-124 — 2026-08-05 — Fixed missing REPO_DIR handling in repfigit gate scripts
+
+- Architecture: The repfigit gate scripts (`repfigit-gate-build.sh` and `repfigit-gate-review.sh`) were failing with "parameter null or not set" when `REPO_DIR` was missing, causing cron jobs to crash.
+- Patterns: Fixed by implementing option 2 from the issue description: on missing `REPO_DIR`, print a warning to stderr and exit 0 (silent no-op) instead of exit 1.
+- Gotchas: The fix preserves backwards compatibility and normal functionality when `REPO_DIR` is properly set, while preventing crashes in cron environments.
+
 ## Retry log
 
 - AIF-67 — 2026-07-28 — status: escalated — stuck after 3 repair cycles; NG-1 backward-compat conflict + ADR 0002 staging question require product decision
+- AIF-86 — 2026-07-31 — fflonk benchmark: 32% cheaper verification, no ceremony, 20x slower proving
+- AIF-122 — 2026-08-05 — status: failed — Linear API unreachable, cannot claim issue
+- AIF-122 — 2026-08-05 — status: failed — wrong-repo (string-utils doesn't exist in clearproof); gate script error; missing AGENT_IDENTITY
+- general — 2026-08-05 — status: failed — Linear MCP tools unavailable; cannot list issues or claim work; pass aborted at step 2 (pick)
+- general — 2026-08-05 — status: failed — wrong-repo (AIF-123 nh-muni-watch, AIF-32/34/33 ai-factory-pyd); all 4 unassigned agent-ready issues belong to other repos; skipped all
+- AIF-124 — 2026-08-05 — status: failed — gate script error (REPO_DIR not set in cron)
 
-## AIF-86 — 2026-07-31 — fflonk benchmark: 32% cheaper verification, no ceremony, 20x slower proving
+## AIF-128 — 2026-08-06 — Wrong-repo skip: SKILL.md/fleet.yaml not in clearproof
 
-- Architecture: proof-system work needs a fresh compile — `artifacts/` is gitignored and the checked-in copy was ~9 days stale. Compile with the CI-pinned circom binary (v2.2.2, sha256 f3d8d1fd…fe9d5) into `build/`, never trust `artifacts/`.
-- Patterns: `tests/vectors/compliance/input.json` is camelCase (SDK-facing); `generate_witness.js` needs snake_case. The authoritative mapping is `packages/proof/src/prover.ts` ~line 37. Gas is measured with `verifyProof.estimateGas` to match `Groth16VerifierBLS.bench.ts`; a locally generated Groth16 verifier reproduced ADR 0003's published baseline to within 37 gas, so that harness is trustworthy.
-- Gotchas: fflonk needs ptau 2^19, NOT the 2^18 pinned in CI — it fails with "Section 2 too small" (needs 9x domainSize G1 points). iden3 publishes blake2b hashes while CI pins sha256; both are recorded in FFLONK_BENCHMARK.md. `snarkjs zkey export soliditycalldata` emits ONE flat array (24 proof + 16 signals), not two. The snarkjs fflonk verifier is GPL-3.0 — generate it into `packages/contracts/contracts/bench/` locally and delete it; that directory already contains a tracked Apache file (Groth16VerifierBLS.sol), so never `rm -rf` it.
+- Architecture: AIF-128 references `skills/repfigit-review/SKILL.md` and `repfigit-fleet.yaml` — these files live in the repfigit-loop repo, not clearproof. Same Linear team but different codebase.
+- Patterns: Wrong-repo issues: unassign, remove `agent-ready`, move to Backlog, comment with reason. Do NOT add `blocked` or retry log entry.
+- Gotchas: Gate script error masked this as wrong-repo from the start (REPO_DIR not set); manual classification needed when gate is broken.
+
+## AIF-126 — 2026-08-06 — Wrong-repo skip: repfigit_review.py not in clearproof
+
+- Architecture: AIF-126 references `scripts/lib/repfigit_review.py` and `scripts/repfigit-review-gate.sh` — these files live in the repfigit-loop repo, not clearproof (ZK infrastructure project).
+- Patterns: Wrong-repo issues: comment with reason, unassign (leave `agent-ready`), move to Backlog. Do NOT add `blocked`.
+- Gotchas: No clearproof-specific work available in queue; all unassigned agent-ready issues belong to other repos.
+
+## AIF-145 — 2026-08-17 — Wrong-repo skip: memory-gateway CI failures not in clearproof
+
+- Architecture: AIF-145 references `app.maintenance.detect_and_resolve_contradictions`, `app.auth.bind_workspace_claim`, `tests/test_contradiction_detection.py`, and CI at `github.com/repfigit/memory-gateway` — these are memory-gateway (Python app), not clearproof (ZK circuits + Solidity).
+- Patterns: Wrong-repo issues: comment with reason, unassign, move to Backlog, keep `agent-ready`. Do NOT add `blocked`.
+- Gotchas: Linear issue was already In Progress (started 2026-08-17 00:01:05) — possibly claimed by another builder or manually moved. Unassigned it and moved back to Backlog so the correct builder can pick it up.

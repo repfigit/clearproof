@@ -1,56 +1,28 @@
 # Contributing
 
-## Prerequisites
+The [main repository](https://github.com/repfigit/clearproof) is **public**, verified September 7, 2026. The local adoption pilot is on the unreleased `feat/adoption-pilot-foundation` branch in draft PR #27. Source access does not imply a published package release or production approval.
 
-- Python 3.11+ with [uv](https://docs.astral.sh/uv/)
-- Node.js 20+ with npm
-- circom 2.2.2+
-
-## Setup
+## For contributors with access
 
 ```bash
 git clone https://github.com/repfigit/clearproof.git
 cd clearproof
-uv sync --all-extras
 npm install
-bash scripts/compile_circuits.sh
+uv sync --extra dev
 ```
 
-## Running tests
+Read the applicable `AGENTS.md` instructions before editing. Python uses the deliberate `src.` import prefix. Keep Circom, Python witness builders, TypeScript mappings, contracts and test vectors synchronized for proof-interface changes.
+
+## Checks
 
 ```bash
-uv run pytest tests/ -v              # All Python
-uv run pytest tests/unit/ -v         # Unit only
-uv run pytest tests/integration/ -v  # Integration
-uv run pytest tests/compliance/ -v   # Compliance (sanctions, tiers, revocation)
-npm run build                         # TypeScript type-check
-npm run test:ts                       # TypeScript tests
-cd packages/contracts && npx hardhat test  # Contracts (46 tests)
+make test
+npm run test:ts
+npm run build
 ```
 
-## Code style
+Run targeted behavior tests and the appropriate integration/contract/circuit checks for the change. Python style is Ruff, line length 120, Python 3.11+. TypeScript is strict.
 
-- **Python**: Ruff (line length 120, target 3.11). Run `make lint` and `make format`.
-- **TypeScript**: Strict mode. Run `npm run build` to type-check all packages.
+Use conventional commit messages and describe the resulting behavior, validation and remaining limitations. Never commit secrets, raw personal data, or development proving keys as production artifacts.
 
-## PR process
-
-1. Branch from `main` with a descriptive name
-2. Write tests for new functionality
-3. Ensure CI passes
-4. Open a PR with a clear description
-
-## Circuit guidelines
-
-- Range-check all private inputs
-- Domain-separate hash functions
-- Verify constraint count after changes
-- Test with edge cases and boundary values
-- Document public signals
-
-## Good first issues
-
-- Test coverage for edge cases
-- SDK error message improvements
-- Documentation improvements
-- CLI commands for common operations
+Current priorities are documented in the repository's adoption pilot plan and summarized on [project status](/docs/status). Report vulnerabilities privately using the [security policy](/docs/security).

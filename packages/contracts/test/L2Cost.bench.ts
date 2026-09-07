@@ -1,4 +1,6 @@
 import hre from "hardhat";
+import { expect } from "chai";
+import { tmpdir } from "os";
 import * as fs from "fs";
 import * as path from "path";
 
@@ -19,7 +21,7 @@ import * as path from "path";
  * repo, so its calldata is *synthesised* at the correct shape and entropy
  * (see `syntheticFflonkCalldata`) and its execution gas is taken from the
  * AIF-86 spike. Both are declared as assumptions in
- * docs/internal/FFLONK_BENCHMARK.md.
+ * docs/internal/FFLONK_L2_COST_MODEL.md.
  *
  * Run:  npx hardhat test test/L2Cost.bench.ts
  * Then: uv run python scripts/l2_cost_model.py --inputs <emitted json>
@@ -27,7 +29,7 @@ import * as path from "path";
 
 const REPO_ROOT = path.resolve(__dirname, "../../..");
 const VECTOR_DIR = path.join(REPO_ROOT, "tests/vectors/compliance");
-const OUT_PATH = process.env.L2_COST_INPUTS || "/tmp/l2-cost-inputs.json";
+const OUT_PATH = process.env.L2_COST_INPUTS || path.join(tmpdir(), "l2-cost-inputs.json");
 
 /** fflonk proofs are 24 field elements; snarkjs emits `bytes32[24] proof`. */
 const FFLONK_PROOF_WORDS = 24;
@@ -84,6 +86,7 @@ function syntheticFflonkCalldata(seed: string, pubSignals: bigint[]): string {
 
 describe("L2 cost inputs: Groth16 execution gas + calldata footprint", function () {
   it("emits per-proof-system gas and calldata for the L2 model", async function () {
+    if (hre.network.name !== "hardhat") throw new Error("This benchmark requires the ephemeral Hardhat network");
     if (!fs.existsSync(path.join(VECTOR_DIR, "proof.json"))) {
       this.skip();
       return;
@@ -109,6 +112,7 @@ describe("L2 cost inputs: Groth16 execution gas + calldata footprint", function 
     // estimateGas on a view function meters it as a transaction, so this is
     // intrinsic (21k + calldata) + execution — the number an L2 charges at
     // the L2 gas price. The model subtracts nothing; it adds the L1 term.
+    expect(await verifier.verifyProof(pA, pB, pC, pubSignals)).to.equal(true);
     const groth16Gas = await verifier.verifyProof.estimateGas(pA, pB, pC, pubSignals);
 
     const groth16Calldata = verifier.interface.encodeFunctionData("verifyProof", [

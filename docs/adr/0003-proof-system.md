@@ -1,136 +1,44 @@
-# ADR 0003: Proof System Selection (Groth16 vs Noir/UltraHonk)
+# Proof system selection: Groth16 for the local pilot
 
-## Status
+Status: retained implementation choice; production assurance is not established.
 
-Accepted (2026-07-28)
+This document records the proof-system choice. The separate
+[authenticated-credential ADR 0003](0003-authenticated-pilot-credentials.md)
+describes what the pilot credential proves.
 
-## Context
+The current adoption pilot uses Circom, snarkjs and Groth16 over BN254. Its
+Python verifier and Solidity `PilotGroth16Verifier` check the same eight-signal
+`pilot-transfer-v2` statement. The current profile binds the exact credential,
+transfer projection and approved roots; it does not prove arbitrary legal or
+business-policy compliance. See [ADR 0009](0009-credential-bound-pilot-profile.md)
+and the [current registry trust boundary](../internal/PILOT_CURRENT_REGISTRY.md).
 
-Clearproof's ZK compliance circuit proves FATF Travel Rule compliance without revealing PII. The circuit has been implemented in Circom targeting Groth16 proofs over BN254 (and optionally BLS12-381).
+Keeping this proof system allows the pilot to exercise one implemented statement
+through witness generation, real pairing, durable authorization and contract
+receipt mirroring. A migration would require a new versioned circuit/profile,
+artifact approval path and matching cross-runtime acceptance evidence. The local
+pilot does not implement or validate a Noir/UltraHonk alternative.
 
-The per-circuit MPC trusted-setup ceremony required by Groth16 is the project's #1 production blocker. Every circuit change requires a new multi-party ceremony (6-12 months, $100k+), which severely limits iteration speed during the development phase.
+The [older benchmark note](../internal/NOIR_BENCHMARK.md) is historical exploratory
+material, not a current release benchmark. Earlier ceremony duration/cost,
+provider-service, gas-price and migration-timeline estimates in this ADR lacked
+sufficient evidence and must not be used for budget, schedule or production claims.
+A new comparison should measure equivalent statements with pinned toolchains and
+report its actual environment, artifact provenance and verification scope.
 
-Noir/UltraHonk offers an alternative: a universal setup (one-time ceremony shared by all circuits) that eliminates the per-circuit ceremony requirement. The tradeoff is higher on-chain verification gas costs.
+Development proving keys and self-generated manifests are explicitly unapproved.
+Successful local proofs do not establish an audited setup or independent security
+assurance. Production authorization remains gated on independent review, closed
+findings, a documented approved setup/artifact path and deployment operations.
+No production ceremony, provider engagement, launch date or chain deployment is
+scheduled or authorized by this document.
 
-This ADR evaluates whether to migrate from Groth16 to Noir/UltraHonk based on benchmark data collected in a spike (see `docs/internal/NOIR_BENCHMARK.md`).
+Use the [local acceptance workflow](../operations/local-pilot-acceptance.md) for
+reproducible development evidence and the
+[adoption plan](../plans/2026-09-05-adoption-pilot-implementation.md) for the
+separate F5 production gate. The legacy BLS12-381 exploration is described in
+[its own ADR](0002-bls12381-migration.md); it is not the current pilot profile.
 
-## Decision
-
-**Stay with Groth16 (BN254).** Do not migrate to Noir/UltraHonk at this time.
-
-### Go/No-Go Criteria
-
-The go threshold was: on-chain verification gas ≤ 2× Groth16 baseline.
-
-| System | Verify Gas | Ratio to Groth16 BN254 |
-|--------|-----------|----------------------|
-| Groth16 BN254 | 341,504 | 1.0× (baseline) |
-| Groth16 BLS12-381 | 363,588 | 1.06× |
-| Noir/UltraHonk (estimated) | 1,500,000 - 3,000,000 | 4.4× - 8.8× |
-
-UltraHonk exceeds the 2× threshold by 2-4×. **No-go.**
-
-### L2 addendum (2026-08-02, AIF-99)
-
-**The table above is an L1 table and should not be read as an L2 table.** On a
-rollup, total cost is execution gas *plus* an L1 data-availability charge that
-scales with the compressed size of the transaction, so proof size is a
-recurring cost the gas column does not capture. `docs/internal/FFLONK_BENCHMARK.md`
-measures this for Base, OP Mainnet and Arbitrum One.
-
-Two findings that bear on this ADR:
-
-1. **The ranking survives, because verification is execution-heavy.** A
-   341k-gas pairing check amortises a few hundred extra DA bytes against a
-   large execution cost — unlike a 21k-gas transfer, where DA dominates. At
-   fees observed on 2026-08-02 the DA term is 0–2% of total cost on all three
-   chains, and gas ranking and total-cost ranking agree.
-
-2. **The margin is thinner on cheap-gas L2s, and post-Fusaka it is coupled to
-   L1 fees.** Since EIP-7918 the blob base fee is pinned to a reserve floor
-   derived from the L1 execution base fee, so an L1 fee recovery now raises
-   rollup DA costs where previously it did not. For the fflonk comparison the
-   crossover on OP Mainnet is an L1 base fee of ~1.7 gwei — below where L1 sat
-   for most of 2025.
-
-Consequence for the mitigation "L2 deployment (gas costs are lower on L2s, may
-change the calculus)" below: **it does not change the calculus for UltraHonk.**
-Larger proofs pay the DA penalty on every verification on every L2, so a 2–3 KB
-UltraHonk proof compounds its execution-gas penalty rather than escaping it.
-The no-go is strengthened, not softened, by L2 deployment.
-
-## Consequences
-
-### Positive
-
-- **Low on-chain gas cost** (341k gas, ~$3-4 per proof at 10 gwei)
-- **Mature, audited tooling** (Circom + snarkjs, multiple production deployments)
-- **Small proof size** (256 bytes)
-- **Established ceremony infrastructure** (PSE, Hermez)
-
-### Negative
-
-- **Per-circuit ceremony required** for every circuit change (6-12 months, $100k+)
-- **Slow iteration** during development phase
-- **Ceremony coordination overhead** (trusted participants, public verification)
-
-### Mitigations
-
-1. **Stabilize the circuit before ceremony.** The compliance circuit is relatively mature. Finalize the signal interface, run the full audit, then proceed with ceremony.
-
-2. **Use a ceremony-as-a-service provider.** PSE and Hermez offer turnkey ceremony coordination, reducing operational burden.
-
-3. **Plan for a single ceremony.** Design the circuit to accommodate foreseeable compliance rule changes (new jurisdictions, threshold adjustments) without structural changes that would require re-compilation.
-
-4. **Re-evaluate in 12-18 months.** Monitor UltraHonk development:
-   - EIP-7849 precompile finalization
-   - Gas cost optimization (target: <2× Groth16)
-   - Noir ecosystem maturity (Poseidon library, production audits)
-   - L2 deployment — gas costs are lower on L2s, but see the L2 addendum
-     above: larger proofs pay an L1 data-availability charge on every L2
-     verification, so L2 does not rescue a proof system that lost on size
-
-## Alternatives Considered
-
-### 1. PLONK (universal setup, moderate gas)
-
-PLONK offers a universal setup with lower gas than UltraHonk (~500k-700k gas), but:
-- Still 1.5-2× Groth16 gas
-- Less mature proving infrastructure than UltraHonk
-- No clear advantage over Groth16 for this use case
-
-### 2. STARKs (no trusted setup, high gas)
-
-STARKs eliminate the trusted setup entirely but have even higher gas costs than UltraHonk (~5-20M gas). Not viable for on-chain verification.
-
-### 3. Hybrid: Groth16 on-chain, UltraHonk off-chain
-
-Use Groth16 for on-chain verification (low gas) and UltraHonk for off-chain verification (faster proving, no ceremony). This preserves the option to migrate later but adds complexity. Not pursued because:
-- The off-chain verification path already uses Groth16 (snarkjs)
-- Dual proof systems increase maintenance burden
-- No clear benefit until UltraHonk matures
-
-## Implementation Plan
-
-1. **Finalize circuit interface** (Q3 2026)
-   - Lock public signal ordering
-   - Complete audit fixes
-   - Freeze test vectors
-
-2. **Coordinate MPC ceremony** (Q4 2026 - Q1 2027)
-   - Select ceremony provider (PSE or Hermez)
-   - Recruit 50-100 trusted participants
-   - Run ceremony (2-4 weeks)
-   - Publish verification keys
-
-3. **Deploy verifier contracts** (Q1 2027)
-   - Deploy Groth16Verifier to Ethereum mainnet + L2s
-   - Integrate with ComplianceRegistry
-   - Run end-to-end tests
-
-## References
-
-- [Noir Benchmark Results](../internal/NOIR_BENCHMARK.md)
-- [ADR 0002: BLS12-381 Migration](./0002-bls12381-migration.md)
-- [UltraHonk Paper](https://aztec.network/blog/ultra-honk)
-- [EIP-7849: UltraHonk Precompile](https://eips.ethereum.org/EIPS/eip-7849)
+A separate [historical L2 cost model](../internal/FFLONK_L2_COST_MODEL.md) explores
+fee sensitivity for the legacy 16-signal profile. Its assumptions and older fee
+snapshot do not determine the current eight-signal pilot choice.

@@ -7,80 +7,59 @@ cli-topic: circuits
 
 # Circuits
 
-clearproof uses **Circom 2.1.6** with **Groth16** proving. The main circuit composes four subcircuits into a single proof with **16 public signals** and ~31K constraints.
+The current circuit uses Circom/Groth16. CI compiles with circom **2.2.2**. Constraint counts and performance depend on the exact source, compiler and artifacts; this page does not state a current benchmark.
+
+These are unaudited development components. See [security](/docs/security).
 
 ## Circuit hierarchy
 
-```mermaid
-graph TD
-    CP["ComplianceProof(20, 10)<br/>~31K constraints total"]
-    CP --> SNM["SanctionsNonMembership(20)<br/>~18K constraints"]
-    CP --> CV["CredentialValidity(10)<br/>~8K constraints"]
-    CP --> AT["AmountTier()<br/>~3K constraints"]
-    CP --> DB["Domain binding + expiration<br/>~2K constraints"]
+```text
+ComplianceProof(20, 10)
+├── SanctionsNonMembership(20)
+├── CredentialValidity(10)
+└── AmountTier()
 ```
 
-- **20** = sanctions tree depth (supports ~1M entries)
-- **10** = issuer tree depth (supports ~1K issuers)
+The main circuit also carries transfer, domain and expiry signals. Some acceptance properties are enforced by the registry rather than inside the circuit.
 
 ## Public signals
 
-All 16 signals are public outputs. No private data is revealed.
+The current schema has two outputs and fourteen public inputs, appearing as sixteen values in the verification interface. They are public metadata, not automatically anonymous data.
 
-| # | Signal | Type | Description |
-|---|--------|------|-------------|
-| 0 | `is_compliant` | bool | 1 if all checks passed |
-| 1 | `sar_review_flag` | bool | 1 if amount tier >= 3 (advisory only) |
-| 2 | `sanctions_root` | field | Merkle root of the sanctions list |
-| 3 | `issuer_root` | field | Merkle root of trusted issuers |
-| 4 | `amount_tier` | uint | Claimed amount tier (1-4) |
-| 5 | `transfer_timestamp` | uint64 | When the transfer was initiated |
-| 6 | `jurisdiction_code` | uint16 | ISO 3166-1 alpha-2 encoded as big-endian integer (e.g., "US" -> 0x5553 -> 21843) |
-| 7 | `credential_commitment` | field | Poseidon hash of the credential |
-| 8 | `tier2_threshold` | uint | Tier 2 amount threshold |
-| 9 | `tier3_threshold` | uint | Tier 3 amount threshold |
-| 10 | `tier4_threshold` | uint | Tier 4 amount threshold |
-| 11 | `domain_chain_id` | uint | EVM chain ID for replay protection |
-| 12 | `domain_contract_hash` | field | keccak256 of the ComplianceRegistry address, reduced mod BN128 scalar field |
-| 13 | `transfer_id_hash` | field | Hash of the unique transfer ID |
-| 14 | `credential_nullifier` | field | Prevents credential double-use |
-| 15 | `proof_expires_at` | uint64 | Proof expiration timestamp |
+| Index | Signal |
+| --- | --- |
+| 0 | `is_compliant` |
+| 1 | `sar_review_flag` |
+| 2 | `sanctions_tree_root` |
+| 3 | `issuer_tree_root` |
+| 4 | `amount_tier` |
+| 5 | `transfer_timestamp` |
+| 6 | `jurisdiction_code` |
+| 7 | `credential_commitment` |
+| 8–10 | `tier2_threshold`, `tier3_threshold`, `tier4_threshold` |
+| 11 | `domain_chain_id` |
+| 12 | `domain_contract_hash` |
+| 13 | `transfer_id_hash` |
+| 14 | `credential_nullifier` |
+| 15 | `proof_expires_at` |
+
+Public-signal changes require coordinated updates to the circuit, SDKs, contracts and fixtures. Jurisdiction is encoded from the two-letter code as a big-endian integer, such as `US` → 21843.
 
 ## Sanctions non-membership
 
-Proves a wallet hash is **not** in the sanctions Merkle tree using a sorted-tree gap proof:
+The sorted-tree gap construction uses neighboring leaves and Merkle paths to check that the queried value lies between them. Adjacency is derived from path bits and compared values are range-checked.
 
-1. Prover provides two adjacent leaves `(left, right)` such that `left < wallet_hash < right`
-2. Circuit verifies both leaves are in the tree via Merkle membership proofs
-3. Circuit range-checks all values to 252 bits (prevents field overflow attacks)
-4. Adjacency is derived from path bits (audit fix), not asserted by the prover
-
-The tree uses **Poseidon hashing** with domain tag `1` for leaves.
-
-**Boundary sentinels**: The tree includes `0` and `2^252 - 1` as permanent entries, ensuring a gap always exists for any non-sanctioned address.
+This establishes a fact about the supplied tree. Authenticity, completeness and freshness of the screening source, and binding the queried wallet to the real transfer, are separate requirements.
 
 ## Credential validity
 
-Proves the originator holds a valid zkKYC credential:
-
-- **Commitment verification**: Poseidon hash of credential fields matches the public commitment
-- **Expiry check**: `expires_at > current_timestamp`
-- **Issuer membership**: Credential issuer is in the trusted issuer Merkle tree (domain tag `2`)
-- **Jurisdiction match**: Credential jurisdiction matches the claimed jurisdiction
-- **KYC tier validation**: Credential tier is sufficient for the transfer
-
-Range checks: 16-bit jurisdiction, 2-bit tier, 64-bit timestamps.
+The current construction checks a credential commitment preimage, expiry relative to the transfer timestamp and issuer membership. Issuer membership alone does not authenticate an actually issued credential. Stronger subject, jurisdiction, holder and issuance binding is planned.
 
 ## Amount tier
 
-Proves the transfer amount falls in the claimed tier without revealing the exact amount:
+The circuit compares an amount against three ordered public thresholds and checks the claimed tier. The verifier must authenticate the thresholds and the meaning/units of the amount.
 
-- Tier 1: `amount < tier2_threshold`
-- Tier 2: `tier2_threshold <= amount < tier3_threshold`
-- Tier 3: `tier3_threshold <= amount < tier4_threshold`
-- Tier 4: `amount >= tier4_threshold`
-
-Thresholds are public inputs (not hardcoded) so jurisdictions can set their own values. The `sar_review_flag` is set to `1` when `amount_tier >= 3` -- this is advisory only.
+The current `sar_review_flag` is a public tier-derived advisory output. It is not a suspicious-activity determination or filing instruction. Confidential advisory handling needs a coordinated proof-version change.
 
 ## Compiling
 
@@ -88,4 +67,4 @@ Thresholds are public inputs (not hardcoded) so jurisdictions can set their own 
 bash scripts/compile_circuits.sh
 ```
 
-> **Warning:** The `MerkleNonMembership` template in `lib/merkle_tree.circom` is **deprecated**. Use `SanctionsNonMembership` from `sanctions_nonmembership.circom` instead.
+This requires the appropriate local toolchain and Powers of Tau input. Development setup artifacts are not production keys. Use `SanctionsNonMembership`; the legacy free-input `MerkleNonMembership` helper has been removed.

@@ -1,0 +1,152 @@
+[
+  {
+    "path": "vasp.did",
+    "value": "did:web:other.example",
+    "error": "invalid"
+  },
+  {
+    "path": "vasp.did",
+    "value": "did:web:beneficiary.example:other",
+    "error": "invalid"
+  },
+  {
+    "path": "version",
+    "value": "0.3.0",
+    "error": "unsupported"
+  },
+  {
+    "path": "version",
+    "value": "0.2.0",
+    "error": "unsupported"
+  },
+  {
+    "path": "clearproof.supportedVersions",
+    "value": [
+      "0.3.0"
+    ],
+    "error": "unsupported"
+  },
+  {
+    "path": "clearproof.supportedVersions",
+    "value": [],
+    "error": "invalid"
+  },
+  {
+    "path": "clearproof.hpkeKeyPurpose",
+    "value": "signing",
+    "error": "invalid"
+  },
+  {
+    "path": "clearproof.hpkeKeyId",
+    "value": "wrong-key",
+    "error": "invalid"
+  },
+  {
+    "path": "clearproof.hpkePublicKey",
+    "value": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=",
+    "error": "invalid"
+  },
+  {
+    "path": "clearproof.hpkePublicKey",
+    "value": "_wAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=",
+    "error": "invalid"
+  },
+  {
+    "path": "clearproof.hpkePublicKey",
+    "value": "age1counterparty",
+    "error": "invalid"
+  },
+  {
+    "path": "clearproof.hpkePublicKey",
+    "value": null,
+    "error": "invalid"
+  },
+  {
+    "path": "clearproof.hpkeSuites",
+    "value": [
+      "unknown-suite"
+    ],
+    "error": "unsupported"
+  },
+  {
+    "path": "clearproof.hpkeSuites",
+    "value": null,
+    "error": "invalid"
+  },
+  {
+    "path": "clearproof.endpoint",
+    "value": "http://beneficiary.example/clearproof",
+    "error": "invalid"
+  },
+  {
+    "path": "clearproof.endpoint",
+    "value": "https://127.0.0.1/clearproof",
+    "error": "invalid"
+  },
+  {
+    "path": "clearproof.endpoint",
+    "value": "https://other.example/clearproof",
+    "error": "invalid"
+  },
+  {
+    "path": "clearproof.endpoint",
+    "value": "https://beneficiary.example@other.example/clearproof",
+    "error": "invalid"
+  },
+  {
+    "path": "clearproof.endpoint",
+    "value": "https://beneficiary.example/clearproof#fragment",
+    "error": "invalid"
+  },
+  {
+    "path": "clearproof.endpoint",
+    "value": "https://beneficiary.example/clearproof?query=1",
+    "error": "invalid"
+  },
+  {
+    "path": "clearproof.endpoint",
+    "value": "https://beneficiary.example/clearproof\n",
+    "error": "invalid"
+  },
+  {
+    "path": "clearproof.supportedChains",
+    "value": [
+      true
+    ],
+    "error": "invalid"
+  },
+  {
+    "path": "clearproof.supportedChains",
+    "value": [
+      1,
+      1
+    ],
+    "error": "invalid"
+  },
+  {
+    "path": "clearproof.supportedChains",
+    "value": [
+      0
+    ],
+    "error": "invalid"
+  },
+  {
+    "path": "clearproof.supportedChains",
+    "value": [
+      9007199254740992
+    ],
+    "error": "invalid"
+  },
+  {
+    "path": "clearproof.proofFormat",
+    "value": "unknown",
+    "error": "unsupported"
+  },
+  {
+    "path": "clearproof.supportedChains",
+    "value": [
+      1.5
+    ],
+    "error": "invalid"
+  }
+]

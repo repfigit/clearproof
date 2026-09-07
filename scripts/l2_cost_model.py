@@ -1,9 +1,15 @@
 #!/usr/bin/env python3
+# SPDX-FileCopyrightText: 2022 The go-ethereum Authors
+# SPDX-FileCopyrightText: 2026 clearproof contributors
+# SPDX-License-Identifier: LGPL-3.0-or-later
+# FastLZ port: op-geth 647c346e2bef36219cc7b47d76b1cb87e7ca29e4/core/types/rollup_cost.go
 """
 Price a compliance-proof verification on L2: execution gas *plus* the L1
 data-availability charge (AIF-99).
 
-ADR 0003's gas table is an L1 table. On a rollup the L1 DA term is a separate,
+This historical model uses the legacy 16-signal profile and dated assumptions.
+It does not estimate the current pilot or fetch current network fees.
+The earlier ADR 0003 gas table was an L1 table. On a rollup the L1 DA term is a separate,
 often dominant, cost and it scales with the *compressed size of the signed
 transaction* — which is exactly where fflonk loses: 24 proof words against
 Groth16's 8, i.e. 512 extra high-entropy (incompressible) bytes on every
@@ -289,9 +295,8 @@ def breakeven_l1_base_fee_gwei(
 ) -> float | None:
     """L1 execution base fee at which `challenger` stops being cheaper.
 
-    Post-Fusaka this is the honest way to state the risk: blob price is pinned
-    to the L1 base fee, so both terms of the OP Stack fee move together and
-    a single observable number decides the ranking.
+    This scenario couples blob and L1 fees at the explicitly assumed ratio.
+    The threshold is conditional on that assumption, not a network forecast.
     """
 
     def cheaper(l1_gwei: float) -> bool:
@@ -358,8 +363,8 @@ def markdown(systems: list[ProofSystem], chains: list[Chain], regimes: list[FeeR
     lines.append("")
     lines.append(
         f"How far L1 fees have to move before {systems[-1].name} stops being "
-        f"cheaper than {systems[0].name}. Blob base fee and L1 execution base "
-        f"fee move together post-Fusaka, so the second column is the one to watch."
+        f"cheaper than {systems[0].name}. This scenario couples blob base fee and L1 execution base "
+        f"fee at an assumed fixed ratio; the thresholds are conditional."
     )
     lines.append("")
     lines.append("| Chain | Breakeven blob base fee | Breakeven L1 base fee | Headroom vs observed |")
@@ -468,12 +473,9 @@ CHAINS = [
 
 ETH_USD = 1864.0  # Coinbase spot, 2026-08-02
 
-# Since Fusaka (2025-12-03) EIP-7918 pins the blob base fee to a reserve floor
-# derived from the L1 execution base fee, and blob space has been structurally
-# under-contended ever since — so in practice the blob price *is* that floor.
-# The old "blobs sit at 1 wei regardless of L1" regime no longer exists.
-# Observed ratio is ~1/17 rather than the spec's 1/16, which lagged L1Block
-# reads would explain.
+# Historical sensitivity scenario: assume a fixed blob/L1 base-fee ratio.
+# This is not a protocol identity and does not model independent blob demand.
+# Resample independent fees and chain parameters before using estimates.
 BLOB_FEE_L1_DIVISOR = 17
 
 
@@ -498,8 +500,7 @@ REGIMES = [
     FeeRegime("Observed 2026-08-02", 0.0425, 2_400_000, ETH_USD),
     # L1 demand recovering to 2025 levels.
     regime_at_l1("L1 at 2 gwei", 2.0),
-    # A sustained L1 spike. Pre-Fusaka this left blob costs untouched; it no
-    # longer does, which is what puts the ranking at risk at all.
+    # A higher-fee scenario with the same assumed blob/L1 coupling.
     regime_at_l1("L1 at 20 gwei", 20.0),
 ]
 

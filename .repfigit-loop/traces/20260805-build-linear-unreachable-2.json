@@ -1,0 +1,1 @@
+{"skill": "repfigit-build", "ranAt": "2026-08-05T00:00:00Z", "outcome": "no-work", "issueId": null, "prNumber": 0, "failureCategory": "none", "humanInterventions": 0, "toolCalls": 7, "verdictCycles": 0, "notes": "Linear MCP unreachable — no work possible. No-op pass."}

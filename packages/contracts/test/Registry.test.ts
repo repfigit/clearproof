@@ -1,3 +1,4 @@
+import { routeVerifier } from "./helpers/verifier";
 import { expect } from "chai";
 import { ethers } from "hardhat";
 import { time } from "@nomicfoundation/hardhat-network-helpers";
@@ -225,9 +226,11 @@ describe("ComplianceRegistry (extended)", function () {
     const sanctionsOracle = await SanctionsOracle.deploy(admin.address, initialRoot, 50);
     await sanctionsOracle.waitForDeployment();
 
+    const { router, selector } = await routeVerifier(await verifier.getAddress());
     const Registry = await ethers.getContractFactory("ComplianceRegistry");
     const registry = await Registry.deploy(
-      await verifier.getAddress(),
+      await router.getAddress(),
+      selector,
       await vaspRegistry.getAddress(),
       await sanctionsOracle.getAddress(),
       250,
@@ -331,9 +334,11 @@ describe("Integration: Full Flow", function () {
     const sanctionsOracle = await SanctionsOracle.deploy(admin.address, initialRoot, 10);
     await sanctionsOracle.waitForDeployment();
 
+    const { router, selector } = await routeVerifier(await verifier.getAddress());
     const Registry = await ethers.getContractFactory("ComplianceRegistry");
     const registry = await Registry.deploy(
-      await verifier.getAddress(),
+      await router.getAddress(),
+      selector,
       await vaspRegistry.getAddress(),
       await sanctionsOracle.getAddress(),
       250,

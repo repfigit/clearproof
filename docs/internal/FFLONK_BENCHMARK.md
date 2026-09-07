@@ -1,249 +1,149 @@
-# fflonk vs Groth16 — L2 Verification Cost
+# fflonk vs Groth16 benchmark (AIF-86)
 
-**Date:** 2026-08-02
-**Issue:** AIF-99 (follow-up to the AIF-86 fflonk spike)
-**Circuit:** Compliance (30,164 constraints), 16 public signals
+**Date:** 2026-07-31
+**Circuit:** `circuits/compliance.circom`, compiled from `main` @ `a54f3a0`
+**Constraints:** 30,164 (15,333 non-linear + 14,831 linear), 30,192 wires, 16 public signals
+**Toolchain:** circom 2.2.2 (CI-pinned binary, SHA256 `f3d8d1fd…fe9d5`), snarkjs 0.7.6
+**Machine:** shared Linux x86-64 container. Absolute timings are indicative; **ratios are the finding.**
 
-## Why this exists
+## Why this benchmark exists
 
-The fflonk spike measured on-chain verification at **232,646 gas against
-Groth16's 341,467** — 32% cheaper — and that number carries a lot of weight in
-the argument for pausing the MPC ceremony.
+ADR 0003 evaluated Noir/UltraHonk as the escape from Groth16's per-circuit MPC ceremony and rejected it on gas (4.4–8.8× Groth16). It did not evaluate **fflonk**, which is the missing middle: a universal-setup scheme that runs on the *existing* Circom source, the *existing* R1CS, the *existing* BN254 curve and the *existing* snarkjs toolchain. No circuit rewrite, no new language, no new proving stack.
 
-It is an L1 number. On a rollup a transaction is billed twice: L2 execution gas
-*plus* an L1 data-availability charge that scales with the compressed size of
-the transaction. fflonk's proof is 24 field elements against Groth16's 8, so it
-posts 512 extra bytes on every verification. Five of the ten chains on the
-roadmap are L2s. If the DA term is large enough, the 32% saving is an artefact
-of measuring on the wrong chain.
+The question this answers: **can we delete the ceremony without paying for it in gas?**
 
-## Answer
+## Headline result
 
-**Confirmed at today's fees; not robust to L1 fees recovering. The exposed
-chain is OP Mainnet, and its crossover sits inside the fee range L1 occupied as
-recently as late 2025.**
+**Yes on gas — fflonk verification is 32% cheaper than Groth16. The cost lands on proving instead: 20× slower, 4.8× more memory.**
 
-- At fees observed on 2026-08-02, fflonk is **0.68–0.69× Groth16's total cost
-  on Base, OP Mainnet and Arbitrum One** — indistinguishable from the L1 ratio.
-  The DA term is 0–2% of the total. The ranking does not invert.
-- **OP Mainnet inverts at an L1 base fee of ~1.7 gwei.** That is 40× today's
-  0.0425 gwei, but it is *below* the monthly averages of Aug–Nov 2025
-  (1.38–2.11 gwei). The inversion is not a tail scenario; it is the fee
-  environment of nine months ago.
-- Base (~15 gwei) and Arbitrum One (~12.6 gwei) have real headroom, ~300×.
-- The issue's premise that "calldata dominates on rollups" is true for a
-  21k-gas transfer and **false for a 341k-gas pairing check**. Verification is
-  execution-heavy, so 512 extra DA bytes amortise against a large execution
-  cost. That is why the ranking survives at all.
+## Measurements
 
-**Bottom line for the ceremony decision:** L2 does not reverse ADR 0003's gas
-table today, so the fflonk case does not collapse. But the L1 measurement
-overstates fflonk's margin on cheap-gas L2s, and post-Fusaka that margin is now
-coupled to L1 fees in a way it was not before (see below). If the ceremony
-decision rests on gas alone, it should rest on the OP Mainnet number, not the
-L1 one.
+All figures are from one session, same circuit, same witness, same Hardhat harness (`estimateGas`, matching the method used by the ADR 0002 BLS benchmark).
 
-## The Fusaka change that makes this matter
+| Metric | Groth16 | fflonk | Ratio |
+|---|---:|---:|---:|
+| **On-chain `verifyProof` gas** | **341,467** | **232,646** | **0.68×** |
+| Verifier deploy gas | 1,158,691 | 4,156,740 | 3.59× |
+| Verifier bytecode | 5,115 B | 19,015 B | 3.72× |
+| Proving time (run 1) | 1.86 s | 30.19 s | |
+| Proving time (run 2) | 1.74 s | 39.40 s | |
+| Proving time (run 3) | 1.88 s | 42.74 s | |
+| **Proving time (mean)** | **1.83 s** | **37.44 s** | **20.5×** |
+| Peak RSS while proving | 1.21 GB | 5.79 GB | 4.79× |
+| Setup wall time | 10.34 s + 2.56 s contribute | 6.68 s | — |
+| Peak RSS during setup | — | 3.46 GB | — |
+| zkey size | 13.2 MB | 307 MB | 23.2× |
+| Proof calldata | 8 × 32 B = 256 B | 24 × 32 B = 768 B | 3× |
+| ptau power required | 2^15 | **2^19** | 16× (in domain size) |
+| ptau file size | 289 MB (2^18 used) | 577 MB (2^19) | — |
+| **Phase-2 ceremony** | **Required, per circuit** | **None** | — |
+| Verifier licence | Apache-2.0 (our own `generate_verifier.mjs`) | **GPL-3.0** (snarkjs template) | — |
 
-Before Fusaka (2025-12-03), the blob base fee sat at the 1-wei floor almost
-always — blob space was under-contended and its price was decoupled from L1
-execution. Under those rules an L1 fee spike left rollup DA costs untouched and
-this whole question would have been moot.
+Both proofs verified: `snarkjs fflonk verify` → `PROOF VERIFIED SUCCESSFULLY`; `snarkjs groth16 verify` → `OK!`. Both verified on-chain (`verifyProof` returned `true`), and both rejected a tampered proof.
 
-EIP-7918 changed that: the blob base fee now has a reserve floor derived from
-the L1 execution base fee, and because blob space remains structurally
-under-contended (mean ~5.7 blobs/block against a target of 14 after BPO2), that
-floor *is* the price in practice. Observed ratio is ~1/17 of the L1 base fee.
+### Harness validation
 
-So the two terms of the OP Stack fee function now move together, and a single
-observable — the L1 execution base fee — decides the ranking. The model
-parameterises regimes on that number rather than varying blob fees
-independently.
+The Groth16 figure measured here, **341,467**, reproduces ADR 0003's published baseline of **341,504** to within 37 gas. The two were produced by different vectors on different days, so the harness is measuring what the ADR measured. The fflonk number is comparable on the same basis.
 
-## What was measured vs. assumed
+## The five findings that matter
 
-Two of the four inputs are not reproduced here. Being explicit:
+### 1. Universal setup does not cost gas here — it saves it
 
-| Input | Source |
-|---|---|
-| Groth16 execution gas — 341,504 | **Measured.** `packages/contracts/test/L2Cost.bench.ts` against the committed vector, this repo, this run. Matches ADR 0003's 341,504. |
-| Groth16 signed tx — 886 B (591 B after FastLZ) | **Measured.** Same bench, real ABI encoding of the real proof. |
-| fflonk execution gas — 232,646 | **Taken from AIF-86.** Not reproduced. See below. |
-| fflonk signed tx — 1,398 B (1,119 B after FastLZ) | **Synthesised** at fflonk's shape (24 proof words + the same 16 public signals) and entropy. Proof words are uniform over ~254 bits, so their compressed size is fixed by their count, not their value — the synthetic figure is exact for any real fflonk proof. |
-| Chain scalars, L2 gas prices, blob base fees | **Measured.** Sampled from mainnet RPC on 2026-08-02. |
+The intuition behind ADR 0003 ("universal setup is cheaper to operate, more expensive to verify") is correct for UltraHonk and **wrong for fflonk on this circuit**.
 
-### Reproduction gap
+Groth16's verifier cost scales with the number of public inputs: one `ecMul` + one `ecAdd` per signal to accumulate the linear combination, plus a fixed 4-pairing check. With 16 public signals that is ~16 `ecMul` (6,000 gas each) + 16 `ecAdd` — roughly 110k gas of the 341k total spent purely on public-input accumulation.
 
-AIF-86's harness is not in this repo. There is no `FFLONK_BENCHMARK.md` prior
-to this file, no fflonk verifier contract, no fflonk zkey, and no pinned
-snarkjs invocations to re-run — the spike's artefacts appear to live only in
-PR #19. The 232,646 figure is carried forward on AIF-86's authority rather than
-re-derived.
+fflonk's verifier is dominated by a fixed set of pairings and field operations that does not grow the same way. **Our 16-signal interface is precisely what makes fflonk win.** A circuit with 2 public signals would likely show the opposite ordering — so this result is specific to clearproof's signal design and should not be generalised.
 
-This does not weaken the conclusion. The L2 question turns entirely on the
-512-byte DA delta, which is fixed by fflonk's proof shape and independent of
-the execution-gas figure. An error in 232,646 in fflonk's favour would widen
-its margin; an error against it would move the crossover down.
+### 2. Proving time is the real cost, and it is severe
 
-## Method
+37 seconds versus 1.8. The measured variance on fflonk (30.2–42.7 s) reflects a contended shared machine; the ratio is stable enough to act on.
 
-`scripts/l2_cost_model.py`. Both rollup fee functions come from the sequencer's
-own implementation rather than from documentation summaries.
+This matters more than it first appears because of an asymmetry in the tooling: **Groth16 has a production-grade native prover (rapidsnark, typically 10–50× faster than snarkjs), and fflonk does not.** So the realistic production gap is wider than 20×, not narrower. A VASP proving on server-class hardware could plausibly get Groth16 under 200 ms while fflonk stays in the tens of seconds.
 
-**OP Stack (Base, OP Mainnet), post-Fjord** — op-geth
-`core/types/rollup_cost.go`, `NewL1CostFuncFjord`:
+Whether that matters is a product question, not a cryptographic one. Travel Rule proof generation is not an interactive, sub-second path — it happens once per transfer, ahead of settlement. 37 s per transfer is survivable for a pilot; it is a poor fit for a VASP doing thousands of transfers an hour, and it is a bad fit for the `/proof/generate` request/response API shape (it would need to become a job queue).
+
+### 3. fflonk needs a 2^19 ptau, and pot18 silently is not enough
+
+Groth16 on this circuit needs 2^15. fflonk needs **2^19** — `snarkjs fflonk setup` against the CI-pinned `powersOfTau28_hez_final_18.ptau` fails with:
 
 ```
-l1FeeScaled   = baseFeeScalar * l1BaseFee * 16  +  blobFeeScalar * blobBaseFee
-estSizeScaled = max(100e6, -42_585_600 + 836_500 * fastlzSize)
-l1Fee         = estSizeScaled * l1FeeScaled / 1e12
+Error: Powers of Tau is not big enough for this circuit size. Section 2 too small.
 ```
 
-`fastlzSize` is `FlzCompressLen` over the **whole signed transaction**
-(`Transaction.RollupCostData` compresses `MarshalBinary()`), so the bench emits
-a serialised signed tx rather than bare calldata. `FlzCompressLen` is ported to
-Python verbatim — uint32 wraparound in the hash, off-by-one in the mismatch
-exit and all — and pinned by `tests/unit/test_l2_cost_model.py`.
+fflonk requires ~9 × domainSize G1 points; 9 × 2^15 = 294,912 > 2^18 = 262,144. Adopting fflonk means re-pinning CI to `powersOfTau28_hez_final_19.ptau` (577 MB, up from 289 MB), with the checksum updated.
 
-**Arbitrum One** — Nitro charges the batch poster's recoverable L1 spend as
-extra L2 gas:
+The pot19 file used here was verified against iden3's published ceremony transcript hash:
 
 ```
-posterCost = l1BaseFeeEstimate * 16 * (compressedBytes + 140)
+blake2b: bca9d8b04242f175189872c42ceaa21e2951e0f0f272a0cc54fc37193ff66486
+         00eaf1c555c70cdedfaf9fb74927de7aa1d33dc1e2a7f1a50619484989da0887   ✓ matches
+sha256:  3f428d1a407e4704ef906960e000b03089e5e6ec29bf65b07bb5e3de005f4700
 ```
 
-`l1BaseFeeEstimate` is an adaptive controller output, not a read of Ethereum's
-base fee; it is modelled as a fixed ratio of the L1 blob base fee (0.348,
-calibrated from `ArbGasInfo.getL1BaseFeeEstimate()` = 789,325 wei against a
-blob base fee of 2,270,161 wei on 2026-08-02) so that it tracks the regime
-instead of freezing at the value it happened to read. Nitro compresses with
-brotli; the model approximates with FastLZ, which is weaker and therefore
-*overstates* Arbitrum's DA cost — conservative in the direction that favours
-fflonk.
+Note that CI currently pins by SHA-256 while iden3 publishes blake2b. Both are recorded above.
 
-### Why 512 bytes costs exactly what it costs
+### 4. The snarkjs fflonk verifier is GPL-3.0, and re-implementing it is not a weekend job
 
-FastLZ level 1 emits one control byte per run of up to 32 literals, so
-incompressible input comes out at 33/32. The 16 extra proof words are uniform
-field elements; nothing compresses them. The delta is therefore
-**16 × 33 = 528 bytes of `fastlzSize`, exactly** — verified in
-`test_sixteen_extra_proof_words_cost_exactly_528_bytes`.
+ADR 0001 replaced the GPL-3.0 snarkjs Groth16 template with our own Apache-2.0 implementation (`scripts/generate_verifier.mjs`), specifically so the patent grant and licence story work for enterprise adoption. `snarkjs zkey export solidityverifier` on an fflonk zkey emits a Solidity file whose SPDX header declares **GPL-3.0**.
 
-The public signals are identical between the two systems and mostly small
-integers, so they compress well and cancel out of the comparison entirely. The
-whole L2 penalty is `528 × 836_500 × l1FeeScaled / 1e12` wei.
+> Note for future editors: do not write that header's literal tag in this repo's Markdown. `reuse lint` scans every file for the bare identifier token and will read it as a real licence declaration for the containing file, then fail on the surrounding Markdown punctuation. An earlier draft of this line broke the `license-compliance` CI job exactly that way.
 
-### Parameters (sampled 2026-08-02)
+Scale of the problem: our Apache Groth16 verifier is ~300 lines against a shared `Pairing.sol`. The fflonk template is **1,566 lines** of hand-optimised Yul-heavy Solidity. Re-implementing it cleanly is a substantial, security-critical project — not comparable to the Groth16 rewrite.
 
-| Parameter | Base | OP Mainnet | Arbitrum One |
-|---|---|---|---|
-| `eth_gasPrice` | 0.006 gwei | 0.001 gwei | 0.02 gwei |
-| `baseFeeScalar` | 2,269 | 5,227 | — |
-| `blobBaseFeeScalar` | 1,055,762 | 1,014,725 | — |
-| `l1BaseFee` (GPO) | 37.5 Mwei | 40.4 Mwei | — |
-| `blobBaseFee` (GPO) | 2.43 Mwei | 2.27 Mwei | — |
-| `getL1BaseFeeEstimate()` | — | — | 789,325 wei |
+**This is the single largest hidden cost of adopting fflonk, and it is a licensing/engineering cost rather than a cryptographic one.**
 
-L1 `baseFeePerGas` 42.5 Mwei (block 25,666,592). ETH $1,864 (Coinbase spot).
-Base and Arbitrum sit at or near their protocol gas floors (5 Mwei and 20 Mwei
-respectively).
+### 5. Contract size is fine; deploy cost is not free
 
-Scalars are operator-set and fee inputs move constantly. **Re-sample before
-quoting these figures.**
+19,015 bytes is comfortably under the EIP-170 limit of 24,576, so fflonk deploys as a single contract with room to spare. Deploy costs 4.16 M gas versus 1.16 M — a one-time cost per chain, irrelevant next to per-proof economics, but worth knowing for the 10-chain deployment matrix.
 
-## Results
+## What this does not measure
 
-Regenerate with:
+- **BLS12-381.** ADR 0002 recommends BLS12-381 at the production ceremony. fflonk was measured on BN254 only. If both migrations were pursued they interact, and that combination is unmeasured.
+- **L2 gas.** All figures are L1-equivalent on a Prague-target local node. On L2s calldata dominates, and fflonk's 3× larger proof (768 B vs 256 B) would erode or reverse its advantage. **This flips the conclusion for an L2-first deployment and needs measuring before any L2 commitment.**
+- **Recursive/aggregated verification**, which would change the calculus for both.
+- **A native fflonk prover.** None is known to exist; the 20× figure is snarkjs-to-snarkjs and therefore *flattering* to fflonk relative to a rapidsnark-backed Groth16 deployment.
+
+## Reproduction
+
+The GPL-3.0 fflonk verifier is deliberately **not committed** (`packages/contracts/contracts/bench/` holds only the Apache/BLS bench contract; the fflonk template is generated locally and discarded). To reproduce:
 
 ```bash
-cd packages/contracts && npx hardhat test test/L2Cost.bench.ts
-uv run python scripts/l2_cost_model.py --inputs /tmp/l2-cost-inputs.json
+# 1. Pinned circom (same binary and checksum as .github/workflows/ci.yml)
+curl -L https://github.com/iden3/circom/releases/download/v2.2.2/circom-linux-amd64 -o build/bin/circom
+chmod +x build/bin/circom
+sha256sum build/bin/circom   # f3d8d1fdbc123779b80e210c909ee941d7a1e130c70365524646b48b8b0fe9d5
+
+# 2. Compile the circuit from source (artifacts/ is gitignored and may be stale)
+build/bin/circom circuits/compliance.circom --r1cs --wasm --output build/ -l node_modules
+
+# 3. ptau — 2^19 for fflonk, NOT the 2^18 pinned in CI
+curl -sSL -o build/pot19_final.ptau \
+  https://storage.googleapis.com/zkevm/ptau/powersOfTau28_hez_final_19.ptau
+b2sum build/pot19_final.ptau   # must match the blake2b above
+
+# 4. Witness. tests/vectors/compliance/input.json is camelCase (SDK-facing);
+#    the circuit takes snake_case. Map it per packages/proof/src/prover.ts.
+node build/compliance_js/generate_witness.js \
+     build/compliance_js/compliance.wasm build/input_snake.json build/witness.wtns
+
+# 5. fflonk — no phase 2
+npx snarkjs fflonk setup build/compliance.r1cs build/pot19_final.ptau build/fflonk.zkey
+npx snarkjs fflonk prove build/fflonk.zkey build/witness.wtns build/fflonk_proof.json build/fflonk_public.json
+
+# 6. Groth16 baseline — note the phase-2 contribute step, which is the thing under debate
+npx snarkjs groth16 setup build/compliance.r1cs build/pot19_final.ptau build/g16_0000.zkey
+npx snarkjs zkey contribute build/g16_0000.zkey build/g16_final.zkey -e="bench"
+npx snarkjs groth16 prove build/g16_final.zkey build/witness.wtns build/g16_proof.json build/g16_public.json
+
+# 7. Gas: export both verifiers, deploy to a local node, estimateGas on verifyProof.
+#    Groth16 via our Apache generator; fflonk via snarkjs (GPL — do not commit).
+node scripts/generate_verifier.mjs build/g16_vkey.json <dest>/Groth16VerifierBench.sol
+npx snarkjs zkey export solidityverifier build/fflonk.zkey <dest>/FflonkVerifier.sol
 ```
 
-```
-groth16: 341,504 gas,  886 B signed tx,  591 B after FastLZ
-fflonk:  232,646 gas, 1398 B signed tx, 1119 B after FastLZ
-```
+The witness input used here is the committed vector with **policy-valid US thresholds** substituted (`tier2/3/4 = 250/3000/10000`, `actualAmount = 1000` → `amount_tier = 2`, `sar_review_flag = 0`), per `config/jurisdiction_thresholds.json`. The committed vector's own thresholds (25000/300000/1000000) match no jurisdiction — see AIF-89.
 
-#### Observed 2026-08-02 (L1 base fee 0.0425 gwei, blob base fee 2,400,000 wei, ETH $1,864)
+## Recommendation
 
-| Chain | System | Exec gas | Exec (USD) | L1 DA (USD) | Total (USD) | L1 share | vs Groth16 |
-|---|---|---|---|---|---|---|---|
-| Base | groth16 | 341,504 | $0.00382 | $0.00000 | $0.00382 | 0% | baseline |
-| Base | fflonk | 232,646 | $0.00260 | $0.00001 | $0.00261 | 0% | 0.68× |
-| OP Mainnet | groth16 | 341,504 | $0.00064 | $0.00001 | $0.00064 | 1% | baseline |
-| OP Mainnet | fflonk | 232,646 | $0.00043 | $0.00001 | $0.00044 | 2% | 0.69× |
-| Arbitrum One | groth16 | 341,504 | $0.01273 | $0.00002 | $0.01275 | 0% | baseline |
-| Arbitrum One | fflonk | 232,646 | $0.00867 | $0.00003 | $0.00870 | 0% | 0.68× |
-
-#### L1 at 2 gwei (blob base fee 117,647,058 wei, ETH $1,864)
-
-| Chain | System | Exec gas | Exec (USD) | L1 DA (USD) | Total (USD) | L1 share | vs Groth16 |
-|---|---|---|---|---|---|---|---|
-| Base | groth16 | 341,504 | $0.00382 | $0.00017 | $0.00399 | 4% | baseline |
-| Base | fflonk | 232,646 | $0.00260 | $0.00033 | $0.00293 | 11% | 0.74× |
-| OP Mainnet | groth16 | 341,504 | $0.00064 | $0.00024 | $0.00088 | 27% | baseline |
-| OP Mainnet | fflonk | 232,646 | $0.00043 | $0.00048 | $0.00091 | 52% | **1.04×** |
-| Arbitrum One | groth16 | 341,504 | $0.01273 | $0.00089 | $0.01362 | 7% | baseline |
-| Arbitrum One | fflonk | 232,646 | $0.00867 | $0.00154 | $0.01021 | 15% | 0.75× |
-
-#### L1 at 20 gwei (blob base fee 1,176,470,588 wei, ETH $1,864)
-
-| Chain | System | Exec gas | Exec (USD) | L1 DA (USD) | Total (USD) | L1 share | vs Groth16 |
-|---|---|---|---|---|---|---|---|
-| Base | groth16 | 341,504 | $0.00382 | $0.00166 | $0.00548 | 30% | baseline |
-| Base | fflonk | 232,646 | $0.00260 | $0.00328 | $0.00588 | 56% | **1.07×** |
-| OP Mainnet | groth16 | 341,504 | $0.00064 | $0.00241 | $0.00305 | 79% | baseline |
-| OP Mainnet | fflonk | 232,646 | $0.00043 | $0.00477 | $0.00521 | 92% | **1.71×** |
-| Arbitrum One | groth16 | 341,504 | $0.01273 | $0.00893 | $0.02166 | 41% | baseline |
-| Arbitrum One | fflonk | 232,646 | $0.00867 | $0.01537 | $0.02405 | 64% | **1.11×** |
-
-#### Inversion thresholds
-
-| Chain | Breakeven blob base fee | Breakeven L1 base fee | Headroom vs observed |
-|---|---|---|---|
-| Base | 1,399,240,438 wei | 15.0 gwei | 354× |
-| OP Mainnet | 239,388,610 wei | **1.7 gwei** | **40×** |
-| Arbitrum One | 740,554,796 wei | 12.6 gwei | 296× |
-
-Cheap L2 gas is what exposes a chain, not expensive DA. OP Mainnet's execution
-gas is ~6× cheaper than Base's, so fflonk's 108,858-gas saving is worth ~6×
-less there — a much smaller budget to spend on 528 extra DA bytes.
-
-## Consequences
-
-1. **ADR 0003's gas table holds for L2 at current fees, conditionally.** Added
-   as an explicit L2 note in `docs/adr/0003-proof-system.md` rather than left
-   to inference.
-
-2. **Quote the OP Mainnet figure, not the L1 figure.** 40× headroom against a
-   threshold L1 sat above for most of 2025 is a live risk, not a rounding
-   error. If ClearProof is L2-first and OP-Stack-heavy, the honest statement of
-   fflonk's advantage is "32% on L1, 31% on OP Mainnet today, negative if L1
-   fees return to 2025 levels".
-
-3. **Proof size is a recurring cost, not a one-off.** Any future proof system
-   with a larger proof pays this on every verification on every L2. ADR 0003's
-   no-go on UltraHonk (2–3 KB proofs, 4–6× fflonk's) is strengthened: its DA
-   penalty compounds an execution-gas penalty that was already 5–10×.
-
-4. **The ADR numbering in AIF-99 does not match this repo.** The issue refers
-   to "ADR 0004's gas table" and its recommendation to pause the MPC ceremony;
-   ADR 0004 here is the versioned verifier registry, and no fflonk ADR exists.
-   The gas table this work bears on is ADR 0003's. Whoever reconciles this
-   should check whether the fflonk ADR is still unmerged alongside PR #19.
-
-## Limitations
-
-- fflonk's execution gas is not reproduced (see "Reproduction gap").
-- No transaction was submitted to Base, OP Mainnet or Arbitrum One. Costs are
-  computed from the sequencers' own fee functions applied to a real signed
-  transaction, not read from a receipt. Worth a live submission before these
-  figures are quoted externally.
-- The Arbitrum model treats `l1BaseFeeEstimate` as proportional to the blob
-  base fee from a single calibration point. Nitro's estimator is an adaptive
-  controller with hysteresis, so behaviour far from that point is approximate.
-- Fee inputs are a single-block snapshot; the regime ranges are illustrative
-  brackets, not a measured distribution.
-- The ~1/17 blob-to-L1 coupling is an observed ratio (EIP-7918 implies 1/16;
-  lagged `L1Block` reads likely explain the gap), not a guaranteed invariant.
+See [ADR 0004](../adr/0004-fflonk-universal-setup.md).

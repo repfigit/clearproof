@@ -1,6 +1,6 @@
 # @clearproof/circuits
 
-Circom circuits for ZK compliance proofs. Prove sanctions clearance, credential validity, and jurisdiction-correct tier encoding — without revealing private data.
+Legacy Circom circuit sources and artifact paths for controlled evaluation. This package exposes the 16-signal legacy profile, not the separate eight-signal pilot-transfer-v2 authorization workflow.
 
 ## Install
 
@@ -8,16 +8,36 @@ Circom circuits for ZK compliance proofs. Prove sanctions clearance, credential 
 npm install @clearproof/circuits
 ```
 
-## Use pre-compiled artifacts
+## Artifact availability in the 0.4.0 source package
+
+The source checkout does not include compiled WASM or proving keys. Exported paths
+are locations, not a guarantee that files are installed. Check availability first:
 
 ```javascript
-const { artifacts } = require("@clearproof/circuits");
+const { artifactStatus } = require("@clearproof/circuits");
+console.log(artifactStatus()); // available, missing filenames, legacy profile
+```
+
+Availability checks regular, nonempty files only. It does not validate provenance,
+key/circuit compatibility, an audit or a production trusted setup. Published older
+versions may have different contents; inspect the exact package being used.
+
+For a local source demo, generate isolated development artifacts using
+`scripts/test_development_circuits.py <new-output-directory>` from the monorepo,
+then run `clearproof demo --artifacts <new-output-directory>/legacy`. The builder
+requires Node, Circom and the installed Python/workspace dependencies. Its keys
+are unapproved and must remain separate from production artifacts. See
+`docs/internal/PILOT_DEVELOPMENT_ARTIFACTS.md` in the repository for exact commands.
+
+## Use separately prepared artifacts
+
+```javascript
 const snarkjs = require("snarkjs");
 
 const { proof, publicSignals } = await snarkjs.groth16.fullProve(
   input,
-  artifacts.wasmPath,
-  artifacts.zkeyPath
+  "/approved/legacy/compliance_js/compliance.wasm",
+  "/approved/legacy/compliance_final.zkey"
 );
 ```
 
@@ -39,7 +59,7 @@ circom my-circuit.circom \
 
 | Circuit | Constraints | Purpose |
 |---------|------------|---------|
-| `compliance.circom` | 15,754 | Main composed circuit |
+| `compliance.circom` | Build-dependent | Legacy composed circuit |
 | `sanctions_nonmembership.circom` | — | Sorted Merkle gap proof |
 | `credential_validity.circom` | — | Poseidon commitment + expiry + issuer |
 | `amount_tier.circom` | — | Jurisdiction threshold encoding |

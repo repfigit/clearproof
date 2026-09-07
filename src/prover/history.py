@@ -1,0 +1,360 @@
+"""Offline bundle integrity and pairing; historical authority checks remain explicit."""
+
+import base64
+import hashlib
+import json
+from dataclasses import dataclass
+from typing import Literal
+
+from src.policy.fact_approval import FactTrustStore
+from src.protocol.canonical import canonical_bytes, record_digest
+from src.protocol.decision_attestation import DecisionSignatureError, DecisionTrustStore, SignedDecision
+from src.protocol.information_approval import (
+    InformationSignatureError,
+    InformationTrustStore,
+    SignedInformationApproval,
+)
+from src.protocol.transfer import Transfer, VerificationContext
+from src.prover.history_policy import replay_history_policy
+from src.prover.history_statement import HistoryStatementTrust, reconstruct_history_statement
+from src.prover.history_status import HistoryStatusTrust
+from src.prover.history_timing import TimestampObservation, TimestampTrust
+from src.prover.pilot_verifier import PilotPairingVerifier, PilotProof, public_signals
+from src.services.timestamp_evidence import timestamp_record_bytes
+
+
+@dataclass(frozen=True)
+class HistoryInspection:
+    """Support for a recorded local decision under configured trust, not legal certification."""
+
+    outcome: Literal["supported", "contradicted", "indeterminate"]
+    integrity_valid: bool
+    cryptographic_valid: bool | None
+    verified_at: int
+    reasons: tuple[str, ...]
+    statement_valid: bool | None = None
+    policy_reproduced: bool | None = None
+    decision_authenticated: bool | None = None
+    status_authenticated: bool | None = None
+    timing_authenticated: bool | None = None
+    timestamp_observation: TimestampObservation | None = None
+    information_authenticated: bool | None = None
+
+
+class MissingHistoryEvidence(ValueError):
+    pass
+
+
+def _check(condition):
+    if not condition:
+        raise ValueError("History evidence integrity mismatch")
+
+
+def _decode(value):
+    _check(type(value) is str and len(value) <= 200000)
+    return base64.b64decode(value, validate=True)
+
+
+def _integrity(bundle, verifier, expected_receipt_id, expected_tenant):
+    _check(bundle["schema_version"] == "clearproof-history-bundle-v1")
+    _check(bundle["receipt_id"] == expected_receipt_id and bundle["tenant_id"] == expected_tenant)
+    receipt, proof, manifest = bundle["receipt"], bundle["proof"], bundle["evidence_manifest"]
+    _check(receipt["schema_version"] == "clearproof-local-authorization-v1")
+    _check(proof["schema_version"] == "clearproof-retained-proof-v1")
+    _check(manifest["schema_version"] == "clearproof-authorization-evidence-v1")
+    _check(record_digest("clearproof/local-authorization/v1", receipt) == expected_receipt_id)
+    _check(record_digest("clearproof/authorization-evidence/v1", manifest) == receipt["evidence_id"])
+    _check(receipt["tenant_id"] == manifest["tenant_id"] == expected_tenant)
+    transfer = Transfer.model_validate_json(json.dumps(proof["transfer"]))
+    context = VerificationContext.model_validate_json(json.dumps(proof["context"]))
+    context.check_transfer(transfer)
+    _check(transfer.tenant_id == expected_tenant)
+    for name, value in (("transfer_digest", transfer.digest), ("context_digest", context.digest)):
+        _check(receipt[name] == manifest[name] == proof[name] == value)
+    _check(receipt["manifest_digest"] == context.artifact_manifest_digest == verifier.artifacts.manifest.digest)
+    _check(receipt["proof_profile"] == context.proof_profile == verifier.artifacts.manifest.proof_profile)
+    _check(manifest["runtime_sha256"] == hashlib.sha256(verifier.bundle).hexdigest())
+    raw_proof = _decode(proof["proof_base64"])
+    PilotProof.parse(raw_proof)
+    _check(hashlib.sha256(raw_proof).hexdigest() == proof["proof_digest"])
+    signals = public_signals(proof["signals"])
+    _check(receipt["nullifier"] == format(int(signals[3]), "064x"))
+    _check(type(receipt["expires_at"]) is int and receipt["expires_at"] == int(signals[5]))
+    _check(int(signals[4]) == context.evaluated_at)
+    _check(int(signals[6]) == int(context.deployment_chain_id))
+    _check(int(signals[7]) == int(context.deployment_address, 16))
+    _check(receipt["policy_digest"] == transfer.policy_digest == context.policy_digest)
+    _check(receipt["outcome"] == proof["policy_evaluation"]["outcome"] == "ALLOW")
+    _check(proof["policy_evaluation"]["policy_digest"] == receipt["policy_digest"])
+    _check(proof["policy_evaluation"]["transfer_digest"] == transfer.digest)
+    _check(proof["policy_evaluation"]["evaluated_at"] == receipt["authorized_at"])
+    _check(record_digest("clearproof/pilot-envelope/v1", proof["recipient_envelope"]) == receipt["envelope_digest"])
+    binding = proof["recipient_envelope"]["binding"]
+    _check(binding["tenant_id"] == expected_tenant)
+    _check(binding["transfer_digest"] == transfer.digest and binding["context_digest"] == context.digest)
+    _check(binding["proof_digest"] == proof["proof_digest"])
+    _check(binding["recipient_key_id"] == receipt["recipient_key_id"] == proof["recipient_key_id"])
+    _check(binding["recipient_did"] == transfer.beneficiary.vasp_did)
+    _check(proof["recipient_envelope"]["hpke"]["aad"] == record_digest("clearproof/pilot-envelope-binding/v1", binding))
+    _check(proof["recipient_envelope"]["hpke"]["kid"] == binding["recipient_key_id"])
+    signature_hash = hashlib.sha256(bytes.fromhex(proof["information_approval"]["signature"])).hexdigest()
+    _check(signature_hash == proof["information_signature_digest"] == receipt["information_signature_digest"])
+    request = {
+        key: proof[key]
+        for key in (
+            "credential_id",
+            "proof_digest",
+            "signals",
+            "fact_ids",
+            "transfer_digest",
+            "context_digest",
+            "recipient_key_id",
+            "information_signature_digest",
+        )
+    }
+    _check(
+        record_digest("clearproof/authorized-proof/v1", {**request, "envelope_digest": receipt["envelope_digest"]})
+        == receipt["proof_id"]
+    )
+    _check(type(bundle["records"]) is list and len(bundle["records"]) <= 80)
+    records = {}
+    for record in bundle["records"]:
+        key = (record["kind"], record["record_id"], record["revision"])
+        _check(key not in records)
+        records[key] = record
+    _check(type(manifest["records"]) is list and 1 <= len(manifest["records"]) <= 80)
+    expected_records = set()
+    for reference in manifest["records"]:
+        key = (reference["kind"], reference["record_id"], reference["revision"])
+        _check(key not in expected_records)
+        expected_records.add(key)
+        if key not in records:
+            raise MissingHistoryEvidence()
+        record = records[key]
+        _check(record["sha256"] == reference["sha256"] == hashlib.sha256(canonical_bytes(record["value"])).hexdigest())
+    _check(set(records) == expected_records)
+    configuration = bundle["configuration_base64"]
+    if set(manifest["configuration"]) - set(configuration):
+        raise MissingHistoryEvidence()
+    _check(set(configuration) == set(manifest["configuration"]))
+    captured = {}
+    for name, descriptor in manifest["configuration"].items():
+        raw = _decode(configuration[name])
+        _check(type(descriptor["size"]) is int and len(raw) == descriptor["size"])
+        _check(hashlib.sha256(raw).hexdigest() == descriptor["sha256"])
+        captured[name] = raw
+    _check(captured["artifact_manifest"] == canonical_bytes(verifier.artifacts.manifest.model_dump(mode="json")))
+    _check(captured["verification_key"] == verifier.artifacts.verification_key_bytes)
+    return raw_proof, signals
+
+
+async def inspect_history_bundle(
+    bundle: dict,
+    verifier: PilotPairingVerifier,
+    *,
+    expected_receipt_id: str,
+    expected_tenant: str,
+    verified_at: int,
+    statement_trust: HistoryStatementTrust | None = None,
+    fact_trust: FactTrustStore | None = None,
+    decision_trust: DecisionTrustStore | None = None,
+    status_trust: HistoryStatusTrust | None = None,
+    timing_trust: TimestampTrust | None = None,
+    information_trust: InformationTrustStore | None = None,
+) -> HistoryInspection:
+    """Pins and verifier come from the reviewer, never from the exported bundle.
+
+    Optional independent statement trust enables reconstruction at the claimed
+    authorization time. Decision authority and historical non-revocation/timing
+    still require evidence before a supported outcome. This function cannot consume.
+    """
+    if type(verified_at) is not int or not 0 <= verified_at < 2**53:
+        raise ValueError("Invalid history verification clock")
+    try:
+        raw_proof, signals = _integrity(bundle, verifier, expected_receipt_id, expected_tenant)
+    except (KeyError, MissingHistoryEvidence):
+        return HistoryInspection("indeterminate", False, None, verified_at, ("missing_evidence",))
+    except (ValueError, TypeError, OverflowError, RecursionError):
+        return HistoryInspection("contradicted", False, None, verified_at, ("bundle_integrity_mismatch",))
+    expected = signals
+    statement_valid = None
+    if statement_trust is not None:
+        try:
+            expected = reconstruct_history_statement(
+                bundle, verifier, statement_trust, signals, verified_at=verified_at
+            )
+        except (ValueError, KeyError, TypeError):
+            return HistoryInspection("indeterminate", True, None, verified_at, ("statement_trust_unavailable",), False)
+        if expected != signals:
+            return HistoryInspection("contradicted", True, None, verified_at, ("statement_signal_mismatch",), False)
+        statement_valid = True
+    try:
+        inspection = await verifier.inspect(raw_proof, signals, expected_signals=expected)
+    except (ValueError, OSError):
+        return HistoryInspection("indeterminate", True, None, verified_at, ("pairing_unavailable",), statement_valid)
+    if not inspection.cryptographic_valid:
+        return HistoryInspection("contradicted", True, False, verified_at, ("invalid_pairing",), statement_valid)
+    policy_reproduced = None
+    if statement_valid and fact_trust is not None:
+        try:
+            policy_reproduced = replay_history_policy(
+                bundle, statement_trust, fact_trust, signals, verified_at=verified_at
+            )
+        except (ValueError, KeyError, TypeError):
+            return HistoryInspection(
+                "indeterminate", True, True, verified_at, ("policy_evidence_untrusted",), True, False
+            )
+        if not policy_reproduced:
+            return HistoryInspection(
+                "contradicted", True, True, verified_at, ("policy_decision_mismatch",), True, False
+            )
+    decision_authenticated = None
+    if decision_trust is not None:
+        try:
+            signed = SignedDecision.model_validate_json(json.dumps(bundle["proof"]["decision_attestation"]))
+            context = VerificationContext.model_validate_json(json.dumps(bundle["proof"]["context"]))
+            decision_trust.verify(signed, bundle["receipt"], context, verified_at=verified_at)
+            decision_authenticated = True
+        except DecisionSignatureError:
+            return HistoryInspection(
+                "contradicted",
+                True,
+                True,
+                verified_at,
+                ("decision_signature_invalid",),
+                statement_valid,
+                policy_reproduced,
+                False,
+            )
+        except (ValueError, KeyError, TypeError):
+            return HistoryInspection(
+                "indeterminate",
+                True,
+                True,
+                verified_at,
+                ("decision_authority_unavailable",),
+                statement_valid,
+                policy_reproduced,
+                False,
+            )
+    status_authenticated = None
+    if status_trust is not None and statement_valid:
+        try:
+            status_trust.verify(bundle, verified_at=verified_at)
+            status_authenticated = True
+        except (ValueError, KeyError, TypeError):
+            return HistoryInspection(
+                "indeterminate",
+                True,
+                True,
+                verified_at,
+                ("historical_status_authority_unavailable",),
+                statement_valid,
+                policy_reproduced,
+                decision_authenticated,
+                False,
+            )
+    timing_authenticated = None
+    timestamp_observation = None
+    if timing_trust is not None:
+        try:
+            raw_timestamp = timestamp_record_bytes(
+                bundle["decision_timestamp"],
+                tenant_id=expected_tenant,
+                receipt_id=expected_receipt_id,
+            )
+            signed = SignedDecision.model_validate_json(json.dumps(bundle["proof"]["decision_attestation"]))
+            timestamp_observation = timing_trust.verify_decision_window(
+                raw_timestamp,
+                signed,
+                expires_at=bundle["receipt"]["expires_at"],
+                verified_at=verified_at,
+            )
+            timing_authenticated = True
+        except (ValueError, KeyError, TypeError):
+            return HistoryInspection(
+                "indeterminate",
+                True,
+                True,
+                verified_at,
+                ("timestamp_evidence_unavailable",),
+                statement_valid,
+                policy_reproduced,
+                decision_authenticated,
+                status_authenticated,
+                False,
+            )
+    information_authenticated = None
+    if information_trust is not None:
+        try:
+            information_trust.verify_attestation(
+                SignedInformationApproval.model_validate_json(json.dumps(bundle["proof"]["information_approval"])),
+                Transfer.model_validate_json(json.dumps(bundle["proof"]["transfer"])),
+                VerificationContext.model_validate_json(json.dumps(bundle["proof"]["context"])),
+                credential_id=bundle["proof"]["credential_id"],
+                decision_at=bundle["receipt"]["authorized_at"],
+                verified_at=verified_at,
+            )
+            information_authenticated = True
+        except InformationSignatureError:
+            return HistoryInspection(
+                "contradicted",
+                True,
+                True,
+                verified_at,
+                ("information_signature_invalid",),
+                statement_valid,
+                policy_reproduced,
+                decision_authenticated,
+                status_authenticated,
+                timing_authenticated,
+                timestamp_observation,
+                False,
+            )
+        except (ValueError, KeyError, TypeError):
+            return HistoryInspection(
+                "indeterminate",
+                True,
+                True,
+                verified_at,
+                ("information_authority_unavailable",),
+                statement_valid,
+                policy_reproduced,
+                decision_authenticated,
+                status_authenticated,
+                timing_authenticated,
+                timestamp_observation,
+                False,
+            )
+    supported = all(
+        value is True
+        for value in (
+            statement_valid,
+            policy_reproduced,
+            decision_authenticated,
+            status_authenticated,
+            timing_authenticated,
+            information_authenticated,
+        )
+    )
+    return HistoryInspection(
+        "supported" if supported else "indeterminate",
+        True,
+        True,
+        verified_at,
+        (
+            *(("statement_semantics_unverified",) if statement_valid is None else ()),
+            *(("policy_replay_unverified",) if policy_reproduced is None else ()),
+            *(("decision_authority_unverified",) if decision_authenticated is None else ()),
+            *(("historical_revocation_evidence_missing",) if status_authenticated is None else ()),
+            *(("independent_timing_evidence_missing",) if timing_authenticated is None else ()),
+            *(("information_authority_unverified",) if information_authenticated is None else ()),
+        ),
+        statement_valid,
+        policy_reproduced,
+        decision_authenticated,
+        status_authenticated,
+        timing_authenticated,
+        timestamp_observation,
+        information_authenticated,
+    )

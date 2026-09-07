@@ -1,0 +1,12 @@
+{
+  "skill": "repfigit-build",
+  "ranAt": "2026-08-05T01:08:00Z",
+  "outcome": "wrong-repo",
+  "issueId": "AIF-122",
+  "prNumber": 0,
+  "failureCategory": "wrong-repo",
+  "humanInterventions": 0,
+  "toolCalls": 12,
+  "verdictCycles": 0,
+  "notes": "AIF-122 references string-utils library with shout/whisper functions that don't exist in clearproof repo. Gate script failed (REPO_DIR unset). AGENT_IDENTITY missing from runtime context. No buildable issues in queue."
+}

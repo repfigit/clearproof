@@ -1,115 +1,36 @@
 # TypeScript SDK
 
-`@clearproof/proof` — generate and verify ZK compliance proofs, and discover counterparty VASPs.
+`@clearproof/proof` provides proof generation, cryptographic verification and counterparty discovery. Published version: **0.3.0**, checked September 5, 2026. The development checkout is **0.4.0**; confirm the installed version before using its types.
 
 ## Installation
 
 ```bash
-npm install @clearproof/proof
+npm install @clearproof/proof@0.3.0
 ```
 
-Requires Node.js 18+ and compiled circuit artifacts.
-
-## Generate a proof
+## Development API shape
 
 ```typescript
-import { generateProof } from '@clearproof/proof';
+import { generateProof, verifyProof, type ComplianceInput } from '@clearproof/proof';
 
-const result = await generateProof(
-  {
-    // Public inputs
-    sanctionsTreeRoot: '...',
-    issuerTreeRoot: '...',
-    amountTier: 2,
-    transferTimestamp: Math.floor(Date.now() / 1000),
-    jurisdictionCode: 840,
-    credentialCommitment: '...',
-    tier2Threshold: 3000,
-    tier3Threshold: 10000,
-    tier4Threshold: 50000,
-    credentialNullifier: '0xabc...',
-    proofExpiresAt: Math.floor(Date.now() / 1000) + 3600,
-    domainChainId: 11155111,           // Sepolia
-    domainContractHash: '0x...',       // keccak256(registry address) % BN128_R
-    transferIdHash: '0x...',           // keccak256(transferId) % BN128_R
-
-    // Private inputs: credential preimage
-    issuerDid: '...',
-    kycTier: 2,
-    sanctionsClear: 1,
-    issuedAt: 1700000000,
-    expiresAt: 1800000000,
-
-    // Private inputs: issuer Merkle membership proof
-    issuerPathElements: ['...', '...'],
-    issuerPathIndices: ['0', '1'],
-
-    // Private inputs: sanctions non-membership gap proof
-    walletAddressHash: '...',
-    leftKey: '...',
-    rightKey: '...',
-    leftPathElements: ['...'],
-    leftPathIndices: ['0'],
-    rightPathElements: ['...'],
-    rightPathIndices: ['1'],
-
-    // Private inputs: amount
-    actualAmount: 1500000,             // cents (integer arithmetic)
-  },
-  'artifacts/compliance_js/compliance.wasm',
-  'artifacts/compliance_final.zkey',
-);
-
-console.log(result.proof);         // { pi_a, pi_b, pi_c, protocol, curve }
-console.log(result.publicSignals); // string[16]
-console.log(result.proofTime);     // milliseconds
-```
-
-The SDK maps camelCase field names to the snake_case signal names the Circom circuit expects.
-
-## Verify a proof
-
-```typescript
-import { verifyProof } from '@clearproof/proof';
-
-const result = await verifyProof(
-  proof,
-  publicSignals,
-  'artifacts/verification_key.json',
-);
-
-console.log(result.valid);         // true
-console.log(result.isCompliant);   // true
-console.log(result.sarReviewFlag); // false
-```
-
-## Discover counterparty VASPs
-
-```typescript
-import { discoverVASP, supportsChain } from '@clearproof/proof';
-
-// Discover a VASP by domain
-const info = await discoverVASP('exchange.example');
-if (info) {
-  console.log(info.clearproof.endpoint);    // https://exchange.example/clearproof/v1
-  console.log(info.clearproof.publicKey);   // encryption public key
-  console.log(info.clearproof.supportedChains); // [1, 42161, 8453]
+// Supply a complete, authenticated input with witnesses matching your circuit.
+async function evaluate(input: ComplianceInput, wasm: string, zkey: string, vkey: string) {
+  const generated = await generateProof(input, wasm, zkey);
+  const verified = await verifyProof(generated.proof, generated.publicSignals, vkey);
+  return { generated, verified };
 }
-
-// Quick check: does this VASP support Ethereum mainnet?
-const ok = await supportsChain('exchange.example', 1);
 ```
 
-Discovery fetches `https://<domain>/.well-known/clearproof.json` and caches results for 1 hour. The response is self-declared by the counterparty domain; integrations that need registry-backed assurance should verify the returned DID and discovery endpoint against `VASPRegistry` before trusting it.
+The caller supplies compatible artifacts. The SDK maps camelCase fields to Circom signal names; it does not create issuer or sanctions witnesses for you. Field encodings, amount units and public-signal ordering must match the exact proof version.
 
-## Validation rules
+`verified.valid` describes cryptographic verification. `isCompliant` and `sarReviewFlag` interpret circuit outputs; they do not establish full registry acceptance, current policy authorization or legal compliance. Additional trust, freshness, revocation, domain and replay checks remain necessary.
 
-As of v0.3.0, these fields are validated at runtime:
+## Discovery
 
-- `proofExpiresAt` — must be greater than `transferTimestamp` (not just "in the future")
-- `credentialNullifier` — must be non-zero and non-empty
-- `domainChainId` — if zero or unset, a warning is logged (proof has no domain binding)
+`discoverVASP(domain)` and `supportsChain(domain, chainId)` read self-declared well-known metadata. A domain response is not independent issuer/VASP authorization. Python and TypeScript discovery compatibility and destination/key validation are active hardening work.
 
-## Dependencies
+## Input and privacy limitations
 
-- `snarkjs` ^0.7.5 (peer dependency)
+The current SDK validates selected fields, including proof expiry relative to the transfer timestamp and a nonzero credential nullifier. A zero domain chain ID currently emits a warning; it is not a safe production configuration.
+
+Do not log complete witnesses or sensitive proof metadata. Use the installed package's declarations for exact types and dependencies, and review [status](/docs/status) before integration.

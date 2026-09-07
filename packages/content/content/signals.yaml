@@ -2,7 +2,7 @@ signals:
   - index: 0
     name: is_compliant
     type: bit
-    description: 1 if all compliance checks pass
+    description: 1 for the encoded circuit checks; not a legal compliance determination
     source: circuits/compliance.circom
     onChainUsage: Must equal 1 for proof acceptance
     isOutput: true
@@ -10,17 +10,17 @@ signals:
   - index: 1
     name: sar_review_flag
     type: bit
-    description: 1 if amount_tier >= 3 (triggers human review)
+    description: Public tier-derived advisory bit; 1 if amount_tier >= 3, not a suspicious-activity determination
     source: circuits/amount_tier.circom
-    onChainUsage: Stored in userSARFlags mapping
+    onChainUsage: Emitted as the review bit in the development ProofVerified event
     isOutput: true
 
   - index: 2
     name: sanctions_tree_root
     type: field
-    description: Merkle root of sorted OFAC/UN/EU sanctions tree
+    description: Merkle root of the supplied sanctions dataset; source completeness and freshness require verification
     source: circuits/compliance.circom
-    onChainUsage: Checked against SanctionsOracle.root()
+    onChainUsage: Checked against SanctionsOracle.currentRoot()
     isOutput: false
 
   - index: 3
@@ -28,13 +28,13 @@ signals:
     type: field
     description: Merkle root of the trusted VASP issuer tree
     source: circuits/compliance.circom
-    onChainUsage: Checked against IssuerRegistry.root()
+    onChainUsage: Checked against VASPRegistry.issuerMerkleRoot()
     isOutput: false
 
   - index: 4
     name: amount_tier
     type: uint64
-    description: Transfer tier (1=retail, 2=professional, 3=institutional, 4=high-value)
+    description: Amount bucket 1 through 4 under the supplied ordered thresholds
     source: circuits/amount_tier.circom
     onChainUsage: Used for tier-based compliance rules
     isOutput: false
@@ -50,7 +50,7 @@ signals:
   - index: 6
     name: jurisdiction_code
     type: uint16
-    description: ISO 3166-1 alpha-2 country code as integer (e.g., 840 for USA)
+    description: 16-bit jurisdiction input; integrations must agree on its encoding
     source: circuits/credential_validity.circom
     onChainUsage: Used for jurisdiction-specific compliance rules
     isOutput: false
@@ -66,7 +66,7 @@ signals:
   - index: 8
     name: tier2_threshold
     type: uint64
-    description: Maximum amount in USD cents for tier 2 (jurisdiction-specific)
+    description: Inclusive lower boundary in USD cents for tier 2
     source: circuits/amount_tier.circom
     onChainUsage: Jurisdiction-configurable threshold
     isOutput: false
@@ -74,7 +74,7 @@ signals:
   - index: 9
     name: tier3_threshold
     type: uint64
-    description: Maximum amount in USD cents for tier 3 (jurisdiction-specific)
+    description: Inclusive lower boundary in USD cents for tier 3
     source: circuits/amount_tier.circom
     onChainUsage: Jurisdiction-configurable threshold
     isOutput: false
@@ -82,7 +82,7 @@ signals:
   - index: 10
     name: tier4_threshold
     type: uint64
-    description: Maximum amount in USD cents for tier 4 (jurisdiction-specific)
+    description: Inclusive lower boundary in USD cents for tier 4
     source: circuits/amount_tier.circom
     onChainUsage: Jurisdiction-configurable threshold
     isOutput: false
@@ -98,7 +98,7 @@ signals:
   - index: 12
     name: domain_contract_hash
     type: field
-    description: Truncated keccak256 of ComplianceRegistry address
+    description: keccak256 of the encoded ComplianceRegistry address reduced modulo the scalar field
     source: circuits/compliance.circom
     onChainUsage: Must equal keccak256(address(this)) % BN128_R
     isOutput: false
@@ -106,16 +106,16 @@ signals:
   - index: 13
     name: transfer_id_hash
     type: field
-    description: keccak256 of transferId, binds proof to specific transfer
+    description: Registry expects keccak256 of encoded transferId reduced modulo the scalar field; API consistency remains open
     source: circuits/compliance.circom
-    onChainUsage: Unique per transfer, prevents replay
+    onChainUsage: Checked against transferId by the registry, alongside duplicate-record and nullifier checks
     isOutput: false
 
   - index: 14
     name: credential_nullifier
     type: field
     description: Poseidon(credential_commitment, transfer_id_hash) -- one-time-use value stored on-chain
-    source: circuits/credential_validity.circom
+    source: circuits/compliance.circom
     onChainUsage: Stored in usedNullifiers mapping, checked for uniqueness
     isOutput: false
 

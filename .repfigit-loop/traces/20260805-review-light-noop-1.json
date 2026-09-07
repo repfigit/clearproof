@@ -1,0 +1,12 @@
+{
+  "skill": "repfigit-review",
+  "ranAt": "2026-08-05T00:00:00Z",
+  "outcome": "no-work",
+  "issueId": null,
+  "prNumber": 0,
+  "failureCategory": "none",
+  "humanInterventions": 0,
+  "toolCalls": 7,
+  "verdictCycles": 0,
+  "notes": "Light (TIER-1) tick on clearproof: all open non-draft PRs (#11, #19, #23, #24) skipped via state file (escalated at matching headRefOid) and blocked by the needs-human-review hard gate regardless. Draft #22 skipped. No TIER-1 candidates. Merged-PR reconciliation: AIF-80 (#21) and AIF-95 (#18) already Done; #20 has no linked issue and is loop bookkeeping. Gate script failed (REPO_DIR unset in cron) — ran pass directly."
+}

@@ -1,0 +1,12 @@
+{
+  "skill": "repfigit-build",
+  "ranAt": "2026-08-03T02:37:00Z",
+  "outcome": "fixed-pr",
+  "issueId": "AIF-98",
+  "prNumber": 23,
+  "failureCategory": "none",
+  "humanInterventions": 0,
+  "toolCalls": 35,
+  "verdictCycles": 1,
+  "notes": "Successfully implemented jurisdiction code verification for AIF-98. Added JurisdictionCodeMismatch event to ComplianceRegistry contract, updated verifyAndRecord function to check jurisdiction codes, updated TypeScript and Python proof verification code to include jurisdiction matching, and added integration tests. All tests pass."
+}

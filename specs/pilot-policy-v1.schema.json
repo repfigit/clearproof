@@ -1,0 +1,276 @@
+{
+  "$defs": {
+    "PolicyRule": {
+      "additionalProperties": false,
+      "properties": {
+        "effect": {
+          "enum": [
+            "ALLOW",
+            "REVIEW",
+            "DENY"
+          ],
+          "title": "Effect",
+          "type": "string"
+        },
+        "operator": {
+          "enum": [
+            "is_true",
+            "is_false",
+            "at_least",
+            "below"
+          ],
+          "title": "Operator",
+          "type": "string"
+        },
+        "predicate": {
+          "maxLength": 64,
+          "minLength": 1,
+          "pattern": "^[a-z0-9][a-z0-9_-]{0,63}$",
+          "title": "Predicate",
+          "type": "string"
+        },
+        "rule_id": {
+          "maxLength": 64,
+          "minLength": 1,
+          "pattern": "^[a-z0-9][a-z0-9_-]{0,63}$",
+          "title": "Rule Id",
+          "type": "string"
+        },
+        "source_ids": {
+          "items": {
+            "maxLength": 64,
+            "minLength": 1,
+            "pattern": "^[a-z0-9][a-z0-9_-]{0,63}$",
+            "type": "string"
+          },
+          "maxItems": 16,
+          "minItems": 1,
+          "title": "Source Ids",
+          "type": "array"
+        },
+        "threshold_usd_cents": {
+          "anyOf": [
+            {
+              "maxLength": 39,
+              "minLength": 1,
+              "pattern": "^(0|[1-9][0-9]{0,38})$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Threshold Usd Cents"
+        }
+      },
+      "required": [
+        "rule_id",
+        "predicate",
+        "operator",
+        "effect",
+        "source_ids"
+      ],
+      "title": "PolicyRule",
+      "type": "object"
+    },
+    "PolicySource": {
+      "additionalProperties": false,
+      "properties": {
+        "evidence_digest": {
+          "maxLength": 64,
+          "minLength": 64,
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Evidence Digest",
+          "type": "string"
+        },
+        "kind": {
+          "enum": [
+            "synthetic",
+            "reviewed-reference"
+          ],
+          "title": "Kind",
+          "type": "string"
+        },
+        "reference": {
+          "maxLength": 1024,
+          "minLength": 1,
+          "title": "Reference",
+          "type": "string"
+        },
+        "reviewed_at": {
+          "maximum": 9007199254740991,
+          "minimum": 0,
+          "title": "Reviewed At",
+          "type": "integer"
+        },
+        "source_id": {
+          "maxLength": 64,
+          "minLength": 1,
+          "pattern": "^[a-z0-9][a-z0-9_-]{0,63}$",
+          "title": "Source Id",
+          "type": "string"
+        },
+        "valid_until": {
+          "maximum": 9007199254740991,
+          "minimum": 0,
+          "title": "Valid Until",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "source_id",
+        "kind",
+        "reference",
+        "evidence_digest",
+        "reviewed_at",
+        "valid_until"
+      ],
+      "title": "PolicySource",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "asset_registry_digest": {
+      "maxLength": 64,
+      "minLength": 64,
+      "pattern": "^[0-9a-f]{64}$",
+      "title": "Asset Registry Digest",
+      "type": "string"
+    },
+    "chain_id": {
+      "maxLength": 39,
+      "minLength": 1,
+      "pattern": "^(0|[1-9][0-9]{0,38})$",
+      "title": "Chain Id",
+      "type": "string"
+    },
+    "effective_from": {
+      "maximum": 9007199254740991,
+      "minimum": 0,
+      "title": "Effective From",
+      "type": "integer"
+    },
+    "effective_until": {
+      "maximum": 9007199254740991,
+      "minimum": 0,
+      "title": "Effective Until",
+      "type": "integer"
+    },
+    "jurisdiction": {
+      "maxLength": 2,
+      "minLength": 2,
+      "pattern": "^[A-Z]{2}$",
+      "title": "Jurisdiction",
+      "type": "string"
+    },
+    "policy_id": {
+      "maxLength": 64,
+      "minLength": 1,
+      "pattern": "^[a-z0-9][a-z0-9_-]{0,63}$",
+      "title": "Policy Id",
+      "type": "string"
+    },
+    "previous_digest": {
+      "anyOf": [
+        {
+          "maxLength": 64,
+          "minLength": 64,
+          "pattern": "^[0-9a-f]{64}$",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Previous Digest"
+    },
+    "registry_address": {
+      "maxLength": 42,
+      "minLength": 42,
+      "pattern": "^0x[0-9a-f]{40}$",
+      "title": "Registry Address",
+      "type": "string"
+    },
+    "revision": {
+      "maximum": 9007199254740991,
+      "minimum": 1,
+      "title": "Revision",
+      "type": "integer"
+    },
+    "rules": {
+      "default": [],
+      "items": {
+        "$ref": "#/$defs/PolicyRule"
+      },
+      "maxItems": 64,
+      "title": "Rules",
+      "type": "array"
+    },
+    "schema_version": {
+      "const": "clearproof-pilot-policy-v1",
+      "default": "clearproof-pilot-policy-v1",
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "sources": {
+      "items": {
+        "$ref": "#/$defs/PolicySource"
+      },
+      "maxItems": 16,
+      "minItems": 1,
+      "title": "Sources",
+      "type": "array"
+    },
+    "tenant_id": {
+      "maxLength": 64,
+      "minLength": 1,
+      "pattern": "^[a-z0-9][a-z0-9_-]{0,63}$",
+      "title": "Tenant Id",
+      "type": "string"
+    },
+    "tier_thresholds_usd_cents": {
+      "maxItems": 3,
+      "minItems": 3,
+      "prefixItems": [
+        {
+          "maxLength": 39,
+          "minLength": 1,
+          "pattern": "^(0|[1-9][0-9]{0,38})$",
+          "type": "string"
+        },
+        {
+          "maxLength": 39,
+          "minLength": 1,
+          "pattern": "^(0|[1-9][0-9]{0,38})$",
+          "type": "string"
+        },
+        {
+          "maxLength": 39,
+          "minLength": 1,
+          "pattern": "^(0|[1-9][0-9]{0,38})$",
+          "type": "string"
+        }
+      ],
+      "title": "Tier Thresholds Usd Cents",
+      "type": "array"
+    }
+  },
+  "required": [
+    "policy_id",
+    "revision",
+    "tenant_id",
+    "chain_id",
+    "registry_address",
+    "jurisdiction",
+    "asset_registry_digest",
+    "effective_from",
+    "effective_until",
+    "tier_thresholds_usd_cents",
+    "sources"
+  ],
+  "title": "PilotPolicy",
+  "type": "object"
+}
