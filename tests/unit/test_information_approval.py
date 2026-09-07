@@ -185,3 +185,24 @@ def test_historical_review_clock_is_strict(case, review_at):
             decision_at=now,
             verified_at=review_at,
         )
+
+
+@pytest.mark.parametrize("offset", [0, -1])
+def test_information_approval_requires_positive_interval(case, offset):
+    approval = case[6]
+    with pytest.raises(ValueError, match="Invalid information approval interval"):
+        InformationApproval.model_validate({**approval.model_dump(), "expires_at": approval.signed_at + offset})
+
+
+@pytest.mark.parametrize("change", ["interval", "duplicate-source"])
+def test_information_authority_scope_rejects_invalid_configuration(case, change):
+    authority = case[4]
+    changes = {"not_after": authority.not_before} if change == "interval" else {"source_ids": authority.source_ids * 2}
+    with pytest.raises(ValueError, match="Invalid information authority scope"):
+        InformationAuthority.model_validate({**authority.model_dump(), **changes})
+
+
+@pytest.mark.parametrize("count", [0, 2, 257])
+def test_information_key_inventory_requires_distinct_bounded_authorities(case, count):
+    with pytest.raises(ValueError, match="Expected distinct independently approved information keys"):
+        InformationTrustStore([case[4]] * count)

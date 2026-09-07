@@ -672,3 +672,15 @@ still need completion and final merged-main verification.
   not independently establish pricing truth.
 - Full repository coverage remains incomplete across remaining Python paths,
   SDK branches, contracts, docs/browser, scripts and final publication checks.
+
+## Thirty-fourth checkpoint
+
+- Added seven information-approval tests for invalid signing intervals, invalid
+  authority validity, duplicate source scopes and empty/duplicate/oversized key
+  inventories. Existing real signature, payload binding and rotation cases pass.
+- All 29 tests pass. Information approval measures 80/80 statements and 12/12
+  branches (`information-approval-complete.log`/`.data`). Ruff and whitespace pass;
+  no production changes were required.
+- Full repository coverage remains incomplete across remaining Python behavior,
+  SDK branches, Solidity, docs/browser rendering, scripts and final publication
+  checks. This module result does not update the whole-suite coverage figures.
