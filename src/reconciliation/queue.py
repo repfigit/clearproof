@@ -6,6 +6,7 @@ from pydantic import Field
 
 from src.protocol.transfer import Epoch, Hex32, Record
 from src.reconciliation.events import InvestigationFinding, TransferScope
+from src.reconciliation.provider_links import ProviderLink
 
 
 class QueueRequest(Record):
@@ -20,6 +21,7 @@ class QueueItem(Record):
     states: dict[str, str]
     findings: tuple[InvestigationFinding, ...]
     oldest_age_seconds: Epoch
+    provider_links: tuple[ProviderLink, ...] = Field(default=(), max_length=8)
 
 
 class QueuePage(Record):

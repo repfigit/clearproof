@@ -24,6 +24,15 @@ function cursor(value: unknown): string | null {
   if (!/^[a-f0-9]{64}$/.test(result)) throw new Error('Invalid cursor');
   return result;
 }
+function providerLines(links: unknown): string[] {
+  if (links === undefined) return []; // Earlier v1 responses may omit optional navigation references.
+  return list(links, 8).map(link => {
+    if (typeof link.url !== 'string' || link.url.length > 2048 || /[^\x21-\x7e]|\\/.test(link.url)) throw new Error('Invalid provider link');
+    const url = new URL(link.url);
+    if (url.protocol !== 'https:' || url.username || url.password || url.search || url.hash) throw new Error('Invalid provider link');
+    return `Provider ${text(link.source_id)} | ${text(link.label)} | ${link.url}`;
+  });
+}
 function findingLines(findings: unknown): string[] {
   return list(findings, 32).map(f => `  ${text(f.reason)} | age ${integer(f.age_seconds)}s | owner ${text(f.owner)} | next ${text(f.next_action)}`);
 }
@@ -76,6 +85,7 @@ export function renderInvestigation(report: ObjectValue, queue: boolean): string
       const scope = object(item.scope);
       lines.push(`Transfer ${text(scope.transfer_id)} | ${text(item.scope_digest)} | oldest ${integer(item.oldest_age_seconds)}s`);
       lines.push(...findingLines(item.findings));
+      lines.push(...providerLines(item.provider_links));
     }
     if (report.next_cursor !== null) lines.push(`Continue after: ${text(report.next_cursor)}`);
   } else {
@@ -86,6 +96,7 @@ export function renderInvestigation(report: ObjectValue, queue: boolean): string
       lines.push(`${name}: ${text(states[name])}`);
     }
     lines.push(...findingLines(report.findings));
+    lines.push(...providerLines(report.provider_links));
     for (const event of list(report.timeline, 256)) {
       lines.push(`${integer(event.occurred_at)} | received ${integer(event.ingested_at)} | ${text(event.source_id)} | ${text(event.dimension)}: ${text(event.state)}`);
     }

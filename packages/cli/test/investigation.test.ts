@@ -54,7 +54,8 @@ it('renders independent timeline states and rejects terminal control characters'
 });
 
 it('runs the built queue command with private stdin and JSON output', async () => {
-  const base = await api([page([item(1, 10)], null)]);
+  const provider = { source_id: 'custody', label: 'console', url: 'https://console.example/tx/opaque' };
+  const base = await api([page([{ ...item(1, 10), provider_links: [provider] }], null)]);
   const child = spawn(process.execPath, [resolve('dist/index.js'), 'investigation', 'queue', '--api-url', base, '--json'], {
     env: { ...process.env, CLEARPROOF_API_TOKEN: 'test-token' }, stdio: ['pipe', 'pipe', 'pipe'],
   });
@@ -67,4 +68,19 @@ it('runs the built queue command with private stdin and JSON output', async () =
   clearTimeout(timer);
   expect(code, stderr).toBe(0);
   expect(JSON.parse(stdout).complete_from_start).toBe(true);
+  expect(JSON.parse(stdout).items[0].provider_links).toEqual([provider]);
+});
+
+
+it('renders optional provider navigation in timelines and queues and rejects unsafe links', () => {
+  const link = { source_id: 'custody', label: 'provider-console', url: 'https://console.example/tx/opaque' };
+  const report = { schema_version: 'clearproof-investigation-v1', scope_digest: digest(1), as_of: 200,
+    states: { compliance: 'unknown', proof: 'unknown', counterparty: 'unknown', custody: 'submitted', chain: 'unknown', evidence: 'unknown' },
+    findings: [], timeline: [], provider_links: [link] };
+  expect(renderInvestigation(report, false)).toContain('Provider custody | provider-console | https://console.example/tx/opaque');
+  expect(renderInvestigation({ complete_from_start: true, items: [{ ...item(1, 5), provider_links: [link] }], next_cursor: null }, true)).toContain(link.url);
+  for (const url of ['javascript:alert(1)', 'http://console.example/', 'https://user:secret@console.example/',
+    'https://console.example/?secret=1', 'https://console.example/#secret', 'https://console.example/\u001b']) {
+    expect(() => renderInvestigation({ ...report, provider_links: [{ ...link, url }] }, false)).toThrow();
+  }
 });

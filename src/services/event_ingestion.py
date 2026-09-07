@@ -8,6 +8,7 @@ from src.auth.principal import Principal
 from src.protocol.canonical import record_digest
 from src.protocol.transfer import Address, Epoch, OpaqueId, Record, UInt128
 from src.reconciliation.events import Dimension, SourceEvent, TransferEvent, TransferScope, reconcile
+from src.reconciliation.provider_links import ProviderLinkCatalog
 from src.reconciliation.queue import QueueItem, QueuePage, QueueRequest
 from src.storage.pilot import PilotStore, RecordConflict
 
@@ -44,8 +45,9 @@ class EventAuthority(Record):
 
 
 class EventIngestionService:
-    def __init__(self, db, cipher, principal: Principal, *, authorities: tuple[EventAuthority, ...]):
+    def __init__(self, db, cipher, principal: Principal, *, authorities: tuple[EventAuthority, ...], links=()):
         self.principal = Principal.model_validate(principal)
+        self.links = ProviderLinkCatalog(links)
         if type(authorities) is not tuple or len(authorities) > 256:
             raise ValueError("Configure a bounded authority inventory")
         self.authorities = tuple(EventAuthority.model_validate(a) for a in authorities)
@@ -135,7 +137,10 @@ class EventIngestionService:
             raise EventAuthorityError("Investigation is outside the authenticated tenant")
         async with self.store.transaction() as tx:
             events = await self._load_events(tx, scope.digest)
-        return reconcile(scope, events, now=now)
+        report = reconcile(scope, events, now=now)
+        return report.model_copy(
+            update={"provider_links": self.links.for_events(self.principal.tenant_id, scope.digest, events)}
+        )
 
     async def _load_events(self, tx, scope_digest: str) -> tuple[TransferEvent, ...]:
         events = []
@@ -182,6 +187,7 @@ class EventIngestionService:
                             states=report.states,
                             findings=findings,
                             oldest_age_seconds=max(f.age_seconds for f in findings),
+                            provider_links=self.links.for_events(self.principal.tenant_id, digest, events),
                         )
                     )
         return QueuePage(

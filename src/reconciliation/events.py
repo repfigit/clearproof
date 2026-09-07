@@ -6,6 +6,7 @@ from pydantic import Field, model_validator
 
 from src.protocol.canonical import record_digest
 from src.protocol.transfer import Address, Epoch, Hex32, OpaqueId, Record, UInt128, uint128
+from src.reconciliation.provider_links import ProviderLink
 
 STATES = {
     "compliance": {"approved", "review", "denied"},
@@ -92,6 +93,7 @@ class Investigation(Record):
     states: dict[str, str]
     findings: tuple[InvestigationFinding, ...]
     timeline: tuple[TransferEvent, ...]
+    provider_links: tuple[ProviderLink, ...] = Field(default=(), max_length=8)
     source_authenticity: Literal["caller-required"] = "caller-required"
 
 

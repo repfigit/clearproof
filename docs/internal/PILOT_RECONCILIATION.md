@@ -50,9 +50,9 @@ retries, reject conflicting duplicate identities/sequences, exercise tenant and
 clock substitution, and distinguish complete, failed, timed-out and reorganized
 observations. Durable ingestion, queue reports and CLI/API validation are
 described below. The locally tested Fireblocks signature profile and encrypted
-intake are documented in `PILOT_FIREBLOCKS_ADAPTER.md`. Provider links, full
-workflow event coverage and the bilateral scenario remain open CP-012–CP-014
-integration. No live account integration is claimed by these local tests.
+intake are documented in `PILOT_FIREBLOCKS_ADAPTER.md`. Operator-configured provider links are described below. The
+[local bilateral scenario](PILOT_BILATERAL.md) also joins durable counterparty and
+custody observations. No live account integration is claimed by these local tests.
 
 ## Durable internal ingestion
 
@@ -205,3 +205,36 @@ These rules are operational review prompts, not jurisdictional legal policy or
 independent validation of provider/chain assertions. Tests cover all added
 adverse states, custody/finality separation, changed block hash/height under one
 source, reversed delivery and stable change age across repeated observations.
+
+
+## Scoped provider navigation
+
+The read-only investigation and queue endpoints load optional operator-owned
+`PILOT_INVESTIGATION_LINKS` configuration. It is a JSON object with a `links` array;
+each entry contains `tenant_id`, `scope_digest`, `source_id`, `label` and `url`.
+Use the canonical business-transfer scope digest, the source ID actually retained
+in its events, an opaque label such as `provider-console`, and the provider URL
+approved by the operator. No Fireblocks console route is guessed automatically.
+
+Only entries matching the authenticated tenant, requested transfer scope and a
+source present in that transfer's retained events appear in the report. Unknown
+transfers, unobserved sources and another tenant's entries are excluded. The
+request body cannot supply a link catalogue. Missing configuration yields no
+links; malformed configuration returns a minimized 503 response on report reads.
+
+URLs are bounded ASCII HTTPS navigation references without credentials, query
+strings, fragments, whitespace or backslashes. Select a query-free console or
+transaction URL; do not place tokens, names or raw personal information in it.
+The catalogue accepts at most 256 entries, eight per tenant/transfer, within a
+64 KiB configuration body. Duplicate source/URL references in the same scope
+reject. Links are emitted in deterministic source/label/URL order.
+
+The optional `provider_links` array is included in investigation responses and
+individual queue items. The readable CLI renders source, label and URL; it
+validates links even when emitting JSON. Older v1 responses that omit this
+optional field remain readable. The API and CLI never fetch or open these links.
+
+Navigation uses current operator configuration. It is not provider-signed evidence
+or proof of the remote site's authenticity, availability, settlement or legal
+compliance. Link changes do not change retained event commitments, projected
+states or findings. Keep the catalogue separate from encrypted evidence retention.

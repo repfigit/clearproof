@@ -1099,6 +1099,42 @@ async def test_event_api_real_jwt_configuration_and_minimized_errors(db, monkeyp
         assert (
             await client.post("/pilot/events/investigate", json={**scope, "tenant_id": "tenant-b"}, headers=headers)
         ).status_code == 403
+        link = dict(
+            tenant_id=source.scope.tenant_id,
+            scope_digest=source.scope.digest,
+            source_id=source.source_id,
+            label="provider-console",
+            url="https://console.example/tx/opaque",
+        )
+        excluded = [
+            dict(link, tenant_id="tenant-b"),
+            dict(link, scope_digest="ff" * 32),
+            dict(link, source_id="other-source"),
+        ]
+        monkeypatch.setenv("PILOT_INVESTIGATION_LINKS", json.dumps({"links": [link, *excluded]}))
+        linked = await client.post("/pilot/events/investigate", json=scope, headers=headers)
+        expected_link = {k: v for k, v in link.items() if k not in ("tenant_id", "scope_digest")}
+        assert linked.status_code == 200 and linked.json()["provider_links"] == [expected_link]
+        failure_event = dict(
+            body, state="failed", source_event_id="queue-failure", source_sequence=body["source_sequence"] + 1
+        )
+        assert (await client.post("/pilot/events/ingest", json=failure_event, headers=headers)).status_code == 200
+        page = await client.post("/pilot/events/queue", json={}, headers=headers)
+        assert page.status_code == 200 and page.json()["items"][0]["provider_links"] == [expected_link]
+        unknown_scope = {**scope, "transfer_id": "unknown-transfer"}
+        assert (await client.post("/pilot/events/investigate", json=unknown_scope, headers=headers)).json()[
+            "provider_links"
+        ] == []
+        spoofed_link = await client.post(
+            "/pilot/events/investigate", json={**scope, "provider_links": [link]}, headers=headers
+        )
+        assert spoofed_link.status_code == 422 and "console.example" not in spoofed_link.text
+        monkeypatch.setenv(
+            "PILOT_INVESTIGATION_LINKS", json.dumps({"links": [dict(link, url="javascript:PRIVATE-MARKER")]})
+        )
+        invalid = await client.post("/pilot/events/investigate", json=scope, headers=headers)
+        assert invalid.status_code == 503 and "PRIVATE-MARKER" not in invalid.text
+        monkeypatch.delenv("PILOT_INVESTIGATION_LINKS")
         monkeypatch.delenv("PILOT_EVENT_AUTHORITIES")
         assert (await client.post("/pilot/events/ingest", json=body, headers=headers)).status_code == 503
         assert (await client.post("/pilot/events/investigate", json=scope, headers=headers)).status_code == 200
