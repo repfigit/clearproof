@@ -580,3 +580,16 @@ still need completion and final merged-main verification.
   are not returned on disconnect, cancellation or limit/deadline failures.
 - Remaining Python, SDK, Solidity, docs/browser, operational-script and final
   review/publication requirements still prevent full repository completion.
+
+## Twenty-seventh checkpoint
+
+- Added nine policy evaluator tests for exact safe-integer clocks, positive fact
+  intervals, replay before effective intervals, unresolved applicability despite
+  a matched allow rule, and verified-fact enrichment preserving external scope
+  while rejecting duplicate predicates.
+- The policy/model/diff regression passes 96 tests. Evaluator coverage is 107/107
+  statements and 48/48 branches (`policy-evaluator-boundaries.log`/`.data`). Ruff
+  and whitespace pass; no production changes were required. These are deterministic
+  policy checks, not evidence of legal completeness or authority to consume proofs.
+- Full repository coverage remains incomplete across other Python modules,
+  SDK branches, Solidity, docs/browser, scripts and final publication checks.
