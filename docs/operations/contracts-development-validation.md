@@ -47,7 +47,7 @@ npm run compile --workspace=@clearproof/contracts
 
 The runner requires a complete inspected development bundle; it does not generate
 or approve new keys. It starts an owned Hardhat node on a dynamically selected
-loopback port, checks chain ID 31337 and runs all durable pilot storage tests.
+loopback port, checks chain ID 31337 and runs all durable pilot storage and publication-journal tests.
 Each test uses a unique database schema that is dropped afterward. The node and
 test process groups are cleaned up on success, failure or interruption, and node
 logs containing public development keys are kept in an ephemeral private file.
@@ -56,7 +56,9 @@ Missing dependencies/artifacts, node startup errors and test failures fail the r
 The authorization fixture deploys the matching verifier and registry before
 producing its real proof. After atomic PostgreSQL authorization it authenticates a
 fresh mirror plan, publishes its actual heads and statement, verifies and mirrors
-the receipt, and confirms the database consumption was not repeated. It exercises
+the receipt, and confirms the database consumption was not repeated. The
+publication journal is exercised with a lost response after node acceptance,
+database reconnect and hash-based inclusion lookup without a second send. It exercises
 wrong receipt/caller, replay and checkpoint invalidation, then continues the
 existing restart, API/CLI and offline historical verification checks. This local
 integration uses synthetic credentials and source approvals. It is not a deployed

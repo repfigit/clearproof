@@ -4179,7 +4179,20 @@ async def check_authorization_mirror(
 
         current = max(int(time.time()), (await mirror_evm.web3.eth.get_block("latest"))["timestamp"])
         current_plan = await service.prepare(receipt["receipt_id"], **{**arguments, "now": current})
-        assert await mirror_evm.check(current_plan) == receipt["receipt_id"]
+        from src.protocol.canonical import record_digest
+        from src.storage.publication_journal import PublicationJournal
+
+        async def revalidate(binding):
+            reviewed = max(int(time.time()), (await mirror_evm.web3.eth.get_block("latest"))["timestamp"])
+            assert reviewed < binding.expires_at
+            refreshed = await service.prepare(receipt["receipt_id"], **{**arguments, "now": reviewed})
+            assert (
+                record_digest("clearproof/mirror-plan/v1", {k: v for k, v in refreshed.items() if k != "prepared_at"})
+                == binding.plan_digest
+            )
+
+        journal = PublicationJournal(db, cipher(), exporter)
+        assert await mirror_evm.check(current_plan, journal, revalidate) == receipt["receipt_id"]
     # A signed receipt is insufficient if its actual authoritative consumption is absent.
     async with db.connection() as conn:
         await conn.execute(

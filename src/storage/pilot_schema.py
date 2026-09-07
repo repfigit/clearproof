@@ -95,3 +95,28 @@ CHECK (kind IN ('credential','proof','transfer','receipt','event','policy','revo
                'issuance-root','issuer-root','sanctions-root','idempotency','root-source',
                'provider-evidence','fact-evidence','policy-activation','authorization-evidence','observation'));
 """
+
+
+PUBLICATION_JOURNAL_MIGRATION = """
+CREATE TABLE pilot_publications (
+    tenant_id TEXT NOT NULL,
+    intent_id TEXT NOT NULL CHECK (intent_id ~ '^[0-9a-f]{64}$' AND length(intent_id)=64),
+    receipt_id TEXT NOT NULL,
+    receipt_kind TEXT NOT NULL DEFAULT 'receipt' CHECK (receipt_kind='receipt'),
+    receipt_revision BIGINT NOT NULL DEFAULT 1 CHECK (receipt_revision=1),
+    phase TEXT NOT NULL CHECK (phase IN ('publish','mirror')),
+    chain_id BIGINT NOT NULL CHECK (chain_id BETWEEN 1 AND 9007199254740991),
+    sender TEXT NOT NULL CHECK (sender ~ '^0x[0-9a-f]{40}$' AND length(sender)=42),
+    nonce BIGINT NOT NULL CHECK (nonce BETWEEN 0 AND 9007199254740991),
+    broadcast_claimed BOOLEAN NOT NULL DEFAULT false,
+    key_id TEXT NOT NULL,
+    content_tag TEXT NOT NULL,
+    cipher_nonce BYTEA NOT NULL CHECK (octet_length(cipher_nonce)=12),
+    ciphertext BYTEA NOT NULL CHECK (octet_length(ciphertext) BETWEEN 16 AND 65552),
+    PRIMARY KEY (tenant_id,intent_id),
+    UNIQUE (chain_id,sender,nonce),
+    UNIQUE (tenant_id,receipt_id,phase),
+    FOREIGN KEY (tenant_id,receipt_kind,receipt_id,receipt_revision)
+        REFERENCES pilot_records(tenant_id,kind,record_id,revision)
+);
+"""

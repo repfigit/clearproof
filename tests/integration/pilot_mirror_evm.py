@@ -1,12 +1,19 @@
 """Synthetic PostgreSQL-to-EVM gate. Only an explicitly configured loopback node is allowed."""
 
+import hashlib
 import json
+import time
 from pathlib import Path
 from urllib.parse import urlsplit
 
 import pytest
+from eth_account import Account
 from web3 import AsyncHTTPProvider, AsyncWeb3
 from web3.exceptions import ContractLogicError
+
+from src.protocol.canonical import record_digest
+from src.storage.pilot import RecordConflict
+from src.storage.publication_journal import PublicationBinding
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -57,7 +64,64 @@ class LocalAuthorizationEVM:
         assert receipt["status"] == 1
         return receipt
 
-    async def check(self, plan):
+    async def journal_send(self, operation, sender, phase, statement_id, plan, journal, revalidate):
+        # Public Hardhat mnemonic, exclusively for this owned loopback development node.
+        Account.enable_unaudited_hdwallet_features()
+        index = [self.admin, self.publisher, self.consumer].index(sender)
+        signer = Account.from_mnemonic(
+            "test test test test test test test test test test test junk", account_path=f"m/44'/60'/0'/0/{index}"
+        )
+        assert signer.address == sender
+        transaction = await operation.build_transaction(
+            {"from": sender, "nonce": await self.web3.eth.get_transaction_count(sender, "pending")}
+        )
+        signed = signer.sign_transaction(transaction)
+        semantic_plan = {k: v for k, v in plan.items() if k != "prepared_at"}
+        binding = PublicationBinding(
+            receipt_id=plan["receipt_id"],
+            statement_id=bytes(statement_id).hex(),
+            phase=phase,
+            chain_id=31337,
+            registry=self.address,
+            sender=sender.lower(),
+            calldata_digest=hashlib.sha256(bytes.fromhex(transaction["data"][2:])).hexdigest(),
+            plan_digest=record_digest("clearproof/mirror-plan/v1", semantic_plan),
+            runtime_sha256=hashlib.sha256(await self.web3.eth.get_code(self.contract.address)).hexdigest(),
+            expires_at=plan["publish_before"],
+        )
+        identity = await journal.reserve(binding, bytes(signed.raw_transaction), now=int(time.time()))
+        assert await journal.reserve(binding, bytes(signed.raw_transaction), now=int(time.time())) == identity
+        sent = []
+
+        async def send(raw):
+            sent.append(raw)
+            result = await self.web3.eth.send_raw_transaction(raw)
+            if phase == "publish":
+                # Node accepted it, but this caller lost the response before recording it.
+                raise TimeoutError("Synthetic lost publication response")
+            return result
+
+        if phase == "publish":
+            with pytest.raises(TimeoutError):
+                await journal.broadcast_once(identity, revalidate=revalidate, send_raw=send)
+        else:
+            assert (
+                await journal.broadcast_once(identity, revalidate=revalidate, send_raw=send) == bytes(signed.hash).hex()
+            )
+        await journal.store._db.close()
+        await journal.store._db.connect()
+        observed = await journal.inspect(identity)
+        assert observed["broadcast_claimed"] and observed["chain_outcome"] == "not-established"
+        assert observed["transaction_hash"] == bytes(signed.hash).hex()
+        included = await self.web3.eth.wait_for_transaction_receipt(
+            bytes.fromhex(observed["transaction_hash"]), timeout=30
+        )
+        assert included["status"] == 1
+        with pytest.raises(RecordConflict):
+            await journal.broadcast_once(identity, revalidate=revalidate, send_raw=send)
+        assert len(sent) == 1
+
+    async def check(self, plan, journal, revalidate):
         assert plan["publication_state"] == "not-published"
         assert plan["consumption_owner"] == "postgresql" and plan["contract_effect"] == "audit-mirror-only"
         assert plan["assurance"] == "development-unapproved"
@@ -95,7 +159,15 @@ class LocalAuthorizationEVM:
         )
         identity = await fn.statementId(tenant, statement).call()
         assert await fn.statementPublication(identity).call() == [False, 0]
-        await self.send(fn.publishBatch(tenant, epoch, updates, statement), self.publisher)
+        await self.journal_send(
+            fn.publishBatch(tenant, epoch, updates, statement),
+            self.publisher,
+            "publish",
+            identity,
+            plan,
+            journal,
+            revalidate,
+        )
         # Read-back works without relying on the publication response or client memory.
         reconnected = self.web3.eth.contract(address=self.contract.address, abi=artifact("PilotCurrentRegistry")["abi"])
         assert await reconnected.functions.statementPublication(identity).call() == [True, epoch]
@@ -106,7 +178,15 @@ class LocalAuthorizationEVM:
         for bad_receipt, sender in [(bytes(32), self.consumer), (receipt_id, self.publisher)]:
             with pytest.raises((ContractLogicError, ValueError)):
                 await fn.mirror(tenant, identity, bad_receipt, *args[2:]).call({"from": sender})
-        await self.send(fn.mirror(tenant, identity, receipt_id, *args[2:]), self.consumer)
+        await self.journal_send(
+            fn.mirror(tenant, identity, receipt_id, *args[2:]),
+            self.consumer,
+            "mirror",
+            identity,
+            plan,
+            journal,
+            revalidate,
+        )
         assert await reconnected.functions.mirroredReceipts(tenant, signals[3]).call() == receipt_id
         with pytest.raises((ContractLogicError, ValueError)):
             await fn.mirror(tenant, identity, receipt_id, *args[2:]).call({"from": self.consumer})

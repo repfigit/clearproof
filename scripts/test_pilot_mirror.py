@@ -83,7 +83,15 @@ def main():
                 "Running real PostgreSQL authorization and receipt mirroring on an isolated development EVM", flush=True
             )
             tests = subprocess.Popen(
-                [sys.executable, "-m", "pytest", "tests/integration/test_pilot_storage.py", "-q", "--tb=short"],
+                [
+                    sys.executable,
+                    "-m",
+                    "pytest",
+                    "tests/integration/test_pilot_storage.py",
+                    "tests/integration/test_publication_journal.py",
+                    "-q",
+                    "--tb=short",
+                ],
                 cwd=ROOT,
                 env=env,
                 start_new_session=True,

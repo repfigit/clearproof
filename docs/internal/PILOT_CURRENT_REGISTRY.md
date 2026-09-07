@@ -105,9 +105,10 @@ Existence is historical: it does not prove current head validity, current publis
 epoch, finality or mirroring. Reconciliation must check the configured chain and
 runtime, transaction inclusion/finality, current epoch and heads, and the exact
 `mirroredReceipts(tenant, nullifier)` value before reporting the relevant outcome.
-Retain the intended statement ID and transaction identity before broadcast. Do not
-blindly resend a new transaction after a timeout. The durable writer and its
-recovery orchestration remain unimplemented.
+The [publication journal](PILOT_PUBLICATION_JOURNAL.md) retains the intended
+statement ID and signed transaction identity before a one-time broadcast claim.
+It preserves an uncertain outcome across reconnect and rejects an automatic second
+send. Chain reconciliation, finality and replacement orchestration remain required.
 
 ## Authenticated preparation
 
@@ -152,8 +153,9 @@ approval. Tests exercise valid read-only inspection, missing/non-ALLOW approval,
 caller/tenant/context rejection, changed proof material, replay, checkpoint
 supersession and restoration, disabled credentials/approval, expiry and publisher
 replacement. Batch tests additionally cover atomic rollback after late rejection,
-exact head reuse, stale epochs/revisions and deterministic publication lookup. The fresh-artifact builder invokes this suite using its own Python
-interpreter and artifact outputs.
+exact head reuse, stale epochs/revisions and deterministic publication lookup. The
+fresh-artifact builder invokes this suite using its own Python interpreter and
+artifact outputs.
 
 The real PostgreSQL authorization test independently exercises preparation from an
 actual consumed receipt, same-clock/reconnect stability, read-only counts, exact
@@ -171,11 +173,14 @@ exactly one consumption and unchanged retained-record counts.
 `scripts/test_pilot_mirror.py` runs the full durable pilot suite with its own fresh
 loopback node, isolated test database schemas and cleanup of owned processes. The
 fresh-artifact CI job uses this runner. This is a synthetic local integration gate:
-it does not fetch live sources, implement a durable publisher process or establish
-shared database/chain finality. Checkpoint invalidation is explicitly submitted by
+it does not fetch live sources or establish shared database/chain finality. The
+journal path retains signed publish/mirror transactions, loses the publication
+response after node acceptance, reconnects PostgreSQL and finds the transaction
+by its retained hash without sending again. This is recovery evidence for the
+journal, not a complete publisher worker. Checkpoint invalidation is explicitly submitted by
 the fixture; it does not demonstrate an automated source revocation relay.
 
-To complete CP-007, implement the publication writer and join these gates with
+To complete CP-007, finish the publication worker and broaden the joined gate with
 shared adversarial tests against actual enrollment, facts, policy, valuation,
 information and recipient authorities. Reconcile uncertain transaction outcomes
 without creating another authorization. These contracts and tests remain unapproved
