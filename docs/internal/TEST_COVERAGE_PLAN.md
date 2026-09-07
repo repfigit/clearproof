@@ -53,11 +53,11 @@ exercise every supported test layer with its required local dependencies.
 
 Python: chain writer, snarkjs prover, gRPC failure paths, keyring rotation,
 API startup/shutdown and proof route error paths. The current combined report
-still has 927 missed lines and 468 missed branches. Subprocess coverage must also be captured before interpreting child
+still has 927 missed lines and 467 missed branches. Subprocess coverage must also be captured before interpreting child
 CLI modules as unexecuted.
 
-CLI: prove/verify/demo, entrypoint execution, artifact discovery and remaining
-doctor/policy/investigation/report transport branches.
+CLI: source line/branch/function/statement coverage is now 100%, enforced by CI.
+Keep the actual artifact/service acceptance tests alongside mocked boundary tests.
 
 Solidity: router administration/timelocks, oracle updates, VASP administration,
 registry validation failures and cryptographic rejection branches. Retest normal
@@ -92,6 +92,33 @@ remain part of the coverage inventory; the shared content modules now have a
   exercise packaged help and signal explanations, rendering, diagnostics,
   interactive recipes and history/counterparty process lifecycle handling.
 
-Remaining integrity investigations include interleaved file-audit writers and
-prover subprocess timeout/rejection handling. A 100% module coverage result does
+Remaining integrity investigations include prover subprocess timeout/rejection
+handling and legacy audit-log newline compatibility. A 100% module coverage result does
 not by itself prove these behavioral properties. The full objective remains open.
+
+
+## Third checkpoint
+
+- CLI: 141 tests pass with 432/432 lines, 238/238 branches, 59/59 functions and
+  476/476 statements. The coverage command now requires 100% for each metric.
+  Tests include actual entrypoint dispatch, private-input timeout cleanup,
+  policy/investigation schemas, resumed queue completeness, proof file selection,
+  verification exit codes and development-labelled demo export hashes.
+- File audit: synchronized independent processes and interleaved instances now
+  extend one chain. Each operation uses a Portalocker file lock, reads the current
+  predecessor from the locked handle, and flushes/fsyncs before release. Lock
+  contention and incomplete trailing records fail without an unlocked append.
+  The local filesystem concurrency tests verify all 48 records and their links.
+- PostgreSQL audit: head selection and insertion now share one transaction and
+  table lock. Verification checks sequence continuity and predecessor linkage,
+  rejecting rehashed splices as well as individually invalid hashes. Real database
+  concurrency and tampering regressions pass; the storage suite has 18 tests.
+- Both audit modules retain 100% measured source line/branch coverage.
+- Full Python run: 1159 passed, with the one checkpoint test separately passing
+  on an owned local EVM. Combined coverage is 7372/8299 lines (88.83%) and
+  1589/2056 branches (77.29%). No generated source was removed from the denominator.
+
+File-lock API reference: [Portalocker quickstart](https://portalocker.readthedocs.io/en/latest/quickstart.html).
+Locks coordinate cooperating writers; these tests cover the local filesystem.
+The remaining Python, SDK, contracts, docs and operational-script requirements
+still need completion and final merged-main verification.

@@ -18,6 +18,9 @@ import logging
 import os
 import time
 from pathlib import Path
+from typing import BinaryIO
+
+import portalocker
 
 logger = logging.getLogger(__name__)
 
@@ -25,10 +28,11 @@ logger = logging.getLogger(__name__)
 class AuditMirror:
     """Append-only audit mirror with hash-chain integrity."""
 
-    def __init__(self, path: str | None = None) -> None:
+    def __init__(self, path: str | None = None, *, lock_timeout: float = 30) -> None:
         self._path = Path(path or os.environ.get("AUDIT_MIRROR_PATH", "./audit/mirror.jsonl"))
         self._path.parent.mkdir(parents=True, exist_ok=True)
-        self._prev_hash: str = self._compute_tail_hash()
+        self._lock_timeout = lock_timeout
+        self._compute_tail_hash()  # Fail on an unreadable existing log.
 
     # -- internal helpers ------------------------------------------------------
 
@@ -40,24 +44,27 @@ class AuditMirror:
         zero_hash = "0" * 64
         if not self._path.exists():
             return zero_hash
+        with portalocker.Lock(self._path, "rb", timeout=self._lock_timeout) as f:
+            return self._read_tail_hash(f)
+
+    @staticmethod
+    def _read_tail_hash(f: BinaryIO) -> str:
         # Read backwards until a complete non-empty record is available. Records
         # can exceed a chunk; hashing only the last 4 KB would fork the chain.
-        # I/O errors propagate: an unreadable existing log must not start anew.
-        with open(self._path, "rb") as f:
-            f.seek(0, 2)
-            position = f.tell()
-            fragment = b""
-            while position:
-                size = min(4096, position)
-                position -= size
-                f.seek(position)
-                lines = (f.read(size) + fragment).split(b"\n")
-                complete = lines[1:] if position else lines
-                for line in reversed(complete):
-                    if line:
-                        return hashlib.sha256(line).hexdigest()
-                fragment = lines[0]
-        return zero_hash
+        f.seek(0, 2)
+        position = f.tell()
+        fragment = b""
+        while position:
+            size = min(4096, position)
+            position -= size
+            f.seek(position)
+            lines = (f.read(size) + fragment).split(b"\n")
+            complete = lines[1:] if position else lines
+            for line in reversed(complete):
+                if line:
+                    return hashlib.sha256(line).hexdigest()
+            fragment = lines[0]
+        return "0" * 64
 
     # -- public API ------------------------------------------------------------
 
@@ -76,22 +83,29 @@ class AuditMirror:
             block_number: Ethereum block number (if applicable).
             tx_hash: Ethereum transaction hash (if applicable).
         """
-        entry = {
-            "timestamp": time.time(),
-            "event_type": event_type,
-            "block_number": block_number,
-            "tx_hash": tx_hash,
-            "data": data,
-            "prev_hash": self._prev_hash,
-        }
-        line = json.dumps(entry, separators=(",", ":"), sort_keys=True)
-        next_hash = hashlib.sha256(line.encode()).hexdigest()
+        # Every writer derives the predecessor from the file while holding the
+        # same lock through flush/fsync. No per-instance cached tail is trusted.
+        with portalocker.Lock(self._path, "a+b", timeout=self._lock_timeout) as f:
+            f.seek(0, 2)
+            if f.tell():
+                f.seek(-1, 2)
+                if f.read(1) != b"\n":
+                    raise ValueError("Audit mirror has an incomplete trailing record")
+            entry = {
+                "timestamp": time.time(),
+                "event_type": event_type,
+                "block_number": block_number,
+                "tx_hash": tx_hash,
+                "data": data,
+                "prev_hash": self._read_tail_hash(f),
+            }
+            line = json.dumps(entry, separators=(",", ":"), sort_keys=True).encode("utf-8")
+            f.seek(0, 2)
+            f.write(line + b"\n")
+            f.flush()
+            os.fsync(f.fileno())
 
-        with open(self._path, "a") as f:
-            f.write(line + "\n")
-        self._prev_hash = next_hash
-
-        logger.debug("Audit mirror: %s recorded (hash=%s)", event_type, self._prev_hash[:12])
+        logger.debug("Audit mirror record appended (hash=%s)", hashlib.sha256(line).hexdigest()[:12])
 
     def verify_integrity(self) -> bool:
         """Verify the hash chain of the entire mirror file.
@@ -104,7 +118,7 @@ class AuditMirror:
 
         prev_hash = "0" * 64
         try:
-            with open(self._path, "r") as f:
+            with portalocker.Lock(self._path, "r", timeout=self._lock_timeout, encoding="utf-8") as f:
                 for lineno, raw_line in enumerate(f, start=1):
                     raw_line = raw_line.rstrip("\n")
                     if not raw_line:

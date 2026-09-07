@@ -238,3 +238,45 @@ class TestPersistentAuditLog:
                 await cur.execute("UPDATE audit_entries SET entry_hash = 'deadbeef' WHERE sequence_number = 1")
         valid = await log.verify_chain(start_seq=0)
         assert valid is False
+
+
+async def test_audit_concurrent_appends_have_unique_contiguous_sequences(audit_log):
+    import asyncio
+
+    entries = await asyncio.gather(*(audit_log.append("synthetic", "actor", f"t-{i}", b"metadata") for i in range(8)))
+    assert sorted(entry.sequence_number for entry in entries) == list(range(1, 9))
+    stored = await audit_log.get_entries()
+    assert len(stored) == 8
+    assert await audit_log.verify_chain()
+    assert await audit_log.verify_chain(start_seq=4)
+
+
+async def test_audit_rejects_a_self_consistent_record_with_the_wrong_predecessor(audit_log, db):
+    from src.storage.models import StoredAuditEntry
+
+    await audit_log.append("first", "actor", "t-1", b"one")
+    entry = await audit_log.append("second", "actor", "t-2", b"two")
+    wrong_previous = "f" * 64
+    replacement_hash = StoredAuditEntry.compute_hash(entry.data_hash, wrong_previous, entry.sequence_number)
+    async with db.connection() as conn:
+        await conn.execute(
+            "UPDATE audit_entries SET prev_entry_hash = %s, entry_hash = %s WHERE sequence_number = 2",
+            (wrong_previous, replacement_hash),
+        )
+    assert await audit_log.verify_chain() is False
+    assert await audit_log.verify_chain(start_seq=1) is False
+
+
+async def test_audit_rejects_a_deleted_record_even_when_next_link_is_rehashed(audit_log, db):
+    from src.storage.models import StoredAuditEntry
+
+    first = await audit_log.append("first", "actor", "t-1", b"one")
+    await audit_log.append("second", "actor", "t-2", b"two")
+    third = await audit_log.append("third", "actor", "t-3", b"three")
+    async with db.connection() as conn:
+        await conn.execute("DELETE FROM audit_entries WHERE sequence_number = 2")
+        await conn.execute(
+            "UPDATE audit_entries SET prev_entry_hash = %s, entry_hash = %s WHERE sequence_number = 3",
+            (first.entry_hash, StoredAuditEntry.compute_hash(third.data_hash, first.entry_hash, 3)),
+        )
+    assert await audit_log.verify_chain() is False
