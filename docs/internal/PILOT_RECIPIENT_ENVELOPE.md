@@ -20,6 +20,9 @@ a domain-separated digest of tenant, exact transfer/context/proof digests,
 recipient DID/key ID and sealing time. Ciphertext uses bounded 2048-character
 base64 chunks so it fits the existing canonical encrypted-record format. The
 legacy HPKE format and its protocol bridge serialization are unchanged.
+HPKE decoding requires the canonical padded base64url encoding emitted by the
+encoder. Ignored characters, whitespace, extra padding and nonzero unused pad
+bits reject, even when a permissive decoder would recover identical bytes.
 
 `open_pilot_envelope` requires independently expected binding metadata. It checks
 the complete binding, key fingerprint derived from the recipient private key,
@@ -37,12 +40,14 @@ recover the original ciphertext and receipt even after key expiry.
 
 Recipient authority or encryption failure aborts authorization. A subsequent
 storage/consumption failure rolls back the envelope, proof, receipt and consumption
-together. There is no shared-key or plaintext fallback. Delivery, acknowledgment,
-complete IVMS101 mapping and sender-authenticated bilateral exchange remain
-separate required integrations; the signed business fact about information
+together. There is no shared-key or plaintext fallback. Live delivery,
+acknowledgment, complete IVMS101 mapping and remote bilateral interoperability
+remain separate integration gates. The local counterparty simulator checks
+independently trusted information and decision signatures before accepting its
+decrypted payload; it does not establish live interoperability. The signed business fact about information
 completeness does not establish the truth of the validated personal fields.
 
 Tests use real X25519/HPKE and synthetic bytes. They cover scoped authority,
 validity and rotation overlap, wrong keys, altered metadata/associated data,
-valid-base64 ciphertext corruption, maximum payload size, encryption failure,
+valid-base64 ciphertext corruption, noncanonical encoding, maximum payload size, encryption failure,
 changed-payload retries and recipient decryption after database reconnect.

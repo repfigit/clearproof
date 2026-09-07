@@ -71,7 +71,10 @@ def _b64e(data: bytes) -> str:
 
 
 def _b64d(data: str) -> bytes:
-    return base64.urlsafe_b64decode(data.encode("ascii"))
+    decoded = base64.b64decode(data.encode("ascii"), altchars=b"-_", validate=True)
+    if _b64e(decoded) != data:
+        raise ValueError("Noncanonical envelope encoding")
+    return decoded
 
 
 def generate_keypair() -> tuple[bytes, bytes]:
