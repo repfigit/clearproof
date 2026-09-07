@@ -505,3 +505,20 @@ still need completion and final merged-main verification.
 - Ruff and whitespace pass. No production changes were required. The remaining
   history integrity paths and broader Python/SDK/contracts/docs/scripts and final
   publication requirements remain open; this is not full coverage completion.
+
+## Twenty-second checkpoint
+
+- Added four PostgreSQL integrity tests for missing publication intent, unknown
+  history cursor, SQL/encrypted sequence mismatch, authenticated sequence gaps
+  and a cursor whose next retained row skips its requested sequence.
+- Corruption is limited to isolated synthetic test schemas. The gap test re-seals
+  a valid encrypted/digested row with sequence 2 as the first row, proving that
+  history checks enforce continuity beyond ciphertext authentication. Rejections
+  leave the publication unbroadcast.
+- The related regression passes 97 tests, including 20 PostgreSQL cases. History
+  measures 109/109 statements and 38/38 branches in
+  `publication-history-complete.log`/`.data`. Ruff and whitespace pass. PostgreSQL
+  was stopped after verification; no production changes were needed.
+- Whole-repository completion remains unproven. Other Python gaps, SDK branches,
+  Solidity, docs/browser rendering, operational scripts and final review/merge
+  evidence remain required.

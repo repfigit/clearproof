@@ -360,3 +360,69 @@ async def test_attempt_migration_preserves_existing_claims_and_unclaimed_intents
     assert before[0]["broadcast_attempts"] == 1 and before[1]["broadcast_attempts"] == 0
     with pytest.raises(RecordConflict):
         await journal.broadcast_once(first, revalidate=current, send_raw=crash)
+
+
+async def test_history_rejects_missing_intent_and_unknown_cursor(db):
+    from src.storage.publication_history import PublicationHistory
+
+    journal, account, transaction, binding = await seed(db)
+    identity = await journal.reserve(binding, bytes(account.sign_transaction(transaction).raw_transaction), now=1)
+    history = PublicationHistory(journal)
+    value = observation(identity, await journal.inspect(identity))
+    missing = "ff" * 32
+    with pytest.raises(ValueError, match="^Publication intent is unavailable$"):
+        await history.append(missing, {**value, "intent_id": missing}, policy_digest="11" * 32, observed_at=20)
+    await history.append(identity, value, policy_digest="11" * 32, observed_at=20)
+    with pytest.raises(ValueError, match="^History cursor does not identify a retained observation$"):
+        await history.page(identity, after=99)
+
+
+@pytest.mark.parametrize("corruption", ["index-mismatch", "sequence-gap", "cursor-gap"])
+async def test_history_rejects_index_substitution_and_authenticated_sequence_gaps(db, corruption):
+    from src.storage.publication_history import PublicationHistory
+
+    journal, account, transaction, binding = await seed(db)
+    identity = await journal.reserve(binding, bytes(account.sign_transaction(transaction).raw_transaction), now=1)
+    history = PublicationHistory(journal)
+    first = await history.append(
+        identity,
+        observation(identity, await journal.inspect(identity)),
+        policy_digest="11" * 32,
+        observed_at=20,
+    )
+    async with db.connection() as conn:
+        if corruption == "index-mismatch":
+            # SQL metadata is not authenticated by the encrypted payload's digest.
+            await conn.execute(
+                "UPDATE pilot_publication_observations SET sequence=2 WHERE tenant_id=%s AND intent_id=%s",
+                (journal.store.tenant_id, identity),
+            )
+        else:
+            # Deliberately retain an authenticated but noncontiguous history row.
+            # This tests semantic chain validation beyond AEAD/digest integrity.
+            value = {key: value for key, value in first.items() if key != "observation_id"}
+            value["sequence"] = 2
+            record_id = record_digest("clearproof/publication-observation/v1", value)
+            sealed = journal.cipher.seal(journal.store.tenant_id, "publication-observation", record_id, 1, value)
+            await conn.execute(
+                "UPDATE pilot_publication_observations SET sequence=2, observation_id=%s, key_id=%s, "
+                "content_tag=%s, cipher_nonce=%s, ciphertext=%s WHERE tenant_id=%s AND intent_id=%s",
+                (
+                    record_id,
+                    sealed["key_id"],
+                    sealed["content_tag"],
+                    sealed["nonce"],
+                    sealed["ciphertext"],
+                    journal.store.tenant_id,
+                    identity,
+                ),
+            )
+        await conn.commit()
+    message = {
+        "index-mismatch": "Publication history identity differs from retained evidence",
+        "sequence-gap": "Publication history chain is incomplete",
+        "cursor-gap": "History cursor does not identify a retained observation",
+    }[corruption]
+    with pytest.raises(ValueError, match=f"^{message}$"):
+        await history.page(identity, after=1 if corruption == "cursor-gap" else 0)
+    assert not (await journal.inspect(identity))["broadcast_claimed"]
