@@ -2027,6 +2027,7 @@ async def test_durable_current_inspection_real_pairing_and_revocation(db, monkey
                 == hashlib.sha256(bytes.fromhex(signed_information.signature)).hexdigest()
             )
             assert (await retained.get("receipt", receipt["receipt_id"]))["authorized_at"] == now
+            check_bilateral_scenarios(record, receipt, configuration, decision_authority, payload_args, private, now)
             assert (await service().inspect(credential.credential_nonce, proof, signals, now=now)).cryptographic_valid
             async with db.connection() as conn:
                 assert (await (await conn.execute("SELECT count(*) FROM pilot_records")).fetchone())[0] == baseline + 9
@@ -4211,3 +4212,72 @@ async def check_authorization_mirror(
     async with db.connection() as conn:
         assert (await (await conn.execute("SELECT count(*) FROM pilot_records")).fetchone())[0] == before
         assert (await (await conn.execute("SELECT count(*) FROM pilot_consumptions")).fetchone())[0] == 1
+
+
+def check_bilateral_scenarios(record, receipt, configuration, decision_authority, payload, private, now):
+    import copy
+    import json
+
+    from cryptography.hazmat.primitives.asymmetric.x25519 import X25519PrivateKey
+
+    from src.protocol.bridges.pilot_bilateral import LocalBilateralCounterparty
+    from src.protocol.bridges.trp_bridge import TRPBridge
+    from src.protocol.decision_attestation import DecisionTrustStore
+    from src.sar.pilot_envelope import RecipientTrustStore
+
+    request = TRPBridge.build_pilot_request(record, receipt)
+    assert payload["pii"].decode() not in json.dumps(request)
+    configuration_args = dict(
+        transfer=configuration.transfer,
+        context=configuration.context,
+        decision_trust=DecisionTrustStore([decision_authority]),
+        information_trust=payload["information_trust"],
+        recipient_trust=payload["recipient_trust"],
+        private_keys={receipt["recipient_key_id"]: private},
+    )
+    receiver = LocalBilateralCounterparty(**configuration_args)
+    for behavior, outcome in (
+        ("accept", "accepted"),
+        ("reject", "rejected"),
+        ("request-information", "information-requested"),
+    ):
+        result = receiver.receive(request, now=now, behavior=behavior)
+        assert result["outcome"] == outcome and result["source_authenticity"] == "local-simulator"
+        assert result["authorization"] == "not-created" and result["execution"] == "not-requested"
+        assert receiver.receive(copy.deepcopy(request), now=now, behavior=behavior) == result
+        assert payload["pii"].decode() not in json.dumps(result)
+    assert receiver.receive(request, now=now, behavior="timeout", deadline=now + 1)["outcome"] == "pending"
+    assert receiver.receive(request, now=now + 1, behavior="timeout", deadline=now + 1)["outcome"] == "timeout"
+    unsupported = {**request, "profile": "unsupported-pilot-v99"}
+    assert receiver.receive(unsupported, now=now)["outcome"] == "unsupported-version"
+    authority = payload["recipient_trust"].select(
+        receipt["recipient_key_id"], configuration.transfer, configuration.context, now=now
+    )
+    new_private = X25519PrivateKey.from_private_bytes(bytes([33]) * 32)
+    successor = authority.model_copy(update={"public_key": new_private.public_key().public_bytes_raw().hex()})
+    overlap = LocalBilateralCounterparty(
+        **{
+            **configuration_args,
+            "recipient_trust": RecipientTrustStore([authority, successor]),
+            "private_keys": {authority.key_id: private, successor.key_id: new_private.private_bytes_raw()},
+        }
+    )
+    assert overlap.receive(request, now=now)["outcome"] == "accepted"
+    retired = LocalBilateralCounterparty(
+        **{
+            **configuration_args,
+            "recipient_trust": RecipientTrustStore([successor]),
+            "private_keys": {successor.key_id: new_private.private_bytes_raw()},
+        }
+    )
+    with pytest.raises(ValueError):
+        retired.receive(request, now=now)
+    for field in ("envelope", "authorization_request", "decision", "information_approval"):
+        changed = copy.deepcopy(request)
+        changed[field] = {}
+        with pytest.raises(ValueError, match="Invalid local bilateral"):
+            receiver.receive(changed, now=now)
+    with pytest.raises(ValueError):
+        receiver.receive(request, now=receipt["expires_at"])
+    with pytest.raises(ValueError):
+        LocalBilateralCounterparty(**{**configuration_args, "private_keys": {}}).receive(request, now=now)
