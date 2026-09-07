@@ -382,3 +382,43 @@ def test_discovery_key_rejects_base64_padding_bit_alias():
     assert base64.urlsafe_b64decode(alias + "=") == base64.urlsafe_b64decode(encoded + "=")
     with pytest.raises(DiscoveryInvalid, match="HPKE public key has noncanonical encoding"):
         decode_hpke_key(alias)
+
+
+@pytest.mark.parametrize("settings", ["[]", "null", '"synthetic"', "{", " " * 16385])
+async def test_invalid_operator_egress_settings_do_not_replace_or_use_cached_client(monkeypatch, settings):
+    import src.protocol.discovery as discovery
+
+    client = DiscoveryClient()
+    fetch = AsyncMock(return_value=DOCUMENT)
+    monkeypatch.setattr(discovery, "fetch_document", fetch)
+    await client.discover("beneficiary.example")
+    assert client._cache
+    monkeypatch.setattr(discovery, "_default_client", client)
+    monkeypatch.setattr(discovery, "_default_settings", ("{}", None, None))
+    monkeypatch.setenv("DISCOVERY_PRIVATE_DESTINATIONS", settings)
+    monkeypatch.delenv("SSL_CERT_FILE", raising=False)
+    monkeypatch.delenv("SSL_CERT_DIR", raising=False)
+    with pytest.raises(DiscoveryInvalid, match="^Invalid operator discovery egress configuration$"):
+        await discovery.resolve_hpke_public_key("beneficiary.example")
+    assert discovery._default_client is client
+    assert discovery._default_settings == ("{}", None, None)
+    fetch.assert_awaited_once()
+
+
+async def test_public_cache_clear_forces_key_refetch(monkeypatch):
+    import src.protocol.discovery as discovery
+
+    client = DiscoveryClient()
+    monkeypatch.setattr(discovery, "_default_client", client)
+    monkeypatch.setattr(discovery, "_default_settings", ("{}", None, None))
+    monkeypatch.setenv("DISCOVERY_PRIVATE_DESTINATIONS", "{}")
+    monkeypatch.delenv("SSL_CERT_FILE", raising=False)
+    monkeypatch.delenv("SSL_CERT_DIR", raising=False)
+    fetch = AsyncMock(return_value=DOCUMENT)
+    monkeypatch.setattr(discovery, "fetch_document", fetch)
+    first = await discovery.resolve_hpke_public_key("beneficiary.example")
+    assert await discovery.resolve_hpke_public_key("beneficiary.example") == first
+    fetch.assert_awaited_once()
+    discovery.clear_discovery_cache()
+    assert await discovery.resolve_hpke_public_key("beneficiary.example") == first
+    assert fetch.await_count == 2

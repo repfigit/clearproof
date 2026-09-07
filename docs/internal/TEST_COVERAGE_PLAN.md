@@ -735,3 +735,16 @@ still need completion and final merged-main verification.
   pass; no production changes or proving artifacts changed.
 - Remaining Python, SDK, Solidity, docs/browser, scripts and final publication
   evidence keep the full repository coverage objective active and incomplete.
+
+## Thirty-ninth checkpoint
+
+- Added six discovery-client tests for malformed/non-object/oversized operator
+  egress configuration and the public cache-clear helper. Invalid configuration
+  neither replaces the last valid client nor returns its cached key; explicit
+  clearing causes a new fetch.
+- All 132 discovery tests pass. Client coverage is 59/59 statements and 16/16
+  branches (`discovery-client-complete.log`/`.data`). Ruff and whitespace pass;
+  no production changes were required. These tests mock document fetches; the
+  existing transport suite separately covers real local TLS/egress behavior.
+- Remaining Python, SDK, Solidity, docs/browser, scripts and publication checks
+  keep full repository coverage incomplete. Overall reports still need refresh.
