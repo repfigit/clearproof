@@ -138,3 +138,169 @@ async def test_observation_reads_require_both_explicit_roles(
     assert response.status_code == 403
     assert response.json() == {"detail": "Required role is not granted"}
     called.assert_not_called()
+
+
+@pytest.fixture
+def inspection_case(route_case):
+    import json
+
+    from tests.unit.test_pilot_verifier import synthetic_proof
+
+    app, routes = route_case
+    principal = Principal(
+        tenant_id="synthetic-tenant",
+        actor_id="synthetic-actor",
+        roles=("proof:inspect", "evidence:decrypt", "policy:read", "observations:write"),
+    )
+    app.dependency_overrides[TenantPrincipalDependency] = lambda: principal
+    target = routes.InspectionTarget(configuration=None, verifier=None)
+    app.state.pilot_inspection_targets = {(principal.tenant_id, "synthetic-target"): target}
+    body = {
+        "target_id": "synthetic-target",
+        "credential_id": "synthetic-credential",
+        "proof_json": json.dumps(synthetic_proof()),
+        "public_signals": ["0"] * 8,
+    }
+    return app, routes, body
+
+
+async def inspect_post(app, body):
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        return await client.post("/pilot/proof/inspect", json=body)
+
+
+@pytest.mark.parametrize(
+    "failure,status,detail",
+    [
+        ("missing-targets", 503, "Pilot inspection configuration is unavailable"),
+        ("invalid-targets", 503, "Pilot inspection configuration is unavailable"),
+        ("foreign-tenant", 404, "Pilot inspection target is unavailable"),
+        ("invalid-target", 503, "Pilot inspection configuration is unavailable"),
+        ("missing-db", 503, "Pilot database is unavailable"),
+        ("unready-db", 503, "Pilot database is unavailable"),
+        ("missing-key", 503, "Pilot inspection configuration is unavailable"),
+    ],
+)
+async def test_inspection_configuration_rejects_before_service(inspection_case, monkeypatch, failure, status, detail):
+    app, routes, body = inspection_case
+    from unittest.mock import Mock
+
+    constructor = Mock(side_effect=AssertionError("Service must not initialize"))
+    monkeypatch.setattr(routes.ProofInspectionService, "__init__", constructor)
+    if failure == "missing-targets":
+        del app.state.pilot_inspection_targets
+    elif failure == "invalid-targets":
+        app.state.pilot_inspection_targets = []
+    elif failure == "foreign-tenant":
+        target = next(iter(app.state.pilot_inspection_targets.values()))
+        app.state.pilot_inspection_targets = {("foreign", body["target_id"]): target}
+    elif failure == "invalid-target":
+        app.state.pilot_inspection_targets = {("synthetic-tenant", body["target_id"]): {}}
+    elif failure == "missing-db":
+        app.state.db = None
+    elif failure == "unready-db":
+        app.state.db.is_ready = False
+    else:
+        monkeypatch.delenv("PII_MASTER_KEY")
+    response = await inspect_post(app, body)
+    assert response.status_code == status
+    assert response.json() == {"detail": detail}
+    constructor.assert_not_called()
+
+
+@pytest.mark.parametrize("error", [ValueError, TypeError, KeyError, RuntimeError])
+async def test_inspection_service_configuration_errors_are_minimized(inspection_case, monkeypatch, error):
+    from unittest.mock import Mock
+
+    app, routes, body = inspection_case
+    constructor = Mock(side_effect=error("synthetic-private-configuration"))
+    monkeypatch.setattr(routes.ProofInspectionService, "__init__", constructor)
+    response = await inspect_post(app, body)
+    assert response.status_code == 503
+    assert response.json() == {"detail": "Pilot inspection configuration is unavailable"}
+    constructor.assert_called_once()
+
+
+@pytest.mark.parametrize("failure", ["missing-enrollment", "invalid-proof", "invalid-type", "runtime"])
+async def test_inspection_service_rejections_are_minimized(inspection_case, monkeypatch, failure):
+    from src.services.enrollment import EnrollmentNotFound
+
+    app, routes, body = inspection_case
+    error = {
+        "missing-enrollment": EnrollmentNotFound,
+        "invalid-proof": ValueError,
+        "invalid-type": TypeError,
+        "runtime": RuntimeError,
+    }[failure]
+    monkeypatch.setattr(routes.ProofInspectionService, "__init__", lambda *args: None)
+    called = AsyncMock(side_effect=error("synthetic-private-error"))
+    monkeypatch.setattr(routes.ProofInspectionService, "inspect", called)
+    response = await inspect_post(app, body)
+    assert response.status_code == (404 if failure == "missing-enrollment" else 422)
+    assert "synthetic-private-error" not in response.text
+    called.assert_awaited_once()
+    assert called.call_args.args[0] == body["credential_id"]
+    assert type(called.call_args.kwargs["now"]) is int
+
+
+@pytest.mark.parametrize(
+    "changes",
+    [
+        {"proof_json": "invalid"},
+        {"public_signals": ["01"] * 8},
+        {"target_id": ""},
+        {"artifact_path": "/synthetic/operator-only"},
+    ],
+)
+async def test_invalid_inspection_input_precedes_configuration(inspection_case, changes):
+    app, _, body = inspection_case
+    del app.state.pilot_inspection_targets
+    response = await inspect_post(app, {**body, **changes})
+    assert response.status_code == 422
+    assert response.json() == {"detail": "Invalid pilot proof input"}
+
+
+@pytest.mark.parametrize("operation", ["evaluate", "observe"])
+@pytest.mark.parametrize("failure", ["fact-trust", "enrollment", "value", "type", "runtime"])
+async def test_evaluation_and_observation_failure_mapping(inspection_case, monkeypatch, operation, failure):
+    from unittest.mock import Mock
+
+    from src.services.enrollment import EnrollmentNotFound
+
+    app, routes, values = inspection_case
+    model = routes.EvaluationBody if operation == "evaluate" else routes.ObservationBody
+    extra = {"idempotency_key": "synthetic-retry"} if operation == "observe" else {}
+    body = model.model_validate({**values, "fact_ids": (), **extra})
+    error = {"enrollment": EnrollmentNotFound, "value": ValueError, "type": TypeError, "runtime": RuntimeError}
+    called = AsyncMock(side_effect=error.get(failure, ValueError)("synthetic-private-fact-error"))
+    service = SimpleNamespace(**{operation: called})
+    target = SimpleNamespace(fact_trust=None if failure == "fact-trust" else Mock(spec=routes.FactTrustStore))
+    prepared = AsyncMock(return_value=(service, target, body, body.proof_json.encode(), tuple(body.public_signals)))
+    monkeypatch.setattr(routes, "prepare_inspection", prepared)
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        response = await client.post(f"/pilot/proof/{operation}", json={})
+    expected = 503 if failure == "fact-trust" else 404 if failure == "enrollment" else 422
+    assert response.status_code == expected
+    assert "synthetic-private-fact-error" not in response.text
+    prepared.assert_awaited_once()
+    if failure == "fact-trust":
+        called.assert_not_called()
+    else:
+        called.assert_awaited_once()
+        assert called.call_args.args[0] == body.credential_id
+        if operation == "observe":
+            assert called.call_args.kwargs["idempotency_key"] == body.idempotency_key
+
+
+async def test_observation_conflict_has_stable_http_status(inspection_case, monkeypatch):
+    from unittest.mock import Mock
+
+    app, routes, values = inspection_case
+    body = routes.ObservationBody.model_validate({**values, "fact_ids": (), "idempotency_key": "synthetic-retry"})
+    service = SimpleNamespace(observe=AsyncMock(side_effect=routes.RecordConflict("synthetic-private-conflict")))
+    target = SimpleNamespace(fact_trust=Mock(spec=routes.FactTrustStore))
+    monkeypatch.setattr(routes, "prepare_inspection", AsyncMock(return_value=(service, target, body, b"{}", ())))
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        response = await client.post("/pilot/proof/observe", json={})
+    assert response.status_code == 409
+    assert response.json() == {"detail": "Observation request or idempotency conflict"}

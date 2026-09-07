@@ -471,3 +471,21 @@ still need completion and final merged-main verification.
   interpret that partial report as repository-wide coverage or a regression.
 - Remaining route failure paths and the broader Python/SDK/contracts/docs/scripts
   and publication requirements remain active.
+
+## Twentieth checkpoint
+
+- Expanded the observation route suite to 68 tests with pilot inspection target
+  isolation, invalid target/configuration/database/key rejection, private proof
+  validation and bounded service errors. Invalid input is rejected before operator
+  configuration is accessed; targets from another tenant return unavailable.
+- Evaluation/observation handler tests cover missing fact trust, missing enrollment,
+  rejected facts/runtime failures and the stable 409 idempotency-conflict response.
+  These isolate handlers with prepared service stubs; actual trust, pairing and
+  persistence remain the responsibility of their existing integration suites.
+- All 68 tests pass. The focused pilot-proof module report covers 162/164 statements
+  and 32/32 branches. Its two missing statements are inspect/evaluate success
+  response construction, already exercised in the full database/artifact suite;
+  a fresh combined report remains necessary before updating overall figures.
+  Ruff and whitespace pass; no production code changed.
+- Full coverage remains incomplete across other Python code, SDK residual branches,
+  Solidity, docs/browser rendering, operational scripts and publication checks.
