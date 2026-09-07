@@ -209,3 +209,77 @@ def test_preconstructed_model_cannot_bypass_amount_binding(transfer, registry):
     forged = transfer.model_copy(update={"usd_cents": "1"})
     with pytest.raises(ValueError):
         parse_transfer(forged, registry)
+
+
+@pytest.mark.parametrize("kind", ["empty", "duplicate", "oversized"])
+def test_catalog_rejects_invalid_inventory(kind):
+    asset = AssetDefinition.model_validate(VECTOR["assets"][0])
+    assets = [] if kind == "empty" else [asset] * (2 if kind == "duplicate" else 257)
+    with pytest.raises(ValueError, match="1–256 unique asset identities"):
+        AssetRegistry(assets)
+
+
+@pytest.mark.parametrize(
+    "changes,message",
+    [
+        ({"kind": "vasp", "vasp_did": None}, "canonical did:web"),
+        ({"kind": "vasp", "vasp_did": "beneficiary.example"}, "canonical did:web"),
+        ({"kind": "self_hosted", "vasp_did": "did:web:beneficiary.example"}, "cannot declare a VASP"),
+        ({"wallet": "0x" + "0" * 40}, "wallet cannot be zero"),
+    ],
+)
+def test_participant_identity_boundaries(transfer, changes, message):
+    from src.protocol.transfer import Participant
+
+    with pytest.raises(ValueError, match=message):
+        Participant.model_validate({**transfer.originator.model_dump(), **changes})
+
+
+@pytest.mark.parametrize("field", ["amount_base_units", "usd_cents"])
+def test_transfer_rejects_zero_amount_or_valuation(transfer, field):
+    with pytest.raises(ValueError, match="must be positive"):
+        Transfer.model_validate({**transfer.model_dump(), field: "0"})
+
+
+def test_transfer_rejects_valuation_for_another_asset(transfer):
+    values = transfer.model_dump()
+    values["valuation"]["asset_id"] = "eip155:1/erc20:0x" + "ab" * 20
+    assert values["valuation"]["asset_id"] != values["asset_id"]
+    with pytest.raises(ValueError, match="Valuation asset does not match"):
+        Transfer.model_validate(values)
+
+
+def test_catalog_digest_is_checked_after_asset_membership(transfer, registry):
+    values = {**transfer.model_dump(), "asset_registry_digest": "00" * 32}
+    with pytest.raises(ValueError, match="Asset registry digest mismatch"):
+        parse_transfer(values, registry)
+
+
+@pytest.mark.parametrize("chain", ["0", str(2**64)])
+def test_verifier_deployment_chain_rejects_out_of_range(chain):
+    with pytest.raises(ValueError, match="Invalid deployment chain ID"):
+        VerificationContext.model_validate({**VECTOR["records"][1]["value"], "deployment_chain_id": chain})
+
+
+def test_verifier_deployment_rejects_zero_address():
+    with pytest.raises(ValueError, match="Deployment address cannot be zero"):
+        VerificationContext.model_validate({**VECTOR["records"][1]["value"], "deployment_address": "0x" + "0" * 40})
+
+
+@pytest.mark.parametrize("cryptographic_result", ["valid", "invalid"])
+def test_evaluated_receipt_requires_proof_digest(cryptographic_result):
+    with pytest.raises(ValueError, match="Evaluated proof requires its digest"):
+        EvidenceReceipt.model_validate(
+            {**VECTOR["records"][2]["value"], "cryptographic_result": cryptographic_result, "proof_digest": None}
+        )
+
+
+def test_catalog_order_and_digest_do_not_depend_on_inventory_order(registry):
+    reversed_registry = AssetRegistry([AssetDefinition.model_validate(value) for value in reversed(VECTOR["assets"])])
+    assert reversed_registry.definitions == registry.definitions
+    assert tuple(asset.asset_id for asset in registry.definitions) == tuple(
+        sorted(asset["asset_id"] for asset in VECTOR["assets"])
+    )
+    assert reversed_registry.digest == registry.digest
+    with pytest.raises(ValidationError):
+        registry.definitions[0].decimals = 0

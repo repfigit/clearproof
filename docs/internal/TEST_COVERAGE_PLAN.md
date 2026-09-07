@@ -522,3 +522,19 @@ still need completion and final merged-main verification.
 - Whole-repository completion remains unproven. Other Python gaps, SDK branches,
   Solidity, docs/browser rendering, operational scripts and final review/merge
   evidence remain required.
+
+## Twenty-third checkpoint
+
+- Added 17 transfer-schema tests covering empty/duplicate/oversized catalogues,
+  VASP/self-hosted identity consistency, zero wallets/amounts/valuations, valuation
+  asset mismatch, catalogue digest mismatch, invalid deployment chain/address and
+  missing evaluated-proof references. Catalogue ordering/digest remain independent
+  of input order, and exposed asset definitions remain immutable.
+- The transfer/policy regression passes 121 tests. Transfer models and catalogue
+  logic measure 200/200 statements and 54/54 branches in
+  `transfer-schema-complete.log`/`.data`. Ruff and whitespace pass. No production
+  changes were required; these validations do not establish price truth, issuance
+  authority or compliance beyond the explicitly checked record constraints.
+- Full repository coverage remains incomplete across remaining Python paths,
+  SDK branches, contracts, docs/browser rendering, operational scripts and final
+  review/CI/merge verification. Overall percentages require a fresh full run.
