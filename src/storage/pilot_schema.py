@@ -140,3 +140,11 @@ CREATE TABLE pilot_publication_observations (
         REFERENCES pilot_publication_observations(tenant_id,intent_id,observation_id)
 );
 """
+
+
+PUBLICATION_ATTEMPTS_MIGRATION = """
+ALTER TABLE pilot_publications ADD COLUMN broadcast_attempts INTEGER NOT NULL DEFAULT 0;
+UPDATE pilot_publications SET broadcast_attempts=1 WHERE broadcast_claimed;
+ALTER TABLE pilot_publications ADD CONSTRAINT pilot_publication_attempt_bounds
+    CHECK (broadcast_attempts BETWEEN 0 AND 3 AND broadcast_claimed=(broadcast_attempts>0));
+"""

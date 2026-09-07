@@ -218,3 +218,139 @@ async def test_recovery_service_records_only_successfully_reconciled_observation
     with pytest.raises(ValueError, match="policy"):
         await service.observe(identity, now=21)
     assert len((await service.history.page(identity))["items"]) == 1
+
+
+async def test_explicit_same_transaction_rebroadcast_is_bounded_and_compare_and_swap(db):
+    journal, account, transaction, binding = await seed(db)
+    raw = bytes(account.sign_transaction(transaction).raw_transaction)
+    identity = await journal.reserve(binding, raw, now=1)
+    sent = []
+
+    async def current(_):
+        pass
+
+    async def lost(value):
+        sent.append(value)
+        raise TimeoutError("Synthetic response loss")
+
+    with pytest.raises(TimeoutError):
+        await journal.broadcast_once(identity, revalidate=current, send_raw=lost)
+    results = await asyncio.gather(
+        *(journal.rebroadcast_once(identity, expected_attempts=1, revalidate=current, send_raw=lost) for _ in range(2)),
+        return_exceptions=True,
+    )
+    assert sum(isinstance(r, TimeoutError) for r in results) == 1
+    assert sum(isinstance(r, RecordConflict) for r in results) == 1
+    with pytest.raises(TimeoutError):
+        await journal.rebroadcast_once(identity, expected_attempts=2, revalidate=current, send_raw=lost)
+    with pytest.raises(ValueError):
+        await journal.rebroadcast_once(identity, expected_attempts=3, revalidate=current, send_raw=lost)
+    assert sent == [raw, raw, raw]
+    await db.close()
+    await db.connect()
+    assert (await journal.inspect(identity))["broadcast_attempts"] == 3
+
+
+@pytest.mark.parametrize("failure", [None, "known", "nonce", "runtime", "simulation", "expired", "source", "reorg"])
+async def test_missing_recovery_requires_fresh_preconditions_before_claim(db, failure):
+    import hashlib
+    from types import SimpleNamespace
+    from unittest.mock import AsyncMock
+
+    from src.chain.publication_reconciliation import PublicationChainPolicy
+    from src.services.publication_recovery import PublicationRecoveryService
+
+    journal, account, transaction, binding = await seed(db)
+    runtime = b"synthetic-runtime"
+    binding = binding.model_copy(update={"runtime_sha256": hashlib.sha256(runtime).hexdigest()})
+    signed = account.sign_transaction(transaction)
+    raw = bytes(signed.raw_transaction)
+    identity = await journal.reserve(binding, raw, now=1)
+    source = AsyncMock()
+    with pytest.raises(TimeoutError):
+        await journal.broadcast_once(identity, revalidate=source, send_raw=AsyncMock(side_effect=TimeoutError()))
+    source.reset_mock()
+
+    class Eth:
+        @property
+        async def chain_id(self):
+            return 31337
+
+    eth = Eth()
+    block = dict(number=10, timestamp=20, hash=b"a" * 32)
+    eth.get_block = AsyncMock(return_value=block)
+    eth.get_code = AsyncMock(return_value=runtime)
+    eth.get_transaction_count = AsyncMock(return_value=4)
+    eth.call = AsyncMock(return_value=b"")
+    eth.send_raw_transaction = AsyncMock(return_value=signed.hash)
+    report = observation(identity, await journal.inspect(identity))
+    reconciler = SimpleNamespace(
+        journal=journal,
+        web3=SimpleNamespace(eth=eth),
+        policy=PublicationChainPolicy(
+            chain_id=31337, registry=binding.registry, runtime_sha256=binding.runtime_sha256, block_tag="latest"
+        ),
+        reconcile=AsyncMock(return_value=report),
+    )
+    now = 20
+    if failure == "known":
+        report["status"] = "pending"
+    elif failure == "nonce":
+        eth.get_transaction_count.return_value = 5
+    elif failure == "runtime":
+        eth.get_code.return_value = b"different"
+    elif failure == "simulation":
+        eth.call.side_effect = ValueError("Synthetic contract rejection")
+    elif failure == "expired":
+        now = 100
+    elif failure == "source":
+        source.side_effect = ValueError("Synthetic source invalidation")
+    elif failure == "reorg":
+        eth.get_block.side_effect = [block, {**block, "hash": b"b" * 32}]
+    service = PublicationRecoveryService(reconciler)
+    if failure:
+        with pytest.raises((ValueError, RecordConflict)):
+            await service.rebroadcast_missing(identity, expected_attempts=1, now=now, revalidate=source)
+        eth.send_raw_transaction.assert_not_awaited()
+        assert (await journal.inspect(identity))["broadcast_attempts"] == 1
+    else:
+        assert (
+            await service.rebroadcast_missing(identity, expected_attempts=1, now=now, revalidate=source)
+            == bytes(signed.hash).hex()
+        )
+        eth.send_raw_transaction.assert_awaited_once_with(raw)
+        eth.call.assert_awaited_once()
+        source.assert_awaited_once_with(binding)
+        assert (await journal.inspect(identity))["broadcast_attempts"] == 2
+
+
+async def test_attempt_migration_preserves_existing_claims_and_unclaimed_intents(db):
+    journal, account, transaction, binding = await seed(db)
+    first = await journal.reserve(binding, bytes(account.sign_transaction(transaction).raw_transaction), now=1)
+    second = await journal.reserve(
+        binding.model_copy(update={"phase": "mirror"}),
+        bytes(account.sign_transaction({**transaction, "nonce": 5}).raw_transaction),
+        now=1,
+    )
+
+    async def current(_):
+        pass
+
+    async def crash(_):
+        raise TimeoutError("Synthetic pre-migration claim")
+
+    with pytest.raises(TimeoutError):
+        await journal.broadcast_once(first, revalidate=current, send_raw=crash)
+    before = [await journal.inspect(first), await journal.inspect(second)]
+    # Reconstruct the preceding schema in this fixture's isolated disposable namespace.
+    async with db.connection() as conn:
+        assert (await (await conn.execute("SELECT max(version) FROM schema_migrations")).fetchone())[0] == 19
+        await conn.execute("ALTER TABLE pilot_publications DROP CONSTRAINT pilot_publication_attempt_bounds")
+        await conn.execute("ALTER TABLE pilot_publications DROP COLUMN broadcast_attempts")
+        await conn.execute("DELETE FROM schema_migrations WHERE version=19")
+    await db.close()
+    await db.connect()
+    assert [await journal.inspect(first), await journal.inspect(second)] == before
+    assert before[0]["broadcast_attempts"] == 1 and before[1]["broadcast_attempts"] == 0
+    with pytest.raises(RecordConflict):
+        await journal.broadcast_once(first, revalidate=current, send_raw=crash)

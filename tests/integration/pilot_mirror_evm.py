@@ -118,24 +118,30 @@ class LocalAuthorizationEVM:
 
         async def send(raw):
             sent.append(raw)
+            if phase == "mirror":
+                raise TimeoutError("Synthetic crash before sending the claimed transaction")
             result = await self.web3.eth.send_raw_transaction(raw)
             if phase == "publish":
                 # Node accepted it, but this caller lost the response before recording it.
                 raise TimeoutError("Synthetic lost publication response")
             return result
 
-        if phase == "publish":
-            with pytest.raises(TimeoutError):
-                await journal.broadcast_once(identity, revalidate=revalidate, send_raw=send)
-        else:
-            assert (
-                await journal.broadcast_once(identity, revalidate=revalidate, send_raw=send) == bytes(signed.hash).hex()
-            )
+        with pytest.raises(TimeoutError):
+            await journal.broadcast_once(identity, revalidate=revalidate, send_raw=send)
         await journal.store._db.close()
         await journal.store._db.connect()
         observed = await journal.inspect(identity)
         assert observed["broadcast_claimed"] and observed["chain_outcome"] == "not-established"
         assert observed["transaction_hash"] == bytes(signed.hash).hex()
+        if phase == "mirror":
+            now = max(int(time.time()), (await self.web3.eth.get_block("latest"))["timestamp"])
+            recovered_hash = await recovery.rebroadcast_missing(
+                identity, expected_attempts=1, now=now, revalidate=revalidate
+            )
+            assert recovered_hash == observed["transaction_hash"]
+            assert (await journal.inspect(identity))["broadcast_attempts"] == 2
+        else:
+            assert observed["broadcast_attempts"] == 1
         included = await self.web3.eth.wait_for_transaction_receipt(
             bytes.fromhex(observed["transaction_hash"]), timeout=30
         )
@@ -151,12 +157,15 @@ class LocalAuthorizationEVM:
         assert confirmed["resubmission"] == "not-authorized"
         history = await recovery.history.page(identity)
         assert history["current_chain_state"] == "not-established"
-        assert [row["observation"]["status"] for row in history["items"]] == [
-            "not-found",
-            "awaiting-confirmations",
-            "confirmed-success",
-        ]
-        assert history["items"][-1]["sequence"] == 3
+        statuses = [row["observation"]["status"] for row in history["items"]]
+        assert statuses[-2:] == ["awaiting-confirmations", "confirmed-success"]
+        assert all(status == "not-found" for status in statuses[:-2])
+        assert history["items"][-1]["sequence"] == len(statuses)
+        attempts = (await journal.inspect(identity))["broadcast_attempts"]
+        now = max(int(time.time()), (await self.web3.eth.get_block("latest"))["timestamp"])
+        with pytest.raises(RecordConflict):
+            await recovery.rebroadcast_missing(identity, expected_attempts=attempts, now=now, revalidate=revalidate)
+        assert (await journal.inspect(identity))["broadcast_attempts"] == attempts
         with pytest.raises(RecordConflict):
             await journal.broadcast_once(identity, revalidate=revalidate, send_raw=send)
         assert len(sent) == 1

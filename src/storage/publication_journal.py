@@ -177,28 +177,41 @@ class PublicationJournal:
                 "binding": value["binding"],
                 "transaction_hash": value["transaction_hash"],
                 "broadcast_claimed": row["broadcast_claimed"],
+                "broadcast_attempts": row["broadcast_attempts"],
                 "account_nonce": row["nonce"],
                 "chain_outcome": "not-established",
             }
 
     async def broadcast_once(self, identity, *, revalidate, send_raw):
         """Claim before RPC. Any lost response remains uncertain; no implicit retry or fee replacement."""
+        return await self._broadcast(identity, expected_attempts=0, revalidate=revalidate, send_raw=send_raw)
+
+    async def rebroadcast_once(self, identity, *, expected_attempts: int, revalidate, send_raw):
+        """Explicit recovery of identical bytes only; caller must establish fresh missing-transaction preconditions."""
+        if type(expected_attempts) is not int or not 1 <= expected_attempts <= 2:
+            raise ValueError("Recovery requires attempt 1 or 2; at most three broadcasts are permitted")
+        return await self._broadcast(
+            identity, expected_attempts=expected_attempts, revalidate=revalidate, send_raw=send_raw
+        )
+
+    async def _broadcast(self, identity, *, expected_attempts, revalidate, send_raw):
         self._require()
         observed = await self.inspect(identity)
         if observed is None:
             raise ValueError("Publication intent is unavailable")
-        if observed["broadcast_claimed"]:
+        if observed["broadcast_attempts"] != expected_attempts:
             raise RecordConflict("Publication was already claimed; reconcile its transaction hash")
         # Independent writer rechecks source evidence, destination/code, clock and chain state here.
         await revalidate(PublicationBinding.model_validate(observed["binding"]))
         async with self.store.transaction() as tx:
             row = await self._row(tx, identity)
             value = self._open(identity, row)
-            if row["broadcast_claimed"]:
+            if row["broadcast_attempts"] != expected_attempts:
                 raise RecordConflict("Publication was already claimed; reconcile its transaction hash")
             await tx._conn.execute(
-                "UPDATE pilot_publications SET broadcast_claimed=true WHERE tenant_id=%s AND intent_id=%s",
-                (tx.tenant_id, identity),
+                "UPDATE pilot_publications SET broadcast_claimed=true,broadcast_attempts=%s "
+                "WHERE tenant_id=%s AND intent_id=%s",
+                (expected_attempts + 1, tx.tenant_id, identity),
             )
             raw = bytes.fromhex("".join(value["raw_chunks"]))
         # The committed claim survives a crash before or after this call. Never clear it on an exception.

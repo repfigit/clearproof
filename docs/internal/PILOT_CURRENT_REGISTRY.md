@@ -111,8 +111,10 @@ It preserves an uncertain outcome across reconnect and rejects an automatic seco
 send. Its read-only reconciler checks pinned-chain inclusion, confirmation policy,
 exact events and inclusion-time registry state. The recovery service retains
 validated observations as encrypted, linked history across reconnect; old success
-is not treated as current state. Worker action transitions and replacement
-orchestration remain required.
+is not treated as current state. Bounded explicit recovery can rebroadcast the
+identical retained transaction after fresh missing-hash, source, nonce and
+simulation checks. Fee/nonce replacement and complete worker orchestration remain
+required.
 
 ## Authenticated preparation
 

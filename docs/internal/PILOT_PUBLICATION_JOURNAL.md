@@ -44,8 +44,7 @@ revisions. No transaction is sent if revalidation fails.
 Only the first claimant invokes the sender. A crash before send, timeout after
 send, cancellation, incorrect returned hash or successful RPC response leaves the
 claim set. The journal never clears it or automatically allocates another nonce,
-bumps fees or resends. This intentionally leaves a pre-send crash unresolved until
-an operator/worker reconciles it; a claim does not prove that the node received the
+bumps fees or resends. A pre-send crash requires the explicit recovery checks below; a claim does not prove that the node received the
 transaction.
 
 `inspect` works after reconnect and expiry and returns the binding, exact retained
@@ -115,8 +114,9 @@ Every report sets `current_authorization=not-evaluated` and
 `resubmission=not-authorized`. Registry effects describe inclusion-time state,
 not fresh source eligibility or continued current-head approval. Reconciliation
 neither clears a broadcast claim nor writes journal state, sends a transaction,
-allocates another nonce or authorizes a transfer. Identifying replacement hashes,
-resolving a crash before send and controlled replacement remain worker tasks.
+allocates another nonce or authorizes a transfer. Explicit recovery of a missing hash after a pre-send crash is described below.
+Identifying replacement hashes and controlled fee/nonce replacement remain worker
+tasks.
 
 The joined EVM gate exercises not-found, one-block awaiting-confirmations and
 two-block confirmed-success for both actual publication and mirroring. Unit tests
@@ -161,3 +161,47 @@ cover exact retry, reconnect, pagination, foreign tenant isolation, encrypted
 content, rejected substitution/status/clock/policy, and preserving a later missing
 observation after confirmed success. Journal and history rows remain outside the
 existing `/pilot/usage` retained-record counters.
+
+## Explicit recovery of an unsent claim
+
+`PublicationRecoveryService.rebroadcast_missing` handles a claim that may have
+crashed before RPC send. The caller explicitly supplies the intent ID and expected
+attempt count. This is separate from ordinary `broadcast_once`, which continues
+to reject a previously claimed intent. A reconciliation report alone grants no
+permission to retry.
+
+Recovery requires all of these fresh preconditions:
+
+- The retained attempt count is exactly the requested count and the intent has not expired.
+- Reconciliation against the pinned policy finds the retained hash absent. Pending, included, reverted or noncanonical observations do not qualify.
+- The independent source revalidation callback still approves the original binding.
+- The latest runtime matches the policy, and both the canonical and pending account nonce equal the retained nonce.
+- Simulating the original calldata, sender, gas limit and zero value against the observed latest block succeeds.
+- The latest block hash and selected policy remain unchanged during preflight.
+
+Only then does the journal atomically claim the next attempt and submit the exact
+retained signed bytes. It does not sign a new transaction, change fees, change
+calldata, release the reserved nonce or create a new authorization. The whole
+recovery operation has a 30-second timeout; cancellation after claiming preserves
+the attempt. The contract still enforces current epochs, revisions and expiry at
+execution; preflight is not an atomic lock across PostgreSQL and the chain.
+
+Migration 19 adds a bounded attempt counter, backfills existing claims as attempt
+one and constrains its consistency with the claim flag. At most three attempts
+can be claimed for an intent: the initial attempt and two explicit recoveries.
+A failed preflight does not consume an attempt. A crash or uncertain response
+after claiming does. Concurrent requests for the same expected count cannot both
+claim it. Exhaustion requires operator review; there is no automatic reset.
+
+The owned EVM gate retains its lost-response-after-publication scenario and adds
+a crash-before-send for mirroring. After reconnect, recovery submits identical
+bytes and confirms the retained hash. A later recovery request for the included
+transaction rejects without incrementing attempts. PostgreSQL tests cover
+concurrent/repeated attempts, the cap and preflight failures for known transactions,
+nonce advancement, runtime mismatch, failed simulation, expiry, source invalidation
+and a changing block.
+
+This does not discover an unknown replacement transaction or permit fee/nonce
+replacement. A transaction known by another provider may still be absent at the
+selected provider; replaying identical signed bytes preserves its hash and nonce.
+Account use outside this journal remains an operator coordination responsibility.
