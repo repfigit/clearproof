@@ -298,3 +298,21 @@ still need completion and final merged-main verification.
   including child processes and generated modules. PostgreSQL was stopped after
   verification. The next largest authored gaps include sanctions registry logic,
   pilot proof routes, policy model validation and the in-memory SAR audit log.
+
+## Eleventh checkpoint
+
+- In-memory SAR audit tests reproduced mutable retained entries exposed through
+  append/read/transaction results, replacement of explicit epoch zero, an empty
+  transaction filter returning all records, and acceptance of rehashed sequence
+  gaps. The APIs now return detached entry copies, preserve explicit timestamps,
+  distinguish None from empty references and verify contiguous sequence numbers.
+- The existing hash format is preserved. Documentation now accurately states
+  that it binds payload digests/links/sequences, not entry metadata or an external
+  chain anchor. This is an in-memory legacy audit structure, not encrypted storage.
+- Eight new audit tests pass; the affected API/compliance regression totals 110
+  passing tests. The SAR audit module measures 52/52 lines and 8/8 branches.
+  Ruff, whitespace and REUSE pass. Overall percentages remain those of the last
+  combined full run until refreshed; this focused result is not full completion.
+- Fixed-depth registry/artifact compatibility, remaining Python validation
+  branches, SDK's seven branches, Solidity, docs and operational script coverage
+  remain part of the active objective.
