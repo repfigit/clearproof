@@ -549,7 +549,7 @@ async def test_discovery_failure_stops_before_proving_or_encryption(
         patch(
             "src.protocol.discovery.resolve_hpke_public_key", new_callable=AsyncMock, side_effect=error("lookup failed")
         ),
-        patch("src.api.routes.proof._get_db_from_app", return_value=None),
+        patch("src.api.routes.proof._get_db", return_value=None),
         patch("src.api.routes.proof._prover.fullprove", new_callable=AsyncMock) as prover,
         patch("src.sar.encryption.encrypt_pii") as legacy,
         patch("src.sar.hpke_envelope.seal_envelope") as hpke,

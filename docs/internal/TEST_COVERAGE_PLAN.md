@@ -227,3 +227,22 @@ still need completion and final merged-main verification.
   app-specific database access (the route currently imports the global app),
   verification failure handling and other error branches. The full objective
   remains active across Python, SDK, contracts, docs and operational scripts.
+
+## Eighth checkpoint
+
+- A real HTTP regression using a separately created app showed proof generation
+  reading the module-global app's database and returning a missing-credential
+  error instead of its own cached result. The route now receives the HTTP Request
+  and uses that request's application state. The obsolete global-app accessor
+  was removed, and affected test boundaries were updated.
+- Verification exception logging exposed synthetic untrusted input. Logs now
+  retain a fixed diagnostic without exception text. Tests cover malformed/short
+  public signals, failed pairing and malformed/unavailable chain observations;
+  absent evidence remains unverified rather than a successful jurisdiction match.
+- API/lifecycle/proof-route/compliance regression: 114 tests pass. The focused
+  proof route measurement misses 32 lines, primarily durable writes and remaining
+  setup/error handling. Ruff, whitespace and REUSE checks pass. Whole-suite
+  coverage percentages still refer to the last combined run, not this subset.
+- Durable proof generation needs real PostgreSQL acceptance, including failure
+  rollback and retries, before declaring its persistence paths covered. The full
+  objective and all remaining workspaces remain open.

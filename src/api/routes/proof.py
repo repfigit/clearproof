@@ -186,12 +186,6 @@ def _get_db(app) -> Optional[Database]:
     return getattr(getattr(app, "state", None), "db", None)
 
 
-def _get_db_from_app() -> Optional[Database]:
-    from src.api.main import app as _app
-
-    return _get_db(_app)
-
-
 async def _check_sanctions_staleness(db: Optional[Database]) -> None:
     if db is None:
         return
@@ -210,6 +204,7 @@ async def _check_sanctions_staleness(db: Optional[Database]) -> None:
 @router.post("/generate", response_model=dict, summary="Generate ZK compliance proof")
 async def generate_proof(
     request: ProofGenerateRequest,
+    http_request: Request,
     _auth: dict = Depends(JWTAuthDependency),
     _rl: None = Depends(_proof_generate_limiter),
     _cred_registry: CredentialRegistry = Depends(get_credential_registry),
@@ -233,7 +228,7 @@ async def generate_proof(
             ),
         )
 
-    db = _get_db_from_app()
+    db = _get_db(http_request.app)
     await _check_sanctions_staleness(db)
 
     if db is not None:
@@ -484,7 +479,7 @@ async def verify_proof(
     try:
         valid = await _prover.verify(request.groth16_proof, request.public_signals)
     except Exception:
-        logger.exception("Proof verification failed")
+        logger.error("Proof verification failed")
         raise HTTPException(status_code=503, detail="Proof verification temporarily unavailable")
 
     signals = request.public_signals
