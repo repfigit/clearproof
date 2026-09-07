@@ -257,3 +257,37 @@ def _set_test_env(tmp_path):
         },
     ):
         yield
+
+
+@pytest.fixture
+def wallet_enrollment():
+    """Synthetic EOA and enrollment shared by wallet-extension boundary tests."""
+    from eth_account import Account
+
+    from src.auth.principal import Principal
+    from src.protocol.credential import PilotCredential, holder_commitment
+    from src.protocol.enrollment import EnrollmentConsent
+
+    wallet = Account.create()
+    credential = PilotCredential(
+        tenant_id="wallet-tenant",
+        credential_nonce="ab" * 32,
+        issuer_did="did:web:issuer.example",
+        subject_wallet=wallet.address.lower(),
+        holder_commitment=holder_commitment("123456"),
+        jurisdiction="US",
+        kyc_tier=2,
+        sanctions_clear=True,
+        issued_at=1000,
+        expires_at=200000,
+    )
+    consent = EnrollmentConsent(
+        credential=credential, chain_id=31337, registry_address="0x" + "1" * 40, consent_expires_at=1500
+    )
+    principal = Principal(
+        tenant_id=credential.tenant_id,
+        actor_id="issuer-actor",
+        roles=("credential:issue", "credential:revoke", "evidence:decrypt"),
+        issuer_dids=(credential.issuer_did,),
+    )
+    return wallet, consent, principal

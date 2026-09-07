@@ -342,12 +342,18 @@ async def test_attempt_migration_preserves_existing_claims_and_unclaimed_intents
     with pytest.raises(TimeoutError):
         await journal.broadcast_once(first, revalidate=current, send_raw=crash)
     before = [await journal.inspect(first), await journal.inspect(second)]
-    # Reconstruct the preceding schema in this fixture's isolated disposable namespace.
+    # Reconstruct version 18 in this fixture's isolated disposable namespace.
+    from src.storage.database import _SCHEMA_MIGRATIONS
+    from src.storage.pilot_schema import OBSERVATION_MIGRATION
+
     async with db.connection() as conn:
-        assert (await (await conn.execute("SELECT max(version) FROM schema_migrations")).fetchone())[0] == 19
+        assert (await (await conn.execute("SELECT max(version) FROM schema_migrations")).fetchone())[0] == len(
+            _SCHEMA_MIGRATIONS
+        )
         await conn.execute("ALTER TABLE pilot_publications DROP CONSTRAINT pilot_publication_attempt_bounds")
         await conn.execute("ALTER TABLE pilot_publications DROP COLUMN broadcast_attempts")
-        await conn.execute("DELETE FROM schema_migrations WHERE version=19")
+        await conn.execute(OBSERVATION_MIGRATION)
+        await conn.execute("DELETE FROM schema_migrations WHERE version>=19")
     await db.close()
     await db.connect()
     assert [await journal.inspect(first), await journal.inspect(second)] == before

@@ -1,0 +1,26 @@
+{
+  "challenge": {
+    "schema_version": "clearproof-wallet-challenge-v1",
+    "tenant_id": "tenant-a",
+    "actor_id": "actor-a",
+    "credential": {
+      "schema_version": "clearproof-credential-v1",
+      "tenant_id": "tenant-a",
+      "credential_nonce": "abababababababababababababababababababababababababababababababab",
+      "issuer_did": "did:web:issuer.example",
+      "subject_wallet": "0x1111111111111111111111111111111111111111",
+      "holder_commitment": "123",
+      "jurisdiction": "US",
+      "kyc_tier": 2,
+      "sanctions_clear": true,
+      "issued_at": 1000,
+      "expires_at": 100000
+    },
+    "chain_id": 31337,
+    "registry_address": "0x2222222222222222222222222222222222222222",
+    "nonce": "cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd",
+    "timestamp": 1100,
+    "expires_at": 1400
+  },
+  "message": "Clearproof wallet ownership verification v1\n{\"actor_id\":\"actor-a\",\"chain_id\":31337,\"credential\":{\"credential_nonce\":\"abababababababababababababababababababababababababababababababab\",\"expires_at\":100000,\"holder_commitment\":\"123\",\"issued_at\":1000,\"issuer_did\":\"did:web:issuer.example\",\"jurisdiction\":\"US\",\"kyc_tier\":2,\"sanctions_clear\":true,\"schema_version\":\"clearproof-credential-v1\",\"subject_wallet\":\"0x1111111111111111111111111111111111111111\",\"tenant_id\":\"tenant-a\"},\"expires_at\":1400,\"nonce\":\"cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd\",\"registry_address\":\"0x2222222222222222222222222222222222222222\",\"schema_version\":\"clearproof-wallet-challenge-v1\",\"tenant_id\":\"tenant-a\",\"timestamp\":1100}"
+}

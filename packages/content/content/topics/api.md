@@ -38,3 +38,16 @@ The current amount request uses a floating-point USD field and asset symbol. Exa
 The response includes `valid`, `proof_id`, `compliance_attestations`, `verified_at` and `rejection_reasons`. A successful response does not establish equivalence with every on-chain registry check. Do not infer fund-movement authorization or legal compliance from the response alone.
 
 Durable tenant state, credential authenticity, witness consistency and verifier parity remain active work. See [status](/docs/status) and [security](/docs/security).
+
+
+## Wallet ownership extension (source checkout)
+
+A five-minute EOA signing challenge produces a 24-hour revocable attestation for
+one enrolled credential in the authenticated tenant. Routes are
+`/wallet/ownership/challenge`, `/wallet/ownership/verify`,
+`/wallet/ownership/attestations/{id}`, `/wallet/ownership/revoke` and
+`/wallet/ownership/credential`. The optional extension has a separate commitment;
+existing credential/proof formats are unchanged. Its circuit is staged and is
+not accepted by deployed verifiers. See the
+[wallet ownership guide](https://github.com/repfigit/clearproof/blob/main/docs/internal/WALLET_OWNERSHIP.md)
+for the full flow, signing helper and trust boundaries.

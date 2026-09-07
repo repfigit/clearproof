@@ -148,3 +148,14 @@ UPDATE pilot_publications SET broadcast_attempts=1 WHERE broadcast_claimed;
 ALTER TABLE pilot_publications ADD CONSTRAINT pilot_publication_attempt_bounds
     CHECK (broadcast_attempts BETWEEN 0 AND 3 AND broadcast_claimed=(broadcast_attempts>0));
 """
+
+
+WALLET_OWNERSHIP_MIGRATION = """
+ALTER TABLE pilot_records DROP CONSTRAINT pilot_records_kind_check;
+ALTER TABLE pilot_records ADD CONSTRAINT pilot_records_kind_check
+CHECK (kind IN ('credential','proof','transfer','receipt','event','policy','revocation',
+               'issuance-root','issuer-root','sanctions-root','idempotency','root-source',
+               'provider-evidence','fact-evidence','policy-activation','authorization-evidence','observation',
+               'wallet-challenge','wallet-challenge-slot','wallet-quota','wallet-attestation',
+               'wallet-extension','wallet-revocation'));
+"""

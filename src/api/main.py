@@ -24,6 +24,7 @@ from src.api.routes.pilot_proof import router as pilot_proof_router
 from src.api.routes.policy import router as policy_router
 from src.api.routes.proof import router as proof_router
 from src.api.routes.usage import router as usage_router
+from src.api.routes.wallet_ownership import router as wallet_ownership_router
 from src.storage.database import Database
 from src.version import VERSION
 
@@ -112,6 +113,7 @@ def create_app() -> FastAPI:
     app.include_router(auth_router)
     app.include_router(discovery_router)
     app.include_router(enrollment_router)
+    app.include_router(wallet_ownership_router)
     app.include_router(policy_router)
     app.include_router(pilot_proof_router)
     app.include_router(authorization_router)
