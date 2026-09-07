@@ -633,3 +633,16 @@ still need completion and final merged-main verification.
 - This restricted ASCII record encoding remains distinct from general JSON
   canonicalization. Other Python gaps and the SDK/contracts/docs/scripts plus
   publication requirements still leave full repository coverage incomplete.
+
+## Thirty-first checkpoint
+
+- Added nine recipient-authority and software-encryption tests. Invalid canonical
+  recipient identities/intervals and empty/duplicate/oversized key inventories
+  reject. Real AES-GCM tests show stable configured HKDF derivation, separation
+  between deployment salts and envelope contexts, and legacy fallback warnings.
+- All 54 related tests pass. Software encryption and pilot envelope modules
+  together measure 85/85 statements and 16/16 branches (`sar-boundaries.log`/`.data`).
+  Ruff and whitespace pass. No production changes were required; configuring or
+  changing live salts was not part of this test-only work.
+- Other Python gaps, SDK branches, Solidity, docs/browser, scripts and final
+  CI/review/merge verification remain open. Overall figures still require refresh.

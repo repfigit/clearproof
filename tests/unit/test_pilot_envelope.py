@@ -192,3 +192,23 @@ def test_bounded_payload_digest_and_valid_base64_tamper(case):
     chunks[0] = ("A" if chunks[0][0] != "A" else "B") + chunks[0][1:]
     with pytest.raises(ValueError, match="decryption failed"):
         open_pilot_envelope(envelope, private, expected_binding=binding)
+
+
+@pytest.mark.parametrize(
+    "changes",
+    [
+        {"recipient_did": "recipient.example"},
+        {"not_before": 100, "not_after": 100},
+        {"not_before": 101, "not_after": 100},
+    ],
+)
+def test_recipient_authority_requires_canonical_identity_and_positive_interval(case, changes):
+    authority = case[4]
+    with pytest.raises(ValueError, match="Invalid recipient authority"):
+        RecipientAuthority.model_validate({**authority.model_dump(), **changes})
+
+
+@pytest.mark.parametrize("count", [0, 2, 257])
+def test_recipient_inventory_rejects_missing_duplicate_or_excessive_keys(case, count):
+    with pytest.raises(ValueError, match="Expected distinct independently approved recipient keys"):
+        RecipientTrustStore([case[4]] * count)
