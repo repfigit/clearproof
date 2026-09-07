@@ -722,3 +722,16 @@ still need completion and final merged-main verification.
   100% claim or removal solely to improve metrics. Ruff and whitespace pass.
 - No production changes were needed. Other Python, SDK, Solidity, docs/browser,
   scripts and final review/publication requirements remain open.
+
+## Thirty-eighth checkpoint
+
+- Added 13 enrollment/wallet model tests for consent validity relative to issuance
+  and credential expiry, zero audiences/nonces, challenge issuance outside
+  credential validity, exact attestation TTL/identity and extension intervals.
+  An initial enrollment fixture-index error in the new tests was corrected.
+- All 40 tests pass, including existing real EOA signature and staged Circom
+  witness checks. Both protocol modules measure 146/146 statements and 44/44
+  branches combined (`wallet-model-boundaries.log`/`.data`). Ruff and whitespace
+  pass; no production changes or proving artifacts changed.
+- Remaining Python, SDK, Solidity, docs/browser, scripts and final publication
+  evidence keep the full repository coverage objective active and incomplete.
