@@ -877,3 +877,21 @@ still need completion and final merged-main verification.
   statements and 24/24 branches (`history-timing-boundaries.log`/`.data`). Ruff
   and whitespace checks pass. No production source changed. Full repository
   coverage and publication verification remain incomplete.
+
+## Forty-seventh checkpoint
+
+- Added 19 real PostgreSQL policy-review cases covering effective approval clocks,
+  duplicate business transfers/case IDs, future observations, each retained-parent
+  consistency field, conflicting reviewed-case records and stored comparison
+  digest/tenant/schema bindings. Rejected approvals leave no partial policy
+  history; invalid-clock retries can subsequently succeed with the same key.
+- Initial new-fixture errors used lists for strict tuple fields and changed the
+  candidate's scope before evaluation. Corrected these to reach the intended
+  duplicate and retained-parent checks, preserving normal policy evaluation.
+- All 21 selected tests pass, including existing encrypted history/restart and
+  JWT-protected HTTP/built CLI regressions. Policy review measures 95/95 statements
+  and 38/38 branches (`policy-review-boundaries.log`/`.data`). The 68 deselected
+  storage cases are outside this focused run. Owned PostgreSQL was stopped.
+- Ruff and whitespace checks pass. No production source changed. Other Python,
+  TypeScript, Solidity, docs/scripts and final publication requirements remain
+  unfinished, and the last complete Python report is still checkpoint 42.

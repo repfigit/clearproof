@@ -4848,3 +4848,169 @@ async def test_storage_event_capacity_rejects_overflow_without_truncating(db):
             await tx.event_ids(scope)
     async with store(db, tenant="tenant-b").transaction() as tx:
         assert await tx.event_ids(scope) == []
+
+
+@pytest.fixture
+def policy_review_case(db):
+    import runpy
+    from pathlib import Path
+
+    from src.policy.diff import PolicyCase
+    from src.services.policy_review import PolicyReviewRequest, PolicyReviewService, ReviewedCase
+
+    policy, transfer, context, facts = runpy.run_path(
+        str(Path(__file__).resolve().parents[1] / "unit/test_policy_evaluator.py")
+    )["case"].__wrapped__()
+    case = PolicyCase(
+        case_id="synthetic-case", transfer=transfer, context=context, facts=facts, evaluated_at=context.evaluated_at
+    )
+    request = PolicyReviewRequest(policy=policy, cases=(ReviewedCase(case=case, expected="ALLOW"),))
+    principal = Principal(
+        tenant_id=policy.tenant_id,
+        actor_id="synthetic-reviewer",
+        roles=("policy:approve", "policy:read", "evidence:decrypt"),
+    )
+    return PolicyReviewService(db, cipher(), principal), request, context.evaluated_at
+
+
+@pytest.mark.parametrize("clock", [True, "100", "before", "expiry"])
+async def test_policy_review_requires_effective_integer_clock(policy_review_case, clock):
+    service, request, now = policy_review_case
+    if clock == "before":
+        clock = request.policy.effective_from - 1
+    elif clock == "expiry":
+        clock = request.policy.effective_until
+    with pytest.raises(ValueError, match="currently effective policy"):
+        await service.approve(request, idempotency_key="synthetic-review", now=clock)
+    assert await service.store.get("policy", request.policy.digest) is None
+    assert (await service.approve(request, idempotency_key="synthetic-review", now=now))["approved_at"] == now
+
+
+@pytest.mark.parametrize("duplicate", ["case", "transfer"])
+async def test_policy_review_rejects_duplicate_review_inventory(policy_review_case, duplicate):
+    from src.services.policy_review import PolicyReviewRequest
+
+    service, request, now = policy_review_case
+    item = request.cases[0]
+    value = item.model_dump()
+    if duplicate == "transfer":
+        value["case"]["case_id"] = "synthetic-other-case"
+    else:
+        value["case"]["transfer"]["transfer_id"] = "synthetic-other-transfer"
+    invalid = PolicyReviewRequest.model_validate({**request.model_dump(), "cases": (item.model_dump(), value)})
+    with pytest.raises(ValueError, match="unique business transfers and case IDs"):
+        await service.approve(invalid, idempotency_key="synthetic-review", now=now)
+    assert await service.store.get("policy", request.policy.digest) is None
+
+
+async def test_policy_review_rejects_future_observation(policy_review_case):
+    from src.services.policy_review import PolicyReviewRequest
+
+    service, request, now = policy_review_case
+    value = request.model_dump()
+    value["cases"][0]["case"]["evaluated_at"] = now + 1
+    with pytest.raises(ValueError, match="future observations"):
+        await service.approve(PolicyReviewRequest.model_validate(value), idempotency_key="synthetic-review", now=now)
+    assert await service.store.get("policy", request.policy.digest) is None
+
+
+@pytest.mark.parametrize("mutation", ["digest", "scope", "policy-id", "revision", "future-approval"])
+async def test_policy_review_rejects_inconsistent_retained_parent(policy_review_case, mutation):
+    from src.policy.model import PilotPolicy
+    from src.services.policy_review import PolicyReviewRequest
+
+    service, request, now = policy_review_case
+    parent = request.policy
+    if mutation == "scope":
+        parent = PilotPolicy.model_validate(
+            {**parent.model_dump(), "jurisdiction": "EU" if parent.jurisdiction != "EU" else "US"}
+        )
+    child = {**request.policy.model_dump(), "previous_digest": parent.digest, "revision": 2}
+    retained = {
+        "schema_version": "clearproof-policy-approval-v1",
+        "policy": parent.model_dump(mode="json"),
+        "approved_at": now,
+    }
+    if mutation == "digest":
+        retained["policy"]["policy_id"] = "synthetic-different-policy"
+    elif mutation == "policy-id":
+        child["policy_id"] = "synthetic-different-policy"
+    elif mutation == "revision":
+        child["revision"] = 3
+    elif mutation == "future-approval":
+        retained["approved_at"] = now + 1
+    child = PilotPolicy.model_validate(child)
+    async with service.store.transaction() as tx:
+        await tx.put("policy", parent.digest, retained)
+    # Evaluate the candidate normally before testing its retained predecessor.
+    # The scope case uses a foreign-scope parent and a locally valid candidate.
+    from src.policy.evaluator import evaluate_policy
+    from src.services.policy_review import ReviewedCase
+
+    case = request.cases[0].case
+    expected = evaluate_policy(child, case.transfer, case.context, case.facts, now=case.evaluated_at).outcome
+    candidate = PolicyReviewRequest(policy=child, cases=(ReviewedCase(case=case, expected=expected),))
+    with pytest.raises(ValueError, match="does not extend the retained policy history"):
+        await service.approve(candidate, idempotency_key="synthetic-child", now=now)
+    assert await service.store.get("policy", child.digest) is None
+    async with service.store.transaction() as tx:
+        assert await tx.record_ids("policy") == [parent.digest]
+
+
+async def test_policy_review_rejects_conflicting_retained_case(policy_review_case):
+    from src.protocol.canonical import record_digest
+
+    service, request, now = policy_review_case
+    value = request.cases[0].case.model_dump(mode="json")
+    digest = record_digest("clearproof/review-case/v1", value)
+    async with service.store.transaction() as tx:
+        await tx.put(
+            "policy", digest, {"schema_version": "clearproof-reviewed-case-v1", "case": {"fixture": "synthetic"}}
+        )
+    with pytest.raises(RecordConflict, match="Reviewed case content differs"):
+        await service.approve(request, idempotency_key="synthetic-review", now=now)
+    assert await service.store.get("policy", request.policy.digest) is None
+
+
+@pytest.mark.parametrize(
+    "mutation", ["duplicate", "policy-digest", "policy-tenant", "case-missing", "case-schema", "case-digest"]
+)
+async def test_policy_review_rejects_invalid_retained_comparison(policy_review_case, mutation):
+    from src.policy.model import PilotPolicy
+    from src.protocol.canonical import record_digest
+    from src.services.policy_review import StoredPolicyComparison
+
+    service, request, _ = policy_review_case
+    policy = request.policy
+    if mutation == "policy-tenant":
+        policy = PilotPolicy.model_validate({**policy.model_dump(), "tenant_id": "tenant-b"})
+    case = request.cases[0].case.model_dump(mode="json")
+    digest = record_digest("clearproof/review-case/v1", case)
+    policy_record = {"schema_version": "clearproof-policy-approval-v1", "policy": policy.model_dump(mode="json")}
+    case_record = {"schema_version": "clearproof-reviewed-case-v1", "case": case}
+    if mutation == "policy-digest":
+        policy_record["policy"]["policy_id"] = "synthetic-other-policy"
+    elif mutation == "case-schema":
+        case_record["schema_version"] = "unknown-synthetic-schema"
+    elif mutation == "case-digest":
+        case_record["case"]["case_id"] = "synthetic-other-case"
+    async with service.store.transaction() as tx:
+        await tx.put("policy", policy.digest, policy_record)
+        if mutation != "case-missing":
+            await tx.put("policy", digest, case_record)
+    comparison = StoredPolicyComparison(
+        before_digest=policy.digest,
+        after_digest=policy.digest,
+        case_digests=(digest,) * (2 if mutation == "duplicate" else 1),
+    )
+    expected = {
+        "duplicate": "Duplicate retained case",
+        "policy-digest": "Retained policy binding is invalid",
+        "policy-tenant": "Retained policy binding is invalid",
+        "case-missing": "unavailable",
+        "case-schema": "unavailable",
+        "case-digest": "Retained case binding is invalid",
+    }[mutation]
+    with pytest.raises(ValueError, match=expected):
+        await service.compare_stored(comparison)
+    assert await service.store.get("policy", policy.digest) == policy_record
