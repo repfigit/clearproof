@@ -13,6 +13,7 @@ from web3.exceptions import ContractLogicError
 
 from src.chain.publication_reconciliation import PublicationChainPolicy, PublicationReconciler
 from src.protocol.canonical import record_digest
+from src.services.publication_recovery import PublicationRecoveryService
 from src.storage.pilot import RecordConflict
 from src.storage.publication_journal import PublicationBinding
 
@@ -105,9 +106,12 @@ class LocalAuthorizationEVM:
             ),
         )
 
+        recovery = PublicationRecoveryService(reconciler)
+
         async def observe():
             now = max(int(time.time()), (await self.web3.eth.get_block("latest"))["timestamp"])
-            return await reconciler.reconcile(identity, now=now)
+            retained = await recovery.observe(identity, now=now)
+            return retained["observation"]
 
         assert (await observe())["status"] == "not-found"
         sent = []
@@ -145,6 +149,14 @@ class LocalAuthorizationEVM:
         )
         assert confirmed["current_authorization"] == "not-evaluated"
         assert confirmed["resubmission"] == "not-authorized"
+        history = await recovery.history.page(identity)
+        assert history["current_chain_state"] == "not-established"
+        assert [row["observation"]["status"] for row in history["items"]] == [
+            "not-found",
+            "awaiting-confirmations",
+            "confirmed-success",
+        ]
+        assert history["items"][-1]["sequence"] == 3
         with pytest.raises(RecordConflict):
             await journal.broadcast_once(identity, revalidate=revalidate, send_raw=send)
         assert len(sent) == 1

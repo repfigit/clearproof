@@ -109,8 +109,10 @@ The [publication journal](PILOT_PUBLICATION_JOURNAL.md) retains the intended
 statement ID and signed transaction identity before a one-time broadcast claim.
 It preserves an uncertain outcome across reconnect and rejects an automatic second
 send. Its read-only reconciler checks pinned-chain inclusion, confirmation policy,
-exact events and inclusion-time registry state. Durable worker transitions and
-replacement orchestration remain required.
+exact events and inclusion-time registry state. The recovery service retains
+validated observations as encrypted, linked history across reconnect; old success
+is not treated as current state. Worker action transitions and replacement
+orchestration remain required.
 
 ## Authenticated preparation
 

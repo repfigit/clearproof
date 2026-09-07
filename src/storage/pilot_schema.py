@@ -120,3 +120,23 @@ CREATE TABLE pilot_publications (
         REFERENCES pilot_records(tenant_id,kind,record_id,revision)
 );
 """
+
+
+PUBLICATION_HISTORY_MIGRATION = """
+CREATE TABLE pilot_publication_observations (
+    tenant_id TEXT NOT NULL,
+    intent_id TEXT NOT NULL,
+    sequence BIGINT NOT NULL CHECK (sequence BETWEEN 1 AND 9007199254740991),
+    observation_id TEXT NOT NULL CHECK (observation_id ~ '^[0-9a-f]{64}$' AND length(observation_id)=64),
+    previous_observation_id TEXT,
+    key_id TEXT NOT NULL,
+    content_tag TEXT NOT NULL,
+    cipher_nonce BYTEA NOT NULL CHECK (octet_length(cipher_nonce)=12),
+    ciphertext BYTEA NOT NULL CHECK (octet_length(ciphertext) BETWEEN 16 AND 65552),
+    PRIMARY KEY (tenant_id,intent_id,sequence),
+    UNIQUE (tenant_id,intent_id,observation_id),
+    FOREIGN KEY (tenant_id,intent_id) REFERENCES pilot_publications(tenant_id,intent_id),
+    FOREIGN KEY (tenant_id,intent_id,previous_observation_id)
+        REFERENCES pilot_publication_observations(tenant_id,intent_id,observation_id)
+);
+"""

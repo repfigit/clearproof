@@ -52,8 +52,8 @@ transaction.
 transaction hash and claim state. Its chain outcome is always `not-established`.
 The read-only reconciler below queries that hash against independent chain policy
 and distinguishes pending, included, noncanonical and confirmed execution. A
-journal row alone is insufficient evidence for any chain outcome. Durable worker
-transitions and replacement identification remain unimplemented. Database reservation and chain state are
+journal row alone is insufficient evidence for any chain outcome. Durable observation history is described below; worker action transitions and
+replacement identification remain unimplemented. Database reservation and chain state are
 not atomic, and the journal does not schedule source invalidation.
 
 ## Validation and accounting
@@ -122,3 +122,42 @@ The joined EVM gate exercises not-found, one-block awaiting-confirmations and
 two-block confirmed-success for both actual publication and mirroring. Unit tests
 cover pending, reverted and noncanonical observations, missing/wrong events, scope
 and calldata substitutions, missing state, stale blocks and reorg during read-back.
+
+## Durable reconciliation history
+
+`PublicationRecoveryService.observe` performs a fresh reconciliation and then
+records the successful observation through `PublicationHistory`. RPC errors,
+inconsistent observations and changed/mismatched confirmation policy raise before
+any history entry is written. The stored policy digest commits to the independently
+configured policy used by the reconciler; retain that policy configuration for
+later review.
+
+Migration 18 adds encrypted `pilot_publication_observations`, linked to the
+retained intent. Each immutable entry binds tenant, intent, sequence, previous
+observation ID, observation clock, policy digest and the complete typed report.
+The report validator checks phase, inclusion fields, execution/effect consistency,
+confirmation arithmetic and the prohibition on transfer/resubmission authorization.
+It also binds the exact retained transaction hash and phase before insertion.
+The history storage primitive accepts operator-supplied reports; the recovery
+service is the path that obtains them from the configured reconciler.
+
+Appending and choosing the next sequence occur under the tenant transaction lock.
+An identical latest report at the same clock and policy returns the same entry.
+An older clock rejects and requires a fresh observation. New observations can
+have a lower block height or weaker result: a prior confirmed observation never
+becomes a permanent current-state flag. Previous success and subsequent absence,
+reorg evidence or a stricter policy remain separate retained records.
+
+`page(intent_id, after=0, limit=32)` provides bounded sequence pagination (maximum
+64 entries per page), validates encrypted identities and predecessor linkage, and
+works after database reconnect. It returns `current_chain_state=not-established`:
+history is evidence of observations, not a cached permission to act. Reading or
+appending does not clear the broadcast claim, reserve another nonce or send an
+RPC transaction. Worker action transitions and controlled replacement remain open.
+
+The joined real EVM test retains the not-found, awaiting-confirmations and
+confirmed-success sequence for both publication and mirroring. PostgreSQL tests
+cover exact retry, reconnect, pagination, foreign tenant isolation, encrypted
+content, rejected substitution/status/clock/policy, and preserving a later missing
+observation after confirmed success. Journal and history rows remain outside the
+existing `/pilot/usage` retained-record counters.
