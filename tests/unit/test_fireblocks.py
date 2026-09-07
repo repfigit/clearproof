@@ -119,3 +119,55 @@ def test_key_expiry_and_duplicates_fail_closed(setup):
         verifier.verify(duplicate, sign(duplicate, key), binding, now_ms=NOW)
     with pytest.raises(FireblocksError):
         verifier.verify(b"x" * 65537, sign(raw, key), binding, now_ms=NOW)
+
+
+@pytest.mark.parametrize("segment", ["", "AA=", "+A", "AB"])
+def test_detached_segments_reject_noncanonical_base64url(segment):
+    from src.adapters.fireblocks import decode_segment
+
+    with pytest.raises(FireblocksError):
+        decode_segment(segment)
+    assert decode_segment("AA") == b"\0"
+
+
+@pytest.mark.parametrize(
+    "changes,message",
+    [
+        ({"valid_from": True}, "key snapshot interval"),
+        ({"valid_until": "100"}, "key snapshot interval"),
+        ({"valid_from": -1}, "key snapshot interval"),
+        ({"valid_from": 10, "valid_until": 10}, "key snapshot interval"),
+        ({"valid_until": 2**53}, "key snapshot interval"),
+        ({"max_age_ms": True}, "notification age bound"),
+        ({"max_age_ms": 0}, "notification age bound"),
+        ({"max_age_ms": 30 * 86400000 + 1}, "notification age bound"),
+    ],
+)
+def test_operator_key_configuration_bounds(setup, changes, message):
+    _, _, _, inventory = setup
+    with pytest.raises(ValueError, match=message):
+        FireblocksVerifier(inventory, **{"valid_from": 1, "valid_until": NOW, **changes})
+
+
+@pytest.mark.parametrize(
+    "inventory", [None, [], {}, {"keys": {}}, {"keys": []}, {"keys": [None] * 17}, {"keys": [], "extra": 1}]
+)
+def test_invalid_jwks_inventory_rejected(inventory):
+    with pytest.raises(ValueError, match="Invalid JWKS inventory"):
+        FireblocksVerifier(json.dumps(inventory).encode(), valid_from=1, valid_until=NOW)
+
+
+def test_undersized_real_rsa_key_rejected():
+    key = rsa.generate_private_key(public_exponent=65537, key_size=1024)
+    jwk = json.loads(jwt.algorithms.RSAAlgorithm.to_jwk(key.public_key()))
+    jwk = {k: jwk[k] for k in ("kty", "n", "e")}
+    jwk.update(kid="synthetic-small-key", alg="RS512", use="sig")
+    with pytest.raises(ValueError, match="Unsupported RSA key size"):
+        FireblocksVerifier(json.dumps({"keys": [jwk]}).encode(), valid_from=1, valid_until=NOW)
+
+
+@pytest.mark.parametrize("signature", ["no-dots", "header.payload.signature", "header...signature"])
+def test_signature_requires_three_parts_and_detached_payload(setup, signature):
+    verifier, _, binding, _ = setup
+    with pytest.raises(FireblocksError, match="Webhook signature, scope or payload rejected"):
+        verifier.verify(FIXTURE.read_bytes(), signature, binding, now_ms=NOW)

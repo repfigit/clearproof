@@ -895,3 +895,30 @@ still need completion and final merged-main verification.
 - Ruff and whitespace checks pass. No production source changed. Other Python,
   TypeScript, Solidity, docs/scripts and final publication requirements remain
   unfinished, and the last complete Python report is still checkpoint 42.
+
+## Forty-eighth checkpoint
+
+- Added 14 event-ingestion cases covering authority coherence/inventory, provider
+  evidence bounds and collisions, 256-event capacity with exact retry, and
+  retained event identity/scope/tenant mismatch. Real encrypted PostgreSQL rows
+  establish that rejected retention leaves no partial event or index entries.
+- Two explicitly labeled storage fault injections exercise missing indexed event
+  and empty indexed scope guards; PostgreSQL constraints ordinarily prevent the
+  missing-row condition. They are not claims of a reproduced database defect.
+- All 20 selected tests pass, including HTTP, process-death rollback, Fireblocks
+  and ageing-queue regressions. Event ingestion measures 110/110 statements and
+  34/34 branches (`event-ingestion-boundaries.log`/`.data`). The 83 deselected
+  storage tests are outside this focused run. Owned PostgreSQL was stopped.
+
+## Forty-ninth checkpoint
+
+- Added 23 Fireblocks adapter cases for canonical base64url, key snapshot/age
+  configuration, JWKS inventory, real undersized RSA keys and detached-signature
+  structure. Existing tests retain real locally signed notification coverage;
+  no Fireblocks account, provider keys or live network is used.
+- All 36 adapter tests pass, measuring 79/79 statements and 28/28 branches
+  (`fireblocks-adapter-complete.log`/`.data`). Ruff and whitespace checks pass for
+  both checkpoints. No production source changed.
+- Full repository coverage remains incomplete across other Python paths, SDK,
+  Solidity, docs/scripts and final remote publication checks. Checkpoint 42 is
+  still the latest full Python measurement; these are focused module results.

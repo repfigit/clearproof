@@ -5014,3 +5014,140 @@ async def test_policy_review_rejects_invalid_retained_comparison(policy_review_c
     with pytest.raises(ValueError, match=expected):
         await service.compare_stored(comparison)
     assert await service.store.get("policy", policy.digest) == policy_record
+
+
+@pytest.fixture
+def event_service(db, event_case):
+    from src.services.event_ingestion import EventIngestionService
+
+    _, authority = event_case
+    principal = Principal(
+        tenant_id="tenant-a", actor_id="actor-a", roles=("events:ingest", "evidence:decrypt", "evidence:read")
+    )
+    return EventIngestionService(db, cipher(), principal, authorities=(authority,))
+
+
+@pytest.mark.parametrize(
+    "changes", [{"valid_until": 1}, {"actors": ("actor-a", "actor-a")}, {"dimensions": ("custody", "custody")}]
+)
+async def test_event_ingestion_authority_rejects_incoherent_configuration(event_case, changes):
+    from src.services.event_ingestion import EventAuthority
+
+    _, authority = event_case
+    with pytest.raises(ValueError, match="Invalid event authority"):
+        EventAuthority.model_validate({**authority.model_dump(), **changes})
+
+
+@pytest.mark.parametrize("inventory", ["list", "overflow"])
+async def test_event_ingestion_authority_inventory_bounds(db, event_case, inventory):
+    from src.services.event_ingestion import EventIngestionService
+
+    _, authority = event_case
+    values = [authority] if inventory == "list" else (authority,) * 257
+    principal = Principal(tenant_id="tenant-a", actor_id="actor-a", roles=("events:ingest", "evidence:decrypt"))
+    with pytest.raises(ValueError, match="bounded authority inventory"):
+        EventIngestionService(db, cipher(), principal, authorities=values)
+
+
+@pytest.mark.parametrize("evidence", [[], ({"fixture": "synthetic"},) * 34])
+async def test_event_ingestion_provider_evidence_bounds_before_retention(event_service, event_case, evidence):
+    source, _ = event_case
+    with pytest.raises(ValueError, match="Provider evidence exceeds retention bounds"):
+        await event_service._ingest_with_evidence(source, now=110, evidence=evidence)
+    async with event_service.store.transaction() as tx:
+        assert await tx.record_ids("event") == []
+        assert await tx.record_ids("provider-evidence") == []
+
+
+async def test_event_ingestion_conflicting_provider_evidence_rolls_back(event_service, event_case):
+    from src.protocol.canonical import record_digest
+
+    source, _ = event_case
+    evidence = {"fixture": "synthetic-provider-evidence"}
+    digest = record_digest("clearproof/provider-evidence/v1", evidence)
+    retained = {"fixture": "synthetic-conflicting-content"}
+    async with event_service.store.transaction() as tx:
+        await tx.put("provider-evidence", digest, retained)
+    with pytest.raises(RecordConflict, match="Provider evidence identity differs"):
+        await event_service._ingest_with_evidence(source, now=110, evidence=(evidence,))
+    async with event_service.store.transaction() as tx:
+        assert await tx.record_ids("event") == []
+        assert await tx.event_ids(source.scope.digest) == []
+        assert await tx.get("provider-evidence", digest) == retained
+
+
+async def test_event_ingestion_capacity_rejects_new_event_but_allows_exact_retry(event_service, event_case):
+    from src.reconciliation.events import SourceEvent
+
+    source, _ = event_case
+    first = await event_service.ingest(source, now=110)
+    for sequence in range(2, 257):
+        current = SourceEvent.model_validate(
+            {**source.model_dump(), "source_event_id": f"synthetic-{sequence}", "source_sequence": sequence}
+        )
+        await event_service.ingest(current, now=110)
+    overflow = SourceEvent.model_validate(
+        {**source.model_dump(), "source_event_id": "synthetic-overflow", "source_sequence": 257}
+    )
+    with pytest.raises(ValueError, match="Transfer event capacity exceeded"):
+        await event_service.ingest(overflow, now=110)
+    assert await event_service.ingest(source, now=111) == {**first, "duplicate": True}
+    async with event_service.store.transaction() as tx:
+        assert len(await tx.event_ids(source.scope.digest)) == 256
+        assert len(await tx.record_ids("event")) == 256
+
+
+@pytest.mark.parametrize("mutation", ["identity", "scope", "tenant"])
+async def test_event_ingestion_investigation_rejects_misbound_retained_event(event_service, event_case, mutation):
+    from src.protocol.canonical import record_digest
+    from src.reconciliation.events import TransferEvent
+
+    source, _ = event_case
+    record_id = record_digest(
+        "clearproof/source-event-id/v1",
+        {"tenant_id": "tenant-a", "source_id": source.source_id, "source_event_id": source.source_event_id},
+    )
+    value = {**source.model_dump(), "ingested_at": 110}
+    if mutation == "identity":
+        value["source_event_id"] = "synthetic-different-event"
+    else:
+        value["scope"]["tenant_id" if mutation == "tenant" else "transfer_id"] = "synthetic-foreign"
+    retained = TransferEvent.model_validate(value).model_dump(mode="json")
+    async with event_service.store.transaction() as tx:
+        await tx.put("event", record_id, {"event": retained})
+        await tx.index_event(record_id, source.scope.digest, "a" * 64, 1)
+    with pytest.raises(ValueError, match="Indexed event identity or scope differs"):
+        await event_service.investigate(source.scope, now=120)
+
+
+async def test_event_ingestion_investigation_rejects_missing_indexed_record(event_service, event_case, monkeypatch):
+    from src.storage.pilot import PilotTransaction
+
+    source, _ = event_case
+    await event_service.ingest(source, now=110)
+    original = PilotTransaction.get
+
+    async def missing(tx, kind, record_id):
+        if kind == "event":
+            return None
+        return await original(tx, kind, record_id)
+
+    # Inject a broken storage read contract. PostgreSQL foreign keys ordinarily
+    # prevent missing indexed rows; the service must not silently omit one.
+    monkeypatch.setattr(PilotTransaction, "get", missing)
+    with pytest.raises(ValueError, match="Indexed event is missing"):
+        await event_service.investigate(source.scope, now=120)
+
+
+async def test_event_ingestion_queue_rejects_indexed_scope_without_events(event_service, event_case, monkeypatch):
+    from unittest.mock import AsyncMock
+
+    from src.reconciliation.queue import QueueRequest
+    from src.storage.pilot import PilotTransaction
+
+    source, _ = event_case
+    await event_service.ingest(source, now=110)
+    # Fault-inject an inconsistent index scan after retaining a genuine scope.
+    monkeypatch.setattr(PilotTransaction, "event_ids", AsyncMock(return_value=[]))
+    with pytest.raises(ValueError, match="Indexed transfer has no events"):
+        await event_service.queue(QueueRequest(), now=120)
