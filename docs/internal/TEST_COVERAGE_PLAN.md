@@ -606,3 +606,17 @@ still need completion and final merged-main verification.
   configured attestor's claim, not factual truth or legal sufficiency.
 - Remaining Python, SDK, contracts, docs/browser, operational scripts and final
   publication/verification work keep the full coverage goal active.
+
+## Twenty-ninth checkpoint
+
+- Added six comparison tests for incompatible tenant/chain/registry/jurisdiction/
+  catalogue scope and duplicate case IDs over distinct valid transfers. The
+  duplicate-case assertion was corrected to account for Pydantic's validation
+  wrapper; production validation already rejected the input correctly.
+- All 15 policy-diff tests pass, including real stdin CLI and authenticated HTTP
+  checks. Diff coverage is 81/81 statements and 10/10 branches, with subprocess
+  coverage captured (`policy-diff-complete.log`/`.data`). Ruff and whitespace pass.
+  No production changes were needed.
+- Remaining repository scope includes other Python paths, SDK branches, Solidity,
+  docs/browser rendering, scripts and final CI/review/merge verification. The full
+  coverage objective remains active and overall percentages await a fresh run.
