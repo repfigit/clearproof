@@ -489,3 +489,19 @@ still need completion and final merged-main verification.
   Ruff and whitespace pass; no production code changed.
 - Full coverage remains incomplete across other Python code, SDK residual branches,
   Solidity, docs/browser rendering, operational scripts and publication checks.
+
+## Twenty-first checkpoint
+
+- Added 45 publication-history tests for coherent included/unestablished states,
+  contradictory inclusion/confirmation/execution/registry-effect claims, numeric
+  bounds and forbidden authorization/resubmission claims. Invalid history cursors,
+  clocks, intent bindings and policy digests reject before database access.
+- The combined publication validation/reconciliation/journal regression passes
+  93 tests, including all 16 real PostgreSQL integration cases. History module
+  coverage is 105/109 statements and 34/38 branches (95% combined metric), with
+  remaining gaps at encrypted identity mismatch, retained transaction mismatch,
+  invalid history cursor and incomplete chain rejection. Evidence is recorded in
+  `publication-history-regression.log` and `.data`; PostgreSQL was stopped afterward.
+- Ruff and whitespace pass. No production changes were required. The remaining
+  history integrity paths and broader Python/SDK/contracts/docs/scripts and final
+  publication requirements remain open; this is not full coverage completion.
