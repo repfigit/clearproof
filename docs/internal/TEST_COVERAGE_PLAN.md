@@ -748,3 +748,15 @@ still need completion and final merged-main verification.
   existing transport suite separately covers real local TLS/egress behavior.
 - Remaining Python, SDK, Solidity, docs/browser, scripts and publication checks
   keep full repository coverage incomplete. Overall reports still need refresh.
+
+## Fortieth checkpoint
+
+- Added six discovery transport tests for ordered system-DNS deduplication,
+  rejection of changed host/port before resolution, and non-JSON numeric constants
+  returned over actual local HTTPS. Existing TLS/SSRF/redirect/deadline tests pass.
+- All 154 discovery tests pass. Transport measures 82/82 statements and 34/34
+  branches (`discovery-transport-complete.log`/`.data`). Ruff and whitespace pass;
+  no production changes were needed. Controlled DNS fixtures do not contact public
+  services; HTTPS tests use an owned local server and certificate.
+- Full repository coverage remains incomplete across other Python paths,
+  SDK branches, Solidity, docs/browser, scripts and final publication checks.

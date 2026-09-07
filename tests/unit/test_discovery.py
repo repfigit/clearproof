@@ -422,3 +422,28 @@ async def test_public_cache_clear_forces_key_refetch(monkeypatch):
     discovery.clear_discovery_cache()
     assert await discovery.resolve_hpke_public_key("beneficiary.example") == first
     assert fetch.await_count == 2
+
+
+async def test_system_resolver_deduplicates_addresses_in_answer_order(monkeypatch):
+    import socket
+
+    from src.protocol.discovery_transport import resolve_addresses
+
+    answers = [
+        (socket.AF_INET, socket.SOCK_STREAM, 6, "", ("93.184.216.34", 443)),
+        (socket.AF_INET6, socket.SOCK_STREAM, 6, "", ("2606:4700::1111", 443, 0, 0)),
+        (socket.AF_INET, socket.SOCK_STREAM, 6, "", ("93.184.216.34", 443)),
+    ]
+    lookup = AsyncMock(return_value=answers)
+    monkeypatch.setattr(asyncio.get_running_loop(), "getaddrinfo", lookup)
+    assert await resolve_addresses("beneficiary.example", 443) == ("93.184.216.34", "2606:4700::1111")
+    lookup.assert_awaited_once_with("beneficiary.example", 443, type=socket.SOCK_STREAM)
+
+
+@pytest.mark.parametrize("host,port", [("other.example", 443), ("beneficiary.example", 8443)])
+async def test_pinned_backend_rejects_destination_change_before_dns(host, port):
+    resolver = AsyncMock()
+    backend = PinnedBackend(parse_target("beneficiary.example"), EgressPolicy(), resolver)
+    with pytest.raises(DiscoveryInvalid, match="Unexpected discovery connection destination"):
+        await backend.connect_tcp(host, port)
+    resolver.assert_not_called()
