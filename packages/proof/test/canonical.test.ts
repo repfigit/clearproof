@@ -29,3 +29,16 @@ describe('canonical private transfer and minimized evidence commitments', () => 
     expect(() => canonicalBytes(nested)).toThrow();
   });
 });
+
+it('bounds encoded bytes after JSON escaping expands valid ASCII strings', () => {
+  expect(() => canonicalBytes(Array(16).fill('"'.repeat(4000)))).toThrow('exceeds 64 KiB');
+});
+
+it('rejects invalid domains and object keys before creating a commitment', () => {
+  for (const domain of ['other/transfer/v1', 'clearproof/transfer/v0', 'clearproof/transfer/v1\n']) {
+    expect(() => recordDigest(domain, {})).toThrow('Invalid commitment domain');
+  }
+  for (const key of ['', '\n', 'x'.repeat(129)]) {
+    expect(() => canonicalBytes({ [key]: 1 })).toThrow('Invalid canonical record key');
+  }
+});

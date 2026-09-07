@@ -51,9 +51,9 @@ exercise every supported test layer with its required local dependencies.
 
 ## Next uncovered behavior to address
 
-Python: gRPC failure paths, API startup/shutdown, proof route error paths and
+Python: API startup/shutdown, proof route error paths and
 remaining validation branches. The current combined report
-still has 779 missed lines and 432 missed branches. Subprocess coverage must also be captured before interpreting child
+still has 632 missed lines and 410 missed branches. Subprocess coverage must also be captured before interpreting child
 CLI modules as unexecuted.
 
 CLI: source line/branch/function/statement coverage is now 100%, enforced by CI.
@@ -174,3 +174,34 @@ still need completion and final merged-main verification.
   and REUSE checks pass. Full coverage remains incomplete; subprocess coverage
   capture, gRPC/API lifecycle branches, SDK branches, Solidity and docs/scripts
   are still required before final CI/merge verification.
+
+## Sixth checkpoint
+
+- Coverage now enables the installed coverage.py subprocess patch. An isolated
+  test invoking Python CLI modules (without importing them in the parent) records
+  execution of their entrypoints in the JSON report. This fixes the measurement
+  gap for child-process CLI acceptance tests; the full run is being refreshed.
+- gRPC: tests reproduced a missing protobuf Error class in both server error
+  handlers, exception logs containing synthetic private input, and an unsupported
+  RPC returning UNKNOWN rather than UNIMPLEMENTED. The handlers now use the
+  actual errors protobuf, minimize logs and explicitly abort unsupported address
+  confirmation. Generated protobufs were not edited.
+- Seventeen gRPC tests pass. The bridge measures 140/140 lines and 18/18 branches.
+  Tests exercise actual TLS/mTLS servers with sealed unary and streaming messages,
+  key exchange, unsupported RPC status, and rejection without a client certificate,
+  plus scoped protocol responses, client dispatch and channel cleanup.
+- SDK: 206 tests pass; coverage is 400/400 lines, 89/89 functions, 506/517
+  statements (97.87%) and 654/671 branches (97.46%). Stream cleanup now releases
+  the reader lock even if cancellation fails. Added tests cover oversized streams,
+  escaped canonical byte limits, malformed pages/signals and independent pairing
+  and threshold rejection. Real proof vector verification remains in the suite.
+- SDK build, Ruff, whitespace and REUSE checks pass. The local-EVM checkpoint
+  test passes with subprocess measurement enabled. Completion remains unproven
+  until all outstanding source/workspace/test-environment requirements are met.
+
+- Full Python regression: 1208 passed, plus the isolated EVM checkpoint passed.
+  Combined source coverage including child processes and generated modules is
+  7663/8295 lines (92.38%) and 1650/2060 branches (80.10%). PostgreSQL was stopped
+  after verification. Reports are retained as `full-coverage-combined-fifth.json`
+  in the local evidence directory. API lifecycle and proof-route error/persistence
+  paths are the largest remaining authored Python gaps.

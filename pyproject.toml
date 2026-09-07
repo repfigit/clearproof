@@ -57,6 +57,7 @@ testpaths = ["tests"]
 markers = ["integration: tests exercising component boundaries"]
 
 [tool.coverage.run]
+patch = ["subprocess"]
 branch = true
 source = ["src"]
 

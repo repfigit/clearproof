@@ -408,3 +408,203 @@ class TestUnsealedEnvelope:
 
         parsed = builder.parse_envelope(envelope, private_key)
         assert parsed == raw_payload
+
+
+async def test_server_errors_do_not_log_decrypted_data(rsa_keypair, monkeypatch, caplog):
+    from src.protocol.bridges.grpc_trisa_bridge import TRISAServer
+
+    private, public = rsa_keypair
+    server = TRISAServer(private, public, b"synthetic")
+
+    async def handler(payload, request):
+        raise ValueError("synthetic-private-marker")
+
+    monkeypatch.setattr(server, "handle_transfer", handler)
+    response = await server.Transfer(pb2.SecureEnvelope(id="synthetic-private-id", payload=b"{}"), None)
+    assert response.error.code == errors_pb2.Error.INTERNAL_ERROR
+    assert response.error.message == "Internal server error"
+    assert "synthetic-private-marker" not in caplog.text
+    assert "synthetic-private-id" not in caplog.text
+
+
+async def test_server_protocol_errors_and_stream_preserve_request_binding(rsa_keypair, monkeypatch):
+    from src.protocol.bridges.grpc_trisa_bridge import TRISAServer
+
+    private, public = rsa_keypair
+    server = TRISAServer(private, public, b"synthetic")
+    request = pb2.SecureEnvelope(id="first", payload=b"{}")
+    accepted = await server.Transfer(request, None)
+    assert accepted.id == request.id
+    assert accepted.transfer_state == pb2.ACCEPTED
+    assert accepted.timestamp
+
+    async def handler(payload, request):
+        raise TRISAError(errors_pb2.Error.COMPLIANCE_CHECK_FAIL, "Rejected", retry=False)
+
+    monkeypatch.setattr(server, "handle_transfer", handler)
+
+    async def requests():
+        yield request
+        yield pb2.SecureEnvelope(id="second", payload=b"{}")
+
+    responses = [response async for response in server.TransferStream(requests(), None)]
+    assert [response.id for response in responses] == ["first", "second"]
+    assert all(response.error.code == errors_pb2.Error.COMPLIANCE_CHECK_FAIL for response in responses)
+    assert all(not response.error.retry for response in responses)
+    key = await server.KeyExchange(pb2.SigningKey(), None)
+    assert key.data == public
+    assert key.signature_algorithm == "RSA-SHA256"
+
+
+async def test_client_rpc_routing_errors_and_channel_cleanup(monkeypatch, caplog):
+    from types import SimpleNamespace
+    from unittest.mock import AsyncMock, Mock
+
+    from src.protocol.bridges import grpc_trisa_bridge as module
+
+    channel = SimpleNamespace(close=AsyncMock())
+    response = pb2.SecureEnvelope(id="reply")
+    stub = SimpleNamespace(
+        Transfer=AsyncMock(return_value=response), ConfirmAddress=AsyncMock(), KeyExchange=AsyncMock()
+    )
+    secure = Mock(return_value=channel)
+    monkeypatch.setattr(module.grpc.aio, "secure_channel", secure)
+    monkeypatch.setattr(module.pb2_grpc, "TRISANetworkStub", Mock(return_value=stub))
+    request = pb2.SecureEnvelope(id="request")
+    async with module.TRISAClient("localhost:1") as client:
+        assert "server-only TLS" in caplog.text
+        assert await client.transfer(request, timeout=2) == response
+        stub.Transfer.assert_awaited_once_with(request, timeout=2)
+        await client.confirm_address("0x123", "ethereum", pb2.KEYTOKEN)
+        address = stub.ConfirmAddress.await_args.args[0]
+        assert (address.crypto_address, address.network, address.confirmation) == ("0x123", "ethereum", pb2.KEYTOKEN)
+        key = pb2.SigningKey(version=1)
+        await client.key_exchange(key)
+        stub.KeyExchange.assert_awaited_once_with(key)
+        stub.Transfer.return_value = pb2.SecureEnvelope(
+            error=errors_pb2.Error(code=errors_pb2.Error.COMPLIANCE_CHECK_FAIL, message="Rejected", retry=False)
+        )
+        with pytest.raises(TRISAError) as error:
+            await client.transfer(request)
+        assert not error.value.retry
+    channel.close.assert_awaited_once()
+    credentials = module.grpc.ssl_channel_credentials()
+    module.TRISAClient("localhost:1", credentials)
+    assert secure.call_args.args == ("localhost:1", credentials)
+
+
+async def test_client_stream_stops_at_protocol_error(monkeypatch):
+    from types import SimpleNamespace
+    from unittest.mock import AsyncMock, Mock
+
+    from src.protocol.bridges import grpc_trisa_bridge as module
+
+    seen = []
+
+    async def stream(requests, timeout):
+        assert timeout == 3
+        async for request in requests:
+            seen.append(request.id)
+            yield pb2.SecureEnvelope(id=request.id)
+            yield pb2.SecureEnvelope(error=errors_pb2.Error(code=errors_pb2.Error.INTERNAL_ERROR, message="Failed"))
+            pytest.fail("client consumed beyond protocol error")
+
+    monkeypatch.setattr(module.grpc.aio, "secure_channel", Mock(return_value=SimpleNamespace(close=AsyncMock())))
+    monkeypatch.setattr(module.pb2_grpc, "TRISANetworkStub", Mock(return_value=SimpleNamespace(TransferStream=stream)))
+
+    async def requests():
+        yield pb2.SecureEnvelope(id="first")
+
+    async with module.TRISAClient("localhost:1") as client:
+        output = client.transfer_stream(requests(), timeout=3)
+        assert (await anext(output)).id == "first"
+        with pytest.raises(TRISAError):
+            await anext(output)
+    assert seen == ["first"]
+
+
+@pytest.mark.parametrize("mtls", [False, True])
+async def test_factory_serves_real_tls_rpcs(
+    rsa_keypair, tmp_path, monkeypatch, mtls, sample_compliance_proof, sample_hybrid_payload
+):
+    from datetime import datetime, timedelta, timezone
+
+    import grpc
+    from cryptography import x509
+    from cryptography.x509.oid import NameOID
+
+    from src.protocol.bridges import grpc_trisa_bridge as module
+
+    private, public = rsa_keypair
+    subject = x509.Name([x509.NameAttribute(NameOID.COMMON_NAME, "localhost")])
+    now = datetime.now(timezone.utc)
+    cert = (
+        x509.CertificateBuilder()
+        .subject_name(subject)
+        .issuer_name(subject)
+        .public_key(private.public_key())
+        .serial_number(x509.random_serial_number())
+        .not_valid_before(now - timedelta(minutes=1))
+        .not_valid_after(now + timedelta(hours=1))
+        .add_extension(x509.SubjectAlternativeName([x509.DNSName("localhost")]), critical=False)
+        .add_extension(x509.BasicConstraints(ca=True, path_length=None), critical=True)
+        .sign(private, hashes.SHA256())
+        .public_bytes(serialization.Encoding.PEM)
+    )
+    pem = private.private_bytes(
+        serialization.Encoding.PEM, serialization.PrivateFormat.PKCS8, serialization.NoEncryption()
+    )
+    key_path, cert_path = tmp_path / "key.pem", tmp_path / "cert.pem"
+    key_path.write_bytes(pem)
+    cert_path.write_bytes(cert)
+    if mtls:
+        with pytest.raises(ValueError, match="trusted_ca_path is required"):
+            await module.create_trisa_server(str(key_path), str(cert_path), port=0)
+    real_factory = grpc.aio.server
+    ports = []
+
+    def factory(*args, **kwargs):
+        server = real_factory(*args, **kwargs)
+        original_bind = server.add_secure_port
+
+        def bind(address, credentials):
+            port = original_bind(address, credentials)
+            ports.append(port)
+            return port
+
+        monkeypatch.setattr(server, "add_secure_port", bind)
+        return server
+
+    monkeypatch.setattr(grpc.aio, "server", factory)
+    server = await module.create_trisa_server(
+        str(key_path), str(cert_path), port=0, require_mtls=mtls, trusted_ca_path=str(cert_path) if mtls else None
+    )
+    await server.start()
+    credentials = grpc.ssl_channel_credentials(
+        root_certificates=cert, private_key=pem if mtls else None, certificate_chain=cert if mtls else None
+    )
+    try:
+        if mtls:
+            unauthenticated = grpc.ssl_channel_credentials(root_certificates=cert)
+            async with module.TRISAClient(f"localhost:{ports[0]}", unauthenticated) as client:
+                with pytest.raises(grpc.aio.AioRpcError) as error:
+                    await client.transfer(pb2.SecureEnvelope(payload=b"{}"), timeout=2)
+                assert error.value.code() in (grpc.StatusCode.UNAVAILABLE, grpc.StatusCode.DEADLINE_EXCEEDED)
+        async with module.TRISAClient(f"localhost:{ports[0]}", credentials) as client:
+            builder = module.SecureEnvelopeBuilder(public, b"synthetic")
+            request = builder.build_envelope("tls-transfer", sample_compliance_proof, sample_hybrid_payload)
+            result = await client.transfer(request, timeout=5)
+            assert result.id == request.id
+            assert result.transfer_state == pb2.ACCEPTED
+
+            async def requests():
+                yield request
+
+            streamed = [item async for item in client.transfer_stream(requests(), timeout=5)]
+            assert [item.id for item in streamed] == [request.id]
+            assert (await client.key_exchange(pb2.SigningKey())).data == public
+            with pytest.raises(grpc.aio.AioRpcError) as error:
+                await client.confirm_address("0x123", "ethereum")
+            assert error.value.code() == grpc.StatusCode.UNIMPLEMENTED
+    finally:
+        await server.stop(0)

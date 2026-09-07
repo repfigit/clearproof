@@ -89,3 +89,11 @@ describe.skipIf(!vectorPresent)('verifier parity vector (off-chain)', () => {
   });
 
 });
+
+it.skipIf(!vectorPresent)('rejects incomplete signals without reporting a jurisdiction', async () => {
+  const proof = JSON.parse(fs.readFileSync(proofPath, 'utf8'));
+  const result = await verifyProof(proof, [], vkeyPath);
+  expect(result.valid).toBe(false);
+  expect(result.jurisdiction).toBeNull();
+  expect(result.rejectionReasons).toContain('threshold_mismatch');
+});

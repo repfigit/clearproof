@@ -8,6 +8,7 @@ import {
   decodeJurisdiction,
   getThresholds,
   thresholdsMatchJurisdiction,
+  jurisdictionMatchesVASP,
 } from '../src/thresholds.js';
 
 /**
@@ -122,4 +123,11 @@ describe('cross-language parity', () => {
       expect(DEFAULT_THRESHOLDS.tier4, `${code} tier4 stricter than default`).toBeLessThanOrEqual(thresholds.tier4);
     }
   });
+});
+
+it('does not treat incomplete or malformed signals as a jurisdiction match', () => {
+  expect(jurisdictionMatchesVASP([], 'US')).toBe(false);
+  const malformed = signals('US');
+  malformed[6] = 'invalid';
+  expect(jurisdictionMatchesVASP(malformed, 'US')).toBe(false);
 });
