@@ -136,6 +136,8 @@ def test_unknown_states_future_observations_and_scope_substitution_reject(scope)
         ("compliance", "review", "compliance-review-required"),
         ("proof", "invalid", "proof-invalid"),
         ("counterparty", "rejected", "counterparty-rejected"),
+        ("counterparty", "pending", "counterparty-pending"),
+        ("counterparty", "unsupported-version", "counterparty-version-unsupported"),
         ("counterparty", "information-requested", "counterparty-information-requested"),
         ("custody", "cancelled", "custody-cancelled"),
         ("evidence", "incomplete", "evidence-incomplete"),

@@ -61,8 +61,7 @@ behavior produce identical request references and results.
 
 Results identify `source_authenticity=local-simulator`, development assurance,
 `authorization=not-created` and `execution=not-requested`. They are trusted only
-as local simulator results, not signed remote responses. Persistent exchange-event
-ingestion, timeline/report integration and the user-facing scenario command remain
+as local simulator results, not signed remote responses. The user-facing scenario command and complete clean-environment pilot remain
 required M5 work. No network communication, storage writes or funds movement occur
 inside this simulator.
 
@@ -75,3 +74,28 @@ and unavailable keys, verifies deterministic retry and checks minimized output.
 The surrounding gate still checks unchanged stored-record counts and exactly one
 consumption. `scripts/test_pilot_mirror.py` includes this path with the real development
 proof, encrypted information and EVM mirror/recovery checks.
+
+## Durable local delivery and investigation
+
+`LocalExchangeService` loads the retained authorization receipt and proof under the
+authenticated tenant, invokes the configured local receiver, and commits minimized
+response evidence, the counterparty event/index and its idempotency result in one
+database transaction. Source authority restricts actor, tenant, deployment and event
+dimension. Delivery requires event-ingestion and evidence-decryption permissions,
+including retries. The receiver configuration and business behavior belong to the
+local service, not an incoming remote response.
+
+A delivery ID binds its receipt, source sequence, declared observation time,
+context and configured behavior. Exact retries return the retained historical
+result; altered requests conflict. A retry after key retirement is therefore a
+historical read, not a fresh acceptance under the retired key. New deliveries still
+require receiver validation. Observation time is a simulator-declared clock, kept
+separate from ingestion time; it is not an authenticated remote timestamp.
+
+The joined database test delivers acceptance before an earlier information request,
+checks simultaneous retries, reconnects, and reconstructs the same investigation.
+Duplicate and reordered internal custody-simulator events join that timeline.
+Custody completion without an independent finality observation remains a finding.
+Pending and unsupported-version counterparty states also produce actionable
+findings. These are local fixtures, not live Fireblocks deliveries or settlement
+proof. The independent Fireblocks adapter retains its existing ingestion boundary.

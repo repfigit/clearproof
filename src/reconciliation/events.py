@@ -10,7 +10,7 @@ from src.protocol.transfer import Address, Epoch, Hex32, OpaqueId, Record, UInt1
 STATES = {
     "compliance": {"approved", "review", "denied"},
     "proof": {"valid", "invalid"},
-    "counterparty": {"accepted", "rejected", "information-requested", "timeout"},
+    "counterparty": {"accepted", "rejected", "information-requested", "timeout", "pending", "unsupported-version"},
     "custody": {"created", "submitted", "completed", "failed", "cancelled"},
     "chain": {"pending", "confirmed", "finalized", "reorged"},
     "evidence": {"complete", "incomplete"},
@@ -141,6 +141,12 @@ def reconcile(scope: TransferScope, events: tuple[TransferEvent, ...], *, now: i
         if len(values) > 1:
             finding("source-conflict-" + dimension, "operations", "review-source-evidence", selected)
     adverse = {
+        ("counterparty", "pending"): ("counterparty-pending", "integrations", "await-counterparty-response"),
+        ("counterparty", "unsupported-version"): (
+            "counterparty-version-unsupported",
+            "integrations",
+            "review-supported-protocol-version",
+        ),
         ("compliance", "denied"): ("compliance-denied", "compliance", "review-denial-evidence"),
         ("compliance", "review"): ("compliance-review-required", "compliance", "review-policy-findings"),
         ("proof", "invalid"): ("proof-invalid", "compliance", "inspect-proof-verification"),

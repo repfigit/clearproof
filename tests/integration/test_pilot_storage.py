@@ -2685,6 +2685,9 @@ async def test_durable_current_inspection_real_pairing_and_revocation(db, monkey
             async with db.connection() as conn:
                 assert (await (await conn.execute("SELECT count(*) FROM pilot_records")).fetchone())[0] == before_export
                 assert (await (await conn.execute("SELECT count(*) FROM pilot_consumptions")).fetchone())[0] == 1
+            await check_durable_local_exchange(
+                db, principal, configuration, receipt, decision_authority, payload_args, private, now
+            )
             return
 
         assert complete.outcome == "INDETERMINATE" and complete.reasons == ("no_decisive_rule",)
@@ -4281,3 +4284,95 @@ def check_bilateral_scenarios(record, receipt, configuration, decision_authority
         receiver.receive(request, now=receipt["expires_at"])
     with pytest.raises(ValueError):
         LocalBilateralCounterparty(**{**configuration_args, "private_keys": {}}).receive(request, now=now)
+
+
+async def check_durable_local_exchange(
+    db, principal, configuration, receipt, decision_authority, payload, private, now
+):
+    from src.protocol.bridges.pilot_bilateral import LocalBilateralCounterparty
+    from src.protocol.decision_attestation import DecisionTrustStore
+    from src.reconciliation.events import SourceEvent, reconcile
+    from src.services.event_ingestion import EventAuthority, EventIngestionService
+    from src.services.local_exchange import ExchangeDelivery, LocalExchangeService
+
+    reviewer = Principal.model_validate({**principal.model_dump(), "roles": (*principal.roles, "evidence:read")})
+    authority = EventAuthority(
+        tenant_id=principal.tenant_id,
+        chain_id=configuration.context.deployment_chain_id,
+        registry_address=configuration.context.deployment_address,
+        source_id="local-bilateral",
+        actors=(principal.actor_id,),
+        dimensions=("counterparty",),
+        valid_from=now - 1,
+        valid_until=now + 100,
+    )
+    custody_authority = authority.model_copy(update={"source_id": "custody-simulator", "dimensions": ("custody",)})
+    events = EventIngestionService(db, cipher(), reviewer, authorities=(authority, custody_authority))
+    args = dict(
+        transfer=configuration.transfer,
+        context=configuration.context,
+        decision_trust=DecisionTrustStore([decision_authority]),
+        information_trust=payload["information_trust"],
+        recipient_trust=payload["recipient_trust"],
+        private_keys={receipt["recipient_key_id"]: private},
+    )
+    counterparty = LocalBilateralCounterparty(**args)
+    accepted = LocalExchangeService(events, counterparty, source_id="local-bilateral")
+    requested = LocalExchangeService(events, counterparty, source_id="local-bilateral", behavior="request-information")
+    first = ExchangeDelivery(
+        receipt_id=receipt["receipt_id"], delivery_id="information-first", source_sequence=1, observed_at=now
+    )
+    second = ExchangeDelivery(
+        receipt_id=receipt["receipt_id"], delivery_id="accepted-second", source_sequence=2, observed_at=now + 1
+    )
+    async with db.connection() as conn:
+        before = (await (await conn.execute("SELECT count(*) FROM pilot_records")).fetchone())[0]
+    replies = await asyncio.gather(accepted.deliver(second, now=now + 2), accepted.deliver(second, now=now + 2))
+    assert replies[0] == replies[1] and replies[0]["result"]["outcome"] == "accepted"
+    earlier = await requested.deliver(first, now=now + 3)
+    assert earlier["result"]["outcome"] == "information-requested"
+    report = await events.investigate(accepted.scope, now=now + 4)
+    assert report.states["counterparty"] == "accepted"
+    assert [e.source_sequence for e in report.timeline] == [1, 2]
+    assert [e.ingested_at for e in report.timeline] == [now + 3, now + 2]
+    assert reconcile(accepted.scope, tuple(reversed(report.timeline)) + report.timeline, now=now + 4) == report
+    await db.close()
+    await db.connect()
+    assert await events.investigate(accepted.scope, now=now + 4) == report
+    assert await accepted.deliver(second, now=now + 5) == replies[0]
+    with pytest.raises(RecordConflict):
+        await requested.deliver(second, now=now + 5)
+    denied = LocalExchangeService(
+        events, LocalBilateralCounterparty(**{**args, "private_keys": {}}), source_id="local-bilateral"
+    )
+    with pytest.raises(ValueError):
+        await denied.deliver(
+            second.model_copy(update={"delivery_id": "unavailable-key", "source_sequence": 3}), now=now + 5
+        )
+    # An exact retry remains a historical recorded result after recipient-key retirement.
+    assert await denied.deliver(second, now=now + 5) == replies[0]
+    async with db.connection() as conn:
+        assert (await (await conn.execute("SELECT count(*) FROM pilot_records")).fetchone())[0] == before + 6
+        assert (await (await conn.execute("SELECT count(*) FROM pilot_consumptions")).fetchone())[0] == 1
+    for sequence, state in ((2, "completed"), (1, "submitted"), (2, "completed")):
+        event = SourceEvent(
+            scope=accepted.scope,
+            source_id="custody-simulator",
+            source_event_id=f"custody-{sequence}",
+            source_sequence=sequence,
+            dimension="custody",
+            state=state,
+            occurred_at=now + sequence,
+            evidence_digest="ab" * 32,
+        )
+        await events.ingest(event, now=now + 6)
+    combined = await events.investigate(accepted.scope, now=now + 7)
+    assert combined.states["counterparty"] == "accepted" and combined.states["custody"] == "completed"
+    assert "custody-completed-without-finality" in {f.reason for f in combined.findings}
+    assert len(combined.timeline) == 4
+    async with db.connection() as conn:
+        local_event = await events.store.get("event", replies[0]["event_id"])
+        evidence = await events.store.get("provider-evidence", local_event["evidence_records"][0])
+        assert evidence["result"]["source_authenticity"] == "local-simulator"
+        assert evidence["receipt_id"] == receipt["receipt_id"]
+        assert (await (await conn.execute("SELECT count(*) FROM pilot_consumptions")).fetchone())[0] == 1
