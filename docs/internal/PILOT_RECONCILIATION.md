@@ -92,8 +92,10 @@ sequence-conflict rollback after the encrypted insert, identity substitution,
 source/actor/time/dimension rejection, ciphertext minimization and identical
 provider IDs in separate tenants. A separate process-death test kills the
 ingester after its encrypted insert and before index insertion, then checks
-rollback and successful retry. Provider signatures, signed source provenance,
-broader queue policy and the complete investigation CLI remain open acceptance work.
+rollback and successful retry. The separately documented Fireblocks adapter verifies
+its signed fixture profile before ingestion. Internal actor grants are not
+independently verifiable historical source attestations. Queue and CLI behavior
+is described below; further operational rules require explicit policy design.
 
 ## Authenticated API
 
@@ -155,8 +157,8 @@ consume authorizations or move funds.
 Real PostgreSQL/JWT tests cover multi-page traversal, nonmatching transfers,
 empty filtered pages with continuation, exact age boundaries, deterministic
 ordering, reconnect, role rejection, tenant isolation and unchanged storage
-counts. CLI rendering, provider links and broader queue decision rules remain
-open CP-014 work.
+counts. The CLI and scoped provider navigation described below expose these
+reports. Additional queue decision rules are separate operational policy choices.
 
 ## CLI reports
 
@@ -179,8 +181,8 @@ and a one-page budget remains explicitly partial. Text output, tenant/role
 rejection and unchanged record/consumption counts are checked too. Enable it
 with `CLEARPROOF_POLICY_CLI_TEST=1` when running
 `tests/integration/test_pilot_storage.py`; the database CI job already builds
-the CLI and enables this flag. Provider links and upstream workflow coverage
-remain open integration work.
+the CLI and enables this flag. Scoped provider links are implemented below;
+complete upstream workflow coverage still requires each intended source integration.
 
 ## Adverse observations and changed chain evidence
 

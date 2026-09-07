@@ -21,9 +21,9 @@ A passing aggregate test count does not close an unchecked requirement.
 | CP-009 manifests and doctor | Artifact model/loader and doctor entry point, source inventory, runtime pins and negative artifact tests | Review mixed/missing/unapproved profiles, production rejection and minimized diagnostics; compare actual generated digests. |
 | CP-010 policy evaluation | Python policy model/evaluator, signed facts/valuations, policy evaluation API tests | Review four outcomes, bounds, conflicting/stale/missing sources and distinction between predicates/obligations. |
 | CP-011 policy comparison and review | Diff/approval/activation services, API and built CLI tests, retained comparison | Review before/after rule explanations, missing/unsupported coverage, review delta, expected outcomes and read-only replay. |
-| CP-012 append-only events | Event model, ingestion/index transactions and process-death tests | Review source/business identities, separate clocks, atomicity, duplicates/order and tenant collisions. |
+| CP-012 append-only events | Event model, ingestion/index transactions and process-death tests | **Verified locally:** source/model/storage/API review and real PostgreSQL tests establish encrypted append-only events, tenant/source identity, separate source/ingestion clocks, atomic index writes, concurrent duplicate handling, reordered delivery and tenant collisions. Process-death test kills the child between record/index writes and proves rollback plus retry. Current owned-service gate: 76 passed. See the evidence map below; internal grants do not imply provider signatures. |
 | CP-013 provider and bilateral semantics | Fireblocks adapter/intake, signed fixture, bridge/counterparty, local exchange and CLI tests | Review detached-byte authentication, required message semantics and explicit local-simulator boundaries. Official provider/protocol reviews are recorded in their implementation docs. |
-| CP-014 readable investigation/queue and provider links | Reconciler, scoped timeline/queue API and CLI | **Provider-link gap closed:** scoped operator catalogue, API/queue fields and readable CLI now have tenant/transfer/source filtering, malformed-configuration and client-validation coverage (30 focused Python, 13 CLI, 76 PostgreSQL/EVM tests passed). Review every named lifecycle scenario before closing the whole item. |
+| CP-014 readable investigation/queue and provider links | Reconciler, scoped timeline/queue API and CLI | **Verified locally:** reviewed every named lifecycle scenario, deterministic replay, independent states, ages/reasons/owners/actions, scoped provider links, queue continuation and readable/JSON CLI. Current checks: 30 reconciliation/link tests, 6 CLI report tests and 76 PostgreSQL/EVM tests passed; the latter runs built CLI against actual JWT/HTTP/database responses. Read-only record/consumption counts are preserved. See the evidence map below for exact scenario coverage and observation limits. |
 | CP-015 historical evidence | Exporter, history statement/status/timing verification, reviewer schema and offline CLI tests | Review independently configured trust, all four times, modified/missing/swapped inputs, compromise/expiry, tenant access and replay prevention. Fresh retained export was reproduced with sockets disabled. |
 | CP-016 observation onboarding/scenarios/metrics | Durable observations/cohort, CLI, bilateral scenarios, combined custody investigation | Review all six counterparty scenarios, duplicate/reordered custody, coverage/disagreement/latency denominators and no enforcement side effects. |
 | CP-017 setup, compatibility and operations | Lockfiles, owned local runner, CI, local acceptance and migration guides | Fresh setup/build/artifact/service/offline evidence exists. **Located documentation gaps closed:** consolidated compatibility and observability/operator guides now describe the actual profile/version, readiness, metrics, retry and recovery boundaries. Spec-index, artifact-doctor and commercial status corrections are included. Remaining release-reference/final-diff review is open. |
@@ -42,3 +42,28 @@ A passing aggregate test count does not close an unchecked requirement.
 F1–F5 are separate follow-on gates. This audit cannot establish live provider
 interoperability, customer adoption, willingness to pay, managed distribution,
 independent assurance or production readiness from local simulations.
+
+## Event and investigation evidence map
+
+CP-012/014 source review covers `SourceEvent`/`TransferEvent`,
+`EventIngestionService`, the tenant transaction and migration 11 index,
+`reconcile`, queue pagination, authenticated routes, provider catalogue and
+readable/JSON CLI. The index has tenant-scoped identity/sequence uniqueness and
+an exact revision-1 encrypted-record foreign key. Supported writers cannot
+update retained events. Internal source authentication is an operator grant;
+it is not a historical provider signature or independently verified finality.
+
+| Required behavior | Direct acceptance evidence |
+| --- | --- |
+| Duplicate/out-of-order convergence | Unit test enumerates all lifecycle permutations and duplicate delivery; PostgreSQL test races five identical ingestions, delivers an earlier source sequence later, reconnects and retains the original ingestion time. |
+| Invalid authentication / tenant collision | Real signed-JWT event API rejects missing roles, missing tokens and ungranted sources. Service tests reject actor/dimension/time grants and foreign investigation; identical source IDs in another authorized tenant remain separate. |
+| Restart during processing | Child process is killed after encrypted insert and before index insertion; transaction-lock acquisition waits for rollback, then investigation is empty and retry inserts one event. Sequence conflicts after insert also roll back both writes. |
+| Approval without submission / timeout / failure | Reconciler tests assert independent states and the exact `approval-without-submission`, `counterparty-timeout` and `settlement-failed` findings with ages, owners and next actions. |
+| Settled with missing evidence | Explicit finalized-chain observation with missing proof/evidence yields `settled-with-unresolved-evidence`; custody completion alone cannot establish chain finality. |
+| Changed canonical block/finality | Reorg and disagreeing-source tests retain conflicts. Same-source replacement tests reverse delivery order and repeat the replacement, preserving the first change age. These check observation semantics, not remote chain truth. |
+| Readable report and provider navigation | Built CLI consumes actual loopback HTTP/JWT/PostgreSQL timeline and queue responses; unit/API tests cover optional HTTPS links filtered by tenant, transfer and observed source, with no navigation request executed. |
+| Ageing queue / no implicit completeness | Real database traversal covers filtered empty pages, cursor continuation, exact age threshold, reconnect and tenant isolation. Built CLI distinguishes one-page partial output from complete four-page traversal. Pages are separate observations. |
+| Read-only replay | Source has no send/consume operation; live-local report/CLI tests compare record and consumption counts before and after reads. A complete six-state report still has no authorization field. |
+
+Provider-byte authentication and mandatory bilateral semantics remain CP-013;
+their separate review is not implied by the internal event grants above.
