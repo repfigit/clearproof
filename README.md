@@ -8,13 +8,13 @@ compliance, source truth, counterparty acceptance or settlement by itself.
 
 **Status checked September 7, 2026:** the main GitHub repository is **public**.
 Public npm packages remain **0.3.0**; this unreleased development checkout is
-**0.4.0**. Use the public `feat/adoption-pilot-foundation` branch for the local pilot. Current circuits and
+**0.4.0**. The local pilot is merged into the public `main` branch. Current circuits and
 contracts have not completed independent audits, and generated proving keys are
 explicitly unapproved development artifacts.
 
 ## Local adoption pilot
 
-The development branch implements:
+The unreleased source checkout implements:
 
 - Authenticated credential enrollment, holder-bound issuance membership and a
   canonical transfer/context projection with exact asset and valuation arithmetic.

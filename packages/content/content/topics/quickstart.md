@@ -28,7 +28,7 @@ The published CLI currently cannot be installed from the public registry because
 Prerequisites: Git, Python 3.11+, Node.js 20+ with npm, and circom 2.2.2 for the circuit compilation path used in CI.
 
 ```bash
-git clone --branch feat/adoption-pilot-foundation https://github.com/repfigit/clearproof.git
+git clone --branch main https://github.com/repfigit/clearproof.git
 cd clearproof
 npm exec --yes --package=npm@11.9.0 -- npm ci
 uv sync --frozen --extra dev --python 3.12
