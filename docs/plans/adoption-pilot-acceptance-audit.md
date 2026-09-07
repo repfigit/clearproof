@@ -1,10 +1,12 @@
 # Adoption pilot acceptance audit
 
-Audit baseline: `1f357ec`. Scope is the original M0–M5 / CP-001–CP-018 plan in
-[the implementation plan](2026-09-05-adoption-pilot-implementation.md). This is an
-open audit, not a completion certificate. The execution ledger supplies evidence
-candidates; each requirement still needs a current source/behavior review.
-A passing aggregate test count does not close an unchecked requirement.
+Audit baseline: `1f357ec`; final source/test baseline: `29870b7`, followed by
+the documented formatting and documentation-packaging corrections. Scope is the
+original M0–M5 / CP-001–CP-018 [implementation plan](2026-09-05-adoption-pilot-implementation.md).
+**Local acceptance complete, September 7, 2026.** Each requirement below has a
+source/behavior review and direct evidence; the cross-cutting gates are recorded
+below. This is an implementation acceptance record, not an independent security
+audit, production certificate or claim of customer adoption.
 
 ## Requirement inventory
 
@@ -26,18 +28,48 @@ A passing aggregate test count does not close an unchecked requirement.
 | CP-014 readable investigation/queue and provider links | Reconciler, scoped timeline/queue API and CLI | **Verified locally:** reviewed every named lifecycle scenario, deterministic replay, independent states, ages/reasons/owners/actions, scoped provider links, queue continuation and readable/JSON CLI. Current checks: 30 reconciliation/link tests, 6 CLI report tests and 76 PostgreSQL/EVM tests passed; the latter runs built CLI against actual JWT/HTTP/database responses. Read-only record/consumption counts are preserved. See the evidence map below for exact scenario coverage and observation limits. |
 | CP-015 historical evidence | Exporter, history statement/status/timing verification, reviewer schema and offline CLI tests | **Verified locally:** reviewed exact revision/hash export, approved reviewer encryption, independent artifact/runtime and six authority layers, real pairing, policy replay, status delegation and RFC 3161 library verification with pinned TSA/certificates/policy/accuracy. Decision, source observation, capture and review times remain separate; operator times are not independent timestamp proof. Reviewed direct adversarial tests in the latest 77-test database gate: missing/swapped records, roots/keys/policy/envelope/signals, missing trust/timestamp, invalid signatures, later compromise, ordinary expiry, unauthorized export and unchanged records/consumption. Current 19 timestamp/CLI tests passed. A fresh process with Python socket connections disabled reproduced the retained encrypted export's exact supported report using its separately configured synthetic trust and review clock. Corrected stale export status. Support is for the recorded local decision; global source truth, beneficiary plaintext validation and production assurance are not inferred. |
 | CP-016 observation onboarding/scenarios/metrics | Durable observations/cohort, CLI, bilateral scenarios, combined custody investigation | **Verified locally:** reviewed observation-only records/roles, shared current evaluation, actor-bound retries, immutable v1/v2 compatibility, scoped monotonic timing, cohort denominators, live pagination and API/SDK/CLI consistency checks. Current focused checks: 3 Python and 11 SDK tests passed. Reviewed direct real-proof/PostgreSQL/JWT/built-CLI cases in the latest 77-test gate: four policy outcomes, failed pairing with no policy, rollback/reconnect, old cached results, tenant isolation, observation-as-proof foreign-key rejection and zero consumption. CP-013's reviewed local counterparty dispositions and duplicate/reordered custody join cover the required scenarios. Actual retained outputs independently reconcile six cases/four observations/two missing, three comparable labels/two agreements/one disagreement and exact measured duration sums. Corrected stale onboarding prose. Metrics describe selected synthetic evaluations, not population completeness, unexplained disagreement causes, end-to-end latency or customer value. |
-| CP-017 setup, compatibility and operations | Lockfiles, owned local runner, CI, local acceptance and migration guides | Fresh setup/build/artifact/service/offline evidence exists. **Located documentation gaps closed:** consolidated compatibility and observability/operator guides now describe the actual profile/version, readiness, metrics, retry and recovery boundaries. Spec-index, artifact-doctor and commercial status corrections are included. Remaining release-reference/final-diff review is open. |
+| CP-017 setup, compatibility and operations | Lockfiles, owned local runner, CI, local acceptance and migration guides | **Verified locally:** independently installed locked checkout, full build, fresh development setup for both profiles, 982 Python tests, 83 real-artifact contract tests and 77 owned PostgreSQL/EVM tests passed. Exact retained offline review, report/pin/permission/privacy checks, noEmit and changed-file Ruff/format checks passed. Reviewed compatibility, migrations/rollback, readiness, metrics and recovery guides; corrected stale README/ADR/status claims. Rechecked private repository and public npm 0.3.0 availability. Homepage and docs deployed; fixed workspace content externalization and monorepo-root prebuilt packaging, then verified 16 live pages and three content endpoints. See the final checkpoint below. Local operator trust configuration remains explicit; source/package distribution and production provisioning are separate follow-ons. |
 | CP-018 paid-pilot preparation and counters | `docs/commercial/`, usage service/API and tests | **Verified for local preparation:** all five commercial packet documents reviewed; brief, interview, worksheet, hypothetical pricing and free/paid boundaries are explicit. `usage_inventory` and its PostgreSQL/JWT test establish one scoped metadata snapshot, role/query enforcement, retry/conflict/reconnect and read-only behavior. Corrected stale capability statements and documented excluded publication tables. No outreach, price acceptance or revenue claim; F4 remains open. |
 
 ## Cross-cutting closure checks
 
-- Inspect the original acceptance text for every row, including prose outside its table.
-- Match negative tests to the actual trust boundary; mocked business tests do not establish circuit validity.
-- Verify final `make test`, uncached workspace/contract tests with explicit fresh artifacts, build/noEmit and changed-file Ruff checks. Distinguish skipped optional/service cases from the separate live-local gates.
-- Verify the fresh-checkout synthetic workflow and its retained observation/comparison/investigation/export outputs. Review scoped identifiers instead of assuming separate fixtures are one customer transfer.
-- Reproduce the encrypted export offline with separately configured synthetic trust and the declared review clock; confirm exact output and no secret/plaintext leakage.
-- Check signal/spec/vector/artifact alignment, release references, compatibility, migration/rollback instructions, observability and the final diff.
-- Record an authoritative source/test result for each closure. Missing or indirect evidence remains open.
+All original table acceptance requirements and the accompanying M0–M5 prose were
+reviewed against the requirement evidence above. Actual witness/pairing checks
+remain distinct from policy and source-authority tests.
+
+- **Build and tests:** independent clone at `29870b7`, frozen npm/Python installs,
+  full workspace build, fresh local phase-one/phase-two development artifacts and
+  both real proof round trips passed. Final Python: 982 passed / 92 optional or
+  service skips; separate owned PostgreSQL/EVM: 77 passed. Uncached workspace
+  tests: SDK 159, CLI 15, content 2, artifact metadata 2, contracts 83; no pending
+  contract cases. TypeScript noEmit passed. All 152 changed Python files pass Ruff
+  and format checks; final HPKE formatting preserves the AST and 21 tests pass.
+- **End-to-end outputs:** all nine retained reports present, with exact byte-size,
+  SHA-256 and artifact pins; private permissions and synthetic key/person-name
+  exclusion checked. Four non-consuming observation outcomes, six selected cases,
+  four observed/two missing and exact measured-duration totals independently match.
+- **Offline review:** after the owned database and EVM stopped, a new process with
+  Python sockets disabled reproduced the exact supported historical report under
+  separately supplied synthetic trust and the retained review clock.
+- **Release and final diff:** current signal/spec/vector/artifact alignment,
+  compatibility and migration/recovery guides reviewed; no generated development
+  keys added. Changed-document file targets and whole-branch whitespace checks
+  pass. README and proof-system/status prose now distinguish legacy/current
+  profiles, published packages and source-only local acceptance. Final docs
+  packaging explicitly preserves the content package's runtime asset paths.
+- **Public accuracy:** GitHub API again reports the main repository private; the
+  four public npm packages remain 0.3.0 and the CLI's content dependency remains
+  unavailable. Homepage build/lint and mobile/desktop checks pass. Updated docs
+  build and all 16 live pages / three content API endpoints pass after repairing
+  prebuilt dependency resolution and workspace externalization.
+
+Exact workflow, counts, host versions and local evidence paths are in the
+[September 7 clean-checkout checkpoint](../operations/local-pilot-acceptance.md#final-clean-checkout-checkpoint--september-7-2026).
+The final docs configuration was validated by a subsequent production build and
+live route checks; unrelated proof/service suites were not repeated for that
+packaging-only correction. No remote CI success is inferred from local results.
+The frozen npm install reports 50 dependency advisories; production dependency
+assurance remains open with F5.
 
 F1–F5 are separate follow-on gates. This audit cannot establish live provider
 interoperability, customer adoption, willingness to pay, managed distribution,

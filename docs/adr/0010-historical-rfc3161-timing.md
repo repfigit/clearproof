@@ -1,6 +1,6 @@
 # ADR 0010: RFC 3161 evidence for signed historical decisions
 
-Date: 2026-09-06  
+Date: 2026-09-06
 Status: implemented for local pilot evaluation; production authority remains unapproved
 
 A decision signature authenticates the operator's claim but cannot authenticate its

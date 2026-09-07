@@ -155,18 +155,12 @@ def open_envelope(
         raise ValueError(f"Unsupported envelope version: {envelope.get('v')!r}")
     for field, expected in SUITE_IDS.items():
         if envelope.get(field) != expected:
-            raise ValueError(
-                f"Unsupported {field}: {envelope.get(field)!r} (expected {expected!r})"
-            )
+            raise ValueError(f"Unsupported {field}: {envelope.get(field)!r} (expected {expected!r})")
 
     skr = _SUITE.kem.deserialize_private_key(recipient_private_key)
     try:
-        recipient_ctx = _SUITE.create_recipient_context(
-            _b64d(envelope["enc"]), skr, info=_INFO
-        )
-        return recipient_ctx.open(
-            _b64d(envelope["ct"]), aad=envelope["aad"].encode("utf-8")
-        )
+        recipient_ctx = _SUITE.create_recipient_context(_b64d(envelope["enc"]), skr, info=_INFO)
+        return recipient_ctx.open(_b64d(envelope["ct"]), aad=envelope["aad"].encode("utf-8"))
     except Exception as exc:
         # Do not leak which check failed (key vs AAD vs tag).
         raise ValueError("Envelope decryption failed") from exc

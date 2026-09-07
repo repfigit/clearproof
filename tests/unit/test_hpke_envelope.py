@@ -159,9 +159,7 @@ class TestBindingAndTamper:
 
 
 class TestFreshness:
-    def test_ephemeral_randomness(
-        self, recipient_keypair: tuple[bytes, bytes]
-    ) -> None:
+    def test_ephemeral_randomness(self, recipient_keypair: tuple[bytes, bytes]) -> None:
         """Same plaintext + same recipient -> different enc/ct (fresh ephemeral key)."""
         _, pub = recipient_keypair
         e1 = seal_envelope(b"same plaintext", pub, "proof-030")

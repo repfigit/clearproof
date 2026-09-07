@@ -135,8 +135,9 @@ trust configuration. Changing the clock asks a different historical trust questi
 See [offline verification](../internal/PILOT_VERIFY_HISTORY_CLI.md) for outcome
 semantics and CLI usage.
 
-The complete requirement-by-requirement M0–M5 acceptance audit remains open. Live provider access, customer validation and production
-assurance remain F1–F5 follow-ons.
+The [requirement-by-requirement M0–M5 acceptance audit](../plans/adoption-pilot-acceptance-audit.md)
+is complete for the local scope. Live provider access, customer validation and
+production assurance remain F1–F5 follow-ons.
 
 
 ## Workspace test behavior
@@ -184,3 +185,45 @@ unestablished because test success alone cannot prove the preceding setup steps.
 For version selection and upgrades, use the [compatibility matrix](pilot-compatibility.md).
 For endpoint meanings, report interpretation and failure handling, use the
 [observability and operator runbook](pilot-observability.md).
+
+
+## Final clean-checkout checkpoint — September 7, 2026
+
+An independent clone of `29870b7` installed npm 11.9.0 and Python dependencies
+from the committed lockfiles. `npm run build` passed all four build tasks.
+`make test` passed **982 tests**, with **92 optional/service tests skipped** and
+30 warnings. The separate owned PostgreSQL/EVM gate passed **77 tests** with
+6 warnings in 161.07 seconds; its owned services stopped successfully.
+
+The clone generated a new local phase-one transcript, phase-two development keys
+and both proof profiles with `scripts/test_development_circuits.py`. Both real
+proof round trips and 21 artifact-dependent EVM checks passed. The uncached
+`npm run test:ts`, supplied with these exact pilot/legacy directories and the
+clone's Python executable, passed **159 SDK, 15 CLI, 2 content, 2 artifact-metadata
+and 83 contract tests**. No contract cases remained pending. Proof, CLI, content
+and contract TypeScript noEmit checks passed. All 152 changed Python files passed
+Ruff checks and format validation. The two final HPKE formatting changes preserve
+their Python ASTs; the focused 21-test envelope suite also passed.
+
+The retained run contains all nine reports. After the database and test chain
+stopped, the documented offline procedure reproduced the exact supported
+historical report with Python socket connections disabled. Report sizes/digests,
+artifact pins, private file/directory permissions and exclusion of the synthetic
+reviewer key and person names passed independent checks. The selected observation
+cohort contains all four outcomes, four observations and two missing cases;
+its counts and measured durations remain scoped to those synthetic evaluations.
+
+Local evidence directories are `/home/agent/.cache/clearproof-tests/final-pilot-29870b7`
+(checkout), `final-artifacts-29870b7` (development artifacts) and
+`final-service-29870b7/pilot` (run), with the latter two under the same cache parent.
+These are operator-local paths, not published downloads. Share only the permitted
+synthetic report inventory. The source review, final documentation changes and
+formatting are recorded in the closing implementation-plan entry.
+
+Host prerequisites were Node 26.5.1, Python 3.12.13, uv 0.12.9, Circom 2.2.2 and
+PostgreSQL 18.6. The Circom binary SHA-256 matched the CI pin
+`f3d8d1fdbc123779b80e210c909ee941d7a1e130c70365524646b48b8b0fe9d5`.
+The npm install reported 50 dependency advisories; successful local acceptance
+does not certify dependency security. Dependency/independent assurance review
+remains part of the production gate. No remote CI, customer adoption, live provider
+interoperability or production approval is inferred from this checkpoint.

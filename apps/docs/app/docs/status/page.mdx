@@ -1,33 +1,33 @@
 # Project status
 
-Last checked: **September 5, 2026**.
+Last checked: **September 7, 2026**.
 
 **Pilot-stage, pre-production software.** Published npm packages: **0.3.0**. Development checkout: **0.4.0**. Main GitHub repository: **private**.
 
+The implementation below is on an unreleased development branch. Local acceptance evidence does not make it available in the published packages or the historical Sepolia deployments.
+
 ## Available components and limits
 
-| Area | Current status |
+| Area | Current development status |
 | --- | --- |
-| Public installation | Proof SDK 0.3.0 installation verified; CLI 0.3.0 installation fails because its `@clearproof/content` dependency is not publicly available |
-| Proof components | Groth16 circuits and SDKs exist; authenticated credential/holder/transfer binding requires further work |
-| API and storage | Components exist; complete durable tenant isolation and restart-safe workflow integration remain open |
-| Verification | Cryptographic fixtures exist; full API/SDK/registry acceptance parity remains open |
-| Encryption | AES-256-GCM and recipient HPKE components exist; discovery, migration, trusted keys and rotation require integration validation |
-| Travel Rule bridges | TRP, TRISA and TAIP-10 prototypes; complete bilateral interoperability is not established |
-| Deployment | Recorded Sepolia testnet contracts; no production readiness claim |
-| Assurance | No completed independent circuit or contract audit; current proving artifacts use development-only setup |
+| Public installation | Proof SDK 0.3.0 installation verified; CLI 0.3.0 depends on `@clearproof/content`, which remains unavailable from the public npm registry |
+| Proof components | Credential-bound Groth16 v2 statement, holder-secret and issuer membership checks, exact transfer projection and valuation arithmetic tested with real development proofs |
+| API and storage | Encrypted tenant-scoped records, signed enrollment, revocation, transactional authorization and restart/retry isolation tested with PostgreSQL |
+| Verification | Matching eight-signal statement checked in Python and Solidity; API/SDK trust the configured server, PostgreSQL owns consumption and contracts mirror receipts under publisher-validated checkpoints |
+| Encryption | Recipient HPKE, independently scoped key authority, signed information approval and transfer/context binding; key rotation and altered-envelope rejection covered locally |
+| Policy workflows | Explained ALLOW, DENY, REVIEW and INDETERMINATE outcomes; stored policy comparison, separate approval/activation history and reviewed rollback |
+| Investigations | Read-only timelines and paginated queues join counterparty, custody, chain and evidence observations, preserving duplicates, ordering and unresolved conflicts |
+| Historical evidence | Encrypted exports with independently configured source/decision/status/timing trust, real proof verification and offline policy replay; missing trust remains indeterminate |
+| Observation onboarding | Non-authorizing observations, selected-cohort coverage/disagreement/timing reports and a disposable database/test-chain acceptance command |
+| Provider and bilateral work | Bounded Fireblocks signature/event adapter tested with synthetic signatures; local simulated bilateral dispositions. Live provider access, automated signing-key refresh and remote TRP conformance remain open |
+| Deployment and assurance | Historical Sepolia deployments only; no completed independent circuit/contract audit or production trusted setup |
 
-## Planned pilot work
+The clean-checkout workflow installs locked dependencies, builds source workspaces, generates explicitly unapproved development artifacts and exercises real PostgreSQL, CLI/API and local EVM paths. Retained encrypted exports can be reviewed after the services stop. These are controlled synthetic tests with configured authorities, not proof of live source truth or legal compliance.
 
-1. Correct storage parsing, chain-cache isolation and discovery compatibility.
-2. Establish authenticated proof inputs, transfer binding, durable tenant state and verifier consistency.
-3. Add policy-change simulation with explained outcomes.
-4. Add read-only transfer investigations across compliance, counterparty and settlement events.
-5. Add independently verifiable historical evidence exports.
-6. Add observation-mode onboarding, simulated counterparties and a reproducible pilot.
+## Adoption and commercial next steps
 
-These are planned milestones, not generally available features. External credential-wallet integrations and ongoing provider-driven re-screening depend on an identified partner and supported upstream access.
+The proposed commercial direction is managed integrations and recurring operational workflows around portable evidence. Pilot briefs, interview questions, a measurement worksheet and hypothetical pricing experiments are prepared. No customer adoption, willingness to pay, revenue or service-level commitment is established.
 
-The proposed commercial direction is managed integrations and operational workflows around portable evidence. No customer adoption, pricing, service-level commitment or regulatory certification is asserted here.
+Customer-dependent issuer/wallet support, live provider integration, ongoing re-screening feeds, commercial validation and independently reviewed production operations remain separate follow-on gates. The repository is still private; general source access and updated package distribution are not yet available.
 
 See [security](/docs/security), [testnet contracts](/docs/contracts) and [quickstart](/docs/quickstart).

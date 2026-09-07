@@ -15,7 +15,8 @@ The configuration is `CurrentStatementConfiguration`; the verifier is loaded by
 are explicit transfer configurations, not caller-provided trust inventories.
 The default app has no targets and returns 503 until provisioned. Reinstall this
 operator configuration on process restart; durable enrollment/root/policy records
-remain in PostgreSQL. A serialized provisioning loader is still onboarding work.
+remain in PostgreSQL. The local acceptance runner supplies synthetic configuration;
+a serialized operator provisioning loader is not supplied by this pilot.
 
 The authenticated JWT needs both `proof:inspect` and `evidence:decrypt`. Static
 API-key development mode retains the existing fixed operator-assigned tenant and
@@ -45,8 +46,10 @@ proof contents and private records.
 A positive pairing result is not a business policy ALLOW, counterparty acceptance,
 legal conclusion or settlement evidence. This endpoint does not expose the
 state-changing authorization service. Development manifest assurance is retained
-in the response. SDK/CLI current inspection and contract parity, durable
-observation reports and complete local onboarding remain separate work.
+in the response. SDK/CLI inspection is described below;
+[observation](PILOT_OBSERVATION_MODE.md),
+[authorization](PILOT_AUTHORIZATION.md) and
+[contract mirroring](PILOT_CURRENT_REGISTRY.md) have separate implemented boundaries.
 
 ## Source SDK and CLI
 
@@ -94,8 +97,8 @@ verify API claims or reproduce Python business rules. The real PostgreSQL gate
 with `CLEARPROOF_POLICY_CLI_TEST=1` exercises built Node CLI → SDK → HTTP → JWT →
 current service/pairing, covering success, failed pairing, tenant/role rejection
 and input-error redaction. The isolated development-artifact CI job enables this
-gate. Other current authorization, contract parity and observation work remains
-open.
+gate. The [acceptance audit](../plans/adoption-pilot-acceptance-audit.md) records
+the evidence for current authorization, contract parity and observation separately.
 
 ## Read-only current policy evaluation
 
@@ -130,6 +133,6 @@ outcomes; it does not validate external data truth or regulatory sufficiency.
 
 Neither endpoint writes an observation record, signs a decision receipt, consumes
 a nullifier, sends a Travel Rule payload or executes a transfer. Durable observation
-mode and authorization use separate services and remain integration work. The
+mode and authorization use the separate services linked above. The
 current source SDK/CLI adapter described above exposes inspection only; evaluation
 client support is not implied by this API addition.
