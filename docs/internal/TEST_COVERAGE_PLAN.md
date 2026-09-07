@@ -841,3 +841,21 @@ still need completion and final merged-main verification.
 - Full repository coverage remains unfinished. The forty-second checkpoint is
   still the last complete Python report; subsequent focused results must not be
   presented as a newly measured repository-wide percentage.
+
+## Forty-fifth checkpoint
+
+- Added 44 checkpoint tests using real Ed25519 root signatures and Web3's actual
+  ABI decoding through a controlled provider. Cases cover tenant/publication
+  identifiers, preceding revisions, deployment/observation configuration, signed
+  context and RPC chain mismatches, empty/unapproved runtime code, stale/future
+  blocks, each head field, publication-time bounds and a changed confirmation hash.
+- Positive checks establish exact maximum block-age acceptance and that bytecode
+  and head reads both use the initially observed block number before its hash is
+  reconfirmed. No public RPC is contacted by the controlled provider.
+- All 44 tests pass; `src/chain/pilot_checkpoint.py` measures 63/63 statements and
+  24/24 branches (`checkpoint-boundaries.log`/`.data`). The existing real local-EVM
+  integration separately passes through `scripts/test_checkpoint_evm.py`
+  (`checkpoint-boundaries-evm.log`, 1 passed); its owned node is cleaned up.
+- Ruff and whitespace checks pass. No production code, contracts or artifacts
+  changed. Other Python paths, SDK/Solidity/docs/scripts and final remote checks
+  remain unfinished; the full coverage objective remains active.
