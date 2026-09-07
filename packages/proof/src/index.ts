@@ -29,3 +29,6 @@ export type { ObservationPageRequest, ObservationPage } from './observation-page
 
 export { authorizeCurrentProof } from './authorization.js';
 export type { AuthorizationRequest, AuthorizationReceipt, AuthorizationReport } from './authorization.js';
+
+export { walletOwnershipSigningMessage } from './wallet-ownership.js';
+export type { WalletOwnershipChallenge, WalletOwnershipCredential, ExpectedWalletOwnershipContext } from './wallet-ownership.js';

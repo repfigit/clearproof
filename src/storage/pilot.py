@@ -23,6 +23,12 @@ from src.storage.database import Database
 from src.storage.pilot_cipher import RecordCipher
 
 _WRITE_ROLES = {
+    "wallet-challenge": "credential:issue",
+    "wallet-challenge-slot": "credential:issue",
+    "wallet-quota": "credential:issue",
+    "wallet-attestation": "credential:issue",
+    "wallet-extension": "credential:issue",
+    "wallet-revocation": "credential:revoke",
     "credential": "credential:issue",
     "issuance-root": "credential:issue",
     "proof": "proof:generate",
@@ -230,7 +236,7 @@ class PilotTransaction:
         if (row is None and expected_revision is not None) or (row and row["revision"] != expected_revision):
             raise RecordConflict("Record already exists or expected revision differs")
         # Proofs/events/receipts/revocations/idempotency results are append-only.
-        if row and kind not in ("issuance-root", "issuer-root", "sanctions-root", "policy-activation"):
+        if row and kind not in ("issuance-root", "issuer-root", "sanctions-root", "policy-activation", "wallet-quota"):
             raise RecordConflict("Pilot record is immutable")
         revision = (row["revision"] if row else 0) + 1
         sealed = self._cipher.seal(self._principal.tenant_id, kind, record_id, revision, value)

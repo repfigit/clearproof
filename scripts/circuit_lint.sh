@@ -23,6 +23,7 @@ if ! command -v circomspect >/dev/null 2>&1; then
 fi
 
 CIRCUIT_FILES=(
+    circuits/wallet_ownership_credential.circom
     circuits/compliance.circom
     circuits/sanctions_nonmembership.circom
     circuits/credential_validity.circom
