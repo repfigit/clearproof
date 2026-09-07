@@ -1,6 +1,7 @@
 # ADR 0009: Bind the exact credential in pilot-transfer-v2
 
-Status: development implementation; current authorization remains incomplete.
+Status: development implementation used by current local inspection and authorization.
+The [full pilot acceptance audit](../plans/adoption-pilot-acceptance-audit.md) remains open.
 
 The v1 composed circuit proved possession of an issued credential for the
 transfer's tenant, wallet and jurisdiction. Its public transfer commitment did
@@ -43,6 +44,11 @@ valid witness with its own v2 commitment; substituting it while retaining the
 other public commitment fails circuit constraints. Real pairing also rejects the
 original proof with the alternate credential's public commitment.
 
-This resolves exact-credential statement binding. It does not complete API/SDK/
-contract current-verifier parity, independent current trust selection, atomic
-revocation/consumption, or the complete encrypted historical pilot workflow.
+This resolves exact-credential statement binding. The separate
+[current inspection](../internal/PILOT_CURRENT_STATEMENT.md),
+[atomic authorization](../internal/PILOT_AUTHORIZATION.md),
+[registry mirror](../internal/PILOT_CURRENT_REGISTRY.md) and
+[historical inspection](../internal/PILOT_HISTORY_INSPECTION.md) implementations
+provide their own acceptance boundaries. Credential binding alone does not prove
+those boundaries correct or close their remaining item-by-item audit. No
+production ceremony or independent assurance is implied.

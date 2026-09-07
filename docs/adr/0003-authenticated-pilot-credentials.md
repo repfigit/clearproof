@@ -49,3 +49,15 @@ route legacy proofs into the new authorization profile. The subcircuit and its
 witness checks are development components. Activation requires the composed
 proof ABI, trusted snapshot handling, real Groth16 proofs and all adversarial
 acceptance checks in the adoption plan. No production ceremony is claimed.
+
+
+Implementation checkpoint: the local pilot now has wallet-signed enrollment,
+registrar-signed root snapshots, composed credential/transfer witness checks and
+real development Groth16 verification. The [v2 binding decision](0009-credential-bound-pilot-profile.md)
+adds the exact credential and issuance root to the outer commitment so two valid
+credentials cannot substitute for each other under one public statement. The
+[enrollment service](../operations/pilot-enrollment.md) rechecks retained consent;
+[current inspection](../internal/PILOT_CURRENT_STATEMENT.md) reconstructs expected
+signals using independently configured root authorities/current pins and the
+retained credential. Wallet and registrar signatures remain outside ZK.
+The full pilot and production assurance gates remain separate from this decision.
