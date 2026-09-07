@@ -93,6 +93,59 @@ const g2 = (p: string[][]): [G1, G1] => [[p[0][1], p[0][0]], [p[1][1], p[1][0]]]
     expect(await registry.mirroredReceipts(tenant, signals[3])).to.equal(receiptId);
   });
 
+  async function batchFixture() {
+    const result = await loadFixture(fixture);
+    const { pins, statement, bundle } = result;
+    const updates = pins.map((pin, i) => ({
+      scope: pin.scope, digest: pin.digest, value: bundle.heads[i].value,
+      expectedRevision: i === 7 ? 0 : 1, validFrom: statement.evaluatedAt,
+      validUntil: statement.validUntil, enabled: true, replace: i === 7,
+    }));
+    // A new designated caller produces a distinct immutable statement, reusing seven heads.
+    return { ...result, updates, batchStatement: { ...statement, consumer: result.outsider.address } };
+  }
+
+  it("atomically publishes a batch, reuses unchanged heads and exposes recovery identity", async function () {
+    const { registry, tenant, publisher, outsider, pins, updates, batchStatement, receiptId, a, b, c, signals } = await batchFixture();
+    const id = await registry.statementId(tenant, batchStatement);
+    expect(await registry.statementPublication(id)).to.deep.equal([false, 0n]);
+    await registry.connect(publisher).publishBatch(tenant, 1, updates, batchStatement);
+    expect(await registry.statementPublication(id)).to.deep.equal([true, 1n]);
+    for (let i = 0; i < 8; i++) expect((await registry.head(tenant, i, pins[i].scope)).revision).to.equal(1);
+    expect(await registry.inspect(tenant, id, a, b, c, signals)).to.equal(true);
+    await expect(registry.connect(publisher).publishBatch(tenant, 1, updates, batchStatement))
+      .to.be.revertedWithCustomError(registry, "InvalidState");
+    await registry.connect(outsider).mirror(tenant, id, receiptId, a, b, c, signals);
+    expect(await registry.mirroredReceipts(tenant, signals[3])).to.equal(receiptId);
+  });
+
+  it("rolls back every head if the final statement or a later checkpoint rejects", async function () {
+    const { registry, tenant, publisher, pins, updates, batchStatement } = await batchFixture();
+    const replaced = updates.map((u) => ({ ...u, replace: true }));
+    const next = { ...batchStatement, pins: pins.map((p, i) => ({ ...p, revision: i === 7 ? 1 : 2 })) };
+    await expect(registry.connect(publisher).publishBatch(tenant, 1, replaced, { ...next, projectionCommitment: 0 }))
+      .to.be.revertedWithCustomError(registry, "InvalidStatement");
+    await expect(registry.connect(publisher).publishBatch(tenant, 1,
+      replaced.map((u, i) => i === 7 ? { ...u, expectedRevision: 1 } : u), next))
+      .to.be.revertedWithCustomError(registry, "InvalidState");
+    for (let i = 0; i < 8; i++) expect((await registry.head(tenant, i, pins[i].scope)).revision).to.equal(i === 7 ? 0 : 1);
+    expect(await registry.statementPublication(await registry.statementId(tenant, next))).to.deep.equal([false, 0n]);
+  });
+
+  it("rejects stale publisher epochs, callers and mismatched reused checkpoint values", async function () {
+    const { registry, tenant, publisher, outsider, updates, batchStatement } = await batchFixture();
+    await expect(registry.connect(outsider).publishBatch(tenant, 1, updates, batchStatement))
+      .to.be.revertedWithCustomError(registry, "UnauthorizedPublisher");
+    await expect(registry.connect(publisher).publishBatch(tenant, 1,
+      updates.map((u, i) => i === 0 ? { ...u, value: BigInt(u.value) + 1n } : u), batchStatement))
+      .to.be.revertedWithCustomError(registry, "InvalidState");
+    await registry.setPublisher(tenant, publisher.address);
+    await expect(registry.connect(publisher).publishBatch(tenant, 1, updates, batchStatement))
+      .to.be.revertedWithCustomError(registry, "InvalidState");
+    await expect(registry.connect(publisher).publishBatch(tenant, 2, updates, batchStatement))
+      .to.be.revertedWithCustomError(registry, "InvalidState");
+  });
+
   it("keeps a non-ALLOW authorization separate from a valid current proof", async function () {
     const { registry, tenant, consumer, id, a, b, c, signals, approve, receiptId } = await loadFixture(fixture);
     await approve(false);

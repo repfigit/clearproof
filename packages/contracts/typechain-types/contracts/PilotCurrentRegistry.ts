@@ -52,6 +52,37 @@ export declare namespace PilotCurrentRegistry {
     enabled: boolean;
   };
 
+  export type HeadUpdateStruct = {
+    scope: BytesLike;
+    digest: BytesLike;
+    value: BigNumberish;
+    expectedRevision: BigNumberish;
+    validFrom: BigNumberish;
+    validUntil: BigNumberish;
+    enabled: boolean;
+    replace: boolean;
+  };
+
+  export type HeadUpdateStructOutput = [
+    scope: string,
+    digest: string,
+    value: bigint,
+    expectedRevision: bigint,
+    validFrom: bigint,
+    validUntil: bigint,
+    enabled: boolean,
+    replace: boolean
+  ] & {
+    scope: string;
+    digest: string;
+    value: bigint;
+    expectedRevision: bigint;
+    validFrom: bigint;
+    validUntil: bigint;
+    enabled: boolean;
+    replace: boolean;
+  };
+
   export type PinStruct = {
     scope: BytesLike;
     digest: BytesLike;
@@ -106,6 +137,7 @@ export interface PilotCurrentRegistryInterface extends Interface {
       | "inspect"
       | "mirror"
       | "mirroredReceipts"
+      | "publishBatch"
       | "publishHead"
       | "publishStatement"
       | "publisherEpochs"
@@ -114,6 +146,7 @@ export interface PilotCurrentRegistryInterface extends Interface {
       | "revokeRole"
       | "setPublisher"
       | "statementId"
+      | "statementPublication"
       | "supportsInterface"
       | "verifier"
       | "verifierCodeHash"
@@ -186,6 +219,15 @@ export interface PilotCurrentRegistryInterface extends Interface {
     values: [BytesLike, BigNumberish]
   ): string;
   encodeFunctionData(
+    functionFragment: "publishBatch",
+    values: [
+      BytesLike,
+      BigNumberish,
+      PilotCurrentRegistry.HeadUpdateStruct[],
+      PilotCurrentRegistry.StatementStruct
+    ]
+  ): string;
+  encodeFunctionData(
     functionFragment: "publishHead",
     values: [
       BytesLike,
@@ -228,6 +270,10 @@ export interface PilotCurrentRegistryInterface extends Interface {
     values: [BytesLike, PilotCurrentRegistry.StatementStruct]
   ): string;
   encodeFunctionData(
+    functionFragment: "statementPublication",
+    values: [BytesLike]
+  ): string;
+  encodeFunctionData(
     functionFragment: "supportsInterface",
     values: [BytesLike]
   ): string;
@@ -263,6 +309,10 @@ export interface PilotCurrentRegistryInterface extends Interface {
     data: BytesLike
   ): Result;
   decodeFunctionResult(
+    functionFragment: "publishBatch",
+    data: BytesLike
+  ): Result;
+  decodeFunctionResult(
     functionFragment: "publishHead",
     data: BytesLike
   ): Result;
@@ -286,6 +336,10 @@ export interface PilotCurrentRegistryInterface extends Interface {
   ): Result;
   decodeFunctionResult(
     functionFragment: "statementId",
+    data: BytesLike
+  ): Result;
+  decodeFunctionResult(
+    functionFragment: "statementPublication",
     data: BytesLike
   ): Result;
   decodeFunctionResult(
@@ -552,6 +606,17 @@ export interface PilotCurrentRegistry extends BaseContract {
     "view"
   >;
 
+  publishBatch: TypedContractMethod<
+    [
+      tenant: BytesLike,
+      expectedEpoch: BigNumberish,
+      updates: PilotCurrentRegistry.HeadUpdateStruct[],
+      statement: PilotCurrentRegistry.StatementStruct
+    ],
+    [string],
+    "nonpayable"
+  >;
+
   publishHead: TypedContractMethod<
     [
       tenant: BytesLike,
@@ -599,6 +664,12 @@ export interface PilotCurrentRegistry extends BaseContract {
   statementId: TypedContractMethod<
     [tenant: BytesLike, statement: PilotCurrentRegistry.StatementStruct],
     [string],
+    "view"
+  >;
+
+  statementPublication: TypedContractMethod<
+    [id: BytesLike],
+    [[boolean, bigint] & { exists: boolean; epoch: bigint }],
     "view"
   >;
 
@@ -686,6 +757,18 @@ export interface PilotCurrentRegistry extends BaseContract {
     "view"
   >;
   getFunction(
+    nameOrSignature: "publishBatch"
+  ): TypedContractMethod<
+    [
+      tenant: BytesLike,
+      expectedEpoch: BigNumberish,
+      updates: PilotCurrentRegistry.HeadUpdateStruct[],
+      statement: PilotCurrentRegistry.StatementStruct
+    ],
+    [string],
+    "nonpayable"
+  >;
+  getFunction(
     nameOrSignature: "publishHead"
   ): TypedContractMethod<
     [
@@ -741,6 +824,13 @@ export interface PilotCurrentRegistry extends BaseContract {
   ): TypedContractMethod<
     [tenant: BytesLike, statement: PilotCurrentRegistry.StatementStruct],
     [string],
+    "view"
+  >;
+  getFunction(
+    nameOrSignature: "statementPublication"
+  ): TypedContractMethod<
+    [id: BytesLike],
+    [[boolean, bigint] & { exists: boolean; epoch: bigint }],
     "view"
   >;
   getFunction(

@@ -21,6 +21,16 @@ contract PilotCurrentRegistry is AccessControl {
         uint64 publisherEpoch;
         bool enabled;
     }
+    struct HeadUpdate {
+        bytes32 scope;
+        bytes32 digest;
+        uint256 value;
+        uint64 expectedRevision;
+        uint64 validFrom;
+        uint64 validUntil;
+        bool enabled;
+        bool replace;
+    }
     struct Pin { bytes32 scope; bytes32 digest; uint64 revision; }
     struct Statement {
         bytes32 contextDigest;
@@ -83,7 +93,7 @@ contract PilotCurrentRegistry is AccessControl {
     }
 
     function publishHead(bytes32 tenant, Kind kind, bytes32 scope, bytes32 digest, uint256 value,
-        uint64 expectedRevision, uint64 validFrom, uint64 validUntil, bool enabled) external {
+        uint64 expectedRevision, uint64 validFrom, uint64 validUntil, bool enabled) public {
         if (msg.sender != publishers[tenant]) revert UnauthorizedPublisher();
         if (scope == bytes32(0) || digest == bytes32(0) || validFrom > block.timestamp ||
             validUntil <= block.timestamp || validUntil > MAX_SAFE || validUntil <= validFrom ||
@@ -113,7 +123,7 @@ contract PilotCurrentRegistry is AccessControl {
             block.timestamp >= current.validUntil) revert InvalidState();
     }
 
-    function publishStatement(bytes32 tenant, Statement calldata statement) external returns (bytes32 id) {
+    function publishStatement(bytes32 tenant, Statement calldata statement) public returns (bytes32 id) {
         if (msg.sender != publishers[tenant]) revert UnauthorizedPublisher();
         if (statement.contextDigest == bytes32(0) || statement.transferDigest == bytes32(0) ||
             statement.projectionCommitment == 0 || statement.projectionCommitment >= R ||
@@ -135,6 +145,34 @@ contract PilotCurrentRegistry is AccessControl {
         approved.statement.consumer = statement.consumer;
         for (uint8 i; i < 8; ++i) approved.statement.pins[i] = statement.pins[i];
         emit StatementPublished(tenant, id, statement.contextDigest);
+    }
+
+    /// @notice Publish a coherent checkpoint set and statement in one transaction.
+    /// @dev Exact epochs and revisions reject stale preparation, including reused heads.
+    function publishBatch(bytes32 tenant, uint64 expectedEpoch, HeadUpdate[8] calldata updates,
+        Statement calldata statement) external returns (bytes32 id) {
+        if (msg.sender != publishers[tenant]) revert UnauthorizedPublisher();
+        if (expectedEpoch != publisherEpochs[tenant]) revert InvalidState();
+        for (uint8 i; i < 8; ++i) {
+            HeadUpdate calldata update = updates[i];
+            Head memory previous = _heads[_headKey(tenant, Kind(i), update.scope)];
+            if (previous.revision != update.expectedRevision || statement.pins[i].scope != update.scope ||
+                statement.pins[i].digest != update.digest) revert InvalidState();
+            if (update.replace) {
+                publishHead(tenant, Kind(i), update.scope, update.digest, update.value,
+                    update.expectedRevision, update.validFrom, update.validUntil, update.enabled);
+            } else if (previous.digest != update.digest || previous.value != update.value ||
+                previous.validFrom != update.validFrom || previous.validUntil != update.validUntil ||
+                previous.enabled != update.enabled) revert InvalidState();
+            _currentHead(tenant, Kind(i), statement.pins[i], statement.evaluatedAt);
+        }
+        id = publishStatement(tenant, statement);
+    }
+
+    /// @notice Reconcile an uncertain publication by its deterministic statement ID.
+    function statementPublication(bytes32 id) external view returns (bool exists, uint64 epoch) {
+        Approval storage approved = _statements[id];
+        return (approved.exists, approved.publisherEpoch);
     }
 
     function _inspect(bytes32 tenant, bytes32 id, uint256[2] calldata a, uint256[2][2] calldata b,

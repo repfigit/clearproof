@@ -81,6 +81,34 @@ The database and chain are not atomic. Failed or delayed mirroring does not undo
 or repeat database authorization. The publisher remains trusted to attest truthfully
 that the receipt exists and was consumed; Solidity cannot query PostgreSQL.
 
+## Atomic publication and recovery
+
+`publishBatch(tenant, expectedEpoch, updates, statement)` publishes all eight
+checkpoint selections and their statement in one transaction. Each update names
+the expected current revision and either replaces the head or reuses it unchanged.
+The statement must pin the resulting exact scope, digest and revision. Reuse
+checks every stored value and interval as well as the current publisher epoch.
+Replacement uses the same validation and monotonic revision rules as `publishHead`.
+A failure anywhere, including final statement validation, rolls back all changes.
+The caller must still be the independently configured tenant publisher.
+
+Writers should read heads and publisher epoch at one pinned block, revalidate the
+source preparation, and use this batch operation. Reuse matching current heads to
+avoid invalidating other statements unnecessarily. A stale epoch or revision
+requires a fresh source/state review; it is not permission to replace newer heads
+with an old preparation. Batch publication does not record a receipt mirror or
+change PostgreSQL authorization.
+
+`statementPublication(id)` returns existence and the epoch recorded at publication.
+It enables read-back of the deterministic statement ID after an uncertain send.
+Existence is historical: it does not prove current head validity, current publisher
+epoch, finality or mirroring. Reconciliation must check the configured chain and
+runtime, transaction inclusion/finality, current epoch and heads, and the exact
+`mirroredReceipts(tenant, nullifier)` value before reporting the relevant outcome.
+Retain the intended statement ID and transaction identity before broadcast. Do not
+blindly resend a new transaction after a timeout. The durable writer and its
+recovery orchestration remain unimplemented.
+
 ## Authenticated preparation
 
 `AuthorizationMirrorService.prepare` requires independently configured trust,
@@ -123,7 +151,8 @@ are not a demonstration of authenticated live participant facts or business-poli
 approval. Tests exercise valid read-only inspection, missing/non-ALLOW approval,
 caller/tenant/context rejection, changed proof material, replay, checkpoint
 supersession and restoration, disabled credentials/approval, expiry and publisher
-replacement. The fresh-artifact builder invokes this suite using its own Python
+replacement. Batch tests additionally cover atomic rollback after late rejection,
+exact head reuse, stale epochs/revisions and deterministic publication lookup. The fresh-artifact builder invokes this suite using its own Python
 interpreter and artifact outputs.
 
 The real PostgreSQL authorization test independently exercises preparation from an
