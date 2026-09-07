@@ -646,3 +646,17 @@ still need completion and final merged-main verification.
   changing live salts was not part of this test-only work.
 - Other Python gaps, SDK branches, Solidity, docs/browser, scripts and final
   CI/review/merge verification remain open. Overall figures still require refresh.
+
+## Thirty-second checkpoint
+
+- Confirmed principal authorization already has full measured line/branch coverage
+  in the prior report, then added 15 root-snapshot tests for invalid audiences,
+  validity intervals, predecessor links, issuer identities, authority inventories
+  and scope-ID stability across revisions with deployment separation.
+- All 50 snapshot/pilot-root tests pass. Root snapshots measure 120/120 statements
+  and 40/40 branches (`root-snapshot-complete.log`/`.data`). Ruff and whitespace
+  pass; no production changes were required. Real signature and current-head
+  checks remain part of the existing suite; snapshot signatures alone do not
+  establish current-head authority.
+- Remaining Python, SDK, Solidity, docs/browser, scripts and final publication
+  checks still prevent a full repository completion claim.
