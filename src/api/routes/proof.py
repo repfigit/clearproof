@@ -529,7 +529,7 @@ async def verify_proof(
             vasp_info = await asyncio.wait_for(chain_reader.get_vasp_info(request.originator_vasp_did), timeout=5)
             if len(vasp_info) == 5 and vasp_info[3] is True and vasp_info[4] > 0:
                 expected = vasp_info[1]
-                if isinstance(expected, str) and len(expected) == 2 and expected.isascii() and expected.isupper():
+                if isinstance(expected, str) and len(expected) == 2 and all("A" <= char <= "Z" for char in expected):
                     jurisdiction_matches = jurisdiction_matches_vasp(signals, expected)
         except Exception:
             # Missing/failed lookup is unverified, never a successful match.

@@ -20,6 +20,7 @@ from src.prover.tier_mapping import get_thresholds
         ("EU", True, False, True, False),
         ("US", False, False, True, None),
         ("?", True, False, True, None),
+        ("A1", True, False, True, None),
         ("US", True, True, True, None),
         ("US", True, False, False, None),
     ],
