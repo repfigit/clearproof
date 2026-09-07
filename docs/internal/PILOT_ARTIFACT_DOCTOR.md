@@ -1,8 +1,14 @@
 # Pilot artifact inspection
 
-The composed proof profile has a separate, read-only Python diagnostic:
+The composed proof profile has a read-only source CLI command backed by the
+Python inspector. After building the CLI, use:
 
 ```bash
+node packages/cli/dist/index.js doctor --python .venv/bin/python \
+  --artifacts /path/to/pilot-artifacts \
+  --trusted-manifest-digest APPROVED_LOCAL_DEVELOPMENT_MANIFEST_DIGEST
+
+# The same inspector is directly available in Python:
 .venv/bin/python -m src.prover.pilot_artifacts /path/to/pilot-artifacts \
   --trusted-manifest-digest APPROVED_LOCAL_DEVELOPMENT_MANIFEST_DIGEST
 ```
@@ -15,6 +21,11 @@ JSON reports `development_unapproved` and `production_eligible: false`.
 `--mode production` rejects every currently supported manifest. There is no
 supported production approval label, and relabeling a manifest cannot enable it.
 Exit one emits a stable rejection code without paths, contents or key material.
+The Node wrapper limits its Python subprocess to 120 seconds and 64 KiB output,
+reconstructs only supported diagnostic fields and suppresses runtime stderr.
+Missing/invalid runtimes return `doctor_configuration_or_runtime_failed`.
+The owned local acceptance runner exercises this built command in development
+and production modes before starting its EVM.
 
 Place `manifest.json` and four distinct regular artifact files in the directory.
 Manifest schema: `src.prover.pilot_artifacts.PilotArtifactManifest`. It binds:

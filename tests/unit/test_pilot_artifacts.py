@@ -107,7 +107,7 @@ def test_invalid_manifest_is_rejected_before_file_reads(bundle, mutation):
         inspect_artifacts(root, trusted_digest=pin)
 
 
-@pytest.mark.parametrize("kind", ["symlink", "fifo", "truncated"])
+@pytest.mark.parametrize("kind", ["symlink", "fifo", "truncated", "missing"])
 def test_special_or_wrong_size_file_rejected_without_blocking(bundle, kind):
     root, value, pin = bundle
     path = root / value["wasm"]["filename"]
@@ -116,7 +116,7 @@ def test_special_or_wrong_size_file_rejected_without_blocking(bundle, kind):
         path.symlink_to(root / value["r1cs"]["filename"])
     elif kind == "fifo":
         os.mkfifo(path)
-    else:
+    elif kind == "truncated":
         path.write_bytes(b"x")
     with pytest.raises(ArtifactError):
         inspect_artifacts(root, trusted_digest=pin)

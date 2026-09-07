@@ -18,6 +18,38 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 
 
+def check_doctor(directory: Path) -> None:
+    """Synthetic fixture pin only; this check never approves development keys."""
+    pin = (directory / "development-manifest-pin.txt").read_text().strip()
+    command = [
+        "node",
+        str(ROOT / "packages/cli/dist/index.js"),
+        "doctor",
+        "--python",
+        sys.executable,
+        "--artifacts",
+        str(directory),
+        "--trusted-manifest-digest",
+        pin,
+    ]
+    for mode, expected in (("development", 0), ("production", 1)):
+        result = subprocess.run([*command, "--mode", mode], cwd=ROOT, capture_output=True, text=True, timeout=125)
+        if result.returncode != expected or result.stderr:
+            raise RuntimeError("Built artifact doctor failed its local acceptance check")
+        report = json.loads(result.stdout)
+        if report.get("production_eligible") is not False:
+            raise RuntimeError("Artifact doctor misreported production assurance")
+        if mode == "development" and not (
+            report.get("status") == "development_unapproved"
+            and report.get("manifest_digest") == pin
+            and report.get("current_profile_supported") is True
+            and report.get("policy_schema_supported") is True
+        ):
+            raise RuntimeError("Artifact doctor did not establish the current development profile")
+        if mode == "production" and report.get("reason") != "development_artifacts_forbidden":
+            raise RuntimeError("Artifact doctor did not reject unapproved production use")
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("artifacts", type=Path, help="Inspected unapproved pilot artifact directory")
@@ -29,6 +61,7 @@ def main():
     for name in ("verification-key.json", "development-manifest-pin.txt"):
         if not (directory / name).is_file():
             parser.error("The complete development artifact bundle is required")
+    check_doctor(directory)
     output = None
     if args.output is not None:
         output = args.output.absolute()

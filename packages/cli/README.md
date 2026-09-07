@@ -19,6 +19,25 @@ artifact availability is not guaranteed in a source checkout. The isolated
 `scripts/test_development_circuits.py` workflow generates unapproved development
 artifacts; those are not production ceremony material.
 
+## Artifact doctor (unreleased)
+
+Inspect local files using an independently reviewed manifest pin:
+
+```bash
+node packages/cli/dist/index.js doctor --python .venv/bin/python \
+  --artifacts /path/to/pilot-artifacts \
+  --trusted-manifest-digest APPROVED_LOCAL_DEVELOPMENT_MANIFEST_DIGEST
+```
+
+Exit 0 means the pinned development files match; `production_eligible` remains
+false. Add `--mode production` to check production eligibility: every supported
+manifest currently rejects with exit 1. Profile and policy-schema support are
+reported separately. The command never downloads, proves, publishes or consumes
+an authorization. It needs the source Python environment, bounds runtime/output,
+and omits paths and file contents from diagnostics. See the
+[artifact guide](../../docs/internal/PILOT_ARTIFACT_DOCTOR.md) for trust and
+historical-profile limits. A bundle's own claimed pin is not independent approval.
+
 ## Policy comparison
 
 `policy diff` calls the authenticated Python API; it does not duplicate policy
