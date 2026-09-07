@@ -859,3 +859,21 @@ still need completion and final merged-main verification.
 - Ruff and whitespace checks pass. No production code, contracts or artifacts
   changed. Other Python paths, SDK/Solidity/docs/scripts and final remote checks
   remain unfinished; the full coverage objective remains active.
+
+## Forty-sixth checkpoint
+
+- Added 38 timestamp cases for authority interval/accuracy/delay/compromise bounds,
+  root inventory limits, response size/type, safe review clocks, exclusive critical
+  TSA certificate usage, timezone/precision conversion and decoded profile/accuracy
+  guards. Invalid certificate tests use real signed X.509 certificates.
+- Extended the synthetic OpenSSL TSA fixture to optionally omit accuracy. A new
+  real response verifies cryptographically, then the application rejects its
+  missing accuracy because it cannot establish a bounded observation interval.
+  Existing fixture calls retain their one-second accuracy setting.
+- Controlled decoded-object tests separately exercise unsupported profile and
+  malformed accuracy guards. They explicitly do not establish cryptographic
+  validity; the existing and new OpenSSL tests provide real signature evidence.
+- All 46 timestamp tests pass. `src/prover/history_timing.py` measures 77/77
+  statements and 24/24 branches (`history-timing-boundaries.log`/`.data`). Ruff
+  and whitespace checks pass. No production source changed. Full repository
+  coverage and publication verification remain incomplete.
