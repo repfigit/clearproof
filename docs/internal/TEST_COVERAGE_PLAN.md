@@ -420,3 +420,22 @@ still need completion and final merged-main verification.
 - Overall percentages remain the fifteenth checkpoint's full-run results until
   refreshed. Remaining Python, SDK, Solidity, docs rendering, operational scripts
   and final publication/review requirements remain open.
+
+## Seventeenth checkpoint
+
+- Added 40 focused evidence-export tests using real X25519/HPKE and explicitly
+  synthetic records. Offline opening rejects envelope shape/version changes,
+  recipient substitution and decrypted scope mismatches; recipient configuration
+  rejects invalid validity intervals and low-order keys.
+- Controlled read-only storage fixtures exercise exact pinned records, missing
+  receipts/proofs/rows/chunks, changed rows, invalid reference/configuration/chunk
+  counts, captured configuration digest/size mismatches and output size limits.
+  Recipient expiry and tenant isolation reject. Optional timestamp bytes are
+  retained without asserting timestamp signature verification or timing authority.
+- All 40 tests pass; `src/services/evidence_export.py` measures 93/93 statements
+  and 42/42 branches (`evidence-export-boundaries.log` and `.data`). Ruff and
+  whitespace checks pass. No production changes were necessary. Storage fixtures
+  here isolate failure paths; existing real PostgreSQL tests remain the separate
+  persistence evidence. Whole-repository figures are not refreshed by this run.
+- Outstanding scope remains the other Python gaps, SDK branches, Solidity,
+  docs rendering, operational scripts and review/CI/merge/main verification.
