@@ -216,3 +216,92 @@ def test_v1_remains_inspectable_but_cannot_enter_current_context(bundle):
     )
     with pytest.raises(ArtifactError, match="historical_profile_not_current"):
         inspected.check_artifact_context(context)
+
+
+@pytest.mark.parametrize("mode", ["", "test", "Production", None])
+def test_unknown_runtime_mode_rejects_before_opening(bundle, mode):
+    root, _, pin = bundle
+    with pytest.raises(ArtifactError, match="^invalid_runtime_mode$"):
+        inspect_artifacts(root / "missing", trusted_digest=pin, mode=mode)
+
+
+@pytest.mark.parametrize("pin", [None, "", "AB" * 32, "00" * 31, "00" * 33])
+def test_trust_pin_requires_canonical_sha256(bundle, pin):
+    root, _, _ = bundle
+    with pytest.raises(ArtifactError, match="^invalid_trust_pin$"):
+        inspect_artifacts(root / "missing", trusted_digest=pin)
+
+
+@pytest.mark.parametrize("kind", ["missing", "file", "symlink"])
+def test_artifact_root_must_be_real_directory(bundle, tmp_path, kind):
+    root, _, pin = bundle
+    target = tmp_path / "alternative"
+    if kind == "file":
+        target.write_bytes(b"synthetic")
+    elif kind == "symlink":
+        target.symlink_to(root, target_is_directory=True)
+    with pytest.raises(ArtifactError, match="^artifact_directory_unavailable$"):
+        inspect_artifacts(target, trusted_digest=pin)
+
+
+@pytest.mark.parametrize("mutation", ["grow", "truncate", "rewrite"])
+def test_artifact_change_after_initial_stat_rejects(tmp_path, monkeypatch, mutation):
+    from src.prover.pilot_artifacts import _read_file
+
+    path = tmp_path / "artifact.bin"
+    path.write_bytes(b"synthetic-original")
+    original_size = path.stat().st_size
+    original_fstat = os.fstat
+    changed = False
+
+    def mutate_after_snapshot(fd):
+        nonlocal changed
+        snapshot = original_fstat(fd)
+        if not changed:
+            changed = True
+            if mutation == "grow":
+                with path.open("ab") as writer:
+                    writer.write(b"additional-bytes")
+            elif mutation == "truncate":
+                path.write_bytes(b"short")
+            else:
+                path.write_bytes(b"x" * original_size)
+                # Ensure timestamp detection without relying on filesystem resolution.
+                os.utime(path, ns=(snapshot.st_atime_ns, snapshot.st_mtime_ns + 1_000_000_000))
+        return snapshot
+
+    monkeypatch.setattr(os, "fstat", mutate_after_snapshot)
+    directory = os.open(tmp_path, os.O_RDONLY | os.O_DIRECTORY)
+    try:
+        message = "artifact_size_limit" if mutation == "grow" else "artifact_changed_during_read"
+        with pytest.raises(ArtifactError, match=f"^{message}$"):
+            _read_file(directory, path.name, limit=original_size)
+        assert changed
+    finally:
+        os.close(directory)
+
+
+@pytest.mark.parametrize(
+    "raw,code",
+    [
+        (b"{", "invalid_json"),
+        (b'"\xff"', "invalid_json"),
+        (b"NaN", "invalid_json_constant"),
+        (b"Infinity", "invalid_json_constant"),
+        (b"-Infinity", "invalid_json_constant"),
+        (b'{"nested":{"key":1,"key":2}}', "duplicate_json_key"),
+    ],
+)
+def test_strict_json_rejects_invalid_or_ambiguous_encoding(raw, code):
+    from src.prover.pilot_artifacts import strict_json
+
+    with pytest.raises(ArtifactError, match=f"^{code}$"):
+        strict_json(raw)
+
+
+def test_strict_json_enforces_exact_byte_limit():
+    from src.prover.pilot_artifacts import strict_json
+
+    assert strict_json(b"{}", limit=2) == {}
+    with pytest.raises(ArtifactError, match="^json_size_limit$"):
+        strict_json(b"{}", limit=1)

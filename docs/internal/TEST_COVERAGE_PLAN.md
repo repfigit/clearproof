@@ -538,3 +538,17 @@ still need completion and final merged-main verification.
 - Full repository coverage remains incomplete across remaining Python paths,
   SDK branches, contracts, docs/browser rendering, operational scripts and final
   review/CI/merge verification. Overall percentages require a fresh full run.
+
+## Twenty-fourth checkpoint
+
+- Added 22 artifact validation tests for runtime modes, canonical trust pins,
+  unavailable/file/symlink roots, strict JSON encoding/constants/limits and files
+  changed after the initial metadata snapshot. Real-file growth, truncation and
+  same-size rewrites deterministically reject; tests do not depend on race timing.
+- The artifact/verifier regression passes 99 tests. Artifact inspection measures
+  159/159 statements and 48/48 branches (`pilot-artifacts-complete.log`/`.data`).
+  Ruff and whitespace pass. No production changes or proving artifacts changed.
+- These tests cover loader trust boundaries and runtime lifecycle, not ceremony
+  legitimacy or source-to-binary reproducibility. Full repository coverage still
+  requires remaining Python, SDK, Solidity, docs/browser, scripts and final
+  publication verification work; the latest full-run percentages remain unchanged.
