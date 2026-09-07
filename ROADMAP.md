@@ -1,5 +1,7 @@
 # Roadmap
 
+The next bounded delivery is governed by the [adoption pilot implementation plan](docs/plans/2026-09-05-adoption-pilot-implementation.md), created September 5, 2026. It sequences the current hardening findings, policy simulation, transfer investigations, historical verification and observation onboarding, with separate gates for customer integrations and production assurance. The dated progress snapshots below remain historical context.
+
 clearproof is moving from a research-oriented ZK Travel Rule repo to a production compliance platform for regulated VASPs.
 
 The strategic wedge is narrow by design: **privacy-preserving Travel Rule infrastructure that interoperates with rails VASPs already use**, especially TRP/OpenVASP and TRISA. clearproof should not be positioned as a generic ZK compliance toolkit or as a replacement for Travel Rule networks. It should prove compliance, minimize PII exposure, and exchange required Travel Rule data through existing protocols.

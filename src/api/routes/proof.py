@@ -63,10 +63,52 @@ class ProofGenerateRequest(BaseModel):
         None,
         description=(
             "Beneficiary VASP's X25519 public key (base64url, 32 bytes) for HPKE v2 "
-            "envelope encryption (RFC 9180). When omitted, falls back to "
-            "BENEFICIARY_HPKE_PUBLIC_KEY env var, then to legacy v1 shared-key AES-256-GCM."
+            "envelope encryption (RFC 9180). When omitted, use operator configuration "
+            "or strict counterparty discovery. Lookup failures reject the request."
         ),
     )
+
+
+async def _resolve_recipient_key(request: ProofGenerateRequest) -> bytes | None:
+    """Choose encryption before proving; failures cannot select legacy encryption."""
+    from src.protocol.discovery import (
+        DiscoveryError,
+        DiscoveryUnavailable,
+        resolve_hpke_public_key,
+    )
+    from src.protocol.discovery_profile import decode_hpke_key
+
+    mode = os.getenv("PII_ENVELOPE_MODE", "hpke-v2")
+    configured_key = os.getenv("BENEFICIARY_HPKE_PUBLIC_KEY")
+    if mode == "legacy-v1":
+        if request.beneficiary_hpke_public_key is not None or configured_key:
+            raise HTTPException(status_code=422, detail="HPKE key conflicts with operator-selected legacy-v1 mode")
+        return None
+    if mode != "hpke-v2":
+        raise HTTPException(status_code=503, detail="Invalid PII_ENVELOPE_MODE configuration")
+    key = request.beneficiary_hpke_public_key
+    if key is None:
+        key = configured_key
+    if key is not None:
+        try:
+            return decode_hpke_key(key)
+        except DiscoveryError as exc:
+            raise HTTPException(status_code=422, detail="Invalid beneficiary HPKE public key") from exc
+    if not request.destination_vasp_did or os.getenv("HPKE_DISCOVERY_ENABLED", "1") == "0":
+        raise HTTPException(status_code=422, detail="HPKE v2 requires a beneficiary key or enabled DID discovery")
+    try:
+        resolved = await resolve_hpke_public_key(request.destination_vasp_did)
+        if resolved is None:
+            raise DiscoveryError("Discovery supplied no HPKE key")
+        return resolved
+    except DiscoveryUnavailable as exc:
+        raise HTTPException(
+            status_code=503, detail="Counterparty discovery unavailable; retry without changing encryption"
+        ) from exc
+    except DiscoveryError as exc:
+        raise HTTPException(
+            status_code=422, detail="Counterparty discovery invalid or unsupported; HPKE key required"
+        ) from exc
 
 
 class ProofVerifyRequest(BaseModel):
@@ -214,6 +256,8 @@ async def generate_proof(
     if int(time.time()) > credential.expires_at:
         raise HTTPException(status_code=410, detail="Credential expired")
 
+    recipient_pubkey = await _resolve_recipient_key(request)
+
     # 4c. Evaluate SAR flags
     sar_result = evaluate_sar_flags(
         tier,
@@ -319,31 +363,6 @@ async def generate_proof(
         }
     ).encode()
 
-    # Prefer HPKE v2 envelopes (per-recipient keys, RFC 9180) when a
-    # beneficiary public key is available; fall back to legacy v1 shared-key
-    # AES-256-GCM during the migration window (SOTA plan item #1).
-    # Key resolution precedence:
-    #   1. explicit request field
-    #   2. BENEFICIARY_HPKE_PUBLIC_KEY env var (static counterparty config)
-    #   3. well-known discovery from destination_vasp_did (spec 0.3.0),
-    #      fail-open to v1 on discovery errors during the migration window
-    recipient_pubkey: bytes | None = None
-    hpke_pubkey_b64 = request.beneficiary_hpke_public_key or os.getenv("BENEFICIARY_HPKE_PUBLIC_KEY")
-    if hpke_pubkey_b64:
-        try:
-            recipient_pubkey = base64.urlsafe_b64decode(hpke_pubkey_b64.encode("ascii"))
-        except Exception:
-            raise HTTPException(status_code=422, detail="beneficiary_hpke_public_key is not valid base64url")
-        if len(recipient_pubkey) != 32:
-            raise HTTPException(status_code=422, detail="beneficiary_hpke_public_key must be 32 bytes (X25519)")
-    elif request.destination_vasp_did and os.getenv("HPKE_DISCOVERY_ENABLED", "1") != "0":
-        from src.protocol.discovery import DiscoveryError, resolve_hpke_public_key
-
-        try:
-            recipient_pubkey = await resolve_hpke_public_key(request.destination_vasp_did)
-        except DiscoveryError as exc:
-            logger.warning("HPKE discovery failed for %s: %s", request.destination_vasp_did, exc)
-
     pii_envelope: dict | None = None
     if recipient_pubkey is not None:
         from src.sar.hpke_envelope import seal_envelope
@@ -353,11 +372,6 @@ async def generate_proof(
         nonce = b""
         encryption_algorithm = "HPKE-X25519-HKDF-SHA256-AES-256-GCM"
     else:
-        logger.warning(
-            "No beneficiary HPKE key available — falling back to v1 shared-key "
-            "AES-256-GCM envelope. Set beneficiary_hpke_public_key or "
-            "BENEFICIARY_HPKE_PUBLIC_KEY to enable v2."
-        )
         keyring = load_keyring()
         active_key = keyring.active_key
         derived_key = derive_key(active_key.key_bytes, f"clearproof-pii-{proof_id}".encode())

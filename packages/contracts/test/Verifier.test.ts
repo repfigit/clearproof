@@ -1,3 +1,4 @@
+import { routeVerifier } from "./helpers/verifier";
 import { expect } from "chai";
 import { ethers } from "hardhat";
 import * as fs from "fs";
@@ -59,14 +60,8 @@ describe("Groth16Verifier", function () {
     const pC: [bigint, bigint] = [BigInt(1), BigInt(2)];
     const pubSignals = Array(16).fill(BigInt(0));
 
-    // Invalid proof should return false (the verifier reverts on
-    // invalid curve points, so we accept either false or a revert)
-    try {
-      const result = await verifier.verifyProof(pA, pB, pC, pubSignals);
-      expect(result).to.equal(false);
-    } catch {
-      // Revert is also acceptable for invalid proofs
-    }
+    // Exact rejection: a broad catch would also swallow a failed assertion.
+    await expect(verifier.verifyProof(pA, pB, pC, pubSignals)).to.be.revertedWith("Pairing: ecpairing failed");
   });
 
   it("should reject a public signal outside the scalar field", async function () {
@@ -137,13 +132,13 @@ describe("Groth16Verifier", function () {
 });
 
 describe("ComplianceRegistry (domain-bound)", function () {
-  it("should verify and record a proof with matching domain", async function () {
+  it("rejects a committed proof from a different chain", async function () {
     // NOTE: This test requires a proof generated with domain_chain_id matching
     // the Hardhat network chain ID (31337). Since our test proof uses Sepolia (11155111),
     // we test that the domain check correctly rejects mismatched chains.
-    // Full integration with matching domains is tested in Registry.test.ts.
-    const proofPath = "/tmp/clearproof_proof_v3.json";
-    const publicPath = "/tmp/clearproof_public_v3.json";
+    // Full proof generation with matching domains is tested in E2E.test.ts.
+    const proofPath = path.resolve(__dirname, "../../../tests/vectors/compliance/proof.json");
+    const publicPath = path.resolve(__dirname, "../../../tests/vectors/compliance/public.json");
 
     if (!fs.existsSync(proofPath) || !fs.existsSync(publicPath)) {
       this.skip();  // Circuit fixtures required — run circuit tests first
@@ -169,9 +164,11 @@ describe("ComplianceRegistry (domain-bound)", function () {
     const sanctionsOracle = await SanctionsOracle.deploy(admin.address, initialRoot, 10);
     await sanctionsOracle.waitForDeployment();
 
+    const { router, selector } = await routeVerifier(await verifier.getAddress());
     const Registry = await ethers.getContractFactory("ComplianceRegistry");
     const registry = await Registry.deploy(
-      await verifier.getAddress(),
+      await router.getAddress(),
+      selector,
       await vaspRegistry.getAddress(),
       await sanctionsOracle.getAddress(),
       250,
@@ -199,6 +196,6 @@ describe("ComplianceRegistry (domain-bound)", function () {
     // but Hardhat runs on chain 31337. The contract correctly rejects this.
     await expect(
       registry.verifyAndRecord(transferId, pA, pB, pC, pubSignals, vaspDid)
-    ).to.be.revertedWith("Wrong chain");
+    ).to.be.revertedWithCustomError(registry, "WrongChain");
   });
 });

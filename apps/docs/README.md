@@ -28,3 +28,13 @@ unauthenticated npm access and clean installation, the deployment manifest and
 actual testnet bytecode. Source features, published packages, deployed contracts
 and planned work are separate states. Audit, performance, interoperability and
 regulatory claims require their own evidence.
+
+
+For a local prebuilt Vercel deployment, build in `apps/docs`, then stage its
+`.vercel/output` at the monorepo root and deploy from that root. Traced file-map
+paths refer to root workspace dependencies. Preserve the previous output until
+the new deployment is verified. Both `serverExternalPackages` and the explicit
+server Webpack external keep `@clearproof/content` at its original package path;
+bundling its CommonJS `__dirname` relocates Markdown/YAML lookups. Check the
+manifest, quickstart topic and signal content endpoints in addition to static
+pages before considering a documentation deployment successful.

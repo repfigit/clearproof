@@ -286,3 +286,124 @@ Domain-separated leaf hash for sanctions list entries.
 Poseidon(0x02, issuer_did)
 ```
 Domain-separated leaf hash for trusted issuer entries.
+
+## Development credential subcircuit (not the active compliance ABI)
+
+`circuits/pilot_credential.circom` defines `PilotCredentialValidity(issuance_depth,
+issuer_depth)` for `clearproof-credential-v1`. It does not instantiate `main`,
+change the legacy 16-signal ABI or provide an authorization endpoint. The test
+harness uses two-level trees solely to exercise membership constraints.
+
+`fields[13]` is the credential Poseidon preimage excluding domain tag 102:
+
+| Index | Value | Range |
+| --- | --- | --- |
+| 0–1 | SHA-256 of canonical issuer DID, high then low limb | 128 bits each |
+| 2–3 | SHA-256 of opaque tenant ID, high then low limb | 128 bits each |
+| 4–5 | Credential nonce, high then low limb | 128 bits each; jointly nonzero |
+| 6 | Subject EVM wallet | 160 bits, nonzero |
+| 7 | Poseidon(101, holder secret) | Nonzero BN254 scalar |
+| 8 | Uppercase ASCII jurisdiction bytes, big endian | Two bytes A–Z |
+| 9 | KYC tier | 1–3 |
+| 10–11 | Issued-at and expires-at | 53 bits each |
+| 12 | Issuer screening assertion | Must equal 1 |
+
+Other inputs are the holder secret, credential commitment, private issuance root
+and path, authorized issuer root and path, expected tenant limbs, expected subject,
+expected jurisdiction and evaluation time. Membership paths have boolean indices.
+The evaluation time must satisfy `issued_at <= evaluated_at < expires_at`.
+
+The composed circuit must bind the expected inputs to the actual transfer, hide
+private fields and remove the legacy SAR advisory signal. The current harness
+exposes expected subject/jurisdiction for testing only; it is not a privacy profile
+for published proofs. See ADR 0003 for external enrollment and root authority.
+
+## Development valuation subcircuits
+
+`pilot_valuation.circom` adds `PilotValuation()` with private inputs
+`amount_base_units`, `numerator`, `denominator`, `usd_cents`, and `remainder`.
+Each is constrained as an unsigned 128-bit value; all but the remainder must be
+positive. Limb arithmetic enforces exact integer quotient/remainder semantics.
+
+`PilotAmountTier()` accepts `usd_cents`, three ordered positive `thresholds` and
+`tier`. It exposes no output. The composed profile must keep the amount and tier
+private and bind policy/valuation provenance; these subcircuits do not change the
+legacy main ABI. See ADR 0004 and `src/prover/pilot_valuation.py` for witness rules.
+
+
+## Development private transfer projection
+
+`PilotTransferProjection` consumes `transfer_fields[48]`, `valuation_remainder`
+and the expected `projection_commitment`. Its `authorization_scope` output is
+for the parent holder-nullifier construction. This is not the final public ABI.
+
+| Index | Field |
+| --- | --- |
+| 0 | `transfer_digest_hi` |
+| 1 | `transfer_digest_lo` |
+| 2 | `context_digest_hi` |
+| 3 | `context_digest_lo` |
+| 4 | `tenant_hi` |
+| 5 | `tenant_lo` |
+| 6 | `transfer_id_hi` |
+| 7 | `transfer_id_lo` |
+| 8 | `nonce_hi` |
+| 9 | `nonce_lo` |
+| 10 | `originator_wallet` |
+| 11 | `beneficiary_wallet` |
+| 12 | `asset_chain` |
+| 13 | `asset_contract` |
+| 14 | `asset_decimals` |
+| 15 | `amount_base_units` |
+| 16 | `valuation_numerator` |
+| 17 | `valuation_denominator` |
+| 18 | `usd_cents` |
+| 19 | `valuation_observed_at` |
+| 20 | `valuation_expires_at` |
+| 21 | `transfer_created_at` |
+| 22 | `transfer_expires_at` |
+| 23 | `evaluated_at` |
+| 24 | `max_transfer_age` |
+| 25 | `jurisdiction` |
+| 26 | `deployment_chain` |
+| 27 | `deployment_address` |
+| 28 | `policy_digest_hi` |
+| 29 | `policy_digest_lo` |
+| 30 | `catalog_digest_hi` |
+| 31 | `catalog_digest_lo` |
+| 32 | `threshold_2` |
+| 33 | `threshold_3` |
+| 34 | `threshold_4` |
+| 35 | `private_tier` |
+| 36 | `originator_did_hi` |
+| 37 | `originator_did_lo` |
+| 38 | `originator_is_vasp` |
+| 39 | `beneficiary_did_hi` |
+| 40 | `beneficiary_did_lo` |
+| 41 | `beneficiary_is_vasp` |
+| 42 | `valuation_source_hi` |
+| 43 | `valuation_source_lo` |
+| 44 | `valuation_evidence_hi` |
+| 45 | `valuation_evidence_lo` |
+| 46 | `valuation_digest_hi` |
+| 47 | `valuation_digest_lo` |
+
+See ADR 0005 for canonical-record binding and trust boundaries.
+
+## Unreleased composed development profile: pilot-transfer-v1
+
+`circuits/pilot_compliance.circom` has eight public inputs and zero outputs:
+
+1. `projection_commitment`
+2. `authorized_issuer_root`
+3. `sanctions_root`
+4. `authorization_nullifier`
+5. `evaluated_at`
+6. `proof_expires_at`
+7. `domain_chain_id`
+8. `domain_registry`
+
+The Python encoder is `src/prover/pilot_compliance.py`. This is a separate
+profile, not a replacement ABI for the legacy verifier. See
+[ADR 0006](../adr/0006-composed-pilot-transfer.md) for private fields, tree bounds,
+trust requirements and the incompatible raw-address sanctions profile.

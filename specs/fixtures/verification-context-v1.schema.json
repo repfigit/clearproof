@@ -1,0 +1,118 @@
+{
+  "additionalProperties": false,
+  "description": "Expected values supplied by the verifier, never copied from an untrusted proof.",
+  "properties": {
+    "schema_version": {
+      "const": "clearproof-verification-context-v1",
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "tenant_id": {
+      "maxLength": 64,
+      "minLength": 1,
+      "pattern": "^[a-z0-9][a-z0-9_-]{0,63}$",
+      "title": "Tenant Id",
+      "type": "string"
+    },
+    "transfer_digest": {
+      "maxLength": 64,
+      "minLength": 64,
+      "pattern": "^[0-9a-f]{64}$",
+      "title": "Transfer Digest",
+      "type": "string"
+    },
+    "deployment_chain_id": {
+      "maxLength": 39,
+      "minLength": 1,
+      "pattern": "^(0|[1-9][0-9]{0,38})$",
+      "title": "Deployment Chain Id",
+      "type": "string"
+    },
+    "deployment_address": {
+      "maxLength": 42,
+      "minLength": 42,
+      "pattern": "^0x[0-9a-f]{40}$",
+      "title": "Deployment Address",
+      "type": "string"
+    },
+    "policy_digest": {
+      "maxLength": 64,
+      "minLength": 64,
+      "pattern": "^[0-9a-f]{64}$",
+      "title": "Policy Digest",
+      "type": "string"
+    },
+    "artifact_manifest_digest": {
+      "maxLength": 64,
+      "minLength": 64,
+      "pattern": "^[0-9a-f]{64}$",
+      "title": "Artifact Manifest Digest",
+      "type": "string"
+    },
+    "proof_profile": {
+      "maxLength": 64,
+      "minLength": 1,
+      "pattern": "^[a-z0-9][a-z0-9_-]{0,63}$",
+      "title": "Proof Profile",
+      "type": "string"
+    },
+    "sanctions_snapshot_digest": {
+      "maxLength": 64,
+      "minLength": 64,
+      "pattern": "^[0-9a-f]{64}$",
+      "title": "Sanctions Snapshot Digest",
+      "type": "string"
+    },
+    "issuer_snapshot_digest": {
+      "maxLength": 64,
+      "minLength": 64,
+      "pattern": "^[0-9a-f]{64}$",
+      "title": "Issuer Snapshot Digest",
+      "type": "string"
+    },
+    "issuance_snapshot_digest": {
+      "maxLength": 64,
+      "minLength": 64,
+      "pattern": "^[0-9a-f]{64}$",
+      "title": "Issuance Snapshot Digest",
+      "type": "string"
+    },
+    "revocation_snapshot_digest": {
+      "maxLength": 64,
+      "minLength": 64,
+      "pattern": "^[0-9a-f]{64}$",
+      "title": "Revocation Snapshot Digest",
+      "type": "string"
+    },
+    "evaluated_at": {
+      "maximum": 9007199254740991,
+      "minimum": 0,
+      "title": "Evaluated At",
+      "type": "integer"
+    },
+    "max_transfer_age_seconds": {
+      "maximum": 86400,
+      "minimum": 0,
+      "title": "Max Transfer Age Seconds",
+      "type": "integer"
+    }
+  },
+  "required": [
+    "schema_version",
+    "tenant_id",
+    "transfer_digest",
+    "deployment_chain_id",
+    "deployment_address",
+    "policy_digest",
+    "artifact_manifest_digest",
+    "proof_profile",
+    "sanctions_snapshot_digest",
+    "issuer_snapshot_digest",
+    "issuance_snapshot_digest",
+    "revocation_snapshot_digest",
+    "evaluated_at",
+    "max_transfer_age_seconds"
+  ],
+  "title": "VerificationContext",
+  "type": "object"
+}

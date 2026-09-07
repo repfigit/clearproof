@@ -1,4 +1,5 @@
 const path = require("path");
+const fs = require("fs");
 
 /**
  * @clearproof/circuits — ZK compliance circuit artifacts
@@ -23,6 +24,16 @@ module.exports = {
     zkeyPath: path.join(artifactsDir, "compliance_final.zkey"),
     vkeyPath: path.join(artifactsDir, "verification_key.json"),
     dir: artifactsDir,
+  },
+  // File availability is not artifact provenance or production approval.
+  artifactStatus() {
+    const missing = ["compliance.wasm", "compliance_final.zkey", "verification_key.json"].filter(name => {
+      try {
+        const info = fs.lstatSync(path.join(artifactsDir, name));
+        return !info.isFile() || info.size === 0;
+      } catch { return true; }
+    });
+    return { available: missing.length === 0, missing, profile: "legacy-compliance-16" };
   },
   circuitSrc: {
     compliance: path.join(srcDir, "compliance.circom"),

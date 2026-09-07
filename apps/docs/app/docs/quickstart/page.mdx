@@ -4,7 +4,7 @@ This is a development setup guide, checked September 5, 2026. Use synthetic data
 
 ## Public package access
 
-The main source repository is private. Public npm packages are available at version 0.3.0:
+The [main source repository](https://github.com/repfigit/clearproof) is public. Public npm packages are available at version 0.3.0:
 
 ```bash
 npm install @clearproof/proof@0.3.0
@@ -14,17 +14,17 @@ Proof generation requires compatible circuit WASM and proving-key files. Verific
 
 The development checkout is version 0.4.0. Do not assume it is identical to the published packages.
 
-The published CLI currently cannot be installed from the public registry because its `@clearproof/content` dependency is unavailable. The standalone proof SDK installation was verified. Use an authorized source checkout for CLI evaluation.
+The published CLI currently cannot be installed from the public registry because its `@clearproof/content` dependency is unavailable. The standalone proof SDK installation was verified. Use a source checkout for CLI evaluation.
 
-## Setup for contributors with repository access
+## Source setup for the unreleased pilot
 
-Prerequisites: authorized GitHub access, Python 3.11+, Node.js 20+ with npm, and circom 2.2.2 for the circuit compilation path used in CI.
+Prerequisites: Git, Python 3.11+, Node.js 20+ with npm, and circom 2.2.2 for the circuit compilation path used in CI.
 
 ```bash
-git clone https://github.com/repfigit/clearproof.git
+git clone --branch feat/adoption-pilot-foundation https://github.com/repfigit/clearproof.git
 cd clearproof
-npm install
-uv sync --extra dev
+npm exec --yes --package=npm@11.9.0 -- npm ci
+uv sync --frozen --extra dev --python 3.12
 npm run build
 node packages/cli/dist/index.js --help
 ```
