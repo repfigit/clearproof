@@ -296,3 +296,113 @@ async def test_verification_samples_time_after_waiting_for_database_lock(db, enr
         if pending is not None and not pending.done():
             pending.cancel()
             await asyncio.gather(pending, return_exceptions=True)
+
+
+@pytest.mark.parametrize("now", [True, "1100", -1, 2**53])
+async def test_invalid_evaluation_clock_does_not_retain_challenge(db, enrolled, now):
+    _, consent, principal, _ = enrolled
+    service = wallet_service(db, principal, consent)
+    with pytest.raises(WalletOwnershipError, match="Invalid wallet evidence evaluation time"):
+        await service.challenge(consent.credential.credential_nonce, now=now)
+    async with service.store.transaction() as tx:
+        assert await tx.record_ids("wallet-challenge") == []
+        assert await tx.record_ids("wallet-quota") == []
+
+
+async def test_challenge_expiring_during_real_signature_verification_is_not_consumed(db, enrolled):
+    wallet, consent, principal, _ = enrolled
+    service = wallet_service(db, principal, consent)
+    challenge = await service.challenge(consent.credential.credential_nonce, now=1100)
+    clock = iter((1200, challenge.expires_at))
+    service.clock = lambda: next(clock)
+    signature = sign(wallet, challenge)
+    with pytest.raises(WalletOwnershipError, match="expired during verification"):
+        await service.verify(challenge.nonce, signature)
+    assert await service.store.get("wallet-attestation", challenge.nonce) is None
+    # A rejected verification did not create a consumption marker. This uses an
+    # explicit synthetic review clock to inspect rollback, not wall-clock travel.
+    assert (await service.verify(challenge.nonce, signature, now=1399)).attestation_id == challenge.nonce
+
+
+@pytest.mark.parametrize("operation", ["verify", "status", "extension"])
+async def test_retained_wallet_evidence_must_match_current_enrollment(db, enrolled, operation):
+    from src.protocol.wallet_ownership import ATTESTATION_TTL, WalletAttestation, WalletChallenge
+
+    wallet, consent, principal, _ = enrolled
+    service = wallet_service(db, principal, consent)
+    original = await service.challenge(consent.credential.credential_nonce, now=1100)
+    value = original.model_dump()
+    value["nonce"] = "a" * 64
+    value["credential"]["jurisdiction"] = "CA" if original.credential.jurisdiction != "CA" else "US"
+    changed = WalletChallenge.model_validate(value)
+    signature = sign(wallet, changed)
+    # Retain correctly encrypted, correctly signed evidence for a different
+    # credential value under the same credential nonce. No cryptography is mocked.
+    async with service.store.transaction() as tx:
+        await tx.put("wallet-challenge", changed.nonce, changed.model_dump(mode="json"))
+        if operation != "verify":
+            attestation = WalletAttestation(
+                attestation_id=changed.nonce,
+                challenge=changed,
+                signature=signature,
+                issued_at=1200,
+                expires_at=1200 + ATTESTATION_TTL,
+            )
+            await tx.put("wallet-attestation", changed.nonce, attestation.model_dump(mode="json"))
+    if operation == "verify":
+        with pytest.raises(WalletOwnershipError, match="Challenge credential changed"):
+            await service.verify(changed.nonce, signature, now=1201)
+        assert await service.store.get("wallet-attestation", changed.nonce) is None
+    elif operation == "status":
+        result = await service.status(changed.nonce, now=1201)
+        assert result["wallet_ownership_verified"] is False
+        assert result["reason"] == "Wallet attestation credential changed"
+    else:
+        with pytest.raises(WalletOwnershipError, match="Wallet attestation credential changed"):
+            await service.issue_extension(changed.nonce, now=1201)
+        assert await service.store.get("wallet-extension", changed.nonce) is None
+
+
+async def test_attestation_storage_key_must_match_signed_identifier(db, enrolled):
+    wallet, consent, principal, _ = enrolled
+    service = wallet_service(db, principal, consent)
+    challenge = await service.challenge(consent.credential.credential_nonce, now=1100)
+    attestation = await service.verify(challenge.nonce, sign(wallet, challenge), now=1200)
+    alias = "b" * 64
+    async with service.store.transaction() as tx:
+        await tx.put("wallet-attestation", alias, attestation.model_dump(mode="json"))
+    with pytest.raises(WalletOwnershipError, match="attestation identifier mismatch"):
+        await service.status(alias, now=1201)
+    assert (await service.status(challenge.nonce, now=1201))["wallet_ownership_verified"] is True
+
+
+async def test_revocation_cannot_precede_attestation_issuance(db, enrolled):
+    wallet, consent, principal, _ = enrolled
+    service = wallet_service(db, principal, consent)
+    challenge = await service.challenge(consent.credential.credential_nonce, now=1100)
+    await service.verify(challenge.nonce, sign(wallet, challenge), now=1200)
+    with pytest.raises(WalletOwnershipError, match="Revocation precedes attestation"):
+        await service.revoke(challenge.nonce, now=1199)
+    assert await service.store.get("wallet-revocation", challenge.nonce) is None
+    assert (await service.revoke(challenge.nonce, now=1200))["revoked_at"] == 1200
+
+
+async def test_extension_retry_rejects_conflicting_retained_fields(db, enrolled):
+    from src.protocol.wallet_ownership import WalletCredentialExtension
+
+    wallet, consent, principal, _ = enrolled
+    service = wallet_service(db, principal, consent)
+    challenge = await service.challenge(consent.credential.credential_nonce, now=1100)
+    attestation = await service.verify(challenge.nonce, sign(wallet, challenge), now=1200)
+    conflicting = WalletCredentialExtension(
+        credential_commitment=consent.credential.commitment,
+        attestation_digest=attestation.digest_scalar,
+        issued_at=attestation.issued_at,
+        expires_at=min(attestation.expires_at, consent.credential.expires_at),
+        wallet_ownership_verified=False,
+    ).model_dump(mode="json")
+    async with service.store.transaction() as tx:
+        await tx.put("wallet-extension", challenge.nonce, conflicting)
+    with pytest.raises(RecordConflict, match="Stored wallet extension differs"):
+        await service.issue_extension(challenge.nonce, now=1201)
+    assert await service.store.get("wallet-extension", challenge.nonce) == conflicting

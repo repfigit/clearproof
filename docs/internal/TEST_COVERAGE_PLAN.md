@@ -922,3 +922,23 @@ still need completion and final merged-main verification.
 - Full repository coverage remains incomplete across other Python paths, SDK,
   Solidity, docs/scripts and final remote publication checks. Checkpoint 42 is
   still the latest full Python measurement; these are focused module results.
+
+## Fiftieth checkpoint
+
+- Added 11 PostgreSQL wallet-service cases for invalid clocks, expiry after actual
+  signature verification, signed evidence whose credential differs from current
+  enrollment, attestation storage-key mismatch, revocation before issuance and
+  conflicting retained extension fields. Real wallet signatures and encrypted
+  records are used throughout; no cryptographic verification is mocked.
+- Rejections preserve challenge/attestation/extension state as appropriate. An
+  expiry rollback test uses explicit synthetic times to establish that no nonce
+  consumption marker was written. Current status never reports mismatched
+  enrollment evidence as verified.
+- All 19 wallet integration tests pass, including existing HTTP, reconnect,
+  concurrency, quota, migration, expiry and revocation checks. Wallet service
+  coverage is 120/120 statements and 34/34 branches
+  (`wallet-service-boundaries.log`/`.data`). Ruff and whitespace checks pass;
+  owned PostgreSQL was stopped. No production changes were required.
+- The repository-wide coverage goal remains incomplete. Other Python modules,
+  SDK branches, Solidity, docs/scripts and final remote CI/merge evidence remain
+  outstanding. Checkpoint 42 remains the last complete Python measurement.
