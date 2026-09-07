@@ -51,9 +51,9 @@ exercise every supported test layer with its required local dependencies.
 
 ## Next uncovered behavior to address
 
-Python: API startup/shutdown, proof route error paths and
-remaining validation branches. The current combined report
-has 493 missed lines and 343 missed branches after the fifteenth checkpoint.
+Python: storage validation, proof route error paths, chain readers/checkpoints,
+history timing and service rejection branches. The current combined report
+has 341 missed lines and 226 missed branches after the forty-second checkpoint.
 Subprocess coverage is captured in this combined report.
 
 CLI: source line/branch/function/statement coverage is now 100%, enforced by CI.
@@ -774,3 +774,37 @@ still need completion and final merged-main verification.
 - Full repository coverage remains incomplete. A fresh full Python run is needed
   to consolidate recent additions before addressing remaining cross-workspace
   gaps and publication checks.
+
+
+## Forty-second checkpoint
+
+- Refreshed the complete Python suite with PostgreSQL, explicit development
+  legacy/pilot proving artifacts, Circom and built policy CLI acceptance enabled:
+  1734 passed, with one checkpoint test skipped, in 366.31 seconds. The same
+  checkpoint passed separately on an owned local EVM (1 passed).
+- The ordinary suite conditionally omits real authorization-mirror EVM behavior
+  without reporting it as a pytest skip. Ran the existing `test_pilot_mirror.py`
+  runner with `PYTEST_ADDOPTS` selecting
+  `durable_current_inspection_real_pairing_and_revocation[authorization]` and
+  coverage enabled. It passed (1 passed, 80 deselected, 137 seconds), exercising
+  the real-chain branch as well as real PostgreSQL and proof verification.
+  Deselected tests already ran in the complete suite; this focused run adds the
+  otherwise conditional EVM environment. The runner's artifact doctor also
+  confirmed development use and rejection of unapproved production use.
+- Combined the three fresh coverage data files explicitly, retaining originals.
+  Python coverage is 8002/8343 lines (95.91%) and 1850/2076 branches (89.11%).
+  The previous complete report measured 7850/8343 lines and 1733/2076 branches;
+  this refresh adds 152 lines and 117 branches. Remaining: 341 lines, 226 branches.
+  Generated protobuf sources remain included: 70/152 lines and 3/8 branches;
+  authored sources separately measure 7932/8191 lines (96.84%) and 1847/2068
+  branches (89.31%). One preexisting coverage-excluded line remains in the report.
+- Evidence under the external test cache: `full-coverage-python-eighth.log`,
+  `full-coverage-checkpoint-eighth.log`, `full-coverage-mirror-eighth.log`, their
+  matching `.data` files, and `full-coverage-combined-eighth.data`/`.json`.
+  Ruff passes across tests; `uvx --offline reuse lint` passes for 709/709 files.
+  Owned PostgreSQL and EVM services stopped after verification.
+- Next Python priorities are pilot storage validation, chain reader/checkpoint
+  failures, history timing, authorization mirroring, event ingestion and policy
+  review. SDK branch, Solidity, docs/browser, operational-script coverage and
+  final remote CI/merge verification remain unfinished. These local results do
+  not establish full coverage or a published release.
