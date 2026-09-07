@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """Compile and prove both profiles with isolated, unapproved development keys.
 
-No generated source, key or artifact is written into the tracked checkout.
+Circuit-derived source, keys and proving artifacts remain in the output directory.
+Workspace builds may refresh normal generated outputs and contract bindings.
 A local contribution is a reproducibility tool, not a production ceremony.
 """
 
@@ -185,6 +186,25 @@ def main():
         "pytest",
         "tests/integration/test_pilot_pairing.py",
         "-q",
+        env={**os.environ, "CLEARPROOF_PILOT_TEST_ARTIFACTS": str(pilot)},
+    )
+    # Exercise the same fresh eight-signal proof on the local EVM. Never deploy to
+    # a configured remote network and never copy development keys into source.
+    contracts = ROOT / "packages/contracts"
+    hardhat = subprocess.check_output(
+        [node, "-e", "process.stdout.write(require.resolve('hardhat/internal/cli/cli'))"],
+        cwd=contracts,
+        text=True,
+        timeout=30,
+    )
+    run(
+        node,
+        hardhat,
+        "test",
+        "--network",
+        "hardhat",
+        "test/PilotGroth16Verifier.test.ts",
+        cwd=contracts,
         env={**os.environ, "CLEARPROOF_PILOT_TEST_ARTIFACTS": str(pilot)},
     )
     print("Development round trips passed; artifacts remain unapproved:", output, flush=True)

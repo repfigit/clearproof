@@ -26,6 +26,8 @@ export type { Groth16Verifier } from "./contracts/Groth16Verifier";
 export { Groth16Verifier__factory } from "./factories/contracts/Groth16Verifier__factory";
 export type { ISanctionsRootReceiver } from "./contracts/ISanctionsRootReceiver";
 export { ISanctionsRootReceiver__factory } from "./factories/contracts/ISanctionsRootReceiver__factory";
+export type { PilotGroth16Verifier } from "./contracts/PilotGroth16Verifier";
+export { PilotGroth16Verifier__factory } from "./factories/contracts/PilotGroth16Verifier__factory";
 export type { PilotRootCheckpoint } from "./contracts/PilotRootCheckpoint";
 export { PilotRootCheckpoint__factory } from "./factories/contracts/PilotRootCheckpoint__factory";
 export type { SanctionsOracle } from "./contracts/SanctionsOracle";
