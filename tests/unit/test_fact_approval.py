@@ -199,3 +199,53 @@ def test_current_cutoff_preserves_signed_expiry_and_inclusive_age(case):
     assert FactTrustStore([compromised]).current_valid_until(approvals, **args) == cutoff - 1
     with pytest.raises(FactTrustError):
         trust.current_valid_until(approvals, **args, verified_at=args["now"] + 1)
+
+
+@pytest.mark.parametrize("boundary", ["before-observation", "at-expiry"])
+def test_approval_signing_time_must_lie_inside_fact_validity(case, boundary):
+    _, _, approvals, _, _ = case
+    approval = approvals[0].approval
+    signed_at = approval.fact.observed_at - 1 if boundary == "before-observation" else approval.fact.expires_at
+    with pytest.raises(ValueError, match="Attestation must be signed within fact validity"):
+        FactApproval.model_validate({**approval.model_dump(), "signed_at": signed_at})
+
+
+@pytest.mark.parametrize(
+    "changes",
+    [
+        {"not_before": 100, "not_after": 100},
+        {"registry_address": "0x" + "00" * 20},
+        {"source_ids": ("source", "source")},
+        {"predicates": ("applicability_resolved", "applicability_resolved")},
+        {"predicates": ("proof_valid",)},
+    ],
+)
+def test_fact_authority_rejects_ambiguous_or_derived_scope(case, changes):
+    _, authority, _, _, _ = case
+    with pytest.raises(ValueError, match="Invalid fact authority scope"):
+        FactAuthority.model_validate({**authority.model_dump(), **changes})
+
+
+def test_signer_must_match_declared_approval_key(case):
+    _, _, approvals, _, _ = case
+    with pytest.raises(FactTrustError, match="^Fact signing key mismatch$"):
+        sign_fact(approvals[0].approval, Ed25519PrivateKey.generate())
+
+
+@pytest.mark.parametrize("authorities", [None, (), [], "invalid", [None] * 257])
+def test_fact_trust_inventory_requires_bounded_list(authorities):
+    with pytest.raises(ValueError, match="Configure 1–256 fact authorities"):
+        FactTrustStore(authorities)
+
+
+@pytest.mark.parametrize("approvals", [None, [], "invalid", (None,) * 65])
+def test_fact_approval_inventory_requires_bounded_tuple(case, approvals):
+    _, authority, _, args, _ = case
+    with pytest.raises(FactTrustError, match="^Fact approval count exceeded$"):
+        FactTrustStore([authority]).verify_for_context(approvals, **args)
+
+
+def test_fact_verification_uses_independent_authenticated_tenant(case):
+    _, authority, approvals, args, _ = case
+    with pytest.raises(FactTrustError, match="^Fact verification tenant mismatch$"):
+        FactTrustStore([authority]).verify_for_context(approvals, **{**args, "tenant_id": "different-tenant"})

@@ -593,3 +593,16 @@ still need completion and final merged-main verification.
   policy checks, not evidence of legal completeness or authority to consume proofs.
 - Full repository coverage remains incomplete across other Python modules,
   SDK branches, Solidity, docs/browser, scripts and final publication checks.
+
+## Twenty-eighth checkpoint
+
+- Added 18 fact-approval tests for signing-time boundaries, authority scope
+  ambiguity, forbidden derived predicates, mismatched real Ed25519 signing keys,
+  bounded authority/approval inventories and independently authenticated tenant
+  mismatch. Existing signature, freshness, compromise and conflict tests remain.
+- The fact/evaluator regression passes 65 tests. Fact approval measures 102/102
+  statements and 30/30 branches (`fact-approval-complete.log`/`.data`). Ruff and
+  whitespace pass; no production changes were required. Signatures establish the
+  configured attestor's claim, not factual truth or legal sufficiency.
+- Remaining Python, SDK, contracts, docs/browser, operational scripts and final
+  publication/verification work keep the full coverage goal active.
