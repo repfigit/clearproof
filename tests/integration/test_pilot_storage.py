@@ -4443,7 +4443,7 @@ async def check_authorization_mirror(
     restricted = AuthorizationMirrorService(db, cipher(), principal, verifier, configuration, consumer=consumer)
     with pytest.raises(HTTPException):
         await restricted.prepare(receipt["receipt_id"], **arguments)
-    await check_authorization_mirror_rejections(service, arguments, receipt)
+    await check_authorization_mirror_rejections(service, arguments, receipt, payload["decision_signer"])
     if mirror_evm:
         import time
 
@@ -5154,7 +5154,7 @@ async def test_event_ingestion_queue_rejects_indexed_scope_without_events(event_
         await event_service.queue(QueueRequest(), now=120)
 
 
-async def check_authorization_mirror_rejections(service, arguments, receipt):
+async def check_authorization_mirror_rejections(service, arguments, receipt, signer):
     """Fault-inject dependency results after establishing a real valid baseline."""
     from dataclasses import replace
     from unittest.mock import AsyncMock
@@ -5227,3 +5227,111 @@ async def check_authorization_mirror_rejections(service, arguments, receipt):
             await service.prepare(receipt["receipt_id"], **arguments)
     # Every patch has been restored; the original evidence remains usable.
     assert (await service.prepare(receipt["receipt_id"], **arguments))["receipt_id"] == receipt["receipt_id"]
+
+    await check_mirror_rebound_evidence(service, arguments, receipt, signer, (inspection, decision))
+
+
+async def check_mirror_rebound_evidence(service, arguments, receipt, signer, evaluation):
+    """Rebind synthetic encrypted evidence without bypassing digest/signature checks."""
+    from copy import deepcopy
+    from unittest.mock import AsyncMock
+
+    from src.protocol.canonical import record_digest
+
+    target = service._store
+    db = target._db
+    original_proof_id = receipt["proof_id"]
+    original_proof = await target.get("proof", original_proof_id)
+    original_receipt = await target.get("receipt", receipt["receipt_id"])
+    tenant = target.tenant_id
+    async with db.connection() as conn:
+        original_sealed = await (
+            await conn.execute(
+                "SELECT key_id,content_tag,nonce,ciphertext FROM pilot_records "
+                "WHERE tenant_id=%s AND kind='proof' AND record_id=%s AND revision=1",
+                (tenant, original_proof_id),
+            )
+        ).fetchone()
+
+    async def retain(conn, kind, identity, value):
+        sealed = cipher().seal(tenant, kind, identity, 1, value)
+        await conn.execute(
+            "INSERT INTO pilot_records (tenant_id,kind,record_id,revision,key_id,content_tag,nonce,ciphertext) "
+            "VALUES (%s,%s,%s,1,%s,%s,%s,%s) ON CONFLICT (tenant_id,kind,record_id,revision) "
+            "DO UPDATE SET key_id=EXCLUDED.key_id,content_tag=EXCLUDED.content_tag,"
+            "nonce=EXCLUDED.nonce,ciphertext=EXCLUDED.ciphertext",
+            (tenant, kind, identity, sealed["key_id"], sealed["content_tag"], sealed["nonce"], sealed["ciphertext"]),
+        )
+
+    for mutation, message in (
+        ("information", "Authorization information binding does not match"),
+        ("envelope", "Recipient envelope binding does not match"),
+        ("participants", "Mirror requires retained participant evidence"),
+    ):
+        proof_record, candidate = deepcopy(original_proof), deepcopy(original_receipt)
+        if mutation == "information":
+            candidate["information_signature_digest"] = "ab" * 32
+        elif mutation == "envelope":
+            proof_record["recipient_envelope"]["binding"]["sealed_at"] += 1
+        else:
+            proof_record["fact_ids"] = []
+        candidate["envelope_digest"] = record_digest("clearproof/pilot-envelope/v1", proof_record["recipient_envelope"])
+        request = {
+            k: proof_record[k]
+            for k in (
+                "credential_id",
+                "proof_digest",
+                "signals",
+                "fact_ids",
+                "transfer_digest",
+                "context_digest",
+                "recipient_key_id",
+                "information_signature_digest",
+            )
+        }
+        candidate["proof_id"] = record_digest(
+            "clearproof/authorized-proof/v1", {**request, "envelope_digest": candidate["envelope_digest"]}
+        )
+        identity = record_digest("clearproof/local-authorization/v1", candidate)
+        assert identity != receipt["receipt_id"]
+        proof_record["decision_attestation"] = signer.sign(candidate, service._context).model_dump(mode="json")
+        try:
+            # Only the isolated synthetic test schema is changed. Re-encrypt the
+            # records and maintain the consumption foreign key so earlier checks
+            # authenticate the candidate before its targeted inconsistency fails.
+            async with db.connection() as conn:
+                await retain(conn, "proof", candidate["proof_id"], proof_record)
+                await retain(conn, "receipt", identity, candidate)
+                await conn.execute(
+                    "UPDATE pilot_consumptions SET proof_id=%s WHERE tenant_id=%s AND nullifier=%s",
+                    (candidate["proof_id"], tenant, receipt["nullifier"]),
+                )
+            with pytest.MonkeyPatch.context() as patch:
+                if mutation == "participants":
+                    # Independently test the final participant-evidence gate even
+                    # if a policy dependency reports ALLOW without participant facts.
+                    patch.setattr(service, "_evaluate_transaction", AsyncMock(return_value=evaluation))
+                with pytest.raises(ValueError, match=message):
+                    await service.prepare(identity, **arguments)
+        finally:
+            async with db.connection() as conn:
+                await conn.execute(
+                    "UPDATE pilot_consumptions SET proof_id=%s WHERE tenant_id=%s AND nullifier=%s",
+                    (original_proof_id, tenant, receipt["nullifier"]),
+                )
+                await conn.execute(
+                    "UPDATE pilot_records SET key_id=%s,content_tag=%s,nonce=%s,ciphertext=%s "
+                    "WHERE tenant_id=%s AND kind='proof' AND record_id=%s AND revision=1",
+                    (*original_sealed, tenant, original_proof_id),
+                )
+                await conn.execute(
+                    "DELETE FROM pilot_records WHERE tenant_id=%s AND kind='receipt' AND record_id=%s",
+                    (tenant, identity),
+                )
+                if candidate["proof_id"] != original_proof_id:
+                    await conn.execute(
+                        "DELETE FROM pilot_records WHERE tenant_id=%s AND kind='proof' AND record_id=%s",
+                        (tenant, candidate["proof_id"]),
+                    )
+        assert await target.get("proof", original_proof_id) == original_proof
+        assert (await service.prepare(receipt["receipt_id"], **arguments))["receipt_id"] == receipt["receipt_id"]

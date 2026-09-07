@@ -962,3 +962,25 @@ still need completion and final merged-main verification.
   stopped; Ruff and whitespace checks pass. No production source changed.
 - Full repository coverage remains incomplete, including this module's remaining
   paths and other Python, SDK, Solidity, docs/scripts and publication requirements.
+
+## Fifty-second checkpoint
+
+- Added three authorization-mirror integrity cases that reconstruct proof/receipt
+  digests, sign candidate receipts with the synthetic decision authority, encrypt
+  retained records and update the isolated database's consumption reference.
+  Real earlier digest/signature/storage checks therefore pass before rejection
+  of mismatched information or recipient-envelope binding.
+- The missing-participant case additionally injects an ALLOW evaluation result
+  to exercise the mirror's independent final participant-evidence requirement.
+  It is a dependency-contract check, not a claim that the configured real policy
+  approves missing evidence. Digest, signature and storage checks remain real.
+- Every altered record/reference is restored in a finally block, including the
+  original encrypted proof bytes; the original authorization prepares afterward.
+  The surrounding scenario checks unchanged record/consumption counts.
+- The artifact-enabled PostgreSQL scenario passes (1 passed, 102 deselected,
+  125.45 seconds). Authorization mirror now measures 89/89 statements and 26/26
+  branches (`authorization-mirror-complete.log`/`.data`). Ruff and whitespace
+  pass; owned PostgreSQL stopped. No production source changed.
+- Full repository coverage remains incomplete; the latest full Python report is
+  checkpoint 42, and remaining Python, SDK, Solidity, docs/scripts and remote
+  publication requirements still need completion and verification.
