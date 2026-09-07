@@ -39,7 +39,7 @@ def test_timeout_terminates_owned_child_group(tmp_path):
             stat = Path(f"/proc/{pid}/stat")
             try:
                 state = stat.read_text().split()[2]
-            except FileNotFoundError:
+            except (FileNotFoundError, ProcessLookupError):
                 # The host may reap the process between lookup and read.
                 break
             if state == "Z":
