@@ -1398,3 +1398,20 @@ still need completion and final merged-main verification.
   Full coverage remains incomplete; checkpoint 69 is the latest full baseline,
   with other Python, generated-code, workspace, operational and remote CI/merge
   requirements still outstanding.
+
+## Seventy-seventh checkpoint
+
+- Added 22 projection validation tests for exact digest width and limb ordering,
+  immutable 48-field inventory, remainder types/canonical integer/range bounds,
+  invalid digest-limb types/ranges and normal frozen-object mutation rejection.
+- All 44 projection tests pass in 13.87 seconds, including existing real Circom
+  substitution tests. Projection measures 51/52 statements and 13/14 branches
+  (`projection-boundaries.log`/`.data`).
+- Line 107's defensive commitment-length rejection remains uncovered. Normal
+  construction already rejects a non-48-field tuple and the instance is frozen;
+  no forced mutation or bypassed constructor was introduced solely to hit it.
+  It remains in the denominator for explicit final review, not silently excluded.
+- Ruff/format/whitespace pass. No production source changed. Full repository
+  coverage remains incomplete; checkpoint 69 is the latest complete Python
+  baseline. Other Python/generated paths, workspaces, operational coverage and
+  final remote CI/merge verification remain outstanding.
