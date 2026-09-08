@@ -1710,3 +1710,23 @@ still need completion and final merged-main verification.
 - Whitespace checks pass. No production contract source changed. Remaining
   contract branches, other workspace and operational coverage, Python/generated
   gaps and final remote CI/merge verification keep the full goal open.
+
+## Ninety-sixth checkpoint
+
+- Added six sanctions-oracle tests for zero administrator, exact cooldown expiry,
+  rejected inventory reduction with unchanged state, both grace-period bounds,
+  oracle/admin role separation and bounded history retention. The history test
+  performs 2002 actual local updates and verifies every one of the 1000 retained
+  records, including root, timestamp, leaf count and chronological ring position.
+  Existing staleness testing now checks equality and the next second explicitly.
+- All 13 oracle tests pass normally (13 seconds). All 28 registry-file tests pass
+  instrumented (37 seconds), with SanctionsOracle at 100% statements, branches,
+  functions and lines: 19 statements, 24 branch outcomes and seven functions
+  (`oracle-boundaries-instrumented.log` and preserved `.json`). Other contracts
+  in this focused report remain partial.
+- Forced normal compilation restores all generated bindings; all 28 registry-file
+  tests pass again on normal bytecode (13 seconds,
+  `oracle-boundaries-restored-normal.log`). TypeScript and whitespace checks pass.
+  No production contract or deployed root changed. Full repository coverage
+  remains incomplete: other contract branches, remaining Python/generated and
+  workspace/operational paths and final remote CI/merge verification are pending.

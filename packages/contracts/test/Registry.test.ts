@@ -129,6 +129,106 @@ describe("SanctionsOracle", function () {
     return { oracleContract, admin, oracle, other, initialRoot };
   }
 
+  it("rejects a zero administrator", async function () {
+    const Factory = await ethers.getContractFactory("SanctionsOracle");
+    await expect(Factory.deploy(ethers.ZeroAddress, ethers.id("synthetic-root"), 100))
+      .to.be.revertedWithCustomError(Factory, "ZeroAdmin");
+  });
+
+  it("accepts updates exactly at cooldown expiry and retains state on early rejection", async function () {
+    const { oracleContract, initialRoot } = await deploySanctionsOracle();
+    const previous = await oracleContract.lastUpdated();
+    const ready = previous + await oracleContract.UPDATE_COOLDOWN();
+    const nextRoot = ethers.id("synthetic-next-root");
+    await time.setNextBlockTimestamp(ready - 1n);
+    await expect(oracleContract.updateRoot(nextRoot, 100))
+      .to.be.revertedWithCustomError(oracleContract, "CooldownActive");
+    expect(await oracleContract.currentRoot()).to.equal(initialRoot);
+    expect(await oracleContract.lastUpdated()).to.equal(previous);
+    expect(await oracleContract.historyLength()).to.equal(1);
+    await time.setNextBlockTimestamp(ready);
+    await expect(oracleContract.updateRoot(nextRoot, 100))
+      .to.emit(oracleContract, "SanctionsRootUpdated").withArgs(initialRoot, nextRoot, 100, ready);
+    expect((await oracleContract.rootHistory(1)).timestamp).to.equal(ready);
+  });
+
+  it("rejects a reduction below half the prior inventory without changing history", async function () {
+    const { oracleContract, initialRoot } = await deploySanctionsOracle();
+    const previous = await oracleContract.lastUpdated();
+    await time.increase(3600);
+    const nextRoot = ethers.id("synthetic-reduced-root");
+    await expect(oracleContract.updateRoot(nextRoot, 49))
+      .to.be.revertedWithCustomError(oracleContract, "LeafCountDecreasedTooMuch");
+    expect(await oracleContract.currentRoot()).to.equal(initialRoot);
+    expect(await oracleContract.leafCount()).to.equal(100);
+    expect(await oracleContract.lastUpdated()).to.equal(previous);
+    expect(await oracleContract.historyLength()).to.equal(1);
+    await oracleContract.updateRoot(nextRoot, 50);
+    expect(await oracleContract.leafCount()).to.equal(50);
+    expect((await oracleContract.rootHistory(1)).leafCount).to.equal(50);
+  });
+
+  it("bounds grace-period changes and reports both previous and new values", async function () {
+    const { oracleContract } = await deploySanctionsOracle();
+    for (const invalid of [6 * 3600 - 1, 168 * 3600 + 1]) {
+      await expect(oracleContract.setGracePeriod(invalid))
+        .to.be.revertedWithCustomError(oracleContract, "PeriodOutOfBounds");
+      expect(await oracleContract.gracePeriod()).to.equal(24 * 3600);
+    }
+    await expect(oracleContract.setGracePeriod(6 * 3600))
+      .to.emit(oracleContract, "GracePeriodUpdated").withArgs(24 * 3600, 6 * 3600);
+    await expect(oracleContract.setGracePeriod(168 * 3600))
+      .to.emit(oracleContract, "GracePeriodUpdated").withArgs(6 * 3600, 168 * 3600);
+    expect(await oracleContract.gracePeriod()).to.equal(168 * 3600);
+  });
+
+  it("separates root publication authority from oracle administration", async function () {
+    const { oracleContract, oracle, other } = await deploySanctionsOracle();
+    const role = await oracleContract.ORACLE_ROLE();
+    const adminRole = await oracleContract.DEFAULT_ADMIN_ROLE();
+    await expect(oracleContract.connect(other).updateRoot(ethers.id("forbidden-root"), 100))
+      .to.be.revertedWithCustomError(oracleContract, "AccessControlUnauthorizedAccount").withArgs(other.address, role);
+    await oracleContract.grantRole(role, oracle.address);
+    for (const call of [
+      () => oracleContract.connect(oracle).pause(),
+      () => oracleContract.connect(oracle).unpause(),
+      () => oracleContract.connect(oracle).setGracePeriod(21600),
+    ]) {
+      await expect(call()).to.be.revertedWithCustomError(oracleContract, "AccessControlUnauthorizedAccount")
+        .withArgs(oracle.address, adminRole);
+    }
+    await time.increase(3600);
+    const nextRoot = ethers.id("authorized-synthetic-root");
+    await oracleContract.connect(oracle).updateRoot(nextRoot, 100);
+    expect(await oracleContract.currentRoot()).to.equal(nextRoot);
+  });
+
+  it("retains exactly the newest history after two complete ring-buffer rotations", async function () {
+    this.timeout(120000);
+    const { oracleContract } = await deploySanctionsOracle();
+    const capacity = Number(await oracleContract.MAX_HISTORY());
+    const initialTime = await oracleContract.lastUpdated();
+    const cooldown = await oracleContract.UPDATE_COOLDOWN();
+    const updates = 2 * capacity + 2;
+    const root = (index: number) => ethers.id(`synthetic-ring-root-${index}`);
+    for (let index = 1; index <= updates; index++) {
+      await time.setNextBlockTimestamp(initialTime + BigInt(index) * cooldown);
+      await oracleContract.updateRoot(root(index), 100);
+    }
+    expect(await oracleContract.historyLength()).to.equal(capacity);
+    const start = Number(await oracleContract.ringBufferStart());
+    expect(start).to.equal(updates + 1 - capacity);
+    for (let offset = 0; offset < capacity; offset++) {
+      const index = updates - capacity + 1 + offset;
+      const retained = await oracleContract.rootHistory((start + offset) % capacity);
+      expect(retained.root).to.equal(root(index));
+      expect(retained.timestamp).to.equal(initialTime + BigInt(index) * cooldown);
+      expect(retained.leafCount).to.equal(100);
+    }
+    expect(await oracleContract.currentRoot()).to.equal(root(updates));
+    expect(await oracleContract.lastUpdated()).to.equal(initialTime + BigInt(updates) * cooldown);
+  });
+
   it("should deploy with initial root", async function () {
     const { oracleContract, initialRoot } = await deploySanctionsOracle();
     expect(await oracleContract.currentRoot()).to.equal(initialRoot);
@@ -173,8 +273,10 @@ describe("SanctionsOracle", function () {
     const { oracleContract } = await deploySanctionsOracle();
     expect(await oracleContract.isStale()).to.equal(false);
 
-    // Advance past 72 hours grace period
-    await time.increase(72 * 3600 + 1);
+    const boundary = await oracleContract.lastUpdated() + await oracleContract.gracePeriod();
+    await time.increaseTo(boundary);
+    expect(await oracleContract.isStale()).to.equal(false);
+    await time.increase(1);
     expect(await oracleContract.isStale()).to.equal(true);
   });
 
