@@ -2146,3 +2146,19 @@ still need completion and final merged-main verification.
 - Ruff, whitespace and REUSE pass. No production changes or coverage exclusions.
   Full Python aggregation, remaining authored and Solidity/workspace gaps,
   operational checks and remote CI/merge keep the repository goal open.
+
+## One hundred and eighteenth checkpoint
+
+- Added seven witness-builder rejection cases: credential tenant/wallet/jurisdiction
+  mismatch, unsupported proof profile and wrong depth for each of the three trees.
+  Fixture inputs are recorded while executing the real builder, not substituted
+  with mocked outputs; all negative cases rebuild the original valid witness
+  afterward and compare it exactly with the control.
+- The full composed-witness test module passes 28 tests with no skips, including
+  actual Circom compilation and WASM adversarial witness generation, in 44.82
+  seconds (`witness-builder-boundaries-complete.log`, `.data`, `.json`). The
+  builder reaches 36/36 statements and 10/10 branches. No generated circuit
+  artifacts or production source changes are included.
+- Ruff and whitespace pass. This is focused evidence; full Python aggregation,
+  remaining authored/other-workspace gaps, operational checks and remote CI/merge
+  remain required before the repository coverage goal can be complete.

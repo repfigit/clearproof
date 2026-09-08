@@ -5,6 +5,7 @@ import json
 import shutil
 import subprocess
 from pathlib import Path
+from unittest.mock import patch
 
 import pytest
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
@@ -379,3 +380,48 @@ def test_valid_credential_substitution_requires_a_different_public_commitment(co
     alternate["projection_commitment"] = original["projection_commitment"]
     result = calculate(compiled, tmp_path, alternate)
     assert result.returncode != 0 and b"Assert Failed" in result.stderr
+
+
+@pytest.fixture(scope="module")
+def witness_call():
+    # Record the fixture's inputs while executing the real witness builder.
+    with patch(__name__ + ".compliance_witness", wraps=compliance_witness) as recorded:
+        expected, _ = synthetic_case()
+    assert recorded.call_count == 1
+    return recorded.call_args.args, recorded.call_args.kwargs, expected
+
+
+@pytest.mark.parametrize("field,value", [
+    ("tenant_id", "other-tenant"),
+    ("subject_wallet", "0x" + "34" * 20),
+    ("jurisdiction", "EU"),
+])
+def test_witness_builder_rejects_credential_originator_mismatch(witness_call, field, value):
+    args, kwargs, expected = witness_call
+    credential = args[3]
+    assert getattr(credential, field) != value
+    changed = PilotCredential.model_validate({**credential.model_dump(), field: value})
+    with pytest.raises(ValueError, match="^Credential does not bind the transfer originator$"):
+        compliance_witness(*args[:3], changed, **kwargs)
+    assert compliance_witness(*args, **kwargs) == expected
+
+
+@pytest.mark.parametrize("tree", ["sanctions", "issuance_path", "issuer_path"])
+def test_witness_builder_rejects_wrong_tree_depth(witness_call, tree):
+    args, kwargs, expected = witness_call
+    changed = dict(kwargs)
+    if tree == "sanctions":
+        changed[tree] = PilotSanctionsTree([], depth=7)
+    else:
+        changed[tree] = {**kwargs[tree], "siblings": kwargs[tree]["siblings"][:-1]}
+    with pytest.raises(ValueError, match="^Composed profile requires depth-eight trees$"):
+        compliance_witness(*args, **changed)
+    assert compliance_witness(*args, **kwargs) == expected
+
+
+def test_witness_builder_rejects_unsupported_profile(witness_call):
+    args, kwargs, expected = witness_call
+    context = VerificationContext.model_validate({**args[1].model_dump(), "proof_profile": "legacy-v1"})
+    with pytest.raises(ValueError, match="^Unsupported composed proof profile$"):
+        compliance_witness(args[0], context, *args[2:], **kwargs)
+    assert compliance_witness(*args, **kwargs) == expected
