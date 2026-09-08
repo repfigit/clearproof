@@ -51,9 +51,9 @@ exercise every supported test layer with its required local dependencies.
 
 ## Next uncovered behavior to address
 
-Python: storage validation, proof route error paths, chain readers/checkpoints,
-history timing and service rejection branches. The current combined report
-has 341 missed lines and 226 missed branches after the forty-second checkpoint.
+Python: publication-journal validation, proof route error paths, policy activation,
+observation and authorization-evidence service branches. The current combined report
+has 267 missed lines and 150 missed branches after the fifty-fourth checkpoint.
 Subprocess coverage is captured in this combined report.
 
 CLI: source line/branch/function/statement coverage is now 100%, enforced by CI.
@@ -67,9 +67,9 @@ bytecode must not be committed.
 These figures describe an intermediate worktree, not a released coverage claim.
 The full goal remains open.
 
-Docs: test routes and rendering. Browser/server behavior and operational scripts
-remain part of the coverage inventory; the shared content modules now have a
-100% source coverage gate.
+Docs: authored TS/TSX source unit coverage is now 100% and gated, as is the shared
+content package. MDX rendering, browser/server behavior and operational scripts
+remain part of the unfinished coverage inventory.
 
 
 ## Second checkpoint
@@ -999,3 +999,30 @@ still need completion and final merged-main verification.
 - MDX page/browser coverage, operational scripts and the other outstanding
   repository requirements remain necessary. Full coverage is not established by
   this source-unit gate. A fresh full Python regression is running separately.
+
+
+## Fifty-fourth checkpoint
+
+- Refreshed the complete Python suite with PostgreSQL, development legacy/pilot
+  artifacts, Circom and built policy CLI acceptance enabled: 1952 passed, one
+  checkpoint skipped, in 422.26 seconds. That checkpoint passed separately on its
+  owned local EVM (1 passed). The optional authorization-mirror EVM path also
+  passed with the new shared integrity checks (1 passed, 154 deselected, 153.07
+  seconds). These deselections narrow the additional EVM run; the complete suite
+  already exercised the ordinary paths.
+- Explicitly combined all three fresh coverage files, retaining originals.
+  Python measures 8076/8343 lines (96.80%) and 1926/2076 branches (92.77%). This
+  adds 74 lines and 76 branches over checkpoint 42. Remaining: 267 lines and 150
+  branches. Generated protobuf sources remain included (70/152 lines, 3/8 branches);
+  authored sources separately measure 8006/8191 lines (97.74%) and 1923/2068
+  branches (92.99%). One preexisting excluded line remains in the report.
+- Evidence under the external test cache: `full-coverage-python-ninth.log`,
+  `full-coverage-checkpoint-ninth.log`, `full-coverage-mirror-ninth.log`, matching
+  `.data` files, and `full-coverage-combined-ninth.data`/`.json`. Ruff passes across
+  tests, REUSE passes for 711/711 tracked files, and owned PostgreSQL/EVM services
+  stopped. Docs' 50-test source gate and typecheck also passed this checkpoint.
+- Next Python priorities are publication journal, proof routes, authorization
+  evidence, policy activation, proof observations and registrar/timestamp-evidence
+  boundaries. SDK branches, Solidity, MDX/browser, scripts and final remote CI,
+  merge and merged-main verification remain unfinished. Full coverage is not yet
+  established; no local percentage is a released coverage claim.
