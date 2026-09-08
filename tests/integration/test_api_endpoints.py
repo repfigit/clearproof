@@ -251,15 +251,30 @@ async def test_credential_get_not_found(client: AsyncClient, mock_registry):
 
 
 @pytest.mark.asyncio
-async def test_credential_get_existing(client: AsyncClient, mock_registry):
-    """GET /credential/{id} for an existing credential returns its status."""
+@pytest.mark.parametrize(
+    "revoked,expires_at,expected",
+    [
+        (False, 999, "expired"),
+        (False, 1000, "expired"),
+        (False, 1001, "active"),
+        (True, 999, "revoked"),
+        (True, 1001, "revoked"),
+    ],
+)
+async def test_credential_get_existing(client: AsyncClient, mock_registry, monkeypatch, revoked, expires_at, expected):
+    """Revocation takes precedence; equality at expiry is already expired."""
+    from types import SimpleNamespace
+
+    from src.api.routes import credential
+
+    monkeypatch.setattr(credential, "time", SimpleNamespace(time=lambda: 1000))
     mock_cred = MagicMock()
-    mock_cred.revoked = False
-    mock_cred.expires_at = int(time.time()) + 86400
+    mock_cred.revoked = revoked
+    mock_cred.expires_at = expires_at
     mock_cred.issuer_did = "did:web:issuer.example.com"
     mock_cred.jurisdiction = "US"
     mock_cred.kyc_tier = "retail"
-    mock_cred.issued_at = int(time.time()) - 3600
+    mock_cred.issued_at = 900
     mock_cred.credential_id = "cred-123"
 
     mock_registry.get.return_value = mock_cred
@@ -270,7 +285,9 @@ async def test_credential_get_existing(client: AsyncClient, mock_registry):
     assert resp.status_code == 200
     body = resp.json()
     assert body["credential_id"] == "cred-123"
-    assert body["status"] == "active"
+    assert body["status"] == expected
+    mock_registry.revoke.assert_not_called()
+    mock_registry.issue.assert_not_awaited()
 
 
 # -----------------------------------------------------------------------

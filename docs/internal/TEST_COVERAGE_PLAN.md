@@ -1573,3 +1573,17 @@ still need completion and final merged-main verification.
   Full repository coverage remains incomplete. Checkpoint 69 is the latest
   full Python baseline; other Python/generated paths, workspace and operational
   coverage, and final remote CI/merge verification remain outstanding.
+
+## Eighty-eighth checkpoint
+
+- Credential status now treats the exact expiry second as expired, consistent
+  with proof generation. The new HTTP boundary regression first reproduced the
+  defect (one failure, four passes in `credential-status-before.log`). It covers
+  before/equal/after expiry and revocation precedence without mutating records.
+- After the source fix, all 53 API endpoint and proof-route failure tests pass
+  in 6.44 seconds. Credential routes measure 71/71 statements and 10/10 branches
+  (`credential-status-complete.log`/`.data`). Ruff and whitespace checks pass.
+- Full repository coverage remains incomplete. Checkpoint 69 is the latest full
+  Python baseline and predates this source fix; a new full run is required.
+  Remaining Python/generated, workspace and operational coverage and remote
+  CI/merge verification remain outstanding.
