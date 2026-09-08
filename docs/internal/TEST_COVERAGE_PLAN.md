@@ -1879,3 +1879,25 @@ still need completion and final merged-main verification.
   No production source changed. Remaining validation/cryptographic branches,
   other contract/Python/generated, workspace/operational and remote CI/merge
   requirements keep the full repository goal open.
+
+## One hundred and fourth checkpoint
+
+- Routed the rejection scenario through an actual Groth16 verifier. Initial
+  validation showed malformed points revert at the pairing precompile rather
+  than returning false. Tests now distinguish that error from canonical infinity
+  points that produce a negative pairing result and ProofVerificationFailed.
+  Both paths preserve records/nullifiers/events before the controlled positive
+  registry flow resumes. No production defect or source change was inferred.
+- All 53 registry/jurisdiction/threshold tests pass instrumented (57 seconds),
+  then again on restored normal bytecode (21 seconds). ComplianceRegistry now
+  measures 100% lines/statements/functions and 98.89% branches
+  (`compliance-pairing-boundaries-complete.log`/`.json`,
+  `compliance-pairing-restored-normal.log`).
+- The sole remaining branch is the missing-default threshold guard at line 172:
+  normal construction and setters always register the fallback. It remains
+  explicitly pending invariant review; no storage corruption or exclusion was
+  introduced to claim coverage. Other contracts in this focused report are not
+  a new full baseline.
+- TypeScript and whitespace pass; normal generated bindings are unchanged.
+  Other contract/Python/generated, workspace/operational and remote CI/merge
+  requirements keep the full repository goal open.

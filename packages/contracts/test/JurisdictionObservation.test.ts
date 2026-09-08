@@ -3,8 +3,8 @@ import { ethers } from "hardhat";
 import { time } from "@nomicfoundation/hardhat-network-helpers";
 import { routeVerifier } from "./helpers/verifier";
 
-// Mock pairing isolates the informational registry behavior; real pairing stays
-// covered by the separate legacy/pilot artifact suites.
+// Most cases isolate registry behavior with mock pairing. Rejection also uses
+// the actual verifier; valid real proofs stay covered by the artifact suites.
 describe("Legacy jurisdiction observations", function () {
   for (const registered of ["US", "EU", "malformed", "@S", "[S", "U@", "U["]) {
     it(`reports ${registered} without changing acceptance`, async function () {
@@ -74,6 +74,19 @@ describe("Legacy jurisdiction observations", function () {
         await unchanged();
         await registry.setVerifierSelector(ethers.ZeroHash);
         await expect(submit()).to.be.revertedWithCustomError(registry, "VerifierSelectorNotSet");
+        await unchanged();
+        const actualVerifier = await (await ethers.getContractFactory("Groth16Verifier")).deploy();
+        const actualSelector = ethers.id("actual-pairing-rejection");
+        await router.registerVerifier(actualSelector, await actualVerifier.getAddress(), "Actual pairing verifier");
+        await time.increase(2);
+        await router.activateVerifier(actualSelector, "Actual pairing verifier");
+        await registry.setVerifierSelector(actualSelector);
+        await expect(submit()).to.be.revertedWith("Pairing: ecpairing failed");
+        await unchanged();
+        // Infinity points have canonical encodings but do not satisfy this key.
+        await expect(registry.connect(vaspWallet).verifyAndRecord(
+          transfer, [0n, 0n], [[0n, 0n], [0n, 0n]], [0n, 0n], signals, did,
+        )).to.be.revertedWithCustomError(registry, "ProofVerificationFailed");
         await unchanged();
         await registry.setVerifierSelector(selector);
       }
