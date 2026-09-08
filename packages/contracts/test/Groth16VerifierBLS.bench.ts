@@ -55,6 +55,24 @@ describe("Groth16VerifierBLS (BLS12-381 / EIP-2537) gas benchmark", function () 
     console.log(`\n    BLS12-381 verifyProof gas (estimate): ${gas.toString()}`);
   });
 
+  it("rejects malformed proof lengths and signal counts before accepting the original proof", async function () {
+    const proof = JSON.parse(fs.readFileSync(`${BLS_ARTIFACTS}/proof_bls.json`, "utf-8"));
+    const pubSignals: string[] = JSON.parse(fs.readFileSync(`${BLS_ARTIFACTS}/public_bls.json`, "utf-8"));
+    const proofBytes = encodeBlsProof(proof);
+    const verifier = await (await hre.ethers.getContractFactory("Groth16VerifierBLS")).deploy();
+    expect(hre.ethers.getBytes(proofBytes)).to.have.length(512);
+    expect(pubSignals).to.have.length(16);
+    for (const malformed of ["0x", proofBytes.slice(0, -2), proofBytes + "00"]) {
+      await expect(verifier.verifyProof(malformed, pubSignals))
+        .to.be.revertedWith("Proof must be 512 bytes (G1 || G2 || G1)");
+    }
+    for (const malformed of [[], pubSignals.slice(0, -1), [...pubSignals, "0"]]) {
+      await expect(verifier.verifyProof(proofBytes, malformed))
+        .to.be.revertedWith("Wrong public signal count");
+    }
+    expect(await verifier.verifyProof(proofBytes, pubSignals)).to.equal(true);
+  });
+
   it("rejects a tampered BLS12-381 proof", async function () {
     const proof = JSON.parse(fs.readFileSync(`${BLS_ARTIFACTS}/proof_bls.json`, "utf-8"));
     const pubSignals: string[] = JSON.parse(

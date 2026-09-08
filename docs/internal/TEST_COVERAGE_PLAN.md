@@ -2060,3 +2060,19 @@ still need completion and final merged-main verification.
   unchanged. No production source changed. Full repository coverage remains
   unproven; other languages/workspaces, operational coverage and remote CI/merge
   still require completion evidence.
+
+## One hundred and thirteenth checkpoint
+
+- Added BLS verifier input-boundary checks using the actual committed proof:
+  empty, 511-byte and 513-byte proofs reject with the proof-length error;
+  zero, 15 and 17 signals reject with the signal-count error. The original
+  512-byte/16-signal proof still verifies after all rejected calls.
+- All four BLS benchmark tests pass normally (1 second), instrumented (3 seconds)
+  and after restoring normal bytecode (1 second). Focused BLS coverage increases
+  from 62.5% to 87.5% branches with 100% lines/statements/functions
+  (`bls-input-boundaries-instrumented.log` and preserved `.json`,
+  `bls-input-boundaries-restored-normal.log`). Its MSM-precompile failure outcome
+  remains uncovered; this report is not the full contract aggregate.
+- TypeScript and whitespace pass; generated normal bindings are unchanged.
+  No production source changed. Other Solidity and repository-wide gaps,
+  operational verification and remote CI/merge remain required for completion.
