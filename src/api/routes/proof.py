@@ -135,11 +135,6 @@ async def _hash_wallet(address: str) -> str:
     return await _poseidon_hash([1, _address_to_int(address)])
 
 
-def _hash_transfer(request: ProofGenerateRequest) -> str:
-    payload = f"{request.wallet_address}:{request.destination_wallet}:{request.amount_usd}:{request.asset}"
-    return hashlib.sha256(payload.encode()).hexdigest()
-
-
 _BN128_R = 21888242871839275222246405745257275088548364400416034343698204186575808495617
 
 

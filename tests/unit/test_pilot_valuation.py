@@ -70,7 +70,7 @@ def test_transfer_witness_uses_full_integer_product():
     vector["usd_cents"] = str(MAX - 2)
     transfer = Transfer.model_validate(vector)
     assert valuation_witness(transfer) == inputs(MAX, MAX - 2, MAX - 1)
-    with pytest.raises(ValueError):
+    with pytest.raises(ValueError, match="USD cents must equal the explicitly rounded rational valuation"):
         valuation_witness(transfer.model_copy(update={"usd_cents": "1"}))
 
 

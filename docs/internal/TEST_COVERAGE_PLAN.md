@@ -2162,3 +2162,23 @@ still need completion and final merged-main verification.
 - Ruff and whitespace pass. This is focused evidence; full Python aggregation,
   remaining authored/other-workspace gaps, operational checks and remote CI/merge
   remain required before the repository coverage goal can be complete.
+
+## One hundred and nineteenth checkpoint
+
+- Audited the remaining unused proof-route hashing helper: repository search finds
+  no caller. Removed that private helper; active transfer identifiers and hashing
+  paths are unchanged and still use hashlib.
+- Audited the duplicate valuation quotient check. Transfer's always-revalidated
+  model enforces the same integer equation before witness calculation, including
+  model_copy inputs. Strengthened the existing large-integer regression to assert
+  that specific validation error; it passes before source cleanup. Removed only
+  the unreachable duplicate check and documented its upstream invariant.
+- All 92 valuation/API/route-failure tests pass, 5 warnings, 13.54 seconds, including
+  actual Circom/WASM arithmetic checks (`valuation-invariant-complete.log`, `.data`,
+  `.json`). Valuation witness coverage is 14/14 statements and 4/4 branches.
+  Proof-route coverage is partial in this selection and still needs the wider
+  PostgreSQL suite. The source denominator is now 8338 statements/2074 branches;
+  old aggregate coverage files describe the previous source revision.
+- Ruff and whitespace pass. No exclusions or generated-artifact changes. Full
+  Python aggregation, remaining authored/other-workspace and operational coverage,
+  and remote CI/merge requirements keep the full goal open.
