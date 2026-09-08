@@ -62,10 +62,12 @@ coverage is captured; defensive paths still require review rather than exclusion
 CLI: source line/branch/function/statement coverage is now 100%, enforced by CI.
 Keep the actual artifact/service acceptance tests alongside mocked boundary tests.
 
-Solidity: router administration/timelocks, oracle updates, VASP administration,
-registry validation failures and cryptographic rejection branches. Retest normal
-uninstrumented bytecode as well as instrumentation; generated coverage factory
-bytecode must not be committed.
+Solidity: checkpoint 100 measures 378/383 lines, 266/271 statements, 293/408
+branches and 79/83 functions with all 110 tests passing. Remaining gaps are in
+ComplianceRegistry, PilotCurrentRegistry, Pairing, PilotGroth16Verifier and the
+BLS benchmark verifier. Router, oracle, VASP registry, relay and checkpoint have
+full measured coverage. Preserve normal-bytecode proof verification alongside
+instrumentation; generated instrumented factory bytecode must not be committed.
 
 These figures describe an intermediate worktree, not a released coverage claim.
 The full goal remains open.
@@ -1792,3 +1794,26 @@ still need completion and final merged-main verification.
 - Full repository coverage remains incomplete: other contract branches, remaining
   Python/generated, workspace/operational paths and remote CI/merge verification
   still require completion. This is not a deployed-contract upgrade.
+
+
+## One hundredth checkpoint
+
+- Refreshed the complete instrumented contract suite with explicit legacy/pilot
+  development artifacts: all 110 tests pass, no skips (reported duration two
+  minutes, `full-contract-coverage-checkpoint100.log`). Preserved both coverage
+  outputs as `full-contract-coverage-checkpoint100.json` and `-raw.json`.
+- Solidity-coverage's own line map reports 378/383 lines (98.69%). Statements:
+  266/271 (98.15%); branches: 293/408 (71.81%); functions: 79/83 (95.18%).
+  Use the report's explicit `l` map: reconstructing lines solely from statement
+  start positions with modern Istanbul produces a smaller, incorrect denominator
+  for this Solidity instrumentation format.
+- Remaining lines include compliance selector administration/pause/unpause,
+  Pairing.P2 and a pilot-current statement rejection. Remaining branch outcomes
+  are concentrated in ComplianceRegistry and PilotCurrentRegistry, plus pairing
+  failure/coordinate paths in the verifier helpers. Original maps retain every
+  location for follow-up; no source or coverage exclusion changed this checkpoint.
+- Forced compilation restored normal artifacts and all tracked generated bindings
+  match the committed state. Checkpoint 99's 110-test normal-bytecode run remains
+  applicable to these identical sources/tests. The working tree has no code edits.
+  Other Python/generated, workspace/operational and remote CI/merge requirements
+  remain outstanding; the full goal is not complete.
