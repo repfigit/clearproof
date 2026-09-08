@@ -1558,3 +1558,18 @@ still need completion and final merged-main verification.
   Full repository coverage remains incomplete. Checkpoint 69 is the latest full
   Python report; remaining Python/generated paths, other workspaces, operational
   tests and final remote CI/merge verification remain open.
+
+## Eighty-seventh checkpoint
+
+- Added three actual HTTP tests for authenticated empty metrics, independent
+  generation/verification averages and rounding, and unauthenticated liveness
+  with no database configured. Each fixture owns fresh counters and restores
+  the module's original clock/store.
+- All three pass in 3.88 seconds. Health/metrics measures 47/47 statements and
+  4/4 branches (`health-metrics-complete.log`/`.data`). Tests preserve the
+  documented distinction: health is process liveness, not dependency readiness;
+  metrics are process-local counters, not durable pilot reports.
+- Ruff/format/whitespace and REUSE (718/718 files) pass. No source changed.
+  Full repository coverage remains incomplete. Checkpoint 69 is the latest
+  full Python baseline; other Python/generated paths, workspace and operational
+  coverage, and final remote CI/merge verification remain outstanding.
