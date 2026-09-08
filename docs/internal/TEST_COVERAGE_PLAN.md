@@ -51,12 +51,11 @@ exercise every supported test layer with its required local dependencies.
 
 ## Next uncovered behavior to address
 
-Python: checkpoint 120 combines the full suite and explicit EVM paths:
-8335/8338 statements (99.964%) and 2070/2074 branches (99.807%). Generated
-protobufs remain included and are fully covered. Three missed statements and
-four branches remain: bilateral CLI import behavior, discovery canonical
-reconstruction, frozen projection length and observation disappearing during
-transactional scan. No new exclusions were introduced.
+Python: checkpoint 134 combines the full suite and explicit EVM paths:
+8332/8332 statements and 2068/2068 branches (100%) across 143 source files.
+Generated protobufs remain included and fully covered. No missed lines or
+branches remain. The one pre-existing excluded line is unchanged. Full CI
+execution of the new combined gate remains unverified.
 
 CLI: source line/branch/function/statement coverage is now 100%, enforced by CI.
 Keep the actual artifact/service acceptance tests alongside mocked boundary tests.
@@ -65,7 +64,7 @@ Solidity: checkpoint 132 measures full coverage: 387/387 lines, 275/275
 statements, 402/402 branches and 88/88 functions. All 133 tests pass both
 instrumented and with restored normal bytecode using both real proof bundles.
 Coverage includes test harnesses and the BLS benchmark verifier. CI coverage
-gating/artifact retention and remote verification still require completion.
+gating/artifact retention are configured; remote verification remains required.
 
 These figures describe an intermediate worktree, not a released coverage claim.
 The full goal remains open.
@@ -2430,3 +2429,28 @@ still need completion and final merged-main verification.
   checkpoint 132 remains the current full local Solidity execution evidence.
   Remote workflow execution is not yet verified. Full Python rerun, remaining
   operational/browser verification and remote CI/review/merge keep the goal open.
+
+## One hundred and thirty-fourth checkpoint
+
+- Full Python refresh finishes with exit 0: 2310 passed, one skipped and 42
+  warnings in 466.94 seconds. The skipped checkpoint passes on its owned local
+  EVM (one passed, two warnings, 3.25 seconds). The explicit durable authorization
+  mirror path passes with real PostgreSQL, proof and EVM (one passed, 222
+  deselected, six warnings, 162.40 seconds).
+- Combined exactly those three coverage databases. All 143 source files have
+  zero missing lines and branches: 8332/8332 statements and 2068/2068 branches.
+  Generated protobufs remain included. Evidence is preserved externally as
+  `full-coverage-{python,checkpoint,mirror,combined}-thirteenth.*`; no generated
+  proving material is committed. Owned PostgreSQL stopped; no test EVM remains.
+- Ruff passes and REUSE covers all 729 tracked files. The exact 100% coverage
+  CLI gate passes against the aggregate. Its installed threshold implementation
+  also rejects 99.999999%, preventing rounding from concealing a missing branch.
+- The circuit CI job now measures its existing durable mirror run, builds the
+  SDK/CLI, runs full Python tests with PostgreSQL and both fresh proof profiles,
+  runs checkpoint coverage, and combines the three named databases before the
+  100% gate. Raw data and aggregate JSON are retained even on failure. Workflow
+  YAML parses and all referenced workspace build commands exist; remote execution
+  is still unverified.
+- This completes local measured Python source coverage. Operational scripts,
+  rendered docs/browser behavior and remote CI/review/merge remain required;
+  the full repository goal stays open.
