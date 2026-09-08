@@ -1359,3 +1359,22 @@ still need completion and final merged-main verification.
 - Full repository coverage remains incomplete. Checkpoint 69 is the latest full
   Python baseline; other service/verifier guards, generated modules, other
   workspaces, operational checks and final remote CI/merge remain outstanding.
+
+## Seventy-fifth checkpoint
+
+- Added 13 historical-status tests using real Ed25519 signed synthetic receipts:
+  valid historical verification after key expiry, empty/duplicate/oversized
+  authority inventories, canonical issuer requirements, missing/duplicate
+  credential records, credential scope substitutions, compromise policy,
+  altered manifest and absent registry delegation.
+- This fixture supplies prevalidated enrollment structure without claiming an
+  enrollment signature or proof was reconstructed here. The status verifier's
+  real signature and independent delegation checks execute; complete outer
+  reconstruction remains covered by checkpoint 69's integration evidence.
+- All 13 pass in 2.30 seconds; historical status measures 42/42 statements and
+  12/12 branches (`history-status-complete.log`/`.data`). The canonical-name
+  case uses a bare DNS name accepted by discovery but rejected as an issuer DID.
+  Ruff/format/whitespace and REUSE (715/715 files) pass; no source changed.
+- Full coverage remains incomplete: remaining Python service/verifier/generated
+  paths, other workspaces, operational tests and remote CI/merge verification
+  remain open. Checkpoint 69 is still the latest complete Python measurement.
