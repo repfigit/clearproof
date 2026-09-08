@@ -1298,3 +1298,20 @@ still need completion and final merged-main verification.
   complete Python baseline; route configuration, remaining Python service and
   verifier guards, generated code, other workspaces and final remote CI/merge
   verification remain outstanding.
+
+## Seventy-first checkpoint
+
+- Added 26 route dependency/error-mapping cases: absent/None/unready databases
+  across wallet, enrollment, policy and event services; missing/invalid encryption
+  keys; invalid deployment chain values for the two services that read them;
+  wallet quota/integrity failures; and enrollment revocation eligibility/conflict.
+- These isolate synchronous route dependency configuration and async handler
+  error mapping without database I/O. They are not HTTP transport or durable
+  lifecycle tests; existing real integration evidence remains checkpoint 69.
+- All 26 pass in 5.67 seconds (`pilot-route-configuration.log`/`.data`).
+  The narrow four-module report covers 150/251 statements and is not a full
+  route coverage claim. Ruff/format/whitespace and REUSE (714/714 files) pass.
+  No production source changed.
+- Full objective remains incomplete. Fireblocks/policy error mapping, remaining
+  Python service/verifier and generated-code paths, other workspaces, operational
+  checks and final remote CI/merge verification remain outstanding.
