@@ -2342,3 +2342,18 @@ still need completion and final merged-main verification.
   factories remain unchanged. No proving artifacts or deployments changed.
 - Full Solidity aggregation, remaining verifier/registry defensive branches,
   full Python rerun, operational checks and remote CI/merge remain required.
+
+## One hundred and twenty-ninth checkpoint
+
+- Exercised BLS MSM precompile failure using the actual valid proof and a bounded
+  100000-gas call. It returns the exact G1MSM failure, while the unchanged proof
+  succeeds afterward with the normal allowance. No precompile or key was mocked.
+- All five BLS tests pass normally (1 second), instrumented (6 seconds) and after
+  restoring normal bytecode (2 seconds). BLS verifier coverage reaches 100% in all
+  four metrics (`bls-msm-gas-instrumented.log` and preserved `.json`,
+  `bls-msm-gas-restored-normal.log`). This is focused contract evidence; no gas
+  pricing or production readiness claim follows from coverage instrumentation.
+- TypeScript and whitespace pass; normal generated bindings match committed
+  bytecode. Production source is unchanged. Remaining current-registry/pilot
+  verifier branches, full Python and Solidity aggregation, operational coverage
+  and remote CI/merge keep the full repository goal open.

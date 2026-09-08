@@ -55,6 +55,16 @@ describe("Groth16VerifierBLS (BLS12-381 / EIP-2537) gas benchmark", function () 
     console.log(`\n    BLS12-381 verifyProof gas (estimate): ${gas.toString()}`);
   });
 
+  it("reports MSM gas exhaustion and still verifies the same proof with sufficient gas", async function () {
+    const proof = JSON.parse(fs.readFileSync(`${BLS_ARTIFACTS}/proof_bls.json`, "utf-8"));
+    const signals: string[] = JSON.parse(fs.readFileSync(`${BLS_ARTIFACTS}/public_bls.json`, "utf-8"));
+    const proofBytes = encodeBlsProof(proof);
+    const verifier = await (await hre.ethers.getContractFactory("Groth16VerifierBLS")).deploy();
+    await expect(verifier.verifyProof(proofBytes, signals, { gasLimit: 100000 }))
+      .to.be.revertedWith("G1MSM precompile failed");
+    expect(await verifier.verifyProof(proofBytes, signals)).to.equal(true);
+  });
+
   it("rejects malformed proof lengths and signal counts before accepting the original proof", async function () {
     const proof = JSON.parse(fs.readFileSync(`${BLS_ARTIFACTS}/proof_bls.json`, "utf-8"));
     const pubSignals: string[] = JSON.parse(fs.readFileSync(`${BLS_ARTIFACTS}/public_bls.json`, "utf-8"));
