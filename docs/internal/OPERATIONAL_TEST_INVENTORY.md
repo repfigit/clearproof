@@ -113,7 +113,7 @@ not a substitute for this missing TypeScript measurement.
 | `legacy-verifier.ts` | 100% all metrics | Retain actual deployment/timelock checks |
 | `deploy.ts` | 0% | Instrument deployment and failure paths |
 | `deploy-multichain.ts` | 0% | Instrument deployment and failure paths |
-| `deploy-relay.ts` | 0% | Isolated relay deployment/error paths |
+| `deploy-relay.ts` | 100% all metrics | Retain real local deployment, oracle-role and record checks |
 | `deploy-verifier-bls.ts` | 0% | Isolated benchmark deployment/error paths |
 | `redeploy-verifier.ts` | 0% | Isolated replacement/error paths |
 | `relay-sanctions-root.ts` | 0% | Controlled relayer lifecycle and errors |
@@ -130,3 +130,12 @@ branches, 31 lines, two functions), all fully gated. The 44-test suite now cover
 Seven contract scripts remain unmeasured. Registry tool tests use controlled RPC,
 file and transaction responses; the gas benchmark also passes on a real ephemeral
 Hardhat network. No public transactions or sanctions updates are performed.
+
+Checkpoint 155 adds eleven relay deployment tests and a real ephemeral-Hardhat
+entry-point test. Relay tooling reaches 45/45 statements, 10/10 branches, 45/45
+lines and 2/2 functions. Its tests cover missing deployment/oracle metadata,
+role presence/grant confirmation, metadata preservation, explorer verification
+variants, and deployment/role/receipt/write failures. Six contract scripts now
+have full per-file gates; the remaining six stay in the denominator at zero.
+The complete contract-tooling report remains partial at 163/643 statements,
+69/180 branches, 160/632 lines and 18/49 functions.

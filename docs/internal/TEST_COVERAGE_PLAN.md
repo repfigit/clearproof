@@ -51,7 +51,7 @@ exercise every supported test layer with its required local dependencies.
 
 ## Next uncovered behavior to address
 
-Python: checkpoint 134 combines the full suite and explicit EVM paths:
+Python: checkpoint 155 combines the fresh full suite and explicit EVM paths:
 8332/8332 statements and 2068/2068 branches (100%) across 143 source files.
 Generated protobufs remain included and fully covered. No missed lines or
 branches remain. The one pre-existing excluded line is unchanged. Full CI
@@ -2943,3 +2943,32 @@ still need completion and final merged-main verification.
 - The existing full Python process remains live and progressing; do not replace
   its still-running evidence with an earlier aggregate or restart it. Full
   verification and remote CI/review/merge remain unfinished.
+
+
+### Checkpoint 155 — relay deployment and fresh Python suite result
+
+- Added eleven relay-deployment boundary tests. All 55 contract-script tests
+  pass with six 100% per-file gates (`contract-scripts-gate155.log`, preserved
+  `contract-scripts155-summary.json`). The relay script covers all 45 statements,
+  ten branches, 45 lines and two functions without changing production source.
+- Added an actual Hardhat entry-point test using a temporary script/record tree
+  and ephemeral EVM. It confirms deployed relay bytecode, granted oracle role,
+  preserved oracle address/metadata and a timestamp. The test passes in four
+  seconds (`relay-real155.log`); contract TypeScript noEmit checking passes
+  (`relay-typecheck155.log`). All deployment activity remains local.
+- The fresh full Python suite finishes successfully: 2502 passed, one skipped,
+  42 warnings in 684.33 seconds (`python-suite153.log`/`.json`/`.data`). It covers
+  8332/8332 statements and 2068/2068 branches. The sole skipped checkpoint test
+  then passes on its owned EVM (one passed, two warnings, 2.77 seconds in
+  `python-checkpoint153.log`). The mirror stage then passes all 223 tests with
+  six warnings in 274.43 seconds (`python-mirror153.log`). The runner exits 0,
+  removes its owned PostgreSQL process, and a separate pg_ctl status check
+  confirms no server is running.
+- Combined the fresh suite/checkpoint/mirror data: 8332/8332 statements and
+  2068/2068 branches pass (`python-combined155.*`). Combining that with the current
+  operational, development and fixture evidence again passes 9377/9377 statements
+  and 2306/2306 branches across 153 files (`repository-combined155.*`). Development
+  evidence is still from the earlier unchanged-source real build; this is not a
+  newly executed ceremony or remote CI run.
+- Six contract scripts, the broader final audit and remote CI/review/merge remain
+  unfinished. Full Python application coverage does not close those wider gaps.
