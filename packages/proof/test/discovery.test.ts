@@ -204,3 +204,18 @@ describe('real TLS, DNS pinning and caches', () => {
     expect(requests).toHaveLength(4);
   });
 });
+
+it('preserves validated DID identity across canonical hosts, ports and paths', () => {
+  for (const host of ['a.example', 'a-b.sub.example', 'xn--bcher-kva.example']) {
+    for (const port of [undefined, 1, 65535]) {
+      for (const path of ['', ':vasps:EU', ':a_b:c.d-e', ':8443']) {
+        const authority = port === undefined ? host : `${host}:${port}`;
+        const did = 'did:web:' + authority.replaceAll(':', '%3A') + path;
+        const target = parseTarget(did);
+        expect(target).toEqual({ did, authority, host, port: port ?? 443,
+          url: `https://${authority}/.well-known/clearproof.json` });
+        expect(parseTarget(target.did)).toEqual(target);
+      }
+    }
+  }
+});

@@ -2269,3 +2269,20 @@ still need completion and final merged-main verification.
 - Remaining serialization/profile/cohort outcomes, the full Python rerun,
   Solidity/operational verification and remote CI/merge still prevent completion
   of the full repository goal.
+
+## One hundred and twenty-fifth checkpoint
+
+- Added SDK identity-preservation checks for 36 canonical DID host/port/path
+  combinations, matching the Python cases. The test passes before source cleanup.
+  Validation already preserves every accepted component, so discovery now returns
+  the validated DID directly rather than reconstructing and comparing it.
+- Added trailing LF/CR/CRLF object-key rejection cases. These pass but do not add
+  branch coverage: direct runtime checks confirm the existing non-multiline ASCII
+  regex already rejects them. The explicit newline condition remains unchanged
+  in this commit; no claim is made that these cases exercised that condition.
+- All 215 SDK tests pass. Aggregate coverage is 512/514 statements, 664/667 branches,
+  399/399 lines and 88/88 functions (`sdk-canonical-profile-complete.log`, preserved
+  `-summary.json` and `.lcov`). TypeScript and whitespace pass. Discovery profile
+  now has full coverage; canonical/cohort outcomes remain for invariant review.
+- Full Python rerun, remaining Solidity/workspace and operational evidence, and
+  remote CI/merge are still required. The full repository goal stays open.

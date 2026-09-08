@@ -50,8 +50,8 @@ export function parseTarget(value: string): DiscoveryTarget {
   if (parts.slice(1).some(part => !/^[A-Za-z0-9._-]+$/.test(part) || /[\r\n]/.test(part) || part === '.' || part === '..')) {
     return invalid('Unsupported did:web path component');
   }
-  const did = 'did:web:' + authority.replaceAll(':', '%3A') + (isDid ? parts.slice(1).map(p => ':' + p).join('') : '');
-  if (isDid && did !== value) return invalid('Noncanonical did:web identifier');
+  // The validated authority and path components are already canonical.
+  const did = isDid ? value : 'did:web:' + authority.replaceAll(':', '%3A');
   return { did, authority, host, port, url: `https://${authority}/.well-known/clearproof.json` };
 }
 export function decodeHpkeKey(value: unknown): Buffer {

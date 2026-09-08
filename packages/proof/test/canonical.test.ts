@@ -38,7 +38,7 @@ it('rejects invalid domains and object keys before creating a commitment', () =>
   for (const domain of ['other/transfer/v1', 'clearproof/transfer/v0', 'clearproof/transfer/v1\n']) {
     expect(() => recordDigest(domain, {})).toThrow('Invalid commitment domain');
   }
-  for (const key of ['', '\n', 'x'.repeat(129)]) {
+  for (const key of ['', '\n', 'key\n', 'key\r', 'key\r\n', 'x'.repeat(129)]) {
     expect(() => canonicalBytes({ [key]: 1 })).toThrow('Invalid canonical record key');
   }
 });
