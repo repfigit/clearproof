@@ -4391,6 +4391,8 @@ async def prepare_authorization_http(
     import json
     import time
     from dataclasses import replace
+    from types import SimpleNamespace
+    from unittest.mock import AsyncMock
 
     import jwt
     from cryptography.hazmat.primitives import serialization
@@ -4502,6 +4504,30 @@ async def prepare_authorization_http(
     )
     assert (await invoke()).status_code == 503
     targets[(principal.tenant_id, "local-transfer")] = target
+    # Reject unexpected operator-provided assurance before decrypting or consuming.
+    # This stand-in is deliberately not a validated artifact manifest.
+    targets[(principal.tenant_id, "local-transfer")] = replace(
+        target,
+        verifier=SimpleNamespace(artifacts=SimpleNamespace(manifest=SimpleNamespace(assurance="unsupported"))),
+    )
+    rejected = await invoke()
+    assert rejected.status_code == 503
+    assert rejected.json()["detail"] == "Pilot authorization configuration is unavailable"
+    targets[(principal.tenant_id, "local-transfer")] = target
+    # Inject service boundary failures with otherwise valid authenticated input.
+    # The real service is restored before the subsequent consumption race.
+    for error_type, status, detail in (
+        (authorization.EnrollmentNotFound, 404, "Pilot enrollment is unavailable"),
+        (authorization.RecordIntegrityError, 503, "Stored authorization evidence cannot be read"),
+    ):
+        failure = AsyncMock(side_effect=error_type("PRIVATE-MARKER"))
+        with monkeypatch.context() as fault:
+            fault.setattr(authorization.ProofAuthorizationService, "authorize", failure)
+            rejected = await invoke()
+        failure.assert_awaited_once()
+        assert rejected.status_code == status
+        assert rejected.json()["detail"] == detail
+        assert "PRIVATE-MARKER" not in rejected.text
     app.state.pilot_authorization_targets = None
     assert (await invoke()).status_code == 503
     app.state.pilot_authorization_targets = targets

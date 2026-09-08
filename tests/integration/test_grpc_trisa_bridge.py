@@ -608,3 +608,32 @@ async def test_factory_serves_real_tls_rpcs(
             assert error.value.code() == grpc.StatusCode.UNIMPLEMENTED
     finally:
         await server.stop(0)
+
+
+@pytest.mark.parametrize("first", ["TRISAClient", "TRISAServer", "SecureEnvelopeBuilder", "TRISAError"])
+def test_public_grpc_exports_resolve_once_and_cache_all_components(monkeypatch, first):
+    from src.protocol import bridges
+    from src.protocol.bridges import grpc_trisa_bridge
+
+    names = ("TRISAClient", "TRISAServer", "SecureEnvelopeBuilder", "TRISAError")
+    for name in names:
+        # Register restoration even when the export was absent before this test.
+        monkeypatch.setitem(vars(bridges), name, None)
+        monkeypatch.delitem(vars(bridges), name)
+    assert getattr(bridges, first) is getattr(grpc_trisa_bridge, first)
+    for name in names:
+        assert vars(bridges)[name] is getattr(grpc_trisa_bridge, name)
+
+    def unexpected_resolution(name):
+        raise AssertionError(f"Cached export unexpectedly resolved again: {name}")
+
+    monkeypatch.setattr(bridges, "__getattr__", unexpected_resolution)
+    for name in names:
+        assert getattr(bridges, name) is getattr(grpc_trisa_bridge, name)
+
+
+def test_public_bridge_exports_reject_unknown_names():
+    from src.protocol import bridges
+
+    with pytest.raises(AttributeError, match="has no attribute 'synthetic_missing_bridge'"):
+        getattr(bridges, "synthetic_missing_bridge")

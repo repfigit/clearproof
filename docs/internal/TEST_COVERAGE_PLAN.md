@@ -1587,3 +1587,31 @@ still need completion and final merged-main verification.
   Python baseline and predates this source fix; a new full run is required.
   Remaining Python/generated, workspace and operational coverage and remote
   CI/merge verification remain outstanding.
+
+## Eighty-ninth checkpoint
+
+- Added authenticated authorization HTTP checks for unsupported operator assurance,
+  missing enrollment and stored-evidence integrity failure. The assurance stand-in
+  is explicitly not a validated artifact manifest; service failures are injected
+  only at the route boundary, then restored before real consumption races.
+- Responses retain bounded 503/404 details and redact the injected private marker.
+  Existing database assertions verify rejected requests leave records and
+  consumptions unchanged; subsequent actual proof/authorization/retry/history
+  checks pass. The selected real-artifact PostgreSQL scenario passes in 150.63
+  seconds, with authorization routes at 51/51 statements and 8/8 branches
+  (`authorization-route-complete.log`/`.data`).
+
+## Ninetieth checkpoint
+
+- Added five public bridge export tests: each possible first lazy gRPC export,
+  identity of every resolved class, subsequent cached access and unknown-name
+  rejection. Monkeypatch restoration preserves the original module export state.
+- All 22 gRPC bridge tests pass in 2.44 seconds. The package initializer measures
+  13/13 statements and 4/4 branches; gRPC implementation measures 140/140 and
+  18/18 (`bridge-exports-complete.log`/`.data`). The broader bridge report remains
+  partial because this invocation does not exercise other protocols/generated
+  paths; it is not a new aggregate baseline.
+- Ruff, format and whitespace checks pass. No production source changed in these
+  two checkpoints. Owned PostgreSQL stopped after validation. Full repository
+  coverage remains incomplete; the next full Python run, remaining workspace and
+  operational coverage, and remote CI/merge verification are still required.
