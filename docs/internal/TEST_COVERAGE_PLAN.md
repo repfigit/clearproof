@@ -2557,3 +2557,27 @@ still need completion and final merged-main verification.
   operational CI. Ruff, whitespace and workflow parsing pass.
 - Remaining scripts, broader browser/deployment verification and remote
   CI/review/merge evidence still prevent completion of the full repository goal.
+
+## One hundred and thirty-ninth checkpoint
+
+- Added isolated historical BLS input conversion tests. All recomputed fields
+  match the committed benchmark vector, and the original input is unchanged.
+  A temporary script symlink and dependency layout exercise both the executable
+  entry and a fresh Python subprocess from a foreign working directory. Generated
+  output is confined to the temporary fixture tree.
+- Each BN254 reference check rejects its independently corrupted root,
+  commitment or nullifier before writing output. Adding the BN254 modulus to a
+  right-path element preserves the BN254 self-check but changes BLS arithmetic;
+  the real BLS left/right-root consistency check rejects the conversion.
+- Optimized BN254 hashes match native Python across arities 1, 2, 5 and 16,
+  including modulus-equivalent inputs. No production source or committed vector
+  changed. The historical BLS benchmark still uses its documented non-standard
+  Poseidon variant; test parity does not approve it for production.
+- All 13 tests pass in 1.62 seconds. Converter coverage is 87/87 statements and
+  14/14 branches (`bls-input139.log`/`.json`). Incremental unchanged-source script
+  aggregate is 540/1045 statements and 116/238 branches
+  (`scripts-combined139.json`).
+- Added the converter to operational CI and its completed-script gate. The
+  four-script gate passes locally with 408/408 statements and 92/92 branches.
+  Ruff and whitespace pass. Remaining operational, browser/deployment and remote
+  CI/review/merge requirements keep the original goal active.
