@@ -2581,3 +2581,28 @@ still need completion and final merged-main verification.
   four-script gate passes locally with 408/408 statements and 92/92 branches.
   Ruff and whitespace pass. Remaining operational, browser/deployment and remote
   CI/review/merge requirements keep the original goal active.
+
+## One hundred and fortieth checkpoint
+
+- Added synthetic HTTPX transport tests for all three sanctions source fetchers:
+  XML namespaces, crypto features, ordinary/empty IDs, raw tokens, CSV/EU text,
+  duplicate counts, digest/length/Last-Modified metadata, malformed XML, HTTP
+  errors and read timeouts. Address token tests reject names and malformed hex.
+  No request reaches a live sanctions endpoint.
+- Isolated builder lifecycle tests cover synthetic online and offline modes,
+  duplicate normalization, depth extension, output provenance and real native
+  Poseidon roots. The existing leaf-vector verifier detects missing/altered
+  vectors and does not rewrite files. Its executable verify entry runs against
+  a temporary symlinked checkout. All output paths are temporary; no deployed
+  root, source logic or build-script version is changed.
+- All 33 selected tests pass in 3.62 seconds. Builder coverage is 293/293
+  statements and 70/70 branches without exclusions
+  (`sanctions-sources140.log`/`.json`). This proves source execution, not a claim
+  that `--verify` audits fetched-source provenance or the entire stored tree;
+  its actual leaf-vector scope is recorded in the operational inventory.
+- Incremental unchanged-source aggregate is 731/1045 statements and 165/238
+  branches (`scripts-combined140.json`). Added these tests to operational CI;
+  the completed five-script gate passes locally at 701/701 statements and
+  162/162 branches. Ruff, whitespace, YAML parsing and REUSE pass.
+- Orchestration runners, JavaScript/shell verification, broader browser/deployment
+  checks and remote CI/review/merge remain unfinished. The full goal stays active.

@@ -8,7 +8,7 @@ removed from the Python denominator.
 
 | Script | Current evidence | Remaining verification |
 | --- | --- | --- |
-| `build_sanctions_tree.py` | Synthetic normalization/tree unit tests | Offline source parsing, failures, reproducibility and output lifecycle; remaining measured branches |
+| `build_sanctions_tree.py` | 293/293 statements, 70/70 branches; synthetic source HTTP/parsing failures, isolated outputs, leaf-vector verification and deterministic roots | Retain aggregate; `--verify` checks leaf vectors, not a fetched-source or full stored-tree audit |
 | `generate_poseidon_constants.py` | 77/77 statements, 20/20 branches; actual complete output parity, matrix redraws, non-mutating verification failures | Retain coverage in final aggregate |
 | `hpke_keygen.py` | 15/15 statements, 2/2 branches; actual foreign-directory CLI; X25519 derivation and HPKE round trip | Retain coverage in final aggregate |
 | `l2_cost_model.py` | 229/229 statements, 56/56 branches; FastLZ, fee boundaries, both report formats, measured inputs and actual CLI | Retain coverage in final aggregate |
@@ -35,13 +35,14 @@ uv run python -m pytest \
   tests/unit/test_hpke_keygen_script.py tests/unit/test_poseidon_script.py \
   tests/unit/test_poseidon_generator.py \
   tests/unit/test_bls_input_script.py \
+  tests/unit/test_sanctions_sources.py \
   --cov=scripts --cov-branch --cov-report=json:operational-coverage.json \
   --cov-report=term-missing -q
 ```
 
 Node dependencies must be installed. CI retains this report separately from
-`src` coverage. The completed HPKE, L2 model, parameter generator and BLS input
-converter scripts have a 100% regression
+`src` coverage. The completed HPKE, L2 model, parameter generator, BLS input
+converter and sanctions builder scripts have a 100% regression
 gate; the all-script aggregate stays visibly partial until the remaining behavior
 is exercised. Synthetic sanctions fixtures do not update deployed roots;
 development proving material and ephemeral private keys are never committed.
