@@ -146,6 +146,8 @@ jobs:
 
   operational-tests:
     runs-on: ubuntu-latest
+    env:
+      COVERAGE_FILE: operational-coverage.data
     steps:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v4
@@ -182,7 +184,9 @@ jobs:
         if: always()
         with:
           name: operational-python-coverage
-          path: operational-coverage.json
+          path: |
+            operational-coverage.json
+            operational-coverage.data
           if-no-files-found: error
           retention-days: 7
 
@@ -368,6 +372,40 @@ jobs:
             ${{ runner.temp }}/clearproof-development-circuits/source-inventory.json
             ${{ runner.temp }}/clearproof-development-circuits/legacy/
             ${{ runner.temp }}/clearproof-development-circuits/pilot/
+          retention-days: 7
+
+  python-aggregate-coverage:
+    runs-on: ubuntu-latest
+    needs: [operational-tests, circuits]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v4
+      - run: uv sync --frozen --extra dev
+      - uses: actions/download-artifact@v4
+        with:
+          name: operational-python-coverage
+          path: coverage-input/operational
+      - uses: actions/download-artifact@v4
+        with:
+          name: python-full-coverage
+          path: coverage-input/full
+      - name: Combine application and every operational Python script
+        env:
+          COVERAGE_FILE: ${{ runner.temp }}/repository-python-coverage.data
+        run: |
+          uv run python -m coverage combine --keep \
+            coverage-input/full/python-coverage-combined.data \
+            coverage-input/operational/operational-coverage.data \
+            coverage-input/full/python-coverage-development-combined.data \
+            coverage-input/full/python-coverage-contract-fixture.data
+          uv run python -m coverage json -o "$RUNNER_TEMP/repository-python-coverage.json"
+          uv run python -m coverage report --fail-under=100
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: repository-python-coverage
+          path: ${{ runner.temp }}/repository-python-coverage.*
+          if-no-files-found: error
           retention-days: 7
 
   circuit-lint:

@@ -2871,3 +2871,26 @@ still need completion and final merged-main verification.
   parsing pass. These three shell scripts now have explicit acceptance evidence;
   this is not an instrumented Bash coverage percentage. Final aggregate/source
   refresh and remote CI/review/merge remain incomplete.
+
+
+### Checkpoint 152 — cross-job Python aggregate gate
+
+- Operational CI now uses a named coverage data file and retains raw data beside
+  JSON. Added a dependent aggregate job that downloads both named artifacts and
+  combines exactly application-combined, operational, development-combined and
+  contract-fixture data. The final report includes both `src` and every Python
+  operational script, with a 100% gate and retained combined data/JSON.
+- Executed the current operational CI test command locally: 234 pass in 210.90
+  seconds (`operational152.log`, `.data`, `.json`). Separately refreshed all four
+  real contract-fixture tests: four pass in 14.70 seconds and the script remains
+  48/48 statements and 8/8 branches (`contract-fixture152.*`).
+- Recreated the exact artifact-download layout externally and executed the YAML
+  aggregate command. It passes 9377/9377 statements and 2306/2306 branches across
+  all 153 Python files (`aggregate152.log`, `aggregate152/repository-python-coverage.*`).
+  The existing excluded line remains unchanged. No report includes fewer files
+  to obtain the result.
+- Removing the contract-fixture input produces a failing gate with a missing
+  statement and two partial branches (`aggregate-negative152.log`), confirming
+  the dedicated artifact-backed evidence matters. CI YAML and whitespace checks
+  pass. Application/development inputs still use their earlier unchanged-source
+  runs; full fresh-suite and remote execution/review/merge remain outstanding.

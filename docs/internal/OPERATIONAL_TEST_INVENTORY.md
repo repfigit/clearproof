@@ -56,7 +56,9 @@ have a 100% regression gate. This focused report remains partial because artifac
 workflows run separately. The circuit job combines its
 real development workflow and failure-path tests for a 100% development-runner
 gate; the contract fixture also has an artifact-backed gate. Local aggregation
-covers all ten Python scripts, but cross-job remote aggregation is still pending.
+covers all ten Python scripts. Checkpoint 152 adds a cross-job aggregate gate
+combining application, operational, development and contract-fixture data; its
+exact command passes locally across 153 files. Remote execution remains pending.
 Synthetic sanctions fixtures do not update deployed roots;
 development proving material and ephemeral private keys are never committed.
 
@@ -84,3 +86,13 @@ diagnostic was emitted, then applies its finding filter. Other nonzero statuses
 become unexpected errors. Real Circomspect passes in both modes; seven SARIF 2.1.0
 reports were checked in an isolated external tree. These are behavioral acceptance
 checks, not a claim of measured Bash line or branch coverage.
+
+At checkpoint 152, the current operational CI command passes all 234 selected
+tests in 210.90 seconds. Its standalone report intentionally remains partial
+(artifact-backed branches run in the circuit job). CI retains raw data as well
+as JSON. The final `python-aggregate-coverage` job depends on both contributing
+jobs and combines four explicitly named data files. Local validation with the
+same command covers 9377/9377 statements and 2306/2306 branches across 143
+application files and ten scripts. Omitting contract-fixture evidence fails the
+gate. Application and development inputs are earlier unchanged-source evidence;
+this aggregate is not a fresh full-suite or remote-CI completion claim.
