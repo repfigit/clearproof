@@ -1615,3 +1615,32 @@ still need completion and final merged-main verification.
   two checkpoints. Owned PostgreSQL stopped after validation. Full repository
   coverage remains incomplete; the next full Python run, remaining workspace and
   operational coverage, and remote CI/merge verification are still required.
+
+## Ninety-first checkpoint
+
+- Extended the real authorization/history scenario with invalid authorization
+  clocks, payload type/size boundaries and duplicate/oversized fact inventories.
+  Existing database invariants confirm failures do not retain records or consume
+  authorization before the subsequent real successful operation.
+- History tests reject invalid reviewer clocks and independently remove each
+  captured configuration item. Explicit boundary doubles exercise reconstructed
+  signal mismatch (pairing must not run) and negative pairing (no policy outcome
+  claimed), alongside the existing actual reconstruction and pairing checks.
+- The real-artifact PostgreSQL scenario passes in 126.90 seconds. History measures
+  186/186 statements and 34/34 branches; proof authorization measures 51/51 and
+  12/12 (`history-outcomes-complete.log`/`.data`).
+
+## Ninety-second checkpoint
+
+- Added a legacy signal decoder regression for JSON integer-conversion failure,
+  with a pinned/restored interpreter digit limit and input below the storage byte
+  bound. The public error remains bounded and omits parser implementation details.
+- All 44 decoder/model tests pass in 1.68 seconds. All 32 actual PostgreSQL proof
+  storage/migration tests pass in 10.91 seconds. Their explicitly appended report
+  measures signal storage at 46/46 statements and 18/18 branches
+  (`stored-signals-decoder.data`, `stored-signals-decoder.log`,
+  `stored-signals-migration.log`).
+- Ruff/format/whitespace checks pass; owned PostgreSQL stopped. No production
+  source changed. Full repository coverage remains incomplete. Checkpoint 69
+  remains the latest full Python baseline; a fresh aggregate run, remaining
+  workspace/operational coverage and remote CI/merge verification are required.

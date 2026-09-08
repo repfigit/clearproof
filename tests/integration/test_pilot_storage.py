@@ -2251,8 +2251,7 @@ async def test_durable_current_inspection_real_pairing_and_revocation(db, monkey
                     signals,
                     references,
                     idempotency_key=key,
-                    **args,
-                    **{**payload_args, **changes},
+                    **{**args, **payload_args, **changes},
                 )
 
             for references in ((), await retain(False)):
@@ -2267,6 +2266,15 @@ async def test_durable_current_inspection_real_pairing_and_revocation(db, monkey
                 await authorize(who=ProofAuthorizationService(db, cipher(), restricted, verifier, configuration))
             async with db.connection() as conn:
                 baseline = (await (await conn.execute("SELECT count(*) FROM pilot_records")).fetchone())[0]
+            for invalid_clock in (None, True, str(now), -1, 2**53):
+                with pytest.raises(ValueError, match="Invalid authorization clock"):
+                    await authorize(now=invalid_clock)
+            for invalid_payload in (None, "synthetic", b"", b"x" * 32769):
+                with pytest.raises(ValueError, match="payload bytes"):
+                    await authorize(pii=invalid_payload)
+            for invalid_refs in ((refs[0], refs[0]), tuple(f"{i:064x}" for i in range(65))):
+                with pytest.raises(ValueError, match="64 distinct fact references"):
+                    await authorize(references=invalid_refs)
             for invalid_information in (b"opaque-unvalidated-information", b"{}"):
                 with pytest.raises(ValueError, match="transfer information"):
                     await authorize(pii=invalid_information)
@@ -2649,6 +2657,9 @@ async def test_durable_current_inspection_real_pairing_and_revocation(db, monkey
                 expected_tenant=principal.tenant_id,
                 verified_at=credential.expires_at + 100,
             )
+            for invalid_clock in (None, True, "100", -1, 2**53):
+                with pytest.raises(ValueError, match="Invalid history verification clock"):
+                    await inspect_history_bundle(bundle, verifier, **{**history_args, "verified_at": invalid_clock})
             historical = await inspect_history_bundle(bundle, verifier, **history_args)
             assert historical.integrity_valid and historical.cryptographic_valid
             assert historical.outcome == "indeterminate"
@@ -2931,6 +2942,46 @@ async def test_durable_current_inspection_real_pairing_and_revocation(db, monkey
                 )
             assert unavailable.statement_valid and unavailable.cryptographic_valid is None
             assert unavailable.outcome == "indeterminate" and unavailable.reasons == ("pairing_unavailable",)
+            from unittest.mock import AsyncMock, Mock
+
+            from src.prover import history as history_module
+            from src.prover.pilot_verifier import PairingInspection
+
+            # Isolate outcome mapping at the reconstruction/pairing boundaries;
+            # actual pairing and reconstruction run above with the original bundle.
+            changed_signals = list(signals)
+            changed_signals[0] = str(int(changed_signals[0]) + 1)
+            pairing = AsyncMock()
+            with monkeypatch.context() as patch:
+                reconstruction = Mock(return_value=tuple(changed_signals))
+                patch.setattr(history_module, "reconstruct_history_statement", reconstruction)
+                patch.setattr(PilotPairingVerifier, "inspect", pairing)
+                mismatch = await inspect_history_bundle(
+                    bundle, verifier, statement_trust=historical_trust, **history_args
+                )
+            reconstruction.assert_called_once()
+            pairing.assert_not_awaited()
+            assert mismatch.outcome == "contradicted" and mismatch.reasons == ("statement_signal_mismatch",)
+            assert mismatch.integrity_valid and mismatch.statement_valid is False
+            assert mismatch.cryptographic_valid is None
+            pairing = AsyncMock(
+                return_value=PairingInspection(False, verifier.artifacts.manifest.digest, "pilot-transfer-v2")
+            )
+            with monkeypatch.context() as patch:
+                patch.setattr(PilotPairingVerifier, "inspect", pairing)
+                invalid = await inspect_history_bundle(
+                    bundle, verifier, statement_trust=historical_trust, **history_args
+                )
+            pairing.assert_awaited_once()
+            assert invalid.outcome == "contradicted" and invalid.reasons == ("invalid_pairing",)
+            assert invalid.integrity_valid and invalid.statement_valid
+            assert invalid.cryptographic_valid is False and invalid.policy_reproduced is None
+            for name in bundle["configuration_base64"]:
+                incomplete_configuration = deepcopy(bundle)
+                del incomplete_configuration["configuration_base64"][name]
+                missing = await inspect_history_bundle(incomplete_configuration, verifier, **history_args)
+                assert missing.outcome == "indeterminate" and missing.reasons == ("missing_evidence",)
+                assert not missing.integrity_valid and missing.cryptographic_valid is None
             for mutation_kind in ("receipt", "root", "key", "policy", "envelope", "signal", "extra_record"):
                 changed_bundle = deepcopy(bundle)
                 if mutation_kind == "receipt":

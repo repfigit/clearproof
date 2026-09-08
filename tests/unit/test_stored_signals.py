@@ -81,3 +81,17 @@ def test_bounded_legacy_decoding(encoded):
 def test_legacy_decoder_accepts_no_expressions_or_nested_encodings(encoded):
     with pytest.raises(ValueError, match="public_signals"):
         decode_legacy_signals(encoded)
+
+
+def test_legacy_decoder_minimizes_json_integer_conversion_failure():
+    import sys
+
+    # Pin and restore the interpreter limit so operator startup flags do not
+    # change this regression. The input remains below the storage byte bound.
+    original = sys.get_int_max_str_digits()
+    try:
+        sys.set_int_max_str_digits(640)
+        with pytest.raises(ValueError, match="^public_signals legacy encoding is invalid$"):
+            decode_legacy_signals("9" * 641)
+    finally:
+        sys.set_int_max_str_digits(original)
