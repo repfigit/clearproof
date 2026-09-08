@@ -2113,3 +2113,20 @@ still need completion and final merged-main verification.
 - Ruff/whitespace pass; REUSE accounts for all 722 files. Authored Python gaps,
   remaining Solidity/workspace and operational coverage, and remote CI/merge
   remain incomplete. The full repository goal stays open.
+
+## One hundred and sixteenth checkpoint
+
+- Added empty and oversized root-certificate tests using an actual synthetic
+  certificate chain. Valid timing trust loads before and after each rejection;
+  invalid roots pass schema loading but fail trust construction with the exact
+  certificate-size error. The CLI returns only its minimized indeterminate report.
+- The initial test run exposed an incorrect test assumption about public trust
+  attributes, not a production defect; assertions now use the actual construction
+  interface. The complete history CLI/timestamp suite passes 59 tests, 5 warnings,
+  15.76 seconds (`history-root-size-complete.log`, `.data`, `.json`). The previously
+  uncovered size-rejection statement and branch execute without mocked parsing.
+- Focused history_cli coverage is 99/108 statements and 11/14 branches. Other
+  paths depend on the wider real-artifact history suite; no full aggregate claim
+  is made from this selection. Ruff and whitespace pass; production unchanged.
+- Full Python aggregation, remaining authored and Solidity/workspace coverage,
+  operational verification and remote CI/merge keep the repository goal open.
