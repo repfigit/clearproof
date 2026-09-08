@@ -1730,3 +1730,22 @@ still need completion and final merged-main verification.
   No production contract or deployed root changed. Full repository coverage
   remains incomplete: other contract branches, remaining Python/generated and
   workspace/operational paths and final remote CI/merge verification are pending.
+
+## Ninety-seventh checkpoint
+
+- Added five VASP registry tests covering zero admin/empty inventory, unknown or
+  active reactivation, inactive discovery edits, replacement-wallet reactivation,
+  stable identity/history, active counts, every registrar role gate and paused
+  mutation rejection. Rejected calls preserve endpoints, counts and issuer root
+  version; unpause permits reactivation and successive issuer-root updates.
+- All 14 VASP tests pass normally (two seconds). All 33 registry-file tests pass
+  instrumented (42 seconds). VASPRegistry reaches 100% statements, branches,
+  functions and lines: 21 statements, 36 branch outcomes, 12 functions;
+  SanctionsOracle retains full coverage (`vasp-boundaries-instrumented.log` and
+  preserved `.json`). Other contracts in this focused report remain partial.
+- Forced normal compilation restores all generated bindings. All 33 registry-file
+  tests pass again on normal bytecode (14 seconds,
+  `vasp-boundaries-restored-normal.log`). TypeScript and whitespace checks pass.
+  No production contract source changed. Remaining contract/Python/generated,
+  workspace/operational coverage and final remote CI/merge verification keep the
+  full repository goal open.

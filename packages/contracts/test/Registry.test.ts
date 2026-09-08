@@ -13,6 +13,117 @@ describe("VASPRegistry", function () {
     return { registry, admin, registrar, other };
   }
 
+  const syntheticDid = ethers.id("did:web:synthetic-vasp.example");
+  const endpoint = "https://synthetic-vasp.example/.well-known/clearproof";
+
+  it("rejects a zero administrator and reports empty inventory", async function () {
+    const Factory = await ethers.getContractFactory("VASPRegistry");
+    await expect(Factory.deploy(ethers.ZeroAddress)).to.be.revertedWithCustomError(Factory, "ZeroAdmin");
+    const { registry } = await deployVASPRegistry();
+    expect(await registry.getActiveVaspCount()).to.equal(0);
+    expect(await registry.vaspCount()).to.equal(0);
+    expect(await registry.getDiscoveryEndpoint(syntheticDid)).to.equal("");
+    expect(await registry.isActive(syntheticDid)).to.equal(false);
+  });
+
+  it("rejects missing or active reactivation and inactive discovery changes", async function () {
+    const { registry, admin } = await deployVASPRegistry();
+    await expect(registry.reactivateVASP(syntheticDid, admin.address))
+      .to.be.revertedWithCustomError(registry, "NotRegistered");
+    await expect(registry.updateDiscoveryEndpoint(syntheticDid, endpoint))
+      .to.be.revertedWithCustomError(registry, "NotActive");
+    await registry.registerVASP(syntheticDid, admin.address, "US", endpoint);
+    await expect(registry.reactivateVASP(syntheticDid, admin.address))
+      .to.be.revertedWithCustomError(registry, "AlreadyActive");
+    await registry.revokeVASP(syntheticDid);
+    await expect(registry.updateDiscoveryEndpoint(syntheticDid, "https://changed.example"))
+      .to.be.revertedWithCustomError(registry, "NotActive");
+    expect(await registry.getDiscoveryEndpoint(syntheticDid)).to.equal(endpoint);
+    expect(await registry.getActiveVaspCount()).to.equal(0);
+  });
+
+  it("reactivates with a replacement wallet while preserving identity and registration history", async function () {
+    const { registry, admin, other } = await deployVASPRegistry();
+    const second = ethers.id("did:web:second-synthetic-vasp.example");
+    await registry.registerVASP(syntheticDid, admin.address, "US", endpoint);
+    await registry.registerVASP(second, admin.address, "SG", endpoint);
+    const original = await registry.vasps(syntheticDid);
+    expect(await registry.getActiveVaspCount()).to.equal(2);
+    await registry.revokeVASP(syntheticDid);
+    expect(await registry.getActiveVaspCount()).to.equal(1);
+    await expect(registry.registerVASP(syntheticDid, other.address, "GB", ""))
+      .to.be.revertedWithCustomError(registry, "AlreadyRegistered");
+    await expect(registry.revokeVASP(syntheticDid)).to.be.revertedWithCustomError(registry, "NotActive");
+    expect(await registry.getActiveVaspCount()).to.equal(1);
+    await expect(registry.reactivateVASP(syntheticDid, other.address))
+      .to.emit(registry, "VASPReactivated").withArgs(syntheticDid, other.address);
+    const restored = await registry.vasps(syntheticDid);
+    expect(restored.wallet).to.equal(other.address);
+    expect(restored.registeredAt).to.equal(original.registeredAt);
+    expect(restored.jurisdiction).to.equal(original.jurisdiction);
+    expect(restored.discoveryEndpoint).to.equal(endpoint);
+    expect(restored.active).to.equal(true);
+    expect(await registry.getActiveVaspCount()).to.equal(2);
+    expect(await registry.vaspCount()).to.equal(2);
+    expect(await registry.vaspIds(0)).to.equal(syntheticDid);
+    expect(await registry.vaspIds(1)).to.equal(second);
+    expect(await registry.isActive(second)).to.equal(true);
+  });
+
+  it("gates every registrar operation and keeps administration separate", async function () {
+    const { registry, admin, registrar, other } = await deployVASPRegistry();
+    const role = await registry.REGISTRAR_ROLE();
+    const adminRole = await registry.DEFAULT_ADMIN_ROLE();
+    await registry.registerVASP(syntheticDid, admin.address, "US", endpoint);
+    for (const call of [
+      () => registry.connect(other).registerVASP(ethers.id("new"), other.address, "US", endpoint),
+      () => registry.connect(other).updateDiscoveryEndpoint(syntheticDid, endpoint),
+      () => registry.connect(other).revokeVASP(syntheticDid),
+      () => registry.connect(other).reactivateVASP(syntheticDid, other.address),
+      () => registry.connect(other).updateIssuerRoot(ethers.id("forbidden-root")),
+    ]) {
+      await expect(call()).to.be.revertedWithCustomError(registry, "AccessControlUnauthorizedAccount")
+        .withArgs(other.address, role);
+    }
+    await registry.grantRole(role, registrar.address);
+    for (const call of [() => registry.connect(registrar).pause(), () => registry.connect(registrar).unpause()]) {
+      await expect(call()).to.be.revertedWithCustomError(registry, "AccessControlUnauthorizedAccount")
+        .withArgs(registrar.address, adminRole);
+    }
+    await registry.connect(registrar).updateDiscoveryEndpoint(syntheticDid, "https://authorized.example");
+    expect(await registry.getDiscoveryEndpoint(syntheticDid)).to.equal("https://authorized.example");
+    expect(await registry.getActiveVaspCount()).to.equal(1);
+  });
+
+  it("blocks all mutations while paused and resumes updates after unpause", async function () {
+    const { registry, admin } = await deployVASPRegistry();
+    const inactive = ethers.id("did:web:inactive-synthetic.example");
+    await registry.registerVASP(syntheticDid, admin.address, "US", endpoint);
+    await registry.registerVASP(inactive, admin.address, "US", endpoint);
+    await registry.revokeVASP(inactive);
+    await registry.pause();
+    for (const call of [
+      () => registry.registerVASP(ethers.id("new"), admin.address, "US", endpoint),
+      () => registry.updateDiscoveryEndpoint(syntheticDid, "https://changed.example"),
+      () => registry.revokeVASP(syntheticDid),
+      () => registry.reactivateVASP(inactive, admin.address),
+      () => registry.updateIssuerRoot(ethers.id("paused-root")),
+    ]) await expect(call()).to.be.revertedWithCustomError(registry, "EnforcedPause");
+    expect(await registry.getActiveVaspCount()).to.equal(1);
+    expect(await registry.vaspCount()).to.equal(2);
+    expect(await registry.getDiscoveryEndpoint(syntheticDid)).to.equal(endpoint);
+    expect(await registry.issuerRootVersion()).to.equal(0);
+    await registry.unpause();
+    await registry.reactivateVASP(inactive, admin.address);
+    expect(await registry.getActiveVaspCount()).to.equal(2);
+    const first = ethers.id("first-synthetic-issuer-root");
+    const second = ethers.id("second-synthetic-issuer-root");
+    await registry.updateIssuerRoot(first);
+    await expect(registry.updateIssuerRoot(second)).to.emit(registry, "IssuerRootUpdated").withArgs(first, second, 2);
+    expect(await registry.issuerMerkleRoot()).to.equal(second);
+    expect(await registry.issuerRootVersion()).to.equal(2);
+  });
+
   it("should register a VASP", async function () {
     const { registry, admin } = await deployVASPRegistry();
     const didHash = ethers.keccak256(ethers.toUtf8Bytes("did:web:vasp1.example"));
