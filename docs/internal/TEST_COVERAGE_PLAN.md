@@ -2242,3 +2242,16 @@ still need completion and final merged-main verification.
   an older revision and must not be reused as proof of full coverage of this one.
   A fresh full Python/EVM run remains required, as do other workspace, operational
   and remote CI/merge requirements. The full repository goal remains open.
+
+## One hundred and twenty-third checkpoint
+
+- Added real local TLS discovery acceptance without Content-Encoding, and a
+  delayed DNS result released only after the request deadline. The latter opens
+  no connection; a subsequent independent request succeeds against the same server.
+- Full SDK coverage run passes with 514/517 statements (99.41%), 666/671 branches
+  (99.25%), 400/400 lines and 89/89 functions. Evidence is preserved in
+  `sdk-transport-boundaries.log`, `-summary.json` and `.lcov`. Transport reaches
+  100% statements; its missing-status fallback remains uncovered.
+- TypeScript and whitespace pass. No production source changed. Remaining SDK
+  canonical/profile/cohort and transport outcomes, the pending full Python rerun,
+  Solidity and operational coverage, and remote CI/merge keep the full goal open.

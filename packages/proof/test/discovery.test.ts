@@ -74,7 +74,7 @@ describe('shared Python publishing and Node consuming profile', () => {
 describe('real TLS, DNS pinning and caches', () => {
   let directory: string, server: Server, ca: string, authority: string;
   let requests: { host?: string; sni: string; path?: string }[];
-  let status: number, body: Buffer | undefined, encoding: string, contentType: string, delay: number;
+  let status: number, body: Buffer | undefined, encoding: string | undefined, contentType: string, delay: number;
   let doc: typeof document;
   const resolver = vi.fn(async () => ['127.0.0.1']);
   const options = () => ({ resolver, ca, privateDestinations: { [authority]: ['127.0.0.1/32'] }, cacheTtlMs: 0 });
@@ -88,7 +88,7 @@ describe('real TLS, DNS pinning and caches', () => {
       requests.push({ host: request.headers.host, sni: (request.socket as TLSSocket).servername, path: request.url });
       const send = () => {
         if (response.destroyed) return;
-        response.writeHead(status, { 'Content-Type': contentType, 'Content-Encoding': encoding,
+        response.writeHead(status, { 'Content-Type': contentType, ...(encoding === undefined ? {} : { 'Content-Encoding': encoding }),
           Location: 'https://169.254.169.254/credentials' });
         response.end(body ?? JSON.stringify(doc));
       };
@@ -119,6 +119,22 @@ describe('real TLS, DNS pinning and caches', () => {
     expect(requests).toEqual([{ host: authority, sni: 'beneficiary.example', path: '/.well-known/clearproof.json' }]);
     expect(resolver).toHaveBeenCalledTimes(1);
     expect(await supportsChain(authority, 11155111, options())).toBe(true);
+  });
+  it('accepts an uncompressed response without a Content-Encoding header', async () => {
+    encoding = undefined;
+    expect(await new DiscoveryClient(options()).discover(authority)).toEqual(doc);
+    expect(requests).toHaveLength(1);
+  });
+  it('does not connect when DNS completes after the request deadline', async () => {
+    let release!: (addresses: string[]) => void;
+    const pending = new Promise<string[]>(resolve => { release = resolve; });
+    const client = new DiscoveryClient({ ...options(), timeoutMs: 10, resolver: () => pending });
+    await expect(client.discover(authority)).rejects.toMatchObject({ code: 'unavailable' });
+    release(['127.0.0.1']);
+    await new Promise<void>(resolve => setImmediate(resolve));
+    expect(requests).toHaveLength(0);
+    expect(await new DiscoveryClient(options()).discover(authority)).toEqual(doc);
+    expect(requests).toHaveLength(1);
   });
   it('blocks rebinding after a successful fetch', async () => {
     const client = new DiscoveryClient(options());
