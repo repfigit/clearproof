@@ -1817,3 +1817,23 @@ still need completion and final merged-main verification.
   applicable to these identical sources/tests. The working tree has no code edits.
   Other Python/generated, workspace/operational and remote CI/merge requirements
   remain outstanding; the full goal is not complete.
+
+## One hundred and first checkpoint
+
+- Added three compliance-registry tests covering every missing constructor
+  dependency, role-protected verifier selection/pause/recovery, and authorized
+  credential revocation while proof recording is paused. Rejected calls preserve
+  selector/pause state and do not create a proof record; unpause resumes ordinary
+  VASP checks while retaining the revocation.
+- All eight selected compliance tests pass normally (three seconds). All 36
+  registry-file tests pass instrumented (42 seconds), then again after restoring
+  normal bytecode (12 seconds). Previously uncovered setVerifierSelector, pause
+  and unpause functions/lines are now exercised, along with all three zero-address
+  constructor rejections (`compliance-admin-instrumented.log` and preserved
+  `.json`, `compliance-admin-restored-normal.log`).
+- The focused ComplianceRegistry report remains partial (40.54% lines, 31.11%
+  branches); it does not replace checkpoint 100's complete suite report. Further
+  proof-validation branches remain to test. TypeScript and whitespace pass;
+  generated bindings match committed normal bytecode and no production source
+  changed. Other contract/Python/generated, workspace/operational and remote
+  CI/merge requirements keep the full repository goal open.

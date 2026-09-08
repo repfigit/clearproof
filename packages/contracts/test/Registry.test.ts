@@ -455,6 +455,65 @@ describe("ComplianceRegistry (extended)", function () {
     return { verifier, vaspRegistry, sanctionsOracle, registry, admin, revoker, vaspWallet, other };
   }
 
+  it("rejects each missing constructor dependency", async function () {
+    const { registry, vaspRegistry, sanctionsOracle } = await deployAll();
+    const Factory = await ethers.getContractFactory("ComplianceRegistry");
+    const dependencies = [await registry.verifierRouter(), await vaspRegistry.getAddress(), await sanctionsOracle.getAddress()];
+    for (const [index, error] of ["ZeroVerifierRouter", "ZeroRegistry", "ZeroOracle"].entries()) {
+      const candidate = [...dependencies];
+      candidate[index] = ethers.ZeroAddress;
+      await expect(Factory.deploy(candidate[0], await registry.verifierSelector(), candidate[1], candidate[2], 250, 1000, 10000))
+        .to.be.revertedWithCustomError(Factory, error);
+    }
+  });
+
+  it("restricts verifier selection and pause administration to the administrator", async function () {
+    const { registry, other } = await deployAll();
+    const original = await registry.verifierSelector();
+    const replacement = ethers.id("synthetic-replacement-selector");
+    const role = await registry.DEFAULT_ADMIN_ROLE();
+    for (const call of [
+      () => registry.connect(other).setVerifierSelector(replacement),
+      () => registry.connect(other).pause(),
+      () => registry.connect(other).unpause(),
+    ]) {
+      await expect(call()).to.be.revertedWithCustomError(registry, "AccessControlUnauthorizedAccount")
+        .withArgs(other.address, role);
+    }
+    expect(await registry.verifierSelector()).to.equal(original);
+    expect(await registry.paused()).to.equal(false);
+    await registry.setVerifierSelector(replacement);
+    expect(await registry.verifierSelector()).to.equal(replacement);
+    await registry.setVerifierSelector(original);
+    expect(await registry.verifierSelector()).to.equal(original);
+  });
+
+  it("pauses proof recording while retaining authorized credential revocation", async function () {
+    const { registry, revoker, other } = await deployAll();
+    const role = await registry.REVOKER_ROLE();
+    await registry.grantRole(role, revoker.address);
+    const commitment = ethers.id("synthetic-paused-credential");
+    const transfer = ethers.id("synthetic-paused-transfer");
+    const did = ethers.id("synthetic-unregistered-vasp");
+    const proof = getDummyProof();
+    expect(await registry.isRevoked(commitment)).to.equal(false);
+    await registry.pause();
+    await expect(registry.verifyAndRecord(transfer, proof.pA, proof.pB, proof.pC, proof.pubSignals, did))
+      .to.be.revertedWithCustomError(registry, "EnforcedPause");
+    expect(await registry.isVerified(transfer)).to.equal(false);
+    expect((await registry.proofs(transfer)).timestamp).to.equal(0);
+    await expect(registry.connect(other).revokeCredential(commitment))
+      .to.be.revertedWithCustomError(registry, "AccessControlUnauthorizedAccount").withArgs(other.address, role);
+    await expect(registry.connect(revoker).revokeCredential(commitment))
+      .to.emit(registry, "CredentialRevoked").withArgs(commitment, revoker.address);
+    expect(await registry.isRevoked(commitment)).to.equal(true);
+    await registry.unpause();
+    expect(await registry.paused()).to.equal(false);
+    await expect(registry.verifyAndRecord(transfer, proof.pA, proof.pB, proof.pC, proof.pubSignals, did))
+      .to.be.revertedWithCustomError(registry, "VASPNotActive");
+    expect(await registry.isRevoked(commitment)).to.equal(true);
+  });
+
   it("should revoke a credential", async function () {
     const { registry, admin } = await deployAll();
     const commitment = ethers.keccak256(ethers.toUtf8Bytes("credential-001"));
