@@ -216,3 +216,42 @@ async def test_mirror_reconciliation_binds_exact_receipt_nullifier_and_state(cas
         observed = await reconciler.reconcile("01" * 32, now=100)
         assert observed["status"] == "confirmed-success"
         assert observed["registry_effect"] == "receipt-mirrored-at-inclusion"
+
+
+def test_reconciliation_requires_nonzero_deployed_registry(case):
+    reconciler, eth, *_ = case
+    policy = reconciler.policy.model_copy(update={"registry": "0x" + "00" * 20})
+    with pytest.raises(ValueError, match="A deployed registry is required"):
+        PublicationReconciler(SimpleNamespace(eth=eth), reconciler.journal, policy)
+    assert eth.contract.call_count == 1  # Only the valid fixture constructed a contract.
+
+
+@pytest.mark.parametrize("now", [True, "100", -1, 2**53])
+async def test_invalid_clock_rejected_before_journal_or_rpc_reads(case, now):
+    reconciler, eth, *_ = case
+    with pytest.raises(PublicationObservationError, match="Invalid observation clock"):
+        await reconciler.reconcile("01" * 32, now=now)
+    reconciler.journal.inspect.assert_not_awaited()
+    eth.get_block.assert_not_awaited()
+
+
+async def test_missing_retained_publication_rejects_before_chain_read(case):
+    reconciler, eth, *_ = case
+    reconciler.journal.inspect.return_value = None
+    with pytest.raises(PublicationObservationError, match="Retained publication is unavailable"):
+        await reconciler.reconcile("01" * 32, now=100)
+    eth.get_block.assert_not_awaited()
+
+
+@pytest.mark.parametrize("changed", ["inclusion", "receipt"])
+async def test_changed_inclusion_or_receipt_cannot_report_stable_success(case, changed):
+    reconciler, eth, _, receipt, block, anchor, _ = case
+    if changed == "inclusion":
+        eth.get_block.side_effect = [anchor, block, {**block, "hash": b"x" * 32}]
+        expected = "Inclusion changed"
+    else:
+        eth.get_transaction_receipt.side_effect = [receipt, {**receipt, "status": 0}]
+        expected = "Receipt changed"
+    with pytest.raises(PublicationObservationError, match=expected):
+        await reconciler.reconcile("01" * 32, now=100)
+    assert eth.get_block.await_count == 3  # Failure precedes the final anchor check.

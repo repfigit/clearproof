@@ -1125,3 +1125,33 @@ still need completion and final merged-main verification.
 - Registrar work is committed as 7d018a1. No production source changed.
   Full repository coverage and final remote CI/merge verification remain
   incomplete; timestamp attachment rejection/conflict cases remain next work.
+
+## Sixty-first checkpoint
+
+- Extended the real authorization scenario with five invalid timestamp-response
+  type/size checks and four missing or mismatched receipt/proof checks. The
+  latter fault-inject storage reads; record counts remain unchanged. Successful
+  attachment still uses real decision signatures, TSA verification and encrypted
+  PostgreSQL storage.
+- A second authentic TSA response with a distinct serial is rejected as a
+  retained-evidence conflict. The original response survives database reconnect
+  and the remainder of the real proof, export/history and CLI scenario passes.
+- Combined with the 21 parsing cases, all 22 selected tests pass in 136.16
+  seconds. Timestamp evidence measures 47/47 statements and 14/14 branches
+  (`timestamp-evidence-complete.log`/`.data`). Ruff/format/whitespace pass;
+  owned PostgreSQL stopped. No production source changed.
+
+## Sixty-second checkpoint
+
+- Added eight publication reconciliation cases for a zero registry, invalid
+  clocks, missing retained intent, changed inclusion header and changed receipt
+  during repeated observation. Early failures avoid unnecessary reads; changed
+  observations cannot return a stable success report.
+- All 33 unit tests pass in 3.71 seconds, measuring 120/120 statements and 48/48
+  branches (`publication-reconciliation-complete.log`/`.data`). These use
+  controlled RPC responses, not a live chain. Existing EVM evidence is recorded
+  in checkpoint 54; it was not rerun for these unit-only additions.
+- Ruff/format/whitespace pass. No production source changed. Full repository
+  coverage remains incomplete; checkpoint 54 remains the latest full Python
+  report. Other Python paths, SDK, Solidity, MDX/browser, scripts and final
+  remote CI/merge verification remain outstanding.

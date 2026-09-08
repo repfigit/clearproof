@@ -2312,6 +2312,32 @@ async def test_durable_current_inspection_real_pairing_and_revocation(db, monkey
             )
             with pytest.raises(ValueError):
                 await timestamp_service.attach(receipt["receipt_id"], b"invalid", now=timestamp_at)
+            for invalid_response in (None, "synthetic", bytearray(b"x"), b"", b"x" * 32769):
+                with pytest.raises(ValueError, match="Invalid timestamp response size"):
+                    await timestamp_service.attach(receipt["receipt_id"], invalid_response, now=timestamp_at)
+            original_timestamp_get = PilotTransaction.get
+            for missing_or_changed in ("receipt", "tenant", "digest", "proof"):
+
+                async def incomplete_timestamp_input(tx, kind, record_id):
+                    value = await original_timestamp_get(tx, kind, record_id)
+                    if kind == "receipt":
+                        if missing_or_changed == "receipt":
+                            return None
+                        if missing_or_changed == "tenant":
+                            return {**value, "tenant_id": "synthetic-other-tenant"}
+                        if missing_or_changed == "digest":
+                            return {**value, "expires_at": value["expires_at"] + 1}
+                    if kind == "proof" and missing_or_changed == "proof":
+                        return None
+                    return value
+
+                with monkeypatch.context() as patch:
+                    patch.setattr(PilotTransaction, "get", incomplete_timestamp_input)
+                    expected = "proof" if missing_or_changed == "proof" else "receipt"
+                    with pytest.raises(ValueError, match=f"Authorization {expected} unavailable"):
+                        await timestamp_service.attach(receipt["receipt_id"], timestamp_response, now=timestamp_at)
+            async with db.connection() as conn:
+                assert (await (await conn.execute("SELECT count(*) FROM pilot_records")).fetchone())[0] == baseline + 9
             denied_timestamp = TimestampEvidenceService(
                 db,
                 cipher(),
@@ -2326,6 +2352,13 @@ async def test_durable_current_inspection_real_pairing_and_revocation(db, monkey
                 await timestamp_service.attach(receipt["receipt_id"], timestamp_response, now=timestamp_at)
                 == timestamp_id
             )
+            # A second authentic response has a different TSA serial, even within
+            # the same second. It must not replace the first retained timestamp.
+            alternate_timestamp = issue_timestamp(timestamp_request(signed_decision))
+            assert alternate_timestamp != timestamp_response
+            conflict_at = int(time.time()) + 2
+            with pytest.raises(RecordConflict, match="A different timestamp is already retained"):
+                await timestamp_service.attach(receipt["receipt_id"], alternate_timestamp, now=conflict_at)
             await db.close()
             await db.connect()
             timestamp_record = await retained.get("authorization-evidence", timestamp_id)
