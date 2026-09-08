@@ -1465,3 +1465,21 @@ still need completion and final merged-main verification.
   remains incomplete; checkpoint 69 is the latest complete Python baseline.
   Other Python/generated paths, workspace coverage, operational tests and
   final remote CI/merge verification remain outstanding.
+
+## Eighty-first checkpoint
+
+- Added four database lifecycle tests for missing/empty connection configuration
+  without pool allocation and disconnected connection/transaction entry before
+  and after idempotent close.
+- New tests plus real PostgreSQL proof-storage tests pass 36 cases in 8.77
+  seconds. Four proof-persistence tests additionally pass in 6.10 seconds,
+  covering successful shared transactions, atomic audit failure rollback,
+  concurrent retries and duplicate-nullifier rollback.
+- Coverage from the four persistence tests is explicitly appended to the
+  lifecycle/storage data file. Database measures 79/79 statements and 16/16
+  branches (`database-complete.data`, `database-complete.log`,
+  `database-transactions.log`).
+- Ruff/format/whitespace and REUSE (717/717 files) pass; owned PostgreSQL
+  stopped. No production source changed. Full coverage remains incomplete:
+  remaining Python/generated paths, other workspace and operational coverage,
+  and final remote CI/merge verification are still outstanding.
