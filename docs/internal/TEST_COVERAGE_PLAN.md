@@ -3020,3 +3020,31 @@ still need completion and final merged-main verification.
   correction next. Overall tooling measurement remains 370/645 statements,
   105/182 branches, 365/634 lines and 30/49 functions. Replacement, root update,
   root relay, final layer refresh and remote verification remain unfinished.
+
+
+### Checkpoint 158 — resumable verifier replacement and real timelock regression
+
+- Added a real-router entrypoint regression. Running it against the previous
+  script fails at immediate activation with `Unauthorized`
+  (`replacement-before158.log`). The corrected script records a pending verifier,
+  reads the actual timelock and chain timestamp, and permits a later invocation
+  to activate/select that same verifier. An early repeat sends no transaction.
+- The workflow validates chain, router/registry binding, pending scope and
+  selector consistency. It rejects conflicting pending registrations and disabled
+  replacements. Current on-chain state allows retries after registration failure,
+  activation, selector change or final record-publication failure. Atomic file
+  publication protects the preceding JSON record; rollback history now retains
+  the original verifier and selector. Removed obsolete unused threshold parsing
+  and jurisdiction encoding, since this script preserves the existing registry.
+- Added 22 boundary/retry tests. All 118 contract-script tests pass with ten
+  per-file gates (`contract-scripts-gate158.log`, `contract-scripts158-summary.json`).
+  Replacement covers 71/71 statements, 48/48 branches, 67/67 lines and 3/3 functions.
+- The final real entrypoint test passes in four seconds: pending state, unchanged
+  early-retry nonce, expiry-bound activation, original stateful addresses and
+  correct rollback metadata (`replacement-real158.log`). The test advances only
+  its own ephemeral EVM clock; the actual script contains no clock manipulation.
+  Contract TypeScript checking and whitespace checks pass. Resume behavior is
+  documented in packages/contracts/README.md. No live deployment was changed.
+- Two sanctions scripts, final layer refresh and remote CI/review/merge remain.
+  Overall contract-tooling measurement is still partial at 441/647 statements,
+  153/220 branches, 432/633 lines and 33/49 functions.

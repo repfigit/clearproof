@@ -115,7 +115,7 @@ not a substitute for this missing TypeScript measurement.
 | `deploy-multichain.ts` | 100% all metrics | Retain balance, threshold, relay-role and explorer tests plus local acceptance |
 | `deploy-relay.ts` | 100% all metrics | Retain real local deployment, oracle-role and record checks |
 | `deploy-verifier-bls.ts` | 100% all metrics | Retain real local vector acceptance/rejection and accurate network reporting |
-| `redeploy-verifier.ts` | 0% | Repair immediate activation against router timelock; verify preserved historical address and replacement failures |
+| `redeploy-verifier.ts` | 100% all metrics | Retain real timelock/resume/rollback-record checks and atomic-publication failure tests |
 | `relay-sanctions-root.ts` | 0% | Controlled relayer lifecycle and errors |
 | `update-sanctions-root.ts` | 0% | Synthetic update/consistency failures |
 | `check-transfer.ts` | 100% all metrics | Retain controlled read responses/errors |
@@ -160,3 +160,14 @@ All 96 contract-script tests pass, and real valid/tampered vector verification
 passes locally. The twelve-file aggregate is still partial: 370/645 statements,
 105/182 branches, 365/634 lines and 30/49 functions. Verifier replacement and
 both sanctions maintenance scripts remain unmeasured.
+
+Checkpoint 158 replaces immediate verifier activation with a persistent, resumable
+workflow. The actual old script fails the real-router regression at activation;
+the current script preserves the original selection until the timelock expires,
+resumes without another deployment/registration, and records the old verifier
+correctly. Atomic record publication preserves pending state across failed final
+writes. Twenty-two unit tests cover scope/conflict checks, retries and failure
+paths; the real entrypoint passes on an ephemeral EVM. Replacement coverage is
+71 statements, 48 branches, 67 lines and three functions, all 100%. The 118-test
+contract-script suite covers 441/647 statements, 153/220 branches, 432/633 lines
+and 33/49 functions. Only the two sanctions maintenance scripts remain unmeasured.

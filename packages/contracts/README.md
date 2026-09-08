@@ -35,3 +35,29 @@ npx hardhat test
 ## License
 
 Apache-2.0
+
+
+## Replacing a verifier through the existing router
+
+From this workspace, run:
+
+```bash
+npx hardhat run scripts/redeploy-verifier.ts --network sepolia
+```
+
+The script checks the deployment record against the connected chain and registry.
+It deploys a verifier and saves `pendingVerifierReplacement` before registering
+it with the existing router. If the router timelock has not expired, the command
+reports the activation timestamp and exits successfully with the replacement
+pending. Run the same command again after that chain timestamp. An early retry
+reuses the pending verifier without resetting the timelock.
+
+After activation, the script updates the existing registry's selector and records
+the old verifier and selector under `previous`. Stateful contract addresses and
+registry domain binding remain unchanged. This does not establish compatibility
+of old proofs with a new verification key.
+
+Keep the pending record when retrying after a failed transaction or final record
+write. The script checks current router/registry state to resume completed steps;
+it refuses conflicting pending registrations, altered scope and a disabled
+replacement verifier. A pending record is not an active deployment.
