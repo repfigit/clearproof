@@ -2682,3 +2682,27 @@ still need completion and final merged-main verification.
   REUSE, whitespace and YAML parsing pass. Development/mirror orchestration,
   JavaScript/shell coverage, browser/deployment audit and remote CI/review/merge
   still keep the full repository goal open.
+
+## One hundred and forty-fourth checkpoint
+
+- Added mirror orchestration tests for explicit database/bundle requirements,
+  doctor rejection, existing output refusal, optional private output permissions,
+  child-only loopback RPC/artifact/policy settings and removal of inherited
+  capture destinations. Parent environment remains unchanged.
+- Covered readiness retry/deadline/wrong-chain/node-exit paths, child launch and
+  execution timeouts, failed exit status, report-finalization errors and already
+  exited process groups. Cleanup kills/reaps both owned processes and closes
+  its private EVM log; unsuccessful tests do not publish a success manifest.
+- All 31 orchestration/report checks pass in 0.62 seconds. Mirror script coverage
+  is 105/105 statements and 38/38 branches without exclusions
+  (`mirror-runner144.log`/`.json`). Production source is unchanged, so checkpoint
+  143's actual 223-test PostgreSQL/EVM acceptance remains current evidence.
+- Added this test module and the mirror script to the operational CI gate.
+  Eight gated scripts pass locally with 893/893 statements and 214/214 branches;
+  the artifact-dependent contract fixture retains its separate gate. Incremental
+  all-script coverage is 971/1045 statements and 225/238 branches
+  (`scripts-combined144.json`).
+- Ruff, whitespace and YAML parsing pass. The development setup runner is the
+  only Python script with remaining missed lines/branches. JavaScript/shell
+  measurement, browser/deployment audit and remote CI/review/merge also remain;
+  the full repository goal is not complete.
