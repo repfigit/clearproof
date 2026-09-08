@@ -2532,3 +2532,28 @@ still need completion and final merged-main verification.
   exposes remaining gaps. Ruff, whitespace and workflow parsing pass. Remaining
   operational behavior and browser/deployment/remote review requirements keep
   the full repository goal active.
+
+## One hundred and thirty-eighth checkpoint
+
+- Added actual full Poseidon parameter regeneration into a new temporary nested
+  directory, comparing every generated constant and matrix to the committed
+  reference. No committed constants or proving material are changed.
+- Controlled only the rare matrix draws while retaining actual Grain-generated
+  round constants. Duplicate draws and zero denominators each force a complete
+  redraw; the accepted matrix satisfies every reciprocal identity and has a
+  nonzero determinant. The round constants still match the reference.
+- Verification tests cover success, one altered constant, missing files and
+  malformed JSON. Verification does not rewrite its reference, including byte
+  contents and modification time. Cached generation is used only for these
+  filesystem/reporting tests; actual generation and live hash parity run too.
+- The generator/reference-vector selection passes 18 tests in 37.23 seconds;
+  the two additional malformed/missing-file cases pass in 0.06 seconds. Generator
+  coverage is 77/77 statements and 20/20 branches without exclusions
+  (`poseidon-generator138.log`/`.json`).
+- Incremental unchanged-source aggregate: 453/1045 operational statements and
+  102/238 branches (`scripts-combined138.json`). Extended the completed-script
+  gate to include the generator; all 321 statements and 78 branches across its
+  three named scripts pass the exact 100% gate locally. Added the test file to
+  operational CI. Ruff, whitespace and workflow parsing pass.
+- Remaining scripts, broader browser/deployment verification and remote
+  CI/review/merge evidence still prevent completion of the full repository goal.
