@@ -1415,3 +1415,19 @@ still need completion and final merged-main verification.
   coverage remains incomplete; checkpoint 69 is the latest complete Python
   baseline. Other Python/generated paths, workspaces, operational coverage and
   final remote CI/merge verification remain outstanding.
+
+## Seventy-eighth checkpoint
+
+- Added 21 malformed jurisdiction/threshold signal tests using the shared legacy
+  proof fixture: incomplete inventories, invalid numeric values, out-of-range
+  or non-uppercase ASCII encodings, malformed submitted thresholds, and
+  case-insensitive comparison against the expected jurisdiction.
+- Combined with existing threshold and jurisdiction integration cases, all 55
+  selected tests pass in 5.97 seconds. Tier mapping measures 45/45 statements
+  and 18/18 branches (`tier-mapping-boundaries.log`/`.data`).
+- These verify configured software behavior, not the legal adequacy of the
+  configured thresholds. No threshold values or production code changed.
+  Ruff/format/whitespace and REUSE (716/716 files) pass.
+- Full repository coverage remains incomplete. Checkpoint 69 is the latest full
+  Python report; remaining Python/generated branches, other workspaces,
+  operational checks and final remote CI/merge verification remain open.
