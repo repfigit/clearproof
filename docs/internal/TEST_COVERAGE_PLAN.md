@@ -3048,3 +3048,27 @@ still need completion and final merged-main verification.
 - Two sanctions scripts, final layer refresh and remote CI/review/merge remain.
   Overall contract-tooling measurement is still partial at 441/647 statements,
   153/220 branches, 432/633 lines and 33/49 functions.
+
+
+### Checkpoint 159 — sanctions update verification and chain-clock checks
+
+- Added 26 tests for operator confirmation/decline, automated mode, network
+  selection, metadata rendering, file-age warning, missing inputs, root equality,
+  cooldown, exact contract leaf-count floor, uint32 validation and transaction/
+  receipt/RPC failures. Conversion tests use the actual ethers version resolved
+  from the contract workspace rather than the root workspace's different version.
+- Three regression failures (`update-before159.log`) demonstrate host-clock
+  cooldown rejection and success exits after post-update root or count mismatch.
+  The script now reads chain time and the contract cooldown, checks both final
+  values, and reports success only after verification. An already-matching root
+  with a differing count also fails instead of claiming synchronization.
+- All 144 contract-script tests pass with eleven full per-file gates. Update
+  tooling covers 101 statements, 43 branches, 98 lines and five functions
+  (`contract-scripts-gate159.log`, `contract-scripts159-summary.json`).
+- A real copied entrypoint updates a newly deployed local oracle after the test
+  advances its ephemeral EVM past cooldown. Root, count and update timestamp
+  checks pass in four seconds (`update-real159.log`). No public root or fetched
+  sanctions dataset is modified. Contract TypeScript and whitespace checks pass.
+- Only root relay remains unmeasured in this tooling inventory. Aggregate V8
+  coverage is 542/656 statements, 196/231 branches, 530/640 lines and 38/49
+  functions. Final layer refresh and remote CI/review/merge remain outstanding.

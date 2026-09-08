@@ -117,7 +117,7 @@ not a substitute for this missing TypeScript measurement.
 | `deploy-verifier-bls.ts` | 100% all metrics | Retain real local vector acceptance/rejection and accurate network reporting |
 | `redeploy-verifier.ts` | 100% all metrics | Retain real timelock/resume/rollback-record checks and atomic-publication failure tests |
 | `relay-sanctions-root.ts` | 0% | Controlled relayer lifecycle and errors |
-| `update-sanctions-root.ts` | 0% | Synthetic update/consistency failures |
+| `update-sanctions-root.ts` | 100% all metrics | Retain real synthetic oracle update and clock/state-mismatch checks |
 | `check-transfer.ts` | 100% all metrics | Retain controlled read responses/errors |
 | `verify-onchain.ts` | 100% all metrics | Retain proof formatting/submission and failure tests |
 | `gas-bench.ts` | 100% all metrics | Retain actual ephemeral-Hardhat benchmark and failure tests |
@@ -171,3 +171,14 @@ paths; the real entrypoint passes on an ephemeral EVM. Replacement coverage is
 71 statements, 48 branches, 67 lines and three functions, all 100%. The 118-test
 contract-script suite covers 441/647 statements, 153/220 branches, 432/633 lines
 and 33/49 functions. Only the two sanctions maintenance scripts remain unmeasured.
+
+Checkpoint 159 adds 26 sanctions-update tests and a real isolated oracle update
+with synthetic data. Three initial regression failures exposed reliance on the
+host clock and success exits after post-update root/count mismatches. The tool
+now uses the latest chain timestamp and contract cooldown, validates uint32 leaf
+counts, rejects inconsistent matching-root metadata, and confirms both updated
+values before reporting success. It covers 101 statements, 43 branches, 98 lines
+and five functions, all fully gated. All 144 contract-script tests pass. Overall
+measurement remains partial at 542/656 statements, 196/231 branches, 530/640
+lines and 38/49 functions; root relay is the remaining unmeasured script. All
+updates in tests use controlled responses or a single newly owned local oracle.

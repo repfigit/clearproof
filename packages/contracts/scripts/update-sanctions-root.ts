@@ -47,7 +47,7 @@ async function main() {
   if (!fs.existsSync(deploymentPath)) {
     console.error(`No deployment found at ${deploymentPath}`);
     console.error(`Available: ${fs.readdirSync(path.dirname(deploymentPath)).join(", ")}`);
-    process.exit(1);
+    return process.exit(1);
   }
 
   const deployment = JSON.parse(fs.readFileSync(deploymentPath, "utf-8"));
@@ -61,12 +61,15 @@ async function main() {
   if (!fs.existsSync(TREE_PATH)) {
     console.error(`\nSanctions tree not found at ${TREE_PATH}`);
     console.error("Run: python scripts/build_sanctions_tree.py");
-    process.exit(1);
+    return process.exit(1);
   }
 
   const tree = JSON.parse(fs.readFileSync(TREE_PATH, "utf-8"));
   const newRoot = tree.root;
   const newLeafCount = tree.leaf_count;
+  if (!Number.isSafeInteger(newLeafCount) || newLeafCount < 0 || newLeafCount > 0xffffffff) {
+    throw new Error("Tree leaf_count must be a uint32 integer");
+  }
   const treeTimestamp = tree.source_metadata?.fetch_timestamp || "unknown";
 
   // Convert root string to bytes32 (Poseidon root is a decimal string)
@@ -99,9 +102,10 @@ async function main() {
   const currentLeafCount = await oracle.leafCount();
   const lastUpdated = await oracle.lastUpdated();
   const isStale = await oracle.isStale();
-  const cooldownEnd =
-    Number(lastUpdated) + 3600; // UPDATE_COOLDOWN = 1 hour
-  const now = Math.floor(Date.now() / 1000);
+  const cooldownEnd = lastUpdated + await oracle.UPDATE_COOLDOWN();
+  const block = await ethers.provider.getBlock("latest");
+  if (!block) throw new Error("Latest block unavailable for cooldown check");
+  const chainNow = BigInt(block.timestamp);
 
   console.log(`\n--- Current on-chain state ---`);
   console.log(`Current root:     ${currentRoot}`);
@@ -111,16 +115,17 @@ async function main() {
 
   // 4. Checks
   if (newRootBytes32 === currentRoot) {
+    if (currentLeafCount !== BigInt(newLeafCount)) throw new Error("Root matches but leaf count differs");
     console.log("\n✓ On-chain root already matches tree. Nothing to do.");
-    process.exit(0);
+    return process.exit(0);
   }
 
-  if (now < cooldownEnd) {
-    const wait = cooldownEnd - now;
+  if (chainNow < cooldownEnd) {
+    const wait = cooldownEnd - chainNow;
     console.error(
-      `\n✗ Cooldown active — ${wait}s remaining (until ${new Date(cooldownEnd * 1000).toISOString()})`
+      `\n✗ Cooldown active — ${wait}s remaining (until ${new Date(Number(cooldownEnd) * 1000).toISOString()})`
     );
-    process.exit(1);
+    return process.exit(1);
   }
 
   // Leaf count floor check (contract enforces >= 50% of current)
@@ -130,7 +135,7 @@ async function main() {
       `\n✗ Leaf count ${newLeafCount} is below floor (${minLeafCount}, 50% of ${currentLeafCount}).`
     );
     console.error("This could indicate a fetch failure. Investigate before forcing.");
-    process.exit(1);
+    return process.exit(1);
   }
 
   // 5. Show diff
@@ -151,7 +156,7 @@ async function main() {
   const ok = await confirm("\nSubmit updateRoot() transaction? [y/N] ");
   if (!ok) {
     console.log("Aborted.");
-    process.exit(0);
+    return process.exit(0);
   }
 
   // 7. Submit
@@ -161,7 +166,6 @@ async function main() {
 
   const receipt = await tx.wait();
   console.log(`Confirmed in block ${receipt!.blockNumber} (gas: ${receipt!.gasUsed})`);
-  console.log("\n✓ Sanctions oracle root updated successfully.");
 
   // Verify
   const updatedRoot = await oracle.currentRoot();
@@ -169,7 +173,11 @@ async function main() {
   console.log(`\nVerification:`);
   console.log(`  Root:       ${updatedRoot}`);
   console.log(`  Leaf count: ${updatedLeafCount}`);
-  console.log(`  Match:      ${updatedRoot === newRootBytes32 ? "✓" : "✗"}`);
+  if (updatedRoot !== newRootBytes32 || updatedLeafCount !== BigInt(newLeafCount)) {
+    throw new Error("Post-update state does not match the requested root and leaf count");
+  }
+  console.log("\n✓ Sanctions oracle root updated successfully.");
+  console.log("  Match:      ✓");
 }
 
 main().catch((error) => {
