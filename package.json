@@ -9,6 +9,8 @@
     "apps/*"
   ],
   "scripts": {
+    "test:scripts": "vitest run --config vitest.scripts.config.mjs",
+    "test:scripts:coverage": "vitest run --config vitest.scripts.config.mjs --coverage",
     "build": "turbo run build",
     "test:ts": "turbo run test",
     "compile": "bash scripts/compile_circuits.sh",
@@ -33,6 +35,8 @@
     }
   },
   "devDependencies": {
-    "turbo": "^2.0"
+    "@vitest/coverage-v8": "^4.1.11",
+    "turbo": "^2.0",
+    "vitest": "^4.1.11"
   }
 }

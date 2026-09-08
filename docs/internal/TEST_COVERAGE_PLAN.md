@@ -2631,6 +2631,29 @@ still need completion and final merged-main verification.
   coverage, browser/deployment audit and remote CI/review/merge keep the full
   repository goal open.
 
+## One hundred and forty-sixth checkpoint
+
+- Established a root Vitest/V8 script suite with explicit dependencies and all
+  four JS/MJS files in the inventory, including unimported generators. Python
+  subprocess acceptance remains separate from JavaScript instrumentation.
+- New EIP-2537 probe tests exposed false positives: generic JSON-RPC errors and
+  unexpected returns could produce an all-chains-success summary; failed fetches
+  leaked abort timers. Five of the initial six checks failed on the original.
+- Changed the probe to one valid infinity pair (384 zero bytes) and require the
+  exact 32-byte true result. HTTP/JSON-RPC errors are unconfirmed and use fallback
+  endpoints; unexpected data counts as unconfirmed. Timers clear in finally,
+  including aborted requests. The vector follows EIP-2537 and also returned the
+  expected result through the actual local Hardhat precompile. No live endpoint
+  was queried and no current public-network availability claim is made.
+- All eight tests pass. Probe coverage is 32/32 statements, 16/16 branches,
+  28/28 lines and 1/1 functions (`scripts-js146.log`, preserved summary JSON).
+  Running only the happy-path test fails all four per-file gates as expected
+  (`scripts-negative146.log`). The all-script aggregate remains 32/117 statements,
+  16/40 branches, 28/105 lines and 1/11 functions until the other scripts execute.
+- Added CI execution/report retention and documented commands. Workflow YAML and
+  whitespace pass. Remaining JS generators/helper, shell checks, full aggregate
+  refresh, browser/deployment audit and remote CI/review/merge keep the goal open.
+
 ## One hundred and forty-second checkpoint
 
 - Added controlled subprocess/HTTP boundary tests for checkpoint orchestration:

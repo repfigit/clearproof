@@ -22,7 +22,7 @@ removed from the Python denominator.
 | `poseidon_hash.js` | 12 actual subprocess tests: large decimal input parity, both JSON forms, malformed shapes/values/arity | JavaScript instrumentation and remaining source audit |
 | `generate_verifier.mjs` | Used for fresh development proofs and real contract tests | Input-validation/output/error inventory and instrumentation |
 | `generate_verifier_bls.mjs` | Outside current focused execution | Input-validation/output/error inventory and instrumentation |
-| `check_eip2537.mjs` | Outside current focused execution | Controlled local precompile probe, unavailable RPC and error reporting |
+| `check_eip2537.mjs` | 32/32 statements, 16/16 branches, 28/28 lines, 1/1 functions; response/fallback/timeout tests and actual local EVM pairing vector | Retain coverage; tests do not establish current public-chain availability |
 | `compile_circuits.sh` | Development artifacts exercised through isolated runner | Shell entry/options/failure audit in an isolated checkout |
 | `circuit_lint.sh` | Existing CI static-analysis job | Local command/error-path evidence and remote run verification |
 | `regen_protobufs.sh` | Existing CI freshness job | Verify exact output/freshness/failure behavior and remote run |
@@ -56,3 +56,17 @@ gate; the contract fixture also has an artifact-backed gate. Local aggregation
 covers all ten Python scripts, but cross-job remote aggregation is still pending.
 Synthetic sanctions fixtures do not update deployed roots;
 development proving material and ephemeral private keys are never committed.
+
+JavaScript measurement is separate:
+
+```bash
+npm run test:scripts:coverage
+```
+
+The root Vitest configuration inventories all four JavaScript scripts, including
+unimported files. At checkpoint 146 the probe is fully gated; the aggregate is
+32/117 statements, 16/40 branches, 28/105 lines and 1/11 functions. The existing
+Poseidon CLI subprocess tests do not contribute to this V8 report yet. CI retains
+the JSON/LCOV reports. Probe tests replace fetch locally; the successful pairing
+vector was also checked on a local Hardhat EVM. Its 384-byte infinity-pair input
+and exact boolean output follow [EIP-2537](https://eips.ethereum.org/EIPS/eip-2537#abi-for-pairing).
