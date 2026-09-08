@@ -73,3 +73,19 @@ async def test_health_is_unauthenticated_liveness_without_database_readiness(cas
         response = await client.get("/health")
     assert response.status_code == 200
     assert response.json() == {"status": "ok", "version": VERSION, "timestamp": 1234}
+
+
+async def test_public_app_factory_builds_independent_working_apps(monkeypatch):
+    from src.api import create_app
+
+    monkeypatch.setenv("PII_MASTER_KEY", "ab" * 32)
+    first, second = create_app(), create_app()
+    assert first is not second
+    first.state.synthetic_factory_marker = True
+    assert not hasattr(second.state, "synthetic_factory_marker")
+    for app in (first, second):
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            response = await client.get("/health")
+        assert response.status_code == 200
+        assert response.json()["status"] == "ok"
+        assert response.json()["version"] == app.version

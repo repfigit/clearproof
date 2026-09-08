@@ -1644,3 +1644,24 @@ still need completion and final merged-main verification.
   source changed. Full repository coverage remains incomplete. Checkpoint 69
   remains the latest full Python baseline; a fresh aggregate run, remaining
   workspace/operational coverage and remote CI/merge verification are required.
+
+## Ninety-third checkpoint
+
+- Added TAIP bridge serialization tests for epoch/day UTC boundaries, exact
+  credential claims, issuer/holder context, JSON roundtrip and unchanged input.
+  Tests explicitly preserve the unsigned presentation placeholder and public
+  signals; omission of separate SAR metadata is not confidentiality of the
+  legacy circuit's public SAR signal. This does not establish standards
+  conformance, completed signing or production readiness.
+- Added an actual public package factory check producing two independent apps
+  with working health routes. Six combined tests pass in 5.62 seconds. TAIP
+  serialization measures 11/11 statements, the API initializer 4/4, and existing
+  health tests retain 47/47 statements and 4/4 branches
+  (`protocol-factory-complete.log`/`.data`). The broader API report is partial.
+- Added installed/missing distribution metadata tests in isolated execution
+  namespaces, preserving the live module's version. Two tests pass in 0.10
+  seconds; version measures 5/5 statements (`version-complete.log`/`.data`).
+- Ruff/format/whitespace and REUSE (720/720 files) pass. No production source
+  changed. Full repository coverage remains incomplete; checkpoint 69 remains
+  the latest full Python baseline. A fresh aggregate run, remaining protocol,
+  generated, workspace and operational coverage and remote CI/merge are pending.
