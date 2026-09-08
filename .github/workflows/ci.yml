@@ -278,7 +278,7 @@ jobs:
       - name: Isolated development setup and real proofs for both profiles
         env:
           COVERAGE_FILE: ${{ runner.temp }}/python-coverage-development.data
-        run: uv run python -m coverage run --branch --source=scripts scripts/test_development_circuits.py "$RUNNER_TEMP/clearproof-development-circuits"
+        run: uv run python -m coverage run --parallel-mode --branch --source=scripts scripts/test_development_circuits.py "$RUNNER_TEMP/clearproof-development-circuits"
       - name: Development setup failure paths and coverage gate
         run: |
           COVERAGE_FILE="$RUNNER_TEMP/python-coverage-development.data" uv run python -m coverage combine --keep "$RUNNER_TEMP"
@@ -358,6 +358,7 @@ jobs:
             packages/contracts/coverage.json
           retention-days: 7
       - name: Upload synthetic pilot reports and encrypted export
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: SYNTHETIC-development-pilot-reports
@@ -366,6 +367,7 @@ jobs:
             ${{ runner.temp }}/clearproof-pilot-run/reports/
           if-no-files-found: error
       - name: Upload unapproved development artifacts
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: UNAPPROVED-development-circuit-artifacts
