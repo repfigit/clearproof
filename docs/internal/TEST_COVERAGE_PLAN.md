@@ -51,10 +51,11 @@ exercise every supported test layer with its required local dependencies.
 
 ## Next uncovered behavior to address
 
-Python: publication-journal validation, proof route error paths, policy activation,
-observation and authorization-evidence service branches. The current combined report
-has 267 missed lines and 150 missed branches after the fifty-fourth checkpoint.
-Subprocess coverage is captured in this combined report.
+Python: authentication middleware, route configuration errors, publication recovery,
+proof preparation/projection, and historical status checks. The current combined
+report has 189 missed lines and 72 missed branches after the sixty-ninth checkpoint.
+Generated protobufs account for 82 missed lines and five missed branches and remain
+in the denominator. Subprocess coverage is captured in this combined report.
 
 CLI: source line/branch/function/statement coverage is now 100%, enforced by CI.
 Keep the actual artifact/service acceptance tests alongside mocked boundary tests.
@@ -1251,3 +1252,31 @@ still need completion and final merged-main verification.
   A refreshed complete Python run is needed to consolidate checkpoints 55–68
   before selecting the remaining gaps. Full repository coverage, other source
   workspaces, operational coverage and remote CI/merge verification remain open.
+
+
+## Sixty-ninth checkpoint
+
+- Refreshed the complete Python run with real PostgreSQL, both development
+  artifact profiles and CLI acceptance enabled: 2093 passed, one checkpoint
+  skip, 40 warnings, 446.58 seconds (`full-coverage-python-tenth.log`).
+- The separately owned local-EVM checkpoint passes (one test, 2.09 seconds).
+  The authorization mirror EVM scenario passes (one selected test, 213
+  deselected, 147.37 seconds). Both runners exited successfully after cleanup.
+- Explicitly combined only these three coverage data files. All Python measures
+  8154/8343 lines (97.73%) and 2004/2076 branches (96.53%), leaving 189 lines
+  and 72 branches. Generated protobuf modules remain included: 70/152 lines
+  and 3/8 branches. Authored source separately measures 8084/8191 lines
+  (98.69%) and 2001/2068 branches (96.76%). One preexisting default coverage
+  exclusion remains; it has not been expanded to hide uncovered code.
+- This replaces checkpoint 54's baseline and records 78 additional covered lines
+  and 78 additional covered branches. Reports are
+  `full-coverage-{python,checkpoint,mirror,combined}-tenth.data`, with full
+  and combined JSON inventories. Ruff across tests and REUSE (712/712 files)
+  pass. Owned PostgreSQL stopped; no generated artifacts or source files changed.
+- Largest authored line gaps now include API authentication/configuration paths.
+  Four-branch gaps remain in publication recovery, proof preparation, pilot
+  projection and historical verification/status. The unused proof-route hash
+  helper still has two unexecuted lines.
+- Full objective remains incomplete: remaining Python gaps, SDK residual
+  statements/branches, Solidity coverage, MDX/browser, operational scripts and
+  final remote CI/merge verification must still be resolved.
