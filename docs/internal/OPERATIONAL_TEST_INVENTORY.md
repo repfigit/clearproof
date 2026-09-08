@@ -19,7 +19,7 @@ removed from the Python denominator.
 | `test_development_circuits.py` | 104/104 statements, 16/16 branches; current real compile/prove/contract workflow plus preconditions, both phase-one paths and process lifecycle | Retain real and unit coverage in final aggregate |
 | `test_pilot_local.py` | 43/43 statements, 8/8 branches; setup/failure/cleanup tests plus 223 passing tests through real owned-cluster/EVM acceptance | Retain aggregate and real execution evidence |
 | `test_pilot_mirror.py` | 105/105 statements, 38/38 branches; doctor/report checks, process startup/readiness/cleanup failures and actual 223-test acceptance run | Retain aggregate and real execution evidence |
-| `poseidon_hash.js` | 12 actual subprocess tests: large decimal input parity, both JSON forms, malformed shapes/values/arity | JavaScript instrumentation and remaining source audit |
+| `poseidon_hash.js` | 19/19 statements, 4/4 branches, 19/19 lines, 2/2 functions; streamed-input V8 tests plus 12 actual subprocess tests | Retain coverage and subprocess parity in final verification |
 | `generate_verifier.mjs` | 28/28 statements, 10/10 branches, 26/26 lines, 4/4 functions; exact committed output, real CLI and rejected inputs | Retain coverage and contract parity evidence |
 | `generate_verifier_bls.mjs` | 41/41 statements, 12/12 branches, 35/35 lines, 4/4 functions; exact benchmark output, real CLI and rejected inputs | Retain coverage; benchmark is not a production migration |
 | `check_eip2537.mjs` | 32/32 statements, 16/16 branches, 28/28 lines, 1/1 functions; response/fallback/timeout tests and actual local EVM pairing vector | Retain coverage; tests do not establish current public-chain availability |
@@ -64,9 +64,10 @@ npm run test:scripts:coverage
 ```
 
 The root Vitest configuration inventories all four JavaScript scripts, including
-unimported files. At checkpoint 147 the probe and both generators are fully gated;
-the aggregate is 101/120 statements, 38/42 branches, 89/108 lines and 9/11 functions. The existing
-Poseidon CLI subprocess tests do not contribute to this V8 report yet. CI retains
+unimported files. At checkpoint 148 all four scripts pass per-file 100% gates;
+the aggregate is 120/120 statements, 42/42 branches, 108/108 lines and 11/11 functions.
+Poseidon tests exercise actual circomlib hashing with controlled process streams;
+12 separate real subprocess tests verify the CLI against native Python hashes. CI retains
 the JSON/LCOV reports. Probe tests replace fetch locally; the successful pairing
 vector was also checked on a local Hardhat EVM. Its 384-byte infinity-pair input
 and exact boolean output follow [EIP-2537](https://eips.ethereum.org/EIPS/eip-2537#abi-for-pairing).

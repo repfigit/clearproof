@@ -8,8 +8,8 @@ export default defineConfig({
       reportsDirectory: 'coverage/scripts',
       reporter: ['text', 'json', 'json-summary', 'lcov'],
       thresholds: {
-        'scripts/check_eip2537.mjs': { statements: 100, branches: 100, functions: 100, lines: 100 },
-        'scripts/generate_verifier*.mjs': { statements: 100, branches: 100, functions: 100, lines: 100 },
+        perFile: true,
+        statements: 100, branches: 100, functions: 100, lines: 100,
       },
     },
   },

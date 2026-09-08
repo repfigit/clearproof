@@ -2787,3 +2787,22 @@ still need completion and final merged-main verification.
 - Cross-job/full-suite refresh, JavaScript/shell script measurement, broader
   browser/deployment checks and remote CI/review/merge still keep the complete
   repository goal open.
+
+
+### Checkpoint 148 — complete operational JavaScript coverage
+
+- Added 11 V8-measured Poseidon helper tests using the actual circomlib implementation:
+  chunked array/wrapped input, a known hash vector, malformed JSON/shapes, invalid
+  integers and unsupported arities. Standard streams and exit are controlled;
+  invalid-input handling explicitly returns after requesting process exit.
+- All 35 operational JavaScript tests pass. All four files now pass per-file 100%
+  gates: 120 statements, 42 branches, 108 lines and 11 functions in total
+  (`poseidon-gate148.log`, preserved `poseidon-summary148.json`).
+- A success-only negative run exits 1 and fails the helper's branch, statement,
+  line and function thresholds (`poseidon-negative148.log`); error paths are
+  required by the gate.
+- All 12 real helper subprocess tests pass in 10.97 seconds, including large
+  decimal input parity with Python from a foreign directory and actual exit
+  behavior (`poseidon-real148.log`).
+- Shell acceptance coverage, cross-job aggregation, fresh full-suite verification
+  and remote CI/review/merge remain outstanding. No full-goal completion claim.
