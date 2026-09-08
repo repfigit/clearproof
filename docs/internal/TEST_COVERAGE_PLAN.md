@@ -2286,3 +2286,23 @@ still need completion and final merged-main verification.
   now has full coverage; canonical/cohort outcomes remain for invariant review.
 - Full Python rerun, remaining Solidity/workspace and operational evidence, and
   remote CI/merge are still required. The full repository goal stays open.
+
+## One hundred and twenty-sixth checkpoint
+
+- Consolidated identical lexical comparators for canonical keys and cohort IDs
+  into one internal helper. Direct ordering tests cover all pairings of punctuation,
+  numeric-looking identifiers and mixed case, including equality and duplicate
+  inputs. Removed the redundant object-key newline predicate after the existing
+  ASCII regex and explicit CR/LF rejection tests established its invariant.
+- Detailed Istanbul data exposed additional reachable gaps: oversized/hidden-key
+  objects and cache eviction. Added exact 64-key acceptance, 65-key/symbol/nonenumerable
+  rejection and an actual local TLS test with 129 identities. Refreshing entry zero
+  retains it while entry one is evicted; retained entries require no request and
+  the evicted entry requires a new request.
+- Full SDK gated run: 218 passed, 6.28 seconds, 515/515 statements, 661/661 branches,
+  400/400 lines and 89/89 functions. Preserved `sdk-complete-checkpoint126-gated.log`,
+  `-summary.json` and `.json`. TypeScript and whitespace pass. The coverage command
+  now enforces 100% statements/branches as well as existing line/function gates.
+- This completes measured SDK source coverage, not repository completion. Full
+  Python rerun, Solidity gaps, operational/browser coverage and remote CI/merge
+  remain required. The full goal stays open.

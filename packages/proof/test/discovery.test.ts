@@ -190,6 +190,25 @@ describe('real TLS, DNS pinning and caches', () => {
     status = 200; await a.discover(authority);
     expect(requests).toHaveLength(4);
   });
+  it('evicts the least recently used identity after 128 cached documents', async () => {
+    const client = new DiscoveryClient({ ...options(), cacheTtlMs: 300000 });
+    const ids = Array.from({ length: 129 }, (_, i) => `${parseTarget(authority).did}:vasp${i}`);
+    for (const did of ids.slice(0, 128)) {
+      doc.vasp.did = did;
+      expect((await client.discover(did)).vasp.did).toBe(did);
+    }
+    expect(requests).toHaveLength(128);
+    expect((await client.discover(ids[0])).vasp.did).toBe(ids[0]);
+    expect(requests).toHaveLength(128);
+    doc.vasp.did = ids[128];
+    await client.discover(ids[128]);
+    expect(requests).toHaveLength(129);
+    for (const did of [ids[0], ids[2]]) expect((await client.discover(did)).vasp.did).toBe(did);
+    expect(requests).toHaveLength(129);
+    doc.vasp.did = ids[1];
+    expect((await client.discover(ids[1])).vasp.did).toBe(ids[1]);
+    expect(requests).toHaveLength(130);
+  });
   it('fences in-flight writes on rotation; slow replies cannot extend TTL', async () => {
     let release!: (addresses: string[]) => void;
     const deferred = new Promise<string[]>(resolve => { release = resolve; });
