@@ -2994,3 +2994,29 @@ still need completion and final merged-main verification.
   unchanged-source evidence (`deployment-real153.log`); no public deployment or
   oracle update was performed. Whitespace checks pass. Final Solidity/browser
   refresh, remaining script coverage and remote CI/review/merge remain open.
+
+
+### Checkpoint 157 — BLS deployment measurement and accurate network reporting
+
+- Added twelve BLS entry-point tests for field encoding, valid/tampered proof
+  results, missing vector files, zero balance, optional deployment receipt,
+  deployment/estimate/write failures and actual chain-ID reporting. Explicit
+  returns after exit requests make termination boundaries clear.
+- Fixed unconditional Sepolia-task completion output: successful runs only
+  claim Sepolia confirmation for chain 11155111. An environment network label
+  alone does not satisfy that check; local runs retain an explicit separate-task
+  message. Development-only benchmark notes remain in the deployment record.
+- All 96 contract-script tests pass, with nine per-file 100% gates. BLS coverage
+  is 57 statements, 15 branches, 57 lines and four functions, all covered
+  (`contract-scripts-gate157.log`, `contract-scripts157-summary.json`).
+- A real copied entrypoint deploys on the ephemeral Hardhat network, accepts the
+  committed BLS proof, rejects its tampered variant and records positive gas
+  measurements without claiming Sepolia confirmation. It passes in three seconds
+  (`bls-real157.log`); contract TypeScript checking and whitespace checks pass.
+  No public deployment or generated proving material is published.
+- Inspection of verifier replacement found immediate activation after router
+  registration despite the router's nonzero timelock, plus a previous-address
+  field populated with the new address. These need targeted regression tests and
+  correction next. Overall tooling measurement remains 370/645 statements,
+  105/182 branches, 365/634 lines and 30/49 functions. Replacement, root update,
+  root relay, final layer refresh and remote verification remain unfinished.

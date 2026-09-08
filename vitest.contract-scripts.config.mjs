@@ -8,6 +8,7 @@ export default defineConfig({
       reportsDirectory: 'coverage/contract-scripts',
       reporter: ['text', 'json', 'json-summary', 'lcov'],
       thresholds: {
+        'packages/contracts/scripts/deploy-verifier-bls.ts': { statements: 100, branches: 100, functions: 100, lines: 100 },
         'packages/contracts/scripts/deploy.ts': { statements: 100, branches: 100, functions: 100, lines: 100 },
         'packages/contracts/scripts/deploy-multichain.ts': { statements: 100, branches: 100, functions: 100, lines: 100 },
         'packages/contracts/scripts/deploy-relay.ts': { statements: 100, branches: 100, functions: 100, lines: 100 },

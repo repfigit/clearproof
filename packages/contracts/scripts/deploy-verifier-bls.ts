@@ -50,7 +50,7 @@ async function main() {
   for (const f of ["proof_bls.json", "public_bls.json"]) {
     if (!fs.existsSync(path.join(vectorsDir, f))) {
       console.error(`Missing ${f} in ${vectorsDir} — see MANIFEST.json`);
-      process.exit(1);
+      return process.exit(1);
     }
   }
   const proof = JSON.parse(fs.readFileSync(path.join(vectorsDir, "proof_bls.json"), "utf-8"));
@@ -68,7 +68,7 @@ async function main() {
   console.log(`Balance:    ${ethers.formatEther(balance)} ETH\n`);
   if (balance === 0n) {
     console.error("Deployer has no balance. Fund the wallet first.");
-    process.exit(1);
+    return process.exit(1);
   }
 
   // 1. Deploy
@@ -87,7 +87,7 @@ async function main() {
   console.log(`  valid proof accepted: ${valid}  (estimateGas: ${validGas})`);
   if (!valid) {
     console.error("FAIL: valid proof rejected on-chain");
-    process.exit(1);
+    return process.exit(1);
   }
 
   // 3. Tampered proof must reject
@@ -96,7 +96,7 @@ async function main() {
   console.log(`  tampered proof rejected: ${!invalid}`);
   if (invalid) {
     console.error("FAIL: tampered proof accepted on-chain");
-    process.exit(1);
+    return process.exit(1);
   }
 
   // 4. Record alongside other deployment artifacts
@@ -120,10 +120,14 @@ async function main() {
     ),
   );
   console.log(`\nDeployment recorded: ${recordPath}`);
-  console.log("ADR 0002 Open Task 1 (Sepolia confirmation) is now complete.");
+  if (network.chainId === 11155111n) {
+    console.log("ADR 0002 Open Task 1 (Sepolia confirmation) is now complete.");
+  } else {
+    console.log("Benchmark verified on this network; Sepolia confirmation remains a separate task.");
+  }
 }
 
 main().catch((err) => {
   console.error(err);
-  process.exit(1);
+  return process.exit(1);
 });

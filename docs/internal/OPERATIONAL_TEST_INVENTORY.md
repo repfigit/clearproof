@@ -114,8 +114,8 @@ not a substitute for this missing TypeScript measurement.
 | `deploy.ts` | 100% all metrics | Retain threshold/record/failure tests and actual local deployment acceptance |
 | `deploy-multichain.ts` | 100% all metrics | Retain balance, threshold, relay-role and explorer tests plus local acceptance |
 | `deploy-relay.ts` | 100% all metrics | Retain real local deployment, oracle-role and record checks |
-| `deploy-verifier-bls.ts` | 0% | Isolated benchmark deployment/error paths |
-| `redeploy-verifier.ts` | 0% | Isolated replacement/error paths |
+| `deploy-verifier-bls.ts` | 100% all metrics | Retain real local vector acceptance/rejection and accurate network reporting |
+| `redeploy-verifier.ts` | 0% | Repair immediate activation against router timelock; verify preserved historical address and replacement failures |
 | `relay-sanctions-root.ts` | 0% | Controlled relayer lifecycle and errors |
 | `update-sanctions-root.ts` | 0% | Synthetic update/consistency failures |
 | `check-transfer.ts` | 100% all metrics | Retain controlled read responses/errors |
@@ -151,3 +151,12 @@ all metrics and gain per-file gates. Overall: 313/643 statements, 90/180 branche
 308/632 lines and 26/49 functions across all twelve files. Four scripts remain
 unmeasured. Existing actual local deployment acceptance remains complementary
 evidence; these new tests control network and file operations.
+
+Checkpoint 157 adds twelve BLS deployment tests and a real ephemeral-Hardhat
+entry-point test. The script reaches 57/57 statements, 15/15 branches, 57/57
+lines and 4/4 functions. Successful non-Sepolia runs no longer claim completion
+of the Sepolia confirmation task: the report uses the actual connected chain ID.
+All 96 contract-script tests pass, and real valid/tampered vector verification
+passes locally. The twelve-file aggregate is still partial: 370/645 statements,
+105/182 branches, 365/634 lines and 30/49 functions. Verifier replacement and
+both sanctions maintenance scripts remain unmeasured.
