@@ -1080,3 +1080,19 @@ still need completion and final merged-main verification.
 - Full repository coverage remains incomplete; checkpoint 54 is the last full
   Python measurement. Other Python paths, SDK, Solidity, MDX/browser, scripts
   and final remote CI/merge verification remain outstanding.
+
+## Fifty-eighth checkpoint
+
+- Added ten observation-model cases for sorted/unique fact references, pairing
+  versus policy presence, policy/transfer/clock binding and unsupported versions.
+  Added seven service validation cases inside the real authorization/observation
+  scenario for invalid clocks and malformed fact inventories.
+- The integration checks unchanged retained-record counts after validation errors,
+  then successfully reuses the same idempotency key. Existing real proof,
+  PostgreSQL, HTTP/CLI, non-consumption, concurrency and rollback behavior passes.
+- All 14 selected tests pass in 142.81 seconds. Proof observation measures 96/96
+  statements and 18/18 branches (`proof-observation-complete.log`/`.data`). Ruff
+  and whitespace pass; owned PostgreSQL stopped. No production source changed.
+- Full repository coverage remains incomplete. Checkpoint 54 is the latest full
+  Python measurement; other Python paths, SDK, Solidity, MDX/browser, operational
+  scripts and final remote CI/merge verification remain outstanding.

@@ -3582,6 +3582,15 @@ async def check_durable_observations(
             },
         )
 
+    for clock in (True, "100", -1, 2**53):
+        with pytest.raises(ValueError, match="Invalid observation clock"):
+            await observe(now=clock)
+    for references in ([], ("aa" * 32,) * 2, tuple(f"{index:064x}" for index in range(65))):
+        with pytest.raises(ValueError, match="at most 64 distinct fact references"):
+            await observe(refs=references)
+    async with db.connection() as conn:
+        assert (await (await conn.execute("SELECT count(*) FROM pilot_records")).fetchone())[0] == baseline
+    # Reuse the same idempotency key: rejected validation wrote no retry entry.
     first, repeated = await asyncio.gather(observe(), observe())
     assert first == repeated
     assert first["mode"] == "observation" and first["authorization_consumed"] is False
