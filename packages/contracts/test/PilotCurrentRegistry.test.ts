@@ -209,6 +209,51 @@ const g2 = (p: string[][]): [G1, G1] => [[p[0][1], p[0][0]], [p[1][1], p[1][0]]]
     expect(await registry.queryFilter(registry.filters.AuthorizationMirrored())).to.have.length(1);
   });
 
+  it("rejects source heads issued after evaluation while retaining the original valid statement", async function () {
+    const { registry, tenant, publisher, statement, id, pins, bundle, a, b, c, signals } = await loadFixture(fixture);
+    const issuedAt = await time.latest();
+    expect(issuedAt).to.be.greaterThan(Number(statement.evaluatedAt));
+    const events = await registry.queryFilter(registry.filters.StatementPublished());
+    for (let kind = 0; kind < 6; kind++) {
+      const scope = ethers.id(`synthetic-later-source-${kind}`);
+      await registry.connect(publisher).publishHead(
+        tenant, kind, scope, pins[kind].digest, bundle.heads[kind].value,
+        0, issuedAt, statement.validUntil, true,
+      );
+      const candidate = { ...statement, pins: statement.pins.map((pin, i) => i === kind ? { ...pin, scope } : pin) };
+      const candidateId = await registry.statementId(tenant, candidate);
+      await expect(registry.connect(publisher).publishStatement(tenant, candidate))
+        .to.be.revertedWithCustomError(registry, "InvalidState");
+      expect((await registry.statementPublication(candidateId)).exists).to.equal(false);
+    }
+    expect(await registry.queryFilter(registry.filters.StatementPublished())).to.have.length(events.length);
+    expect(await registry.inspect(tenant, id, a, b, c, signals)).to.equal(true);
+    expect(await registry.mirroredReceipts(tenant, signals[3])).to.equal(ethers.ZeroHash);
+  });
+
+  it("expires a pinned head at its own deadline even while the statement and proof remain live", async function () {
+    const { registry, tenant, publisher, consumer, statement, pins, bundle, a, b, c, signals, receiptId } = await loadFixture(fixture);
+    const scope = ethers.id("synthetic-short-lived-head");
+    const deadline = (await time.latest()) + 10;
+    expect(BigInt(statement.validUntil.toString())).to.be.greaterThan(BigInt(deadline));
+    await registry.connect(publisher).publishHead(
+      tenant, 0, scope, pins[0].digest, bundle.heads[0].value,
+      0, statement.evaluatedAt, deadline, true,
+    );
+    const candidate = { ...statement, pins: statement.pins.map((pin, i) => i === 0 ? { ...pin, scope } : pin) };
+    const id = await registry.statementId(tenant, candidate);
+    await registry.connect(publisher).publishStatement(tenant, candidate);
+    expect(await registry.inspect(tenant, id, a, b, c, signals)).to.equal(true);
+    await time.increaseTo(deadline);
+    await expect(registry.inspect(tenant, id, a, b, c, signals))
+      .to.be.revertedWithCustomError(registry, "InvalidState");
+    await expect(registry.connect(consumer).mirror(tenant, id, receiptId, a, b, c, signals))
+      .to.be.revertedWithCustomError(registry, "InvalidState");
+    expect((await registry.statementPublication(id)).exists).to.equal(true);
+    expect(await registry.mirroredReceipts(tenant, signals[3])).to.equal(ethers.ZeroHash);
+    expect(await registry.queryFilter(registry.filters.AuthorizationMirrored())).to.have.length(0);
+  });
+
   it("inspects read-only, then mirrors only the approved receipt with its designated caller", async function () {
     const { registry, tenant, consumer, outsider, id, a, b, c, signals, approve, receiptId } = await loadFixture(fixture);
     expect(await registry.inspect(tenant, id, a, b, c, signals)).to.equal(true);

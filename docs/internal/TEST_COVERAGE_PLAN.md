@@ -1999,3 +1999,22 @@ still need completion and final merged-main verification.
   No production source changed. Remaining currentness/defensive branches, other
   contract/Python/generated, workspace/operational and remote CI/merge requirements
   keep the full repository goal open.
+
+## One hundred and tenth checkpoint
+
+- Added rejection of source heads published after proof evaluation for each of
+  the six evaluation-time evidence kinds. Failed statements retain no approval
+  or publication event; the original statement still passes actual proof inspection.
+- Added exact head-expiry rejection while its approved statement remains live.
+  Inspection succeeds before the deadline; inspection and mirroring reject at
+  expiry, preserving the approval without creating a receipt or mirror event.
+- All 25 current-registry tests pass normally (10 seconds), instrumented (12
+  seconds), and after restoring normal bytecode. Focused coverage reaches 94.52%
+  branches with 100% lines/statements/functions for PilotCurrentRegistry
+  (`current-head-time-instrumented.log` and preserved `.json`,
+  `current-head-time-restored-normal.log`). This is not a repository-wide result.
+- TypeScript and whitespace checks pass; generated bindings match committed
+  normal bytecode. No production source changed. Eight uncovered branch outcomes
+  remain in this contract, including defensive dependency and invariant checks.
+  Other contracts, Python/generated code, workspace/operational coverage and
+  remote CI/merge requirements keep the full goal open.
