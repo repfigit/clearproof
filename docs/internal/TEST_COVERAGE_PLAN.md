@@ -2130,3 +2130,19 @@ still need completion and final merged-main verification.
   is made from this selection. Ruff and whitespace pass; production unchanged.
 - Full Python aggregation, remaining authored and Solidity/workspace coverage,
   operational verification and remote CI/merge keep the repository goal open.
+
+## One hundred and seventeenth checkpoint
+
+- Added explicit zero-registry rejection for current root pins. The valid pins
+  still validate and all three actual signed root snapshots verify afterward.
+- Added issuance-tree zero-registry rejection through the public async builder.
+  A transaction boundary spy proves it rejects before any tenant authorization
+  or storage access; valid context construction succeeds before and afterward.
+- All 19 selected tests pass, 5 warnings, 7.44 seconds
+  (`root-scope-validation.log`, `.data`, `.json`). Pilot root verification reaches
+  37/37 statements and 8/8 branches. The issuance context's previously missing
+  rejection is covered; this focused suite does not execute its PostgreSQL tree
+  construction paths and does not replace full-suite evidence.
+- Ruff, whitespace and REUSE pass. No production changes or coverage exclusions.
+  Full Python aggregation, remaining authored and Solidity/workspace gaps,
+  operational checks and remote CI/merge keep the repository goal open.

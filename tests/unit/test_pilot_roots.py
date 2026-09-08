@@ -137,3 +137,12 @@ def test_old_approval_cannot_override_new_current_pin(root_case):
     )
     with pytest.raises(RootTrustError, match="trusted current context"):
         verify_pilot_roots(**args)
+
+
+def test_current_root_pins_reject_zero_registry_before_verification(root_case):
+    _, args = root_case
+    original = args["pins"].model_dump()
+    with pytest.raises(ValueError, match="Invalid current root scope"):
+        CurrentRootPins.model_validate({**original, "registry_address": "0x" + "00" * 20})
+    assert CurrentRootPins.model_validate(original) == args["pins"]
+    assert verify_pilot_roots(**args).checked_at == args["now"]
