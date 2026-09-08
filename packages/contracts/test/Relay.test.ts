@@ -28,6 +28,56 @@ describe("SanctionsRootRelay", function () {
     return { oracle, relay, admin, relayer, other, initialRoot, ORACLE_ROLE, RELAYER_ROLE };
   }
 
+  it("rejects zero constructor authorities and binds the intended oracle", async function () {
+    const { oracle, relay, admin } = await deployRelay();
+    const Factory = await ethers.getContractFactory("SanctionsRootRelay");
+    await expect(Factory.deploy(ethers.ZeroAddress, await oracle.getAddress()))
+      .to.be.revertedWithCustomError(Factory, "ZeroAdmin");
+    await expect(Factory.deploy(admin.address, ethers.ZeroAddress))
+      .to.be.revertedWithCustomError(Factory, "ZeroOracle");
+    expect(await relay.oracle()).to.equal(await oracle.getAddress());
+    expect(await relay.hasRole(await relay.DEFAULT_ADMIN_ROLE(), admin.address)).to.equal(true);
+  });
+
+  it("leaves oracle history unchanged through paused, rejected and revoked-authority attempts", async function () {
+    const { oracle, relay, relayer, initialRoot, ORACLE_ROLE, RELAYER_ROLE } = await deployRelay();
+    const relayAddress = await relay.getAddress();
+    const nextRoot = ethers.id("synthetic-retry-root");
+    const originalTime = await oracle.lastUpdated();
+    await time.increase(3600);
+    async function unchanged() {
+      expect(await oracle.currentRoot()).to.equal(initialRoot);
+      expect(await oracle.lastUpdated()).to.equal(originalTime);
+      expect(await oracle.leafCount()).to.equal(100);
+      expect(await oracle.historyLength()).to.equal(1);
+      expect(await relay.queryFilter(relay.filters.RootRelayed())).to.have.length(0);
+    }
+    await oracle.pause();
+    await expect(relay.connect(relayer).receiveRoot(nextRoot, 100))
+      .to.be.revertedWithCustomError(oracle, "EnforcedPause");
+    await unchanged();
+    await oracle.unpause();
+    await expect(relay.connect(relayer).receiveRoot(nextRoot, 49))
+      .to.be.revertedWithCustomError(oracle, "LeafCountDecreasedTooMuch");
+    await unchanged();
+    await oracle.revokeRole(ORACLE_ROLE, relayAddress);
+    await expect(relay.connect(relayer).receiveRoot(nextRoot, 100))
+      .to.be.revertedWithCustomError(oracle, "AccessControlUnauthorizedAccount").withArgs(relayAddress, ORACLE_ROLE);
+    await unchanged();
+    await oracle.grantRole(ORACLE_ROLE, relayAddress);
+    await relay.revokeRole(RELAYER_ROLE, relayer.address);
+    await expect(relay.connect(relayer).receiveRoot(nextRoot, 100))
+      .to.be.revertedWithCustomError(relay, "AccessControlUnauthorizedAccount").withArgs(relayer.address, RELAYER_ROLE);
+    await unchanged();
+    await relay.grantRole(RELAYER_ROLE, relayer.address);
+    await expect(relay.connect(relayer).receiveRoot(nextRoot, 100))
+      .to.emit(relay, "RootRelayed").withArgs(nextRoot, 100, relayer.address);
+    expect(await oracle.currentRoot()).to.equal(nextRoot);
+    expect(await oracle.historyLength()).to.equal(2);
+    expect((await oracle.rootHistory(1)).root).to.equal(nextRoot);
+    expect(await relay.queryFilter(relay.filters.RootRelayed())).to.have.length(1);
+  });
+
   it("receiveRoot forwards to oracle successfully (after cooldown)", async function () {
     const { oracle, relay, relayer } = await deployRelay();
     const newRoot = ethers.keccak256(ethers.toUtf8Bytes("sanctions-root-v1"));

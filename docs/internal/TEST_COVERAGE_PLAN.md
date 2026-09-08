@@ -1749,3 +1749,22 @@ still need completion and final merged-main verification.
   No production contract source changed. Remaining contract/Python/generated,
   workspace/operational coverage and final remote CI/merge verification keep the
   full repository goal open.
+
+## Ninety-eighth checkpoint
+
+- Added relay constructor validation and an actual relay/oracle recovery scenario.
+  Zero admin/oracle addresses reject; deployed relay binds the intended oracle.
+  Pausing, excessive leaf-count reduction, revoked oracle authority and revoked
+  transport authority each leave root, timestamp, count and history unchanged,
+  with no RootRelayed event. Restoring authority allows exactly one successful
+  relay and matching oracle history append.
+- Eight relay tests pass normally (three seconds), instrumented (two seconds)
+  and after restoring normal bytecode (three seconds). SanctionsRootRelay reaches
+  100% statements, branches, functions and lines: six statements, six branch
+  outcomes, two functions (`relay-boundaries-instrumented.log` and preserved
+  `.json`; restored run `relay-boundaries-restored-normal.log`). Other contracts
+  in the focused report remain partial.
+- TypeScript and whitespace checks pass. Forced compilation restores all generated
+  bindings. Only local test roots were exercised; production contracts and deployed
+  roots are unchanged. Remaining contract/Python/generated, workspace/operational
+  coverage and remote CI/merge verification keep the full repository goal open.
