@@ -5335,3 +5335,136 @@ async def check_mirror_rebound_evidence(service, arguments, receipt, signer, eva
                     )
         assert await target.get("proof", original_proof_id) == original_proof
         assert (await service.prepare(receipt["receipt_id"], **arguments))["receipt_id"] == receipt["receipt_id"]
+
+
+@pytest.fixture
+async def activation_case(db, policy_review_case):
+    from src.services.policy_activation import PolicyActivationService
+
+    review, request, now = policy_review_case
+    await review.approve(request, idempotency_key="synthetic-approved", now=now)
+    principal = Principal.model_validate(
+        {**review.principal.model_dump(), "roles": (*review.principal.roles, "policy:activate")}
+    )
+    return PolicyActivationService(db, cipher(), principal), request.policy, now
+
+
+@pytest.mark.parametrize("clock", [True, "100", -1, 2**53])
+async def test_policy_activation_rejects_invalid_clocks_without_selection(activation_case, clock):
+    from src.services.policy_activation import PolicyActivationRequest, activation_scope
+
+    service, policy, now = activation_case
+    scope = activation_scope(policy)
+    request = PolicyActivationRequest(policy_digest=policy.digest)
+    with pytest.raises(ValueError, match="Invalid activation clock"):
+        await service.activate(request, idempotency_key="synthetic-select", now=clock)
+    with pytest.raises(ValueError, match="Invalid activation clock"):
+        await service.current(scope, now=clock)
+    assert await service.store.get("policy-activation", scope) is None
+    assert (await service.activate(request, idempotency_key="synthetic-select", now=now))["revision"] == 1
+
+
+@pytest.mark.parametrize(
+    "changes",
+    [
+        {"schema_version": "synthetic-wrong-schema"},
+        {"scope_digest": "ab" * 32},
+        {"revision": True},
+        {"revision": 2},
+        {"activated_at": True},
+    ],
+)
+async def test_policy_activation_rejects_malformed_encrypted_head(activation_case, changes):
+    from src.services.policy_activation import PolicyActivationRequest, activation_scope
+
+    service, policy, now = activation_case
+    scope = activation_scope(policy)
+    value = {
+        "schema_version": "clearproof-policy-activation-v1",
+        "scope_digest": scope,
+        "policy_digest": policy.digest,
+        "revision": 1,
+        "previous_digest": None,
+        "activated_at": now,
+        "actor_id": "synthetic-reviewer",
+        **changes,
+    }
+    async with service.store.transaction() as tx:
+        await tx.put("policy-activation", scope, value)
+    with pytest.raises(ValueError, match="Invalid policy activation head"):
+        await service.current(scope, now=now)
+    with pytest.raises(ValueError, match="Invalid predecessor activation"):
+        await service.activate(
+            PolicyActivationRequest(policy_digest=policy.digest, expected_revision=1),
+            idempotency_key="synthetic-next",
+            now=now,
+        )
+    head = await service.store.read("policy-activation", scope)
+    assert head.revision == 1 and head.value == value
+
+
+@pytest.mark.parametrize("future", [False, True])
+async def test_policy_activation_rejects_redundant_or_backdated_selection(activation_case, future):
+    from src.services.policy_activation import PolicyActivationRequest, activation_scope
+
+    service, policy, now = activation_case
+    scope = activation_scope(policy)
+    value = {
+        "schema_version": "clearproof-policy-activation-v1",
+        "scope_digest": scope,
+        "policy_digest": "ab" * 32 if future else policy.digest,
+        "revision": 1,
+        "previous_digest": None,
+        "activated_at": now + int(future),
+        "actor_id": "synthetic-reviewer",
+    }
+    async with service.store.transaction() as tx:
+        await tx.put("policy-activation", scope, value)
+    with pytest.raises(RecordConflict, match="redundant or precedes its predecessor"):
+        await service.activate(
+            PolicyActivationRequest(policy_digest=policy.digest, expected_revision=1),
+            idempotency_key="synthetic-next",
+            now=now,
+        )
+    if future:
+        with pytest.raises(ValueError, match="Invalid policy activation head"):
+            await service.current(scope, now=now)
+    else:
+        assert await service.current(scope, now=now) == policy
+    assert (await service.store.read("policy-activation", scope)).revision == 1
+
+
+async def test_policy_activation_scope_key_must_match_selected_policy(activation_case):
+    service, policy, now = activation_case
+    scope = "ab" * 32
+    async with service.store.transaction() as tx:
+        await tx.put(
+            "policy-activation",
+            scope,
+            {
+                "schema_version": "clearproof-policy-activation-v1",
+                "scope_digest": scope,
+                "policy_digest": policy.digest,
+                "revision": 1,
+                "previous_digest": None,
+                "activated_at": now,
+                "actor_id": "synthetic-reviewer",
+            },
+        )
+    with pytest.raises(ValueError, match="Active policy scope mismatch"):
+        await service.current(scope, now=now)
+
+
+@pytest.mark.parametrize("evaluation", [True, "before", "future"])
+async def test_policy_activation_must_cover_proof_evaluation_time(activation_case, evaluation):
+    from src.services.policy_activation import PolicyActivationRequest, activation_scope, load_active_policy
+
+    service, policy, now = activation_case
+    await service.activate(
+        PolicyActivationRequest(policy_digest=policy.digest), idempotency_key="synthetic-select", now=now
+    )
+    evaluated_at = now - 1 if evaluation == "before" else now + 2 if evaluation == "future" else evaluation
+    async with service.store.transaction() as tx:
+        with pytest.raises(ValueError, match="does not cover proof evaluation time"):
+            await load_active_policy(tx, activation_scope(policy), now=now + 1, evaluated_at=evaluated_at)
+        assert await load_active_policy(tx, activation_scope(policy), now=now + 1, evaluated_at=now) == policy

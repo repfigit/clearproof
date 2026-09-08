@@ -1043,3 +1043,20 @@ still need completion and final merged-main verification.
 - Full repository coverage remains incomplete. Checkpoint 54 is the latest full
   Python report; other Python, SDK, Solidity, MDX/browser, scripts and final
   remote CI/merge requirements remain outstanding.
+
+## Fifty-sixth checkpoint
+
+- Added 15 PostgreSQL policy-activation cases for invalid clocks, malformed
+  encrypted head/predecessor fields, redundant/backdated selection, scope-key
+  mismatch and proof evaluation outside the selected policy's activation interval.
+- Rejections preserve the retained activation revision/value. Invalid-clock
+  requests leave no selection and permit a valid retry with the same key. Exact
+  activation-time evaluation remains accepted.
+- All 16 selected tests pass, including existing concurrent selection, restart
+  and explicit reviewed rollback history. Policy activation measures 65/65
+  statements and 22/22 branches (`policy-activation-complete.log`/`.data`). The
+  other 102 storage tests were deselected for this focused run. Ruff/whitespace
+  pass; owned PostgreSQL stopped. No production source changed.
+- Full repository coverage remains incomplete. Checkpoint 54 is the latest full
+  Python report, with other Python, SDK, Solidity, MDX/browser, operational scripts
+  and remote CI/merge requirements still outstanding.
