@@ -1749,6 +1749,61 @@ async def test_durable_registrar_witness_real_proof(db, tmp_path, monkeypatch):
         patch.setattr(PilotTransaction, "get", altered_source)
         with pytest.raises(RootTrustError, match="inconsistent"):
             await prepare()
+    # Isolate source consistency after the current-credential trust boundary.
+    # Recompute real source digests; altered snapshots are deliberately not
+    # claimed to be valid registrar signatures.
+    from unittest.mock import AsyncMock
+
+    from src.protocol.canonical import record_digest
+    from src.services import proof_preparation
+
+    for mutation in ("source-scope", "issuance-issuer", "missing-issuer", "wrong-issuance-binding"):
+        target = service()
+        name = "issuers" if mutation in ("missing-issuer", "wrong-issuance-binding") else "issuance"
+        domain = "issuer" if name == "issuers" else "issuance"
+        signed = target._inputs[name]
+        source_value = await reader.get("root-source", signed.snapshot.source_digest)
+        if mutation == "source-scope":
+            source_value["evaluated_at"] += 1
+            expected_error = "source scope differs"
+        elif mutation == "issuance-issuer":
+            source_value["issuer_did"] = "did:web:other.example"
+            expected_error = "source issuer differs"
+        elif mutation == "missing-issuer":
+            source_value["issuers"] = []
+            expected_error = "issuer inventory does not bind"
+        else:
+            source_value["issuers"][0]["issuance_snapshot_digest"] = "00" * 32
+            expected_error = "issuer inventory does not bind"
+        source_digest = record_digest(f"clearproof/{domain}-source/v1", source_value)
+        target._inputs[name] = signed.model_copy(
+            update={"snapshot": signed.snapshot.model_copy(update={"source_digest": source_digest})}
+        )
+
+        async def selected_source(tx, kind, record_id):
+            if kind == "root-source" and record_id == source_digest:
+                return source_value
+            return await original_get(tx, kind, record_id)
+
+        with monkeypatch.context() as patch:
+            patch.setattr(target, "_load_current_credential", AsyncMock(return_value=credential))
+            patch.setattr(PilotTransaction, "get", selected_source)
+            with pytest.raises(RootTrustError, match=expected_error):
+                await target.prepare_witness(
+                    credential.credential_nonce, secret="123456", sanctions_tree=PilotSanctionsTree([]), now=now
+                )
+    original_expected = proof_preparation.expected_current_signals
+
+    def different_statement(**kwargs):
+        expected = list(original_expected(**kwargs))
+        expected[0] = str(int(expected[0]) + 1)
+        return tuple(expected)
+
+    with monkeypatch.context() as patch:
+        patch.setattr(proof_preparation, "expected_current_signals", different_statement)
+        with pytest.raises(RootTrustError, match="Prepared witness differs from current statement"):
+            await prepare()
+    assert await prepare() == witness
     alternate = PilotCredential.model_validate({**credential.model_dump(), "credential_nonce": "cd" * 32})
     await enroll(alternate, "enroll-after-publication")
     with pytest.raises(RootTrustError, match="absent"):

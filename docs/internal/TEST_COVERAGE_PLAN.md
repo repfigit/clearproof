@@ -1378,3 +1378,23 @@ still need completion and final merged-main verification.
 - Full coverage remains incomplete: remaining Python service/verifier/generated
   paths, other workspaces, operational tests and remote CI/merge verification
   remain open. Checkpoint 69 is still the latest complete Python measurement.
+
+## Seventy-sixth checkpoint
+
+- Added five proof-preparation consistency cases inside the durable registrar
+  round trip: source scope, issuance issuer, missing issuer entry, wrong issuance
+  snapshot binding and disagreement with expected current public signals.
+- Source cases explicitly isolate checks after credential trust validation.
+  They recompute actual source digests but use altered unsigned snapshot copies
+  and a controlled current-credential result; they do not claim authentic
+  registrar approvals. The original signature/root paths remain real in the
+  surrounding integration scenario. Final-statement fault injection changes
+  one result only after the normal statement calculation succeeds.
+- The unchanged inputs still return the original witness, generate a real proof,
+  pass current inspection and reject subsequent revocation. The selected test
+  passes in 13.62 seconds. Proof preparation measures 45/45 statements and 18/18
+  branches (`proof-preparation-complete.log`/`.data`).
+- Ruff/format/whitespace pass; owned PostgreSQL stopped. No source changed.
+  Full coverage remains incomplete; checkpoint 69 is the latest full baseline,
+  with other Python, generated-code, workspace, operational and remote CI/merge
+  requirements still outstanding.
