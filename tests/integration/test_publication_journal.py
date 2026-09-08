@@ -251,7 +251,28 @@ async def test_explicit_same_transaction_rebroadcast_is_bounded_and_compare_and_
     assert (await journal.inspect(identity))["broadcast_attempts"] == 3
 
 
-@pytest.mark.parametrize("failure", [None, "known", "nonce", "runtime", "simulation", "expired", "source", "reorg"])
+@pytest.mark.parametrize(
+    "failure",
+    [
+        None,
+        "known",
+        "nonce",
+        "runtime",
+        "simulation",
+        "expired",
+        "source",
+        "reorg",
+        "boolean-attempt",
+        "string-attempt",
+        "zero-attempt",
+        "exhausted-attempt",
+        "stale-attempt",
+        "missing-intent",
+        "source-policy-change",
+        "stale-head",
+        "future-head",
+    ],
+)
 async def test_missing_recovery_requires_fresh_preconditions_before_claim(db, failure):
     import hashlib
     from types import SimpleNamespace
@@ -307,10 +328,31 @@ async def test_missing_recovery_requires_fresh_preconditions_before_claim(db, fa
         source.side_effect = ValueError("Synthetic source invalidation")
     elif failure == "reorg":
         eth.get_block.side_effect = [block, {**block, "hash": b"b" * 32}]
+    expected_attempts = {
+        "boolean-attempt": True,
+        "string-attempt": "1",
+        "zero-attempt": 0,
+        "exhausted-attempt": 3,
+        "stale-attempt": 2,
+    }.get(failure, 1)
+    requested_identity = "00" * 32 if failure == "missing-intent" else identity
+    if failure == "source-policy-change":
+
+        async def changed_policy(_):
+            reconciler.policy = reconciler.policy.model_copy(update={"minimum_confirmations": 2})
+
+        source.side_effect = changed_policy
+    elif failure == "stale-head":
+        reconciler.policy = reconciler.policy.model_copy(update={"max_block_age": 1})
+        block["timestamp"] = now - 2
+    elif failure == "future-head":
+        block["timestamp"] = now + 1
     service = PublicationRecoveryService(reconciler)
     if failure:
         with pytest.raises((ValueError, RecordConflict)):
-            await service.rebroadcast_missing(identity, expected_attempts=1, now=now, revalidate=source)
+            await service.rebroadcast_missing(
+                requested_identity, expected_attempts=expected_attempts, now=now, revalidate=source
+            )
         eth.send_raw_transaction.assert_not_awaited()
         assert (await journal.inspect(identity))["broadcast_attempts"] == 1
     else:

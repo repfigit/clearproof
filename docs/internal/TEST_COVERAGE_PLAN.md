@@ -1342,3 +1342,20 @@ still need completion and final merged-main verification.
   changed. Full repository coverage remains incomplete; checkpoint 69 is the
   latest complete Python baseline, with remaining service/verifier/generated
   paths, other workspaces, operational checks and remote CI/merge still open.
+
+## Seventy-fourth checkpoint
+
+- Added nine publication recovery scenarios for noninteger/out-of-range attempt
+  counters, stale attempt state, missing intent, policy changes during source
+  revalidation, stale head and future head.
+- Existing real PostgreSQL journal reservation/claim handling remains in use.
+  RPC, source validation and sending are controlled test boundaries; no public
+  transaction is broadcast. Every failed recovery leaves the attempt count at
+  one and never invokes the sender.
+- All 43 journal integration tests pass in 19.20 seconds. Publication recovery
+  measures 60/60 statements and 22/22 branches
+  (`publication-recovery-complete.log`/`.data`). Ruff/format/whitespace pass;
+  owned PostgreSQL stopped. No production source changed.
+- Full repository coverage remains incomplete. Checkpoint 69 is the latest full
+  Python baseline; other service/verifier guards, generated modules, other
+  workspaces, operational checks and final remote CI/merge remain outstanding.
