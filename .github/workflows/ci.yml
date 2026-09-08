@@ -163,12 +163,13 @@ jobs:
           tests/unit/test_poseidon_generator.py
           tests/unit/test_bls_input_script.py
           tests/unit/test_sanctions_sources.py
+          tests/unit/test_checkpoint_runner.py
           --cov=scripts --cov-branch --cov-report=json:operational-coverage.json
           --cov-report=term-missing -q
       - name: Preserve completed operational script coverage
         run: >-
           uv run python -m coverage report
-          --include="scripts/hpke_keygen.py,scripts/l2_cost_model.py,scripts/generate_poseidon_constants.py,scripts/make_bls_input.py,scripts/build_sanctions_tree.py"
+          --include="scripts/hpke_keygen.py,scripts/l2_cost_model.py,scripts/generate_poseidon_constants.py,scripts/make_bls_input.py,scripts/build_sanctions_tree.py,scripts/test_checkpoint_evm.py"
           --fail-under=100
       - uses: actions/upload-artifact@v4
         if: always()

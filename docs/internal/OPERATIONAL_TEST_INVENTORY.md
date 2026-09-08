@@ -14,7 +14,7 @@ removed from the Python denominator.
 | `l2_cost_model.py` | 229/229 statements, 56/56 branches; FastLZ, fee boundaries, both report formats, measured inputs and actual CLI | Retain coverage in final aggregate |
 | `make_bls_input.py` | 87/87 statements, 14/14 branches; full vector parity, fresh CLI, corrupt references and cross-field path inconsistency | Retain coverage in final aggregate; benchmark remains non-standard BLS Poseidon |
 | `pilot_contract_fixture.py` | 48/48 statements, 8/8 branches; actual proof generation, altered-nullifier rejection, prover timeout/exit and temporary cleanup | Retain coverage in final aggregate; separate artifact-backed CI gate |
-| `test_checkpoint_evm.py` | Owned-EVM acceptance runner previously completed | Instrument runner itself; failure/cleanup paths |
+| `test_checkpoint_evm.py` | 44/44 statements, 6/6 branches; startup/retry/deadline/child-failure and cleanup tests, separate owned-EVM integration | Retain coverage and real execution in final aggregate |
 | `test_development_circuits.py` | Actual development proof runner plus subprocess lifecycle tests | Remaining setup, validation and cleanup branches |
 | `test_pilot_local.py` | Outside current focused execution | Local orchestration and failure/cleanup paths |
 | `test_pilot_mirror.py` | Actual durable authorization/EVM acceptance runner completed | Instrument runner itself; failure/cleanup/report paths |
@@ -36,13 +36,14 @@ uv run python -m pytest \
   tests/unit/test_poseidon_generator.py \
   tests/unit/test_bls_input_script.py \
   tests/unit/test_sanctions_sources.py \
+  tests/unit/test_checkpoint_runner.py \
   --cov=scripts --cov-branch --cov-report=json:operational-coverage.json \
   --cov-report=term-missing -q
 ```
 
 Node dependencies must be installed. CI retains this report separately from
 `src` coverage. The completed HPKE, L2 model, parameter generator, BLS input
-converter and sanctions builder scripts have a 100% regression
+converter, sanctions builder and checkpoint runner scripts have a 100% regression
 gate; the all-script aggregate stays visibly partial until the remaining behavior
 is exercised. Synthetic sanctions fixtures do not update deployed roots;
 development proving material and ephemeral private keys are never committed.

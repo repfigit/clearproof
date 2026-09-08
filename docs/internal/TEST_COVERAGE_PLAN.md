@@ -2630,3 +2630,25 @@ still need completion and final merged-main verification.
 - Ruff and whitespace pass. Remaining orchestration scripts, JavaScript/shell
   coverage, browser/deployment audit and remote CI/review/merge keep the full
   repository goal open.
+
+## One hundred and forty-second checkpoint
+
+- Added controlled subprocess/HTTP boundary tests for checkpoint orchestration:
+  workspace CLI resolution, compilation before node creation, loopback RPC scoped
+  to the pytest child, preserved parent environment, propagated child exit status,
+  compile/startup/test-launch failures, transient readiness retries, deadline and
+  wrong-chain rejection. Cleanup targets only the owned process group and
+  escalates from SIGTERM to SIGKILL after its grace period.
+- All 11 orchestration tests pass in 0.40 seconds; coverage is 44/44 statements
+  and 6/6 branches, without exclusions (`checkpoint-runner142.log`/`.json`).
+  Separately reran the actual owned Hardhat EVM integration: one passed, two
+  warnings, 0.82 seconds of pytest time (`checkpoint-real142.log`), runner exit 0.
+  The controlled failure tests do not substitute for that real success path.
+- Added the runner tests to operational CI and extended its completed-script
+  gate. The six-script gate passes locally at 745/745 statements and 168/168
+  branches; the contract-fixture gate remains in the fresh-artifact job.
+  Incremental unchanged-source aggregate is 823/1045 statements and 179/238
+  branches (`scripts-combined142.json`). No production source changed.
+- Ruff, whitespace and workflow parsing pass. The development, local-pilot and
+  mirror runners remain partially/unmeasured, alongside JavaScript/shell checks,
+  broader browser/deployment audit and remote CI/review/merge. Goal remains open.
