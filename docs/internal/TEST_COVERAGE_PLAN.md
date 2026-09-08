@@ -1979,3 +1979,23 @@ still need completion and final merged-main verification.
   bytecode. No production source changed. Remaining currentness/batch/defensive
   branches, other contract/Python/generated, workspace/operational and remote
   CI/merge requirements keep the full repository goal open.
+
+## One hundred and ninth checkpoint
+
+- Added seven batch consistency faults after a valid early head replacement:
+  mismatched pin scope/digest and altered reused-head digest/value/validity/enabled
+  state. Claimed digest is deliberately aligned for the retained-digest case so
+  it tests the retained-head comparison rather than an earlier pin check.
+- Every failure rolls back all eight heads and head/statement events, retains no
+  approval and creates no mirrored receipt. The corrected batch advances the
+  intended revisions and its resulting statement passes actual proof inspection.
+- All 23 current-registry tests pass normally (11 seconds), instrumented (30
+  seconds) and after restoring normal bytecode (12 seconds). Branch coverage
+  reaches 92.47%; lines/statements/functions remain 100%
+  (`current-batch-boundaries-instrumented.log` and preserved `.json`,
+  `current-batch-boundaries-restored-normal.log`). Other contracts remain partial
+  in this focused report.
+- TypeScript and whitespace pass; normal generated bindings are unchanged.
+  No production source changed. Remaining currentness/defensive branches, other
+  contract/Python/generated, workspace/operational and remote CI/merge requirements
+  keep the full repository goal open.

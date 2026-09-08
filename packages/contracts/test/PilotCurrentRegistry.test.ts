@@ -267,6 +267,42 @@ const g2 = (p: string[][]): [G1, G1] => [[p[0][1], p[0][0]], [p[1][1], p[1][0]]]
     expect(await registry.mirroredReceipts(tenant, signals[3])).to.equal(receiptId);
   });
 
+  it("rolls back an earlier replacement when later reused heads or pins disagree", async function () {
+    const { registry, tenant, publisher, pins, updates, batchStatement, a, b, c, signals } = await batchFixture();
+    const replacements = updates.map((update, i) => i === 0 ? { ...update, replace: true } : { ...update });
+    const statement = { ...batchStatement, pins: batchStatement.pins.map((pin, i) => i === 0 ? { ...pin, revision: 2 } : { ...pin }) };
+    const before = await Promise.all(pins.map((pin, i) => registry.head(tenant, i, pin.scope)));
+    const headEvents = await registry.queryFilter(registry.filters.HeadPublished());
+    const statementEvents = await registry.queryFilter(registry.filters.StatementPublished());
+    for (const fault of ["pin-scope", "pin-digest", "digest", "value", "from", "until", "enabled"]) {
+      const altered = replacements.map(update => ({ ...update }));
+      const candidate = { ...statement, pins: statement.pins.map(pin => ({ ...pin })) };
+      if (fault === "pin-scope") candidate.pins[6].scope = ethers.id("mismatched-scope");
+      else if (fault === "pin-digest") candidate.pins[6].digest = ethers.id("mismatched-digest");
+      else if (fault === "digest") {
+        // Align the claimed pin, isolating the comparison with the retained head.
+        altered[6].digest = ethers.id("unretained-digest");
+        candidate.pins[6].digest = altered[6].digest;
+      } else if (fault === "value") altered[6].value = 1;
+      else if (fault === "from") altered[6].validFrom = BigInt(altered[6].validFrom.toString()) + 1n;
+      else if (fault === "until") altered[6].validUntil = BigInt(altered[6].validUntil.toString()) - 1n;
+      else altered[6].enabled = false;
+      const id = await registry.statementId(tenant, candidate);
+      await expect(registry.connect(publisher).publishBatch(tenant, 1, altered, candidate))
+        .to.be.revertedWithCustomError(registry, "InvalidState");
+      expect((await registry.statementPublication(id)).exists).to.equal(false);
+      for (let i = 0; i < 8; i++) expect(await registry.head(tenant, i, pins[i].scope)).to.deep.equal(before[i]);
+      expect(await registry.queryFilter(registry.filters.HeadPublished())).to.have.length(headEvents.length);
+      expect(await registry.queryFilter(registry.filters.StatementPublished())).to.have.length(statementEvents.length);
+      expect(await registry.mirroredReceipts(tenant, signals[3])).to.equal(ethers.ZeroHash);
+    }
+    const id = await registry.statementId(tenant, statement);
+    await registry.connect(publisher).publishBatch(tenant, 1, replacements, statement);
+    expect((await registry.head(tenant, 0, pins[0].scope)).revision).to.equal(2);
+    expect((await registry.head(tenant, 7, pins[7].scope)).revision).to.equal(1);
+    expect(await registry.inspect(tenant, id, a, b, c, signals)).to.equal(true);
+  });
+
   it("rolls back every head if the final statement or a later checkpoint rejects", async function () {
     const { registry, tenant, publisher, pins, updates, batchStatement } = await batchFixture();
     const replaced = updates.map((u) => ({ ...u, replace: true }));
