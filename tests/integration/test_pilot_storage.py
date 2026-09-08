@@ -1742,6 +1742,23 @@ async def test_durable_registrar_witness_real_proof(db, tmp_path, monkeypatch):
             credential.credential_nonce, secret="123456", sanctions_tree=PilotSanctionsTree([]), now=now
         )
 
+    from src.services.proof_inspection import ProofInspectionService
+
+    for invalid_configuration in (None, inputs):
+        with pytest.raises(ValueError, match="Expected server statement configuration"):
+            ProofInspectionService(db, cipher(), principal, verifier, invalid_configuration)
+    original_read = PilotTransaction.read
+    for missing_kind in ("issuance-root", "issuer-root", "sanctions-root"):
+
+        async def missing_root(tx, kind, record_id, **kwargs):
+            if kind == missing_kind:
+                return None
+            return await original_read(tx, kind, record_id, **kwargs)
+
+        with monkeypatch.context() as patch:
+            patch.setattr(PilotTransaction, "read", missing_root)
+            with pytest.raises(RootTrustError, match="Current root is not retained in this tenant"):
+                await prepare()
     witness = await prepare()
     assert witness["credential_commitment"] == credential.commitment
     await db.close()

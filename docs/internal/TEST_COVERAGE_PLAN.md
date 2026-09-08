@@ -1483,3 +1483,21 @@ still need completion and final merged-main verification.
   stopped. No production source changed. Full coverage remains incomplete:
   remaining Python/generated paths, other workspace and operational coverage,
   and final remote CI/merge verification are still outstanding.
+
+## Eighty-second checkpoint
+
+- Added five proof-inspection boundary checks inside the registrar round trip:
+  None/dictionary server configuration and each unavailable issuance/issuer/
+  sanctions root. Root absence is injected at the transaction read boundary;
+  the original stored roots remain unchanged.
+- The subsequent unmodified preparation and real proof inspection still pass.
+  The selected integration test passes in 15.01 seconds
+  (`proof-inspection-boundaries.log`/`.data`). Its focused report covers
+  68/81 statements; policy evaluation and active-policy mismatch paths belong
+  to the broader suite and were not exercised in this invocation.
+- The additions hit both previously missing branches in checkpoint 69's full
+  inspection report, but no refreshed full-module claim is made from this narrow
+  run. Ruff/format/whitespace pass; owned PostgreSQL stopped. No source changed.
+- Full repository coverage remains incomplete. Other Python/generated paths,
+  workspace and operational coverage, plus final remote CI/merge verification
+  remain outstanding.
