@@ -1183,3 +1183,19 @@ still need completion and final merged-main verification.
 - Full repository coverage remains incomplete; checkpoint 54 is the latest full
   Python report. Other Python paths, SDK, Solidity, MDX/browser, scripts and
   final remote CI/merge verification remain outstanding.
+
+## Sixty-fifth checkpoint
+
+- Added 22 encrypted authorization-input tests covering outer row revision/type/
+  size, exact decoded schema, chunk framing, noncanonical Base64 padding bits,
+  decoded overflow and round trips at one byte, chunk edges and 32 KiB.
+- Tests use real record encryption and explicitly unverified synthetic approval
+  objects: successful sealing/opening does not authenticate an approval. A chunk
+  larger than 4096 characters is rejected by canonical serialization before
+  ciphertext creation; that test asserts the actual boundary separately.
+- All 24 tests pass in 0.57 seconds; authorization input measures 42/42 statements
+  and 14/14 branches (`authorization-input-complete.log`/`.data`).
+  Ruff/format/whitespace pass. No production source changed.
+- Full repository coverage remains incomplete; checkpoint 54 remains the last
+  full Python measurement. Other Python paths, SDK, Solidity, MDX/browser,
+  operational scripts and remote CI/merge verification remain outstanding.
