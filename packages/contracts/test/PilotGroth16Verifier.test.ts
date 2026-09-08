@@ -1,5 +1,5 @@
 import { expect } from "chai";
-import { ethers } from "hardhat";
+import { ethers, network } from "hardhat";
 import fs from "node:fs";
 import path from "node:path";
 import { createHash } from "node:crypto";
@@ -107,4 +107,36 @@ const location = process.env.CLEARPROOF_PILOT_TEST_ARTIFACTS;
     expect(await other.verificationKeyCommitment()).not.to.equal(await contract.verificationKeyCommitment());
     expect(await other.verifyProof(a, b, c, signals)).to.equal(false);
   });
+
+  it("rejects a false pairing-precompile result during key validation", async function () {
+    const { contract, factory, key, pin, a, b, c, signals } = await fixture();
+    type Override = (address: Buffer, data: Buffer) => Promise<
+      { result: Buffer; shouldRevert: boolean; gas: bigint } | undefined>;
+    type Provider = {
+      _wrapped?: Provider;
+      _callOverrideCallback?: Override;
+      _setCallOverrideCallback?: (callback: Override) => Promise<void>;
+    };
+    // Hardhat's EDR test hook: override only the dependency, never contract state.
+    let provider = network.provider as unknown as Provider;
+    while (!provider._setCallOverrideCallback && provider._wrapped) provider = provider._wrapped;
+    if (!provider._setCallOverrideCallback) throw new Error("Hardhat EDR call override hook unavailable");
+    const previous = provider._callOverrideCallback;
+    let intercepted = 0;
+    try {
+      await provider._setCallOverrideCallback(async (address, data) => {
+        if (BigInt("0x" + address.toString("hex")) === 8n) {
+          intercepted++;
+          return { result: Buffer.alloc(32), shouldRevert: false, gas: 0n };
+        }
+        return previous?.(address, data);
+      });
+      await expect(factory.deploy(key, "0x" + pin)).to.be.revertedWithCustomError(contract, "InvalidKey");
+      expect(intercepted).to.be.greaterThan(0);
+    } finally {
+      await provider._setCallOverrideCallback(previous ?? (async () => undefined));
+    }
+    expect(await contract.verifyProof(a, b, c, signals)).to.equal(true);
+  });
+
 });

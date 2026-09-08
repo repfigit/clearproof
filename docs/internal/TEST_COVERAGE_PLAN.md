@@ -61,13 +61,11 @@ transactional scan. No new exclusions were introduced.
 CLI: source line/branch/function/statement coverage is now 100%, enforced by CI.
 Keep the actual artifact/service acceptance tests alongside mocked boundary tests.
 
-Solidity: checkpoint 112 measures 381/382 lines, 269/270 statements, 392/406
-branches and 82/83 functions with all 127 instrumented tests passing. Remaining
-gaps are in PilotCurrentRegistry, Pairing, PilotGroth16Verifier and the BLS
-benchmark verifier. ComplianceRegistry, Groth16Verifier, router, oracle, VASP
-registry, relay and checkpoint have full measured coverage. Preserve
-normal-bytecode proof verification alongside instrumentation; generated
-instrumented factory bytecode must not be committed.
+Solidity: checkpoint 132 measures full coverage: 387/387 lines, 275/275
+statements, 402/402 branches and 88/88 functions. All 133 tests pass both
+instrumented and with restored normal bytecode using both real proof bundles.
+Coverage includes test harnesses and the BLS benchmark verifier. CI coverage
+gating/artifact retention and remote verification still require completion.
 
 These figures describe an intermediate worktree, not a released coverage claim.
 The full goal remains open.
@@ -2397,3 +2395,22 @@ still need completion and final merged-main verification.
 - The pilot verifier's defensive pairing result remains for audit. Full aggregate
   reports, Python rerun, operational/browser requirements and remote CI/merge
   still prevent completion of the full repository coverage goal.
+
+
+## One hundred and thirty-second checkpoint
+
+- Preserved the pilot verifier's defensive pairing-result check. Added isolated
+  fault injection through the installed Hardhat EDR call-override hook, restricted
+  to address 0x08. A false precompile result rejects construction with InvalidKey;
+  the hook is restored in finally and the original real proof verifies afterward.
+  The test explicitly fails if this internal Hardhat capability disappears.
+- Full Solidity instrumentation passes all 133 tests with both real proof bundles
+  and no skips: 387/387 lines, 275/275 statements, 402/402 branches and 88/88
+  functions, all 100%. Preserved `full-contract-coverage-checkpoint132.log`, `.json`
+  and `-raw.json`. Counts use the original Solidity line map.
+- Restored normal bytecode and all 133 tests pass again in 52 seconds
+  (`full-contract-coverage-checkpoint132-normal.log`). TypeScript and whitespace
+  pass; generated bindings remain unchanged. No production source changed.
+- This completes local measured Solidity coverage, not the repository goal.
+  Full Python rerun, coverage CI gates/artifact retention, operational/browser
+  checks and remote CI/review/merge verification remain required.
