@@ -56,10 +56,11 @@ contract PilotRootCheckpoint is AccessControl {
         bytes32 key = keccak256(abi.encode(tenantHash, rootScope));
         Checkpoint storage previous = _heads[key];
         if (expectedRevision != previous.revision || approvalRevision <= previous.revision) revert StaleRevision();
+        // The clock bounds imply validUntil > validFrom before subtraction.
         if (
             snapshotDigest == bytes32(0) || root >= SCALAR_FIELD || approvalRevision > MAX_SAFE_INTEGER ||
             validFrom > block.timestamp || validFrom < previous.validFrom || validUntil <= block.timestamp ||
-            validUntil <= validFrom || validUntil - validFrom > 1 days || validUntil > MAX_SAFE_INTEGER
+            validUntil - validFrom > 1 days || validUntil > MAX_SAFE_INTEGER
         ) revert InvalidApproval();
         _heads[key] = Checkpoint(snapshotDigest, root, approvalRevision, validFrom, validUntil, uint64(block.timestamp));
         emit RootCheckpointPublished(tenantHash, rootScope, snapshotDigest, root, approvalRevision, validFrom, validUntil);

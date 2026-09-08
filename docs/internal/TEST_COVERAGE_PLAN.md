@@ -1768,3 +1768,27 @@ still need completion and final merged-main verification.
   bindings. Only local test roots were exercised; production contracts and deployed
   roots are unchanged. Remaining contract/Python/generated, workspace/operational
   coverage and remote CI/merge verification keep the full repository goal open.
+
+## Ninety-ninth checkpoint
+
+- Added four checkpoint tests for zero scopes/admin, missing digest, unsafe
+  revision, field/validity boundaries, malformed replacements and the maximum
+  interoperable timestamp. Invalid replacements preserve the previous head;
+  the large timestamp case restores its EVM snapshot before later tests.
+- Initial measurement reached full statements but 94.12% branches. Inspection
+  proved `validUntil <= validFrom` unreachable after the earlier guards require
+  `validFrom <= block.timestamp < validUntil`. Removed this duplicate condition
+  and documented why subtraction remains safe. Equal/reversed-window regressions
+  continue to reject. No coverage exclusion or validation bypass was introduced.
+- All eight focused tests pass before and after simplification. Final checkpoint
+  coverage is 100% statements, branches, functions and lines: 12 statements,
+  32 branch outcomes and four functions (`checkpoint-simplified-instrumented.log`
+  and preserved `.json`; pre-change report `checkpoint-boundaries-instrumented`).
+- Forced normal compilation regenerated the checkpoint factory from changed
+  source; only that expected generated factory is included. All 110 contract
+  tests pass on normal bytecode with explicit pilot/legacy artifacts in 50 seconds,
+  no skips (`checkpoint-full-normal-artifacts.log`). Python's actual owned-EVM
+  checkpoint integration passes in 3.25 seconds; TypeScript and whitespace pass.
+- Full repository coverage remains incomplete: other contract branches, remaining
+  Python/generated, workspace/operational paths and remote CI/merge verification
+  still require completion. This is not a deployed-contract upgrade.
