@@ -2202,3 +2202,22 @@ still need completion and final merged-main verification.
   replaces older Python aggregates, not other workspace evidence. Remaining
   Python and Solidity/workspace gaps, operational coverage and remote CI/merge
   still prevent completion of the full repository goal.
+
+## One hundred and twenty-first checkpoint
+
+- Added transaction-boundary fault injection for an observation ID whose record
+  disappears during scanning. The actual service raises the precise error and
+  exits its transaction without returning a partial page. Restoring the synthetic
+  record produces a correctly decoded page and exits the second transaction.
+- Added fresh-process bilateral CLI import checking no output and unchanged stdin
+  position. This exercises the module's non-command entry path without running
+  its CLI. Existing actual CLI execution coverage remains in the full report.
+- All 83 selected unit/observation HTTP tests pass, 5 warnings, 14.40 seconds
+  (`python-last-boundaries-complete.log`, `.data`, `.json`). Ruff, whitespace and
+  REUSE pass (724/724 files). No production source changed.
+- Combined this focused data with checkpoint 120's full/EVM aggregate because
+  production source is identical. `python-checkpoint121-combined.data`/`.json`
+  measure 8336/8338 statements and 2072/2074 branches. This is an incremental
+  aggregate, not a new full-suite run. Only discovery reconstruction and frozen
+  projection length remain uncovered in Python. Other workspace/operational and
+  remote CI/merge requirements keep the full goal open.

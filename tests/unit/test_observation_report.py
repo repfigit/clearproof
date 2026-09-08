@@ -1,5 +1,9 @@
 """Cohort denominators and baseline semantics using minimized synthetic records."""
 
+from contextlib import asynccontextmanager
+from types import SimpleNamespace
+from unittest.mock import AsyncMock
+
 import pytest
 
 from src.policy.evaluator import PolicyEvaluation
@@ -173,3 +177,35 @@ def test_observation_parser_rejects_unknown_versions(version):
     record["schema_version"] = version
     with pytest.raises(ValueError, match="Unsupported observation version"):
         parse_observation(record)
+
+
+@pytest.mark.asyncio
+async def test_observation_scan_rejects_disappeared_record_and_exits_transaction(monkeypatch):
+    from src.auth.principal import Principal
+    from src.services import observation_report as service
+
+    record = observation("ALLOW")
+    principal = Principal(tenant_id=record.tenant_id, actor_id="reader", roles=("policy:read", "evidence:decrypt"))
+    tx = SimpleNamespace(record_ids=AsyncMock(return_value=[record.digest]), get=AsyncMock(return_value=None))
+    exits = []
+
+    @asynccontextmanager
+    async def transaction():
+        try:
+            yield tx
+        finally:
+            exits.append(True)
+
+    # Inject inconsistent storage at the transaction boundary; decoding remains real.
+    monkeypatch.setattr(service, "PilotStore", lambda *args: SimpleNamespace(transaction=transaction))
+    request = service.ObservationPageRequest(limit=1)
+    with pytest.raises(ValueError, match="^Observation disappeared during scan$"):
+        await service.list_observations(None, None, principal, request)
+    assert exits == [True]
+    tx.record_ids.assert_awaited_once_with("observation", after=None, limit=2)
+    tx.get.assert_awaited_once_with("observation", record.digest)
+    tx.get.return_value = record.model_dump(mode="json")
+    result = await service.list_observations(None, None, principal, request)
+    assert exits == [True, True]
+    assert result["observations"] == [record.report()]
+    assert result["next_after"] is None
