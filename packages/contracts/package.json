@@ -32,7 +32,8 @@
     "update-sanctions": "hardhat run scripts/update-sanctions-root.ts",
     "relay-sanctions": "ts-node scripts/relay-sanctions-root.ts",
     "typecheck": "hardhat typechain && tsc --noEmit",
-    "test:coverage": "hardhat coverage"
+    "test:coverage": "hardhat coverage && npm run coverage:check",
+    "coverage:check": "istanbul check-coverage --statements 100 --branches 100 --functions 100 --lines 100 coverage/coverage-final.json"
   },
   "devDependencies": {
     "@nomicfoundation/hardhat-toolbox": "^5.0",

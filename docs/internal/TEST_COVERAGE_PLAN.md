@@ -2414,3 +2414,19 @@ still need completion and final merged-main verification.
 - This completes local measured Solidity coverage, not the repository goal.
   Full Python rerun, coverage CI gates/artifact retention, operational/browser
   checks and remote CI/review/merge verification remain required.
+
+## One hundred and thirty-third checkpoint
+
+- Added Solidity coverage gates for all four metrics using the installed
+  sc-istanbul CLI supplied by solidity-coverage. The complete current report
+  passes; independent temporary reports with one uncovered statement, branch,
+  function or line each fail with exit 1 (`coverage-gate-negative-*.log`).
+  This verifies the original Solidity line map as well as statement counts.
+- The CI circuit job now runs gated full coverage after creating both fresh proof
+  bundles and completing its durable mirror check. It restores normal bytecode
+  even on failure, runs full normal-bytecode verification on success, and uploads
+  coverage evidence with seven-day retention even when coverage fails.
+- Workflow YAML and whitespace checks pass. No application/test source changed;
+  checkpoint 132 remains the current full local Solidity execution evidence.
+  Remote workflow execution is not yet verified. Full Python rerun, remaining
+  operational/browser verification and remote CI/review/merge keep the goal open.

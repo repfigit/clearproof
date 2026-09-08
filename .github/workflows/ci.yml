@@ -195,6 +195,28 @@ jobs:
           CLEARPROOF_PILOT_TEST_ARTIFACTS: ${{ runner.temp }}/clearproof-development-circuits/pilot
           CLEARPROOF_POLICY_CLI_TEST: "1"
         run: uv run python scripts/test_pilot_mirror.py "$CLEARPROOF_PILOT_TEST_ARTIFACTS" --output "$RUNNER_TEMP/clearproof-pilot-run"
+      - name: Full Solidity coverage with fresh legacy and pilot proofs
+        env:
+          CLEARPROOF_PILOT_TEST_ARTIFACTS: ${{ runner.temp }}/clearproof-development-circuits/pilot
+          CLEARPROOF_LEGACY_TEST_ARTIFACTS: ${{ runner.temp }}/clearproof-development-circuits/legacy
+        run: npm run test:coverage --workspace=@clearproof/contracts
+      - name: Restore normal contract bytecode
+        if: always()
+        run: npm exec --workspace=@clearproof/contracts -- hardhat compile --force
+      - name: Full normal-bytecode contract verification
+        env:
+          CLEARPROOF_PILOT_TEST_ARTIFACTS: ${{ runner.temp }}/clearproof-development-circuits/pilot
+          CLEARPROOF_LEGACY_TEST_ARTIFACTS: ${{ runner.temp }}/clearproof-development-circuits/legacy
+        run: npm exec --workspace=@clearproof/contracts -- hardhat test --no-compile
+      - name: Retain Solidity coverage evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: solidity-coverage
+          path: |
+            packages/contracts/coverage/
+            packages/contracts/coverage.json
+          retention-days: 7
       - name: Upload synthetic pilot reports and encrypted export
         uses: actions/upload-artifact@v4
         with:
