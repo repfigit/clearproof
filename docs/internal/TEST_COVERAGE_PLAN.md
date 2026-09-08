@@ -1216,3 +1216,21 @@ still need completion and final merged-main verification.
 - Full repository coverage remains incomplete; checkpoint 54 is the latest full
   Python report. Bilateral receiver guards, other Python paths, SDK, Solidity,
   MDX/browser, scripts and final remote CI/merge verification remain outstanding.
+
+## Sixty-seventh checkpoint
+
+- Added bilateral receiver checks for a valid self-hosted beneficiary (unsupported
+  by this simulator), invalid behavior/clock configuration, extra/missing message
+  fields, timeout deadline types and exact lifetime boundaries, and a substituted
+  information signature. The signature case checks both its specific internal
+  rejection and the public redacted error.
+- Original authentic requests still pass every supported behavior, key overlap,
+  CLI and durable local exchange scenario. A fixture spelling error was corrected
+  before the accepted run; no production source changed.
+- The selected real authorization integration test passes in 113.93 seconds.
+  Bilateral receiver measures 62/62 statements and 20/20 branches
+  (`bilateral-complete.log`/`.data`). Ruff/format/whitespace pass;
+  owned PostgreSQL stopped.
+- Full repository coverage remains incomplete; checkpoint 54 is the last full
+  Python measurement. Proof-route gaps, other Python paths, SDK, Solidity,
+  MDX/browser, operational scripts and remote CI/merge verification remain.

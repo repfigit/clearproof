@@ -4550,6 +4550,31 @@ def check_bilateral_scenarios(record, receipt, configuration, decision_authority
         private_keys={receipt["recipient_key_id"]: private},
     )
     receiver = LocalBilateralCounterparty(**configuration_args)
+    from src.protocol.transfer import Transfer, VerificationContext
+
+    self_hosted_value = configuration.transfer.model_dump(mode="json")
+    self_hosted_value["beneficiary"].update(kind="self_hosted", vasp_did=None)
+    self_hosted = Transfer.model_validate(self_hosted_value)
+    self_hosted_context = VerificationContext.model_validate(
+        {**configuration.context.model_dump(), "transfer_digest": self_hosted.digest}
+    )
+    with pytest.raises(ValueError, match="requires a beneficiary VASP"):
+        LocalBilateralCounterparty(**{**configuration_args, "transfer": self_hosted, "context": self_hosted_context})
+    for overrides in ({"behavior": "unsupported"}, {"now": True}, {"now": str(now)}, {"now": -1}):
+        with pytest.raises(ValueError, match="Invalid local bilateral message or recipient configuration"):
+            receiver.receive(request, **{"now": now, **overrides})
+    for malformed in ({**request, "unexpected": "synthetic"}, {k: v for k, v in request.items() if k != "profile"}):
+        with pytest.raises(ValueError, match="Invalid local bilateral message or recipient configuration"):
+            receiver.receive(malformed, now=now)
+    for deadline in (None, True, str(now + 1), receipt["authorized_at"], receipt["expires_at"]):
+        with pytest.raises(ValueError, match="Invalid local bilateral message or recipient configuration"):
+            receiver.receive(request, now=now, behavior="timeout", deadline=deadline)
+    changed_signature = copy.deepcopy(request)
+    changed_signature["information_approval"]["signature"] = "00" * 64
+    with pytest.raises(ValueError, match="Bilateral information approval differs from authorized evidence"):
+        receiver._receive(changed_signature, now=now, behavior="accept", deadline=None)
+    with pytest.raises(ValueError, match="Invalid local bilateral message or recipient configuration"):
+        receiver.receive(changed_signature, now=now)
     for behavior, outcome in (
         ("accept", "accepted"),
         ("reject", "rejected"),
