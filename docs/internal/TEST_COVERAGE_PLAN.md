@@ -1901,3 +1901,24 @@ still need completion and final merged-main verification.
 - TypeScript and whitespace pass; normal generated bindings are unchanged.
   Other contract/Python/generated, workspace/operational and remote CI/merge
   requirements keep the full repository goal open.
+
+## One hundred and fifth checkpoint
+
+- Audited all threshold-table writes: construction seeds the fallback, the sole
+  writing helper always sets registered=true, and there is no deletion or other
+  mutation path. Added a public-API invariant test for default/explicit resolution,
+  accepted updates at uint64 boundaries, rejected ordering and unauthorized
+  updates. All 11 threshold tests pass before simplification (three seconds).
+- Removed the redundant missing-fallback guard from proof verification and
+  documented the maintained invariant. Threshold ordering, authorization and
+  comparisons against all three proof signals remain unchanged. No corrupted
+  storage setup or coverage exclusion was introduced.
+- All 54 combined registry/jurisdiction/threshold tests pass instrumented in
+  58 seconds. ComplianceRegistry reaches 73/73 lines, 67/67 statements, 88/88
+  branch outcomes and 14/14 functions (`compliance-invariant-complete.log`/`.json`).
+- Forced normal compilation regenerates only the expected compliance-registry
+  factory. All 118 contract tests pass with actual pilot/legacy artifacts in
+  51 seconds, no skips (`compliance-invariant-full-normal.log`). TypeScript and
+  whitespace pass. This source change is local, not a deployed-contract upgrade.
+- Other contract/Python/generated, workspace/operational and remote CI/merge
+  requirements remain incomplete; the full repository goal stays open.
