@@ -9,6 +9,7 @@ export type { ComplianceRegistry } from "./ComplianceRegistry";
 export type { Groth16Verifier } from "./Groth16Verifier";
 export type { ISanctionsRootReceiver } from "./ISanctionsRootReceiver";
 export type { MockVerifier } from "./MockVerifier";
+export type { PairingHarness } from "./PairingHarness";
 export type { PilotCurrentRegistry } from "./PilotCurrentRegistry";
 export type { PilotGroth16Verifier } from "./PilotGroth16Verifier";
 export type { PilotRootCheckpoint } from "./PilotRootCheckpoint";

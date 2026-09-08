@@ -28,6 +28,8 @@ export type { ISanctionsRootReceiver } from "./contracts/ISanctionsRootReceiver"
 export { ISanctionsRootReceiver__factory } from "./factories/contracts/ISanctionsRootReceiver__factory";
 export type { MockVerifier } from "./contracts/MockVerifier";
 export { MockVerifier__factory } from "./factories/contracts/MockVerifier__factory";
+export type { PairingHarness } from "./contracts/PairingHarness";
+export { PairingHarness__factory } from "./factories/contracts/PairingHarness__factory";
 export type { PilotCurrentRegistry } from "./contracts/PilotCurrentRegistry";
 export { PilotCurrentRegistry__factory } from "./factories/contracts/PilotCurrentRegistry__factory";
 export type { PilotGroth16Verifier } from "./contracts/PilotGroth16Verifier";

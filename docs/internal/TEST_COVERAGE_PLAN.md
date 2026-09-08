@@ -2323,3 +2323,22 @@ still need completion and final merged-main verification.
   No production source or proving artifacts changed. The final defensive G2
   pairing-result outcome, other Solidity gaps, full Python rerun, operational
   checks and remote CI/merge keep the full repository goal open.
+
+## One hundred and twenty-eighth checkpoint
+
+- Added a test-only Pairing harness with normal generated bindings. Tests exercise
+  actual EVM precompiles: canonical generators, infinity, double negation, inverse
+  addition, multiplication identities, empty pairing, a false single pairing and
+  cancellation. Both length-mismatch directions and off-curve addition/scalar/
+  pairing operands reject with exact errors; valid multiplication still succeeds.
+- Two tests pass normally (2 seconds), instrumented (under one second), and after
+  restoring normal bytecode. Focused Pairing branch coverage is 100%; its
+  pairingProd4 wrapper is exercised by verifier suites rather than this harness,
+  so focused line/function coverage remains partial. Harness coverage is 100%.
+  Evidence: `pairing-library-instrumented.log`/`.json` and `-restored-normal.log`.
+- Initial TypeScript errors from positional struct arguments were corrected to
+  named ABI fields. Final typecheck, whitespace and REUSE pass. Only the new
+  harness bindings and normal generated indexes change; existing verifier
+  factories remain unchanged. No proving artifacts or deployments changed.
+- Full Solidity aggregation, remaining verifier/registry defensive branches,
+  full Python rerun, operational checks and remote CI/merge remain required.
