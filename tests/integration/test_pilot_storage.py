@@ -5468,3 +5468,183 @@ async def test_policy_activation_must_cover_proof_evaluation_time(activation_cas
         with pytest.raises(ValueError, match="does not cover proof evaluation time"):
             await load_active_policy(tx, activation_scope(policy), now=now + 1, evaluated_at=evaluated_at)
         assert await load_active_policy(tx, activation_scope(policy), now=now + 1, evaluated_at=now) == policy
+
+
+@pytest.fixture
+async def capture_case(db, policy_review_case):
+    from types import SimpleNamespace
+
+    from pydantic import RootModel
+
+    from src.protocol.root_snapshot import RootSnapshot, root_scope_id
+    from src.services.policy_activation import activation_scope
+
+    review, request, now = policy_review_case
+    policy, case = request.policy, request.cases[0].case
+    target = store(db, roles=(*ROLES, "facts:ingest", "policy:activate"))
+    credential_id, fact_id = "ca" * 32, "fa" * 32
+    # This function captures already-validated inputs; these minimal synthetic
+    # records test capture/pinning, not enrollment, root trust or proof validity.
+    inputs = {
+        "transfer": case.transfer,
+        "context": case.context,
+        "registry": SimpleNamespace(definitions=()),
+        "valuation_approval": RootModel({"fixture": "synthetic-valuation"}),
+        "root_pins": RootModel({"fixture": "synthetic-pins"}),
+    }
+    async with target.transaction() as tx:
+        await tx.put(
+            "credential", credential_id, {"consent": {"credential": {"issuer_did": "did:web:synthetic.example"}}}
+        )
+        await tx.put("policy", policy.digest, policy.model_dump(mode="json"))
+        await tx.put("policy-activation", activation_scope(policy), {"fixture": "synthetic-activation"})
+        await tx.put("fact-evidence", fact_id, {"fixture": "synthetic-fact"})
+        for name, kind in (("issuance", "issuance-root"), ("issuers", "issuer-root"), ("sanctions", "sanctions-root")):
+            snapshot = RootSnapshot(
+                tenant_id=target.tenant_id,
+                chain_id=int(case.context.deployment_chain_id),
+                registry_address=case.context.deployment_address,
+                kind=kind,
+                issuer_did="did:web:synthetic.example" if name == "issuance" else None,
+                root="123",
+                tree_depth=8,
+                source_digest="ab" * 32,
+                revision=1,
+                issued_at=now,
+                expires_at=now + 100,
+                key_id="cd" * 32,
+            )
+            inputs[name] = SimpleNamespace(snapshot=snapshot)
+            await tx.put(kind, root_scope_id(snapshot), snapshot.model_dump(mode="json"))
+    verifier = SimpleNamespace(
+        artifacts=SimpleNamespace(
+            manifest=RootModel({"fixture": "synthetic-manifest"}), verification_key_bytes=b"synthetic-key"
+        ),
+        bundle=b"synthetic-runtime",
+    )
+    arguments = dict(
+        inputs=inputs, verifier=verifier, credential_id=credential_id, fact_ids=(fact_id,), policy=policy, now=now
+    )
+    return target, arguments
+
+
+@pytest.mark.parametrize(
+    "kind",
+    ["credential", "policy", "policy-activation", "issuance-root", "issuer-root", "sanctions-root", "fact-evidence"],
+)
+async def test_authorization_capture_requires_each_selected_record(capture_case, monkeypatch, kind):
+    from src.services.authorization_evidence import retain_authorization_evidence
+    from src.storage.pilot import PilotTransaction
+
+    target, arguments = capture_case
+    original = PilotTransaction.read
+
+    async def missing(tx, selected_kind, identity, **kwargs):
+        if selected_kind == kind:
+            return None
+        return await original(tx, selected_kind, identity, **kwargs)
+
+    monkeypatch.setattr(PilotTransaction, "read", missing)
+    with pytest.raises(ValueError, match="Required authorization evidence is unavailable"):
+        async with target.transaction() as tx:
+            await retain_authorization_evidence(tx, **arguments)
+    async with target.transaction() as tx:
+        assert await tx.record_ids("authorization-evidence") == []
+
+
+async def test_authorization_capture_rechecks_local_revocation(capture_case):
+    from src.services.authorization_evidence import retain_authorization_evidence
+
+    target, arguments = capture_case
+    async with target.transaction() as tx:
+        await tx.put("revocation", arguments["credential_id"], {"fixture": "synthetic-revoked"})
+    with pytest.raises(ValueError, match="Credential was revoked during authorization"):
+        async with target.transaction() as tx:
+            await retain_authorization_evidence(tx, **arguments)
+    async with target.transaction() as tx:
+        assert await tx.record_ids("authorization-evidence") == []
+
+
+@pytest.mark.parametrize("size", [0, 131073])
+async def test_authorization_capture_size_failure_rolls_back_earlier_chunks(capture_case, size):
+    from src.services.authorization_evidence import retain_authorization_evidence
+
+    target, arguments = capture_case
+    arguments["verifier"].artifacts.verification_key_bytes = b"x" * size
+    with pytest.raises(ValueError, match="configuration exceeds capture limit"):
+        async with target.transaction() as tx:
+            await retain_authorization_evidence(tx, **arguments)
+    async with target.transaction() as tx:
+        assert await tx.record_ids("authorization-evidence") == []
+
+
+@pytest.mark.parametrize("size", [32768, 32769, 131072])
+async def test_authorization_capture_chunks_roundtrip_and_are_reused(capture_case, size):
+    import base64
+    import hashlib
+
+    from src.services.authorization_evidence import retain_authorization_evidence
+
+    target, arguments = capture_case
+    raw = b"x" * size
+    arguments["verifier"].artifacts.verification_key_bytes = raw
+    async with target.transaction() as tx:
+        identity = await retain_authorization_evidence(tx, **arguments)
+    manifest = await target.get("authorization-evidence", identity)
+    config = manifest["configuration"]["verification_key"]
+    chunks = [await target.get("authorization-evidence", key) for key in config["chunks"]]
+    assert b"".join(base64.b64decode("".join(c["data"]), validate=True) for c in chunks) == raw
+    assert config["size"] == size and config["sha256"] == hashlib.sha256(raw).hexdigest()
+    assert len(config["chunks"]) == (size + 32767) // 32768
+    assert all(len(part) <= 2048 for chunk in chunks for part in chunk["data"])
+    async with target.transaction() as tx:
+        before = await tx.record_ids("authorization-evidence")
+        later = await retain_authorization_evidence(tx, **{**arguments, "now": arguments["now"] + 1})
+        after = await tx.record_ids("authorization-evidence")
+    assert set(after) - set(before) == {later}
+    assert manifest["records"] == (await target.get("authorization-evidence", later))["records"]
+
+
+async def test_authorization_capture_rejects_conflicting_encrypted_chunk(capture_case):
+    import base64
+
+    from src.protocol.canonical import canonical_bytes, record_digest
+    from src.services.authorization_evidence import retain_authorization_evidence
+
+    target, arguments = capture_case
+    raw = canonical_bytes(arguments["verifier"].artifacts.manifest.model_dump(mode="json"))
+    value = {"schema_version": "clearproof-evidence-chunk-v1", "data": [base64.b64encode(raw).decode("ascii")]}
+    identity = record_digest("clearproof/evidence-chunk/v1", value)
+    conflicting = {"fixture": "synthetic-conflict"}
+    async with target.transaction() as tx:
+        await tx.put("authorization-evidence", identity, conflicting)
+    with pytest.raises(ValueError, match="Authorization evidence chunk mismatch"):
+        async with target.transaction() as tx:
+            await retain_authorization_evidence(tx, **arguments)
+    async with target.transaction() as tx:
+        assert await tx.record_ids("authorization-evidence") == [identity]
+        assert await tx.get("authorization-evidence", identity) == conflicting
+
+
+async def test_authorization_capture_pins_record_revision_across_later_update(capture_case):
+    import hashlib
+
+    from src.protocol.canonical import canonical_bytes
+    from src.protocol.root_snapshot import root_scope_id
+    from src.services.authorization_evidence import retain_authorization_evidence
+
+    target, arguments = capture_case
+    async with target.transaction() as tx:
+        identity = await retain_authorization_evidence(tx, **arguments)
+    manifest = await target.get("authorization-evidence", identity)
+    scope = root_scope_id(arguments["inputs"]["issuers"].snapshot)
+    reference = next(r for r in manifest["records"] if r["kind"] == "issuer-root")
+    async with target.transaction() as tx:
+        original = await tx.read("issuer-root", scope)
+        await tx.put("issuer-root", scope, {**original.value, "root": "124"}, expected_revision=1)
+    retained = await target.read("issuer-root", scope, revision=reference["revision"])
+    current = await target.read("issuer-root", scope)
+    assert retained.revision == reference["revision"] == 1 and current.revision == 2
+    assert hashlib.sha256(canonical_bytes(retained.value)).hexdigest() == reference["sha256"]
+    assert hashlib.sha256(canonical_bytes(current.value)).hexdigest() != reference["sha256"]
+    assert await target.get("authorization-evidence", identity) == manifest

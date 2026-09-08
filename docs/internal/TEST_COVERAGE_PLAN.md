@@ -1060,3 +1060,23 @@ still need completion and final merged-main verification.
 - Full repository coverage remains incomplete. Checkpoint 54 is the latest full
   Python report, with other Python, SDK, Solidity, MDX/browser, operational scripts
   and remote CI/merge requirements still outstanding.
+
+## Fifty-seventh checkpoint
+
+- Added 15 PostgreSQL authorization-evidence capture cases for every missing
+  selected record, local revocation, empty/oversized configuration rollback,
+  chunk boundaries/reuse, authenticated chunk conflict and retained revision pins.
+- The capture fixture uses explicitly synthetic minimal prevalidated-input
+  records. It tests persistence and reference capture, not cryptographic or
+  enrollment authenticity. Missing-record cases fault-inject the read boundary;
+  storage, encryption, chunk hashes and transaction rollback remain real.
+- Exact 32 KiB/128 KiB boundaries reconstruct the original bytes; a second capture
+  reuses chunks. After a source update, the original manifest still references
+  the original revision and its hash, never the changed head.
+- All 15 selected tests pass; authorization evidence measures 40/40 statements
+  and 18/18 branches (`authorization-evidence-complete.log`/`.data`). The other
+  118 storage tests were deselected. Ruff/whitespace pass; owned PostgreSQL
+  stopped. No production source changed.
+- Full repository coverage remains incomplete; checkpoint 54 is the last full
+  Python measurement. Other Python paths, SDK, Solidity, MDX/browser, scripts
+  and final remote CI/merge verification remain outstanding.
