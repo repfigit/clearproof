@@ -1858,3 +1858,24 @@ still need completion and final merged-main verification.
   normal bytecode. No production source changed. Other proof-validation branches,
   contract/Python/generated, workspace/operational and remote CI/merge requirements
   remain open for the full repository goal.
+
+## One hundred and third checkpoint
+
+- Added eight signal-binding rejections (chain, contract, expiry, future timestamp,
+  sanctions/issuer roots, transfer and revoked credential), plus paused dependency,
+  wrong-wallet and unset-selector checks to the existing controlled-pairing
+  scenario. Every failure preserves absent proof state, unused nullifier and
+  empty proof/observation event logs before the unchanged submission succeeds.
+- After success, exact transfer replay and a correctly rebound second transfer
+  with the same nullifier reject; the second record remains absent and exactly
+  one ProofVerified event exists. Pairing is explicitly mocked in this suite;
+  separate artifact suites establish cryptographic behavior.
+- Seven scenarios pass normally (three seconds), instrumented (six seconds) and
+  after normal-bytecode restoration (two seconds). Focused ComplianceRegistry
+  coverage reaches 94.59% lines and 78.89% branches
+  (`legacy-binding-instrumented.log` and preserved `.json`,
+  `legacy-binding-restored-normal.log`); this is not a replacement full report.
+- TypeScript and whitespace pass; normal generated bindings are unchanged.
+  No production source changed. Remaining validation/cryptographic branches,
+  other contract/Python/generated, workspace/operational and remote CI/merge
+  requirements keep the full repository goal open.
