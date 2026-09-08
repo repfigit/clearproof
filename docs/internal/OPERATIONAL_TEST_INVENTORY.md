@@ -24,7 +24,7 @@ removed from the Python denominator.
 | `generate_verifier_bls.mjs` | 41/41 statements, 12/12 branches, 35/35 lines, 4/4 functions; exact benchmark output, real CLI and rejected inputs | Retain coverage; benchmark is not a production migration |
 | `check_eip2537.mjs` | 32/32 statements, 16/16 branches, 28/28 lines, 1/1 functions; response/fallback/timeout tests and actual local EVM pairing vector | Retain coverage; tests do not establish current public-chain availability |
 | `compile_circuits.sh` | Development artifacts exercised through isolated runner | Shell entry/options/failure audit in an isolated checkout |
-| `circuit_lint.sh` | Existing CI static-analysis job | Local command/error-path evidence and remote run verification |
+| `circuit_lint.sh` | Ten isolated Bash acceptance tests; actual Circomspect passes with five documented findings; seven real SARIF reports validated | Retain shell behavior evidence and verify remote run; no line/branch percentage claimed |
 | `regen_protobufs.sh` | Existing CI freshness job | Verify exact output/freshness/failure behavior and remote run |
 
 Run the current focused operational job from the repository root:
@@ -42,6 +42,7 @@ uv run python -m pytest \
   tests/unit/test_pilot_mirror_reports.py \
   tests/unit/test_pilot_mirror_runner.py \
   tests/unit/test_development_setup.py \
+  tests/unit/test_circuit_lint_script.py \
   --cov=scripts --cov-branch --cov-report=json:operational-coverage.json \
   --cov-report=term-missing -q
 ```
@@ -71,3 +72,13 @@ Poseidon tests exercise actual circomlib hashing with controlled process streams
 the JSON/LCOV reports. Probe tests replace fetch locally; the successful pairing
 vector was also checked on a local Hardhat EVM. Its 384-byte infinity-pair input
 and exact boolean output follow [EIP-2537](https://eips.ethereum.org/EIPS/eip-2537#abi-for-pairing).
+
+Circuit lint shell acceptance (checkpoint 149) covers both output modes, all
+seven analyzer invocations, all five allowlist patterns, unexpected warnings and
+errors, missing executable, silent/non-diagnostic exits, fatal exits containing
+an otherwise allowed warning, and temporary-file cleanup. Four failing tests
+exposed swallowed analyzer failures; the runner now accepts exit 1 only when a
+diagnostic was emitted, then applies its finding filter. Other nonzero statuses
+become unexpected errors. Real Circomspect passes in both modes; seven SARIF 2.1.0
+reports were checked in an isolated external tree. These are behavioral acceptance
+checks, not a claim of measured Bash line or branch coverage.

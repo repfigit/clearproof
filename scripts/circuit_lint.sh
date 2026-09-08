@@ -53,20 +53,30 @@ ALLOWLIST=(
 )
 
 raw=$(mktemp)
-trap 'rm -f "$raw"' EXIT
+current=$(mktemp)
+trap 'rm -f "$raw" "$current"' EXIT
 
 status=0
 for f in "${CIRCUIT_FILES[@]}"; do
+    analyzer_status=0
     if [[ $SARIF -eq 1 ]]; then
-        circomspect "$f" --sarif-file "$(basename "$f" .circom).sarif" >>"$raw" 2>&1 || true
+        circomspect "$f" --sarif-file "$(basename "$f" .circom).sarif" >"$current" 2>&1 || analyzer_status=$?
     else
-        circomspect "$f" >>"$raw" 2>&1 || true
+        circomspect "$f" >"$current" 2>&1 || analyzer_status=$?
+    fi
+    cat "$current" >>"$raw"
+    # Exit 1 accompanies findings. Other failures, or exit 1 without a
+    # diagnostic, must not disappear when we filter the documented findings.
+    if [[ "$analyzer_status" -ne 0 ]] && {
+        [[ "$analyzer_status" -ne 1 ]] || ! grep -qE "^(warning|error)" "$current"
+    }; then
+        echo "error: circomspect exited with status $analyzer_status for $f" >>"$raw"
     fi
 done
 
 # Extract the first line of every warning/error and subtract the allowlist.
 unexpected=$(mktemp)
-trap 'rm -f "$raw" "$unexpected"' EXIT
+trap 'rm -f "$raw" "$current" "$unexpected"' EXIT
 grep -E "^(warning|error)" "$raw" > "$unexpected" || true
 for allowed in "${ALLOWLIST[@]}"; do
     grep -vF "$allowed" "$unexpected" > "$unexpected.tmp" || true

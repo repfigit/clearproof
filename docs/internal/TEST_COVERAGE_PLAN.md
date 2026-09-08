@@ -2806,3 +2806,24 @@ still need completion and final merged-main verification.
   behavior (`poseidon-real148.log`).
 - Shell acceptance coverage, cross-job aggregation, fresh full-suite verification
   and remote CI/review/merge remain outstanding. No full-goal completion claim.
+
+
+### Checkpoint 149 — circuit lint shell acceptance and failure propagation
+
+- Added ten tests that execute the actual Bash script in an isolated project
+  with controlled analyzer processes and a minimal command PATH. They verify
+  every configured circuit, both report modes, documented and unexpected findings,
+  unavailable/crashed tools and temporary-file cleanup. Four initially failed
+  because analyzer failures were suppressed (`shell-lint-before149.log`).
+- Fixed the runner to retain per-invocation exit status. Exit 1 with diagnostics
+  still reaches normal allowlist filtering; other failed invocations produce an
+  unexpected error, including fatal failures with an otherwise allowed warning.
+- All ten tests pass in 7.99 seconds (`shell-lint149.log`). Actual Circomspect
+  passes with five documented findings and zero unexpected findings
+  (`shell-lint-real149.log`). A separate real SARIF run produces seven valid
+  SARIF 2.1.0 reports in external `lint-sarif149-icsng8mo`; no generated report
+  or circuit artifact is added to the worktree.
+- CI operational tests now include these regressions. Ruff, Bash syntax,
+  whitespace and CI YAML parsing pass. Shell coverage is behavioral evidence,
+  not an instrumented percentage. Protobuf/build-script acceptance, aggregate
+  coverage verification and remote CI/review/merge remain outstanding.
