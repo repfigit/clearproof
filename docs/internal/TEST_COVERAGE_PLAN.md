@@ -1110,3 +1110,18 @@ still need completion and final merged-main verification.
 - Full repository coverage remains incomplete; checkpoint 54 remains the last
   full Python report. Other Python paths, SDK, Solidity, MDX/browser, scripts
   and remote CI/merge verification remain outstanding.
+
+## Sixtieth checkpoint
+
+- Added 21 timestamp record parsing tests: exact byte round trips across chunk
+  boundaries and the 32 KiB maximum; wrong schema/tenant/receipt; malformed
+  record/response types, chunk lengths/counts and Base64; and decoded overflow
+  that still fits the encoded chunk-count limit.
+- All 21 pass in 4.60 seconds (`timestamp-framing.log`/`.data`). These
+  exercise framing only, not timestamp signature authenticity. The focused
+  service-module report is 19/47 statements with attachment paths unexecuted;
+  no claim of whole-module completion is made. Existing real signed timestamp
+  integration evidence remains in checkpoint 54's broader run.
+- Registrar work is committed as 7d018a1. No production source changed.
+  Full repository coverage and final remote CI/merge verification remain
+  incomplete; timestamp attachment rejection/conflict cases remain next work.
