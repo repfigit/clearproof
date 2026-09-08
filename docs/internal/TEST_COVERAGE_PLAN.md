@@ -1534,3 +1534,27 @@ still need completion and final merged-main verification.
   changed. Full repository coverage remains incomplete; checkpoint 69 remains
   the latest full Python baseline. Remaining Python/generated paths, other
   workspaces, operational checks and final remote CI/merge remain outstanding.
+
+## Eighty-fifth checkpoint
+
+- Added 11 tree boundary tests: malformed entry identifiers and invalid/oversized
+  sanctions inventory containers. Rejected sanctions input never reaches hashing.
+  Existing dense-reference tests now also assert published entry order and depth.
+- All 20 tree tests pass in 0.39 seconds; pilot tree measures 51/51 statements and
+  20/20 branches (`pilot-tree-boundaries.log`/`.data`). The sanctions report
+  is intentionally partial (18/36 statements); this invocation tests its input
+  boundary, not normal sanctions witness generation.
+
+## Eighty-sixth checkpoint
+
+- Added a Poseidon constants test using an actual temporary numeric-JSON encoding
+  of the committed constants, checked against all existing fixed reference
+  vectors. It clears the cache, restores the original constants path and checks
+  a reference vector again to prevent cross-test contamination.
+- All 14 Poseidon tests pass in 9.64 seconds, including live parity and constants
+  regeneration checks. Poseidon measures 48/48 statements and 12/12 branches
+  (`poseidon-complete.log`/`.data`).
+- Ruff/format/whitespace pass. No production constants or source changed.
+  Full repository coverage remains incomplete. Checkpoint 69 is the latest full
+  Python report; remaining Python/generated paths, other workspaces, operational
+  tests and final remote CI/merge verification remain open.
