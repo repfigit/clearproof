@@ -51,11 +51,13 @@ exercise every supported test layer with its required local dependencies.
 
 ## Next uncovered behavior to address
 
-Python: authentication middleware, route configuration errors, publication recovery,
-proof preparation/projection, and historical status checks. The current combined
-report has 189 missed lines and 72 missed branches after the sixty-ninth checkpoint.
-Generated protobufs account for 82 missed lines and five missed branches and remain
-in the denominator. Subprocess coverage is captured in this combined report.
+Python: the ninety-fourth checkpoint combines the full suite and explicit EVM
+paths: 94 missed statements and 16 missed branches. Generated protobufs account
+for 82 statements and five branches and remain in the denominator. Authored gaps
+are proof-route unused hashing, bilateral CLI import behavior, discovery canonical
+encoding, history certificate bounds, pilot compliance/projection/root/valuation
+validation, issuance-tree fallback and observation cohort validation. Subprocess
+coverage is captured; defensive paths still require review rather than exclusions.
 
 CLI: source line/branch/function/statement coverage is now 100%, enforced by CI.
 Keep the actual artifact/service acceptance tests alongside mocked boundary tests.
@@ -1665,3 +1667,46 @@ still need completion and final merged-main verification.
   changed. Full repository coverage remains incomplete; checkpoint 69 remains
   the latest full Python baseline. A fresh aggregate run, remaining protocol,
   generated, workspace and operational coverage and remote CI/merge are pending.
+
+
+## Ninety-fourth checkpoint
+
+- Full Python: 2245 passed, one checkpoint test skipped, 40 warnings in 464.49
+  seconds. That checkpoint passes separately on its owned EVM (2.14 seconds).
+  The explicit real PostgreSQL authorization/mirror scenario also passes (one
+  passed, 222 deselected, six warnings in 167.03 seconds). All runners exited
+  successfully; owned EVM processes are gone and PostgreSQL is stopped.
+- Explicitly combined only `full-coverage-python-eleventh.data`,
+  `full-coverage-checkpoint-eleventh.data` and `full-coverage-mirror-eleventh.data`,
+  preserving each file. Combined JSON: `full-coverage-combined-eleventh.json`.
+  Statements: 8249/8343 (98.8733%); branches: 2060/2076 (99.2293%). This adds
+  95 covered statements and 56 branches over checkpoint 69.
+- Generated protobufs remain 70/152 statements and 3/8 branches. Authored source
+  is 8179/8191 (99.8535%) and 2057/2068 (99.4681%). Twelve authored statements
+  and eleven branches remain uncovered; no new coverage exclusion was added.
+- All Python test lint checks and REUSE (720/720) pass. This baseline includes
+  the credential expiry source fix. Full repository coverage is not complete;
+  remaining Python/generated, workspace/operational and remote CI/merge
+  requirements remain open.
+
+## Ninety-fifth checkpoint
+
+- Added six router lifecycle/authority tests covering absent/zero verifiers,
+  activation and retirement at exact timelock boundaries, unchanged pending state
+  on early rejection, immediate emergency disable, future-only delay updates and
+  separation of emergency pause from administrative recovery. Verification after
+  unpause routes to the actual Groth16 verifier and rejects an invalid proof.
+- All eight selected tests pass normally (two seconds) and instrumented. Router
+  coverage reaches 100% statements, branches, functions and lines: 25 statements,
+  38 branch outcomes and 12 functions (`router-boundaries-instrumented.log` and
+  preserved `.json`). Other contracts in this focused report are intentionally
+  partial; their aggregate coverage has not been refreshed.
+- Restored normal artifacts with a forced compile; no generated bindings remain
+  changed. Contract TypeScript checking passes. An initial broad run lacked the
+  artifact variables and hit the default temporary directory's write quota in
+  deployment output. Rerunning with the dedicated TMPDIR and explicit pilot and
+  legacy bundles succeeds: all 93 contract tests pass in 48 seconds, no skips
+  (`router-boundaries-full-normal-artifacts.log`).
+- Whitespace checks pass. No production contract source changed. Remaining
+  contract branches, other workspace and operational coverage, Python/generated
+  gaps and final remote CI/merge verification keep the full goal open.
