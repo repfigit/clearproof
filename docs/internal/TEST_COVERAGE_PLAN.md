@@ -3072,3 +3072,28 @@ still need completion and final merged-main verification.
 - Only root relay remains unmeasured in this tooling inventory. Aggregate V8
   coverage is 542/656 statements, 196/231 branches, 530/640 lines and 38/49
   functions. Final layer refresh and remote CI/review/merge remain outstanding.
+
+
+### Checkpoint 160 — all contract scripts measured; accurate relay results
+
+- Added 30 relay tests covering discovery/selection, confirmation, freshness,
+  missing prerequisites, unknown/missing targets, chain mismatch, failed RPCs,
+  already-matching roots/counts, gas-price fallback, transaction errors, provider
+  cleanup, invalid counts, deduplication and post-transaction verification.
+- Corrected the test harness to resolve the contract workspace's ethers version.
+  With the corrected fixture, seven targeted regressions fail against the old
+  script (`relay-before160.log`): failed targets were reported synchronized and
+  confirmed transactions were accepted without checking resulting state.
+- The relay now retains preflight failures in its summary and exits nonzero for
+  failed targets. Each confirmed update reads back root and count at the receipt
+  block. It checks target chain IDs, validates uint32 counts, deduplicates explicit
+  targets, ignores benchmark-only deployment records and closes providers on
+  both early and normal exits. Wallet construction errors are handled per target.
+- All 174 contract-script tests pass (`contract-scripts-gate160.log`). The full
+  report reaches 678/678 statements, 254/254 branches, 660/660 lines and 51/51
+  functions across all twelve scripts (`contract-scripts160-summary.json`).
+  Coverage configuration now enforces 100% per file throughout the inventory.
+  Contract TypeScript checking and whitespace checks pass.
+- Real multi-chain relay acceptance is still required; these relay tests use
+  controlled chain responses and submit no public transactions. Final Solidity/
+  browser refresh, full audit and remote CI/review/merge remain unfinished.

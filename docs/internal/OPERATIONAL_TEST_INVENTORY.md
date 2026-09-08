@@ -116,7 +116,7 @@ not a substitute for this missing TypeScript measurement.
 | `deploy-relay.ts` | 100% all metrics | Retain real local deployment, oracle-role and record checks |
 | `deploy-verifier-bls.ts` | 100% all metrics | Retain real local vector acceptance/rejection and accurate network reporting |
 | `redeploy-verifier.ts` | 100% all metrics | Retain real timelock/resume/rollback-record checks and atomic-publication failure tests |
-| `relay-sanctions-root.ts` | 0% | Controlled relayer lifecycle and errors |
+| `relay-sanctions-root.ts` | 100% all metrics | Real multi-chain acceptance and final regression refresh remain |
 | `update-sanctions-root.ts` | 100% all metrics | Retain real synthetic oracle update and clock/state-mismatch checks |
 | `check-transfer.ts` | 100% all metrics | Retain controlled read responses/errors |
 | `verify-onchain.ts` | 100% all metrics | Retain proof formatting/submission and failure tests |
@@ -182,3 +182,19 @@ and five functions, all fully gated. All 144 contract-script tests pass. Overall
 measurement remains partial at 542/656 statements, 196/231 branches, 530/640
 lines and 38/49 functions; root relay is the remaining unmeasured script. All
 updates in tests use controlled responses or a single newly owned local oracle.
+
+Checkpoint 160 completes measured contract-script coverage: 678/678 statements,
+254/254 branches, 660/660 lines and 51/51 functions across all twelve files.
+The root gate now requires 100% for every inventoried file, including unimported
+files. All 174 tests pass. Relay tests use controlled chain, wallet and filesystem
+responses; real multi-chain acceptance is still pending. The harness resolves
+ethers from the contract workspace so its mocks match the installed dependency
+without relying on a fixed node_modules nesting layout.
+
+Relay failures now include unknown/missing targets and failed preflight checks in
+the summary. Confirmed transactions are checked for root and count at their receipt
+block before success is recorded. Providers are closed, explicit targets are
+deduplicated, benchmark-only records are excluded from discovery, and chain IDs
+are checked against target configuration. A failed target cannot produce an
+'all networks up to date' result. Seven targeted tests fail against the preceding
+implementation with the corrected fixture. No live relays were performed.
