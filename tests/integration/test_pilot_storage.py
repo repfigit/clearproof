@@ -398,7 +398,7 @@ async def test_signed_root_publication_revision_chain_rotation_and_tenant_bounda
     assert (await reader.read("issuer-root", root_record_id(root))).revision == 2
 
 
-async def test_durable_revocation_scope_retry_and_proving_precondition(db):
+async def test_durable_revocation_scope_retry_and_proving_precondition(db, monkeypatch):
     from eth_account import Account
 
     from src.protocol.credential import PilotCredential, holder_commitment
@@ -477,7 +477,41 @@ async def test_durable_revocation_scope_retry_and_proving_precondition(db):
                 await load_unrevoked_enrollment(
                     tx, "a" * 64, chain_id=31337, registry_address="0x" + "1" * 40, now=invalid_time
                 )
+    from copy import deepcopy
+    from unittest.mock import AsyncMock
+
+    from src.storage.pilot import PilotTransaction
+
+    original = await store(db).get("credential", credential.credential_nonce)
+    async with store(db).transaction() as tx:
+        with pytest.raises(EnrollmentNotFound, match="Enrollment not found"):
+            await load_unrevoked_enrollment(tx, "ff" * 32, chain_id=31337, registry_address="0x" + "1" * 40, now=120)
+    for mutation in ("tenant", "identity", "commitment"):
+        altered = deepcopy(original)
+        if mutation == "commitment":
+            altered["credential_commitment"] = str(int(credential.commitment) + 1)
+        else:
+            field = "tenant_id" if mutation == "tenant" else "credential_nonce"
+            altered["consent"]["credential"][field] = "tenant-b" if mutation == "tenant" else "cd" * 32
+        async with store(db).transaction() as tx:
+            with monkeypatch.context() as patch:
+                patch.setattr(PilotTransaction, "get", AsyncMock(return_value=altered))
+                with pytest.raises(EnrollmentIntegrityError, match="identity or commitment failed"):
+                    await load_unrevoked_enrollment(
+                        tx, credential.credential_nonce, chain_id=31337, registry_address="0x" + "1" * 40, now=120
+                    )
+    assert await store(db).get("credential", credential.credential_nonce) == original
     request = RevocationRequest(credential_id="a" * 64, idempotency_key="revoke-1", reason_code="issuer-withdrawal")
+    with pytest.raises(EnrollmentIneligible, match="Revocation precedes enrollment"):
+        await service().revoke(request, now=109)
+    target = service()
+    foreign_record = deepcopy(original)
+    foreign_record["consent"]["credential"]["tenant_id"] = "tenant-b"
+    with monkeypatch.context() as patch:
+        patch.setattr(target._store, "get", AsyncMock(return_value=foreign_record))
+        with pytest.raises(ValueError, match="Stored enrollment tenant mismatch"):
+            await target.revoke(request, now=120)
+    assert await store(db).get("revocation", credential.credential_nonce) is None
     for changes in [{"issuer_dids": ("did:web:other.example",)}, {"roles": ("evidence:decrypt",)}]:
         unauthorized = Principal.model_validate({**principal.model_dump(), **changes})
         with pytest.raises(HTTPException) as err:

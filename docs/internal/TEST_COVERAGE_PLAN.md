@@ -1431,3 +1431,20 @@ still need completion and final merged-main verification.
 - Full repository coverage remains incomplete. Checkpoint 69 is the latest full
   Python report; remaining Python/generated branches, other workspaces,
   operational checks and final remote CI/merge verification remain open.
+
+## Seventy-ninth checkpoint
+
+- Added six enrollment checks to the durable lifecycle scenario: missing
+  enrollment, substituted retained tenant/credential/commitment, revocation
+  before acceptance and cross-tenant retained revocation input.
+- Substituted rows fault-inject read results; no forged records are persisted.
+  The missing-enrollment and early-revocation checks use actual PostgreSQL.
+  The original credential remains unchanged and no revocation exists after
+  rejection; the normal revoke/retry/reconnect and signature checks still pass.
+- The selected integration test passes in 6.07 seconds; enrollment service
+  measures 69/69 statements and 18/18 branches
+  (`enrollment-service-complete.log`/`.data`). Ruff/format/whitespace pass;
+  owned PostgreSQL stopped. No production source changed.
+- Full repository coverage remains incomplete. Checkpoint 69 is the latest full
+  Python report. Remaining service/verifier/generated paths, other workspaces,
+  operational checks and final remote CI/merge verification remain outstanding.
