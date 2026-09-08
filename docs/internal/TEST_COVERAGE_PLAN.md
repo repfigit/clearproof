@@ -1961,3 +1961,21 @@ still need completion and final merged-main verification.
   No production source changed. Remaining inspection/currentness/batch branches,
   other contract/Python/generated, workspace/operational and remote CI/merge
   requirements keep the full repository goal open.
+
+## One hundred and eighth checkpoint
+
+- Added inspection/mirroring rejection for unknown statement IDs, a relabeled
+  tenant deliberately configured with the same publisher/epoch, and proof expiry
+  extending beyond the approved statement window. Both inspection and mirroring
+  reject; neither tenant acquires a mirrored receipt or event. The original
+  valid proof still inspects and mirrors exactly once for its proper tenant.
+- All 22 current-registry tests pass normally (12 seconds), instrumented (32
+  seconds) and after restoring normal bytecode (12 seconds). Branch coverage
+  increases to 86.30%; lines/statements/functions remain 100%
+  (`current-inspection-boundaries-instrumented.log` and preserved `.json`,
+  `current-inspection-boundaries-restored-normal.log`). Other contracts in this
+  focused report remain partial.
+- TypeScript and whitespace pass; generated bindings match committed normal
+  bytecode. No production source changed. Remaining currentness/batch/defensive
+  branches, other contract/Python/generated, workspace/operational and remote
+  CI/merge requirements keep the full repository goal open.

@@ -176,6 +176,39 @@ const g2 = (p: string[][]): [G1, G1] => [[p[0][1], p[0][0]], [p[1][1], p[1][0]]]
     expect(await registry.inspect(tenant, id, a, b, c, signals)).to.equal(true);
   });
 
+  it("rejects unknown statements, relabeled tenants and proof expiry beyond approval without mirroring", async function () {
+    const { registry, tenant, publisher, consumer, statement, id, a, b, c, signals, approve, receiptId } = await loadFixture(fixture);
+    await approve();
+    const missing = ethers.id("synthetic-missing-statement");
+    await expect(registry.inspect(tenant, missing, a, b, c, signals))
+      .to.be.revertedWithCustomError(registry, "InvalidStatement");
+    await expect(registry.connect(consumer).mirror(tenant, missing, receiptId, a, b, c, signals))
+      .to.be.revertedWithCustomError(registry, "UnauthorizedConsumer");
+    // Match publisher and epoch so rejection must enforce statement tenant binding.
+    const foreign = ethers.id("synthetic-foreign-tenant");
+    await registry.setPublisher(foreign, publisher.address);
+    expect(await registry.publisherEpochs(foreign)).to.equal(await registry.publisherEpochs(tenant));
+    await expect(registry.inspect(foreign, id, a, b, c, signals))
+      .to.be.revertedWithCustomError(registry, "InvalidStatement");
+    await expect(registry.connect(consumer).mirror(foreign, id, receiptId, a, b, c, signals))
+      .to.be.revertedWithCustomError(registry, "InvalidStatement");
+    const extended = [...signals];
+    extended[5] = String(BigInt(statement.validUntil.toString()) + 1n);
+    await expect(registry.inspect(tenant, id, a, b, c, extended))
+      .to.be.revertedWithCustomError(registry, "InvalidStatement");
+    await expect(registry.connect(consumer).mirror(tenant, id, receiptId, a, b, c, extended))
+      .to.be.revertedWithCustomError(registry, "InvalidStatement");
+    for (const scope of [tenant, foreign]) {
+      expect(await registry.mirroredReceipts(scope, signals[3])).to.equal(ethers.ZeroHash);
+    }
+    expect(await registry.queryFilter(registry.filters.AuthorizationMirrored())).to.have.length(0);
+    expect(await registry.inspect(tenant, id, a, b, c, signals)).to.equal(true);
+    await registry.connect(consumer).mirror(tenant, id, receiptId, a, b, c, signals);
+    expect(await registry.mirroredReceipts(tenant, signals[3])).to.equal(receiptId);
+    expect(await registry.mirroredReceipts(foreign, signals[3])).to.equal(ethers.ZeroHash);
+    expect(await registry.queryFilter(registry.filters.AuthorizationMirrored())).to.have.length(1);
+  });
+
   it("inspects read-only, then mirrors only the approved receipt with its designated caller", async function () {
     const { registry, tenant, consumer, outsider, id, a, b, c, signals, approve, receiptId } = await loadFixture(fixture);
     expect(await registry.inspect(tenant, id, a, b, c, signals)).to.equal(true);
