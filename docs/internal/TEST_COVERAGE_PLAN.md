@@ -2094,3 +2094,22 @@ still need completion and final merged-main verification.
   Python aggregate. All source remains in the coverage denominator.
 - Ruff and whitespace pass; REUSE covers all 721 files. Full repository coverage,
   remaining operational checks and remote CI/merge remain open.
+
+## One hundred and fifteenth checkpoint
+
+- Added owned loopback gRPC servers registering the generated network and health
+  servicers. Both regular stubs and experimental client helpers exercise all five
+  RPCs and assert the exact UNIMPLEMENTED status/details, including streamed
+  failures. Every server is stopped and its worker pool joined. This synthetic
+  dispatch test makes no production mTLS or compliance claim.
+- Added isolated subprocess dependency faults for both generated gRPC modules:
+  an old advertised runtime version and a missing version helper. Tests verify
+  the actual warning-versus-error behavior and actionable module/version text.
+  No generated file is edited and the parent interpreter is unaffected.
+- All 38 selected tests pass, 11 warnings, 14.54 seconds
+  (`generated-grpc-complete.log`, `.data`, `.json`). All four generated protobuf
+  modules now measure 152/152 statements and 8/8 branches in this focused report.
+  The prior full Python aggregate must still be refreshed with these tests.
+- Ruff/whitespace pass; REUSE accounts for all 722 files. Authored Python gaps,
+  remaining Solidity/workspace and operational coverage, and remote CI/merge
+  remain incomplete. The full repository goal stays open.
