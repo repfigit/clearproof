@@ -1280,3 +1280,21 @@ still need completion and final merged-main verification.
 - Full objective remains incomplete: remaining Python gaps, SDK residual
   statements/branches, Solidity coverage, MDX/browser, operational scripts and
   final remote CI/merge verification must still be resolved.
+
+## Seventieth checkpoint
+
+- Added 16 authentication middleware cases: real ES256 valid/expired/wrong-key
+  tokens, missing JWT dependency/public key, unknown authentication mode,
+  missing/mismatched/unconfigured API keys, valid minimal claims and actual
+  missing/wrong-scheme bearer parsing in JWT and SIWE modes.
+- JWT dependency absence is isolated through the import cache and restored by
+  pytest; cryptographic verification uses fresh synthetic EC keys. Existing
+  real SIWE route scenarios run alongside these tests.
+- All 18 selected tests pass in 4.99 seconds. Authentication middleware measures
+  60/60 statements and 20/20 branches (`auth-middleware-complete.log`/`.data`).
+  Ruff/format/whitespace and REUSE (713/713 files) pass. No production source
+  changed.
+- Full repository coverage remains incomplete. Checkpoint 69 is the latest
+  complete Python baseline; route configuration, remaining Python service and
+  verifier guards, generated code, other workspaces and final remote CI/merge
+  verification remain outstanding.
