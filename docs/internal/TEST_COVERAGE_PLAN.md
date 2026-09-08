@@ -1026,3 +1026,20 @@ still need completion and final merged-main verification.
   boundaries. SDK branches, Solidity, MDX/browser, scripts and final remote CI,
   merge and merged-main verification remain unfinished. Full coverage is not yet
   established; no local percentage is a released coverage claim.
+
+## Fifty-fifth checkpoint
+
+- Added 16 publication-journal cases for nonzero registry/sender, unavailable or
+  expired consumed authority, canonical intent IDs, altered authenticated retained
+  content, index/encrypted-binding mismatches and unavailable intent handling.
+- A real PostgreSQL race synchronizes both broadcast callers after their initial
+  reads and revalidation. The locked second check permits one claim and exactly
+  one controlled send; the losing caller receives a conflict. Signed transaction
+  bytes are real, but no transaction is sent to a network.
+- All 43 journal tests pass, including existing restart, uncertainty/recovery and
+  retained-history checks. Publication journal measures 118/118 statements and
+  32/32 branches (`publication-journal-complete.log`/`.data`). Ruff and whitespace
+  pass; owned PostgreSQL stopped. No production source changed.
+- Full repository coverage remains incomplete. Checkpoint 54 is the latest full
+  Python report; other Python, SDK, Solidity, MDX/browser, scripts and final
+  remote CI/merge requirements remain outstanding.

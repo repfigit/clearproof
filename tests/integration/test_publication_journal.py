@@ -426,3 +426,106 @@ async def test_history_rejects_index_substitution_and_authenticated_sequence_gap
     with pytest.raises(ValueError, match=f"^{message}$"):
         await history.page(identity, after=1 if corruption == "cursor-gap" else 0)
     assert not (await journal.inspect(identity))["broadcast_claimed"]
+
+
+@pytest.mark.parametrize("mutation", ["missing", "unconsumed", "expiry"])
+async def test_reservation_rejects_unavailable_consumed_authority(db, mutation):
+    journal, account, transaction, binding = await seed(db)
+    if mutation == "missing":
+        binding = binding.model_copy(update={"receipt_id": "ab" * 32})
+    elif mutation == "expiry":
+        binding = binding.model_copy(update={"expires_at": 101})
+    else:
+        async with db.connection() as conn:
+            await conn.execute("DELETE FROM pilot_consumptions")
+    raw = bytes(account.sign_transaction(transaction).raw_transaction)
+    with pytest.raises(ValueError, match="existing consumed receipt"):
+        await journal.reserve(binding, raw, now=1)
+    async with db.connection() as conn:
+        assert (await (await conn.execute("SELECT count(*) FROM pilot_publications")).fetchone())[0] == 0
+
+
+@pytest.mark.parametrize("identity", [None, "", "a" * 63, "A" * 64])
+async def test_publication_selector_rejects_noncanonical_identity(db, identity):
+    journal, _, _, _ = await seed(db)
+    with pytest.raises(ValueError, match="canonical publication intent ID"):
+        await journal.inspect(identity)
+
+
+async def test_retry_rejects_different_authenticated_retained_value(db):
+    journal, account, transaction, binding = await seed(db)
+    raw = bytes(account.sign_transaction(transaction).raw_transaction)
+    identity = await journal.reserve(binding, raw, now=1)
+    async with journal.store.transaction() as tx:
+        value = journal._open(identity, await journal._row(tx, identity))
+        value["synthetic_extra"] = "different-retained-value"
+        sealed = journal.cipher.seal(tx.tenant_id, "publication-intent", identity, 1, value)
+        await tx._conn.execute(
+            "UPDATE pilot_publications SET key_id=%s,content_tag=%s,cipher_nonce=%s,ciphertext=%s "
+            "WHERE tenant_id=%s AND intent_id=%s",
+            (sealed["key_id"], sealed["content_tag"], sealed["nonce"], sealed["ciphertext"], tx.tenant_id, identity),
+        )
+    with pytest.raises(RecordConflict, match="intent differs from retained transaction"):
+        await journal.reserve(binding, raw, now=2)
+    assert not (await journal.inspect(identity))["broadcast_claimed"]
+
+
+@pytest.mark.parametrize(
+    "field,value", [("nonce", 5), ("phase", "mirror"), ("chain_id", 1), ("sender", "0x" + "34" * 20)]
+)
+async def test_publication_index_must_match_encrypted_binding(db, field, value):
+    from psycopg import sql
+
+    journal, account, transaction, binding = await seed(db)
+    identity = await journal.reserve(binding, bytes(account.sign_transaction(transaction).raw_transaction), now=1)
+    async with db.connection() as conn:
+        await conn.execute(
+            sql.SQL("UPDATE pilot_publications SET {}=%s WHERE tenant_id=%s AND intent_id=%s").format(
+                sql.Identifier(field)
+            ),
+            (value, journal.store.tenant_id, identity),
+        )
+    with pytest.raises(ValueError, match="Retained publication binding is inconsistent"):
+        await journal.inspect(identity)
+
+
+async def test_unknown_intent_does_not_revalidate_or_broadcast(db):
+    from unittest.mock import AsyncMock
+
+    journal, _, _, _ = await seed(db)
+    revalidate, send_raw = AsyncMock(), AsyncMock()
+    with pytest.raises(ValueError, match="Publication intent is unavailable"):
+        await journal.broadcast_once("ab" * 32, revalidate=revalidate, send_raw=send_raw)
+    revalidate.assert_not_awaited()
+    send_raw.assert_not_awaited()
+
+
+async def test_broadcast_race_rechecks_attempt_after_both_preflight_reads(db):
+    from web3 import Web3
+
+    journal, account, transaction, binding = await seed(db)
+    raw = bytes(account.sign_transaction(transaction).raw_transaction)
+    identity = await journal.reserve(binding, raw, now=1)
+    ready = asyncio.Barrier(2)
+    sent = []
+
+    async def revalidate(value):
+        assert value == binding
+        # Both callers have observed attempt zero before either claims it.
+        await ready.wait()
+
+    async def send_raw(value):
+        sent.append(value)
+        return Web3.keccak(value)
+
+    results = await asyncio.wait_for(
+        asyncio.gather(
+            *(journal.broadcast_once(identity, revalidate=revalidate, send_raw=send_raw) for _ in range(2)),
+            return_exceptions=True,
+        ),
+        10,
+    )
+    assert sum(isinstance(result, RecordConflict) for result in results) == 1
+    assert results.count(bytes(Web3.keccak(raw)).hex()) == 1
+    assert sent == [raw]
+    assert (await journal.inspect(identity))["broadcast_attempts"] == 1

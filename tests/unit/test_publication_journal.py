@@ -61,3 +61,10 @@ def test_wrong_signer_and_malformed_or_unsupported_encodings_reject():
     for raw in (bytes(wrong.raw_transaction), b"", b"\x02", b"\x01junk", b"\x02" * 16385):
         with pytest.raises(ValueError):
             signed_identity(binding, raw)
+
+
+@pytest.mark.parametrize("field", ["registry", "sender"])
+def test_publication_requires_nonzero_destination_and_sender(field):
+    _, _, binding = transaction_case()
+    with pytest.raises(ValueError, match="configured registry and sender"):
+        PublicationBinding.model_validate({**binding.model_dump(), field: "0x" + "00" * 20})
