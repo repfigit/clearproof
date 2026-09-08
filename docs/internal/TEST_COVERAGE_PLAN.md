@@ -2843,3 +2843,31 @@ still need completion and final merged-main verification.
   checks pass. CI operational acceptance now includes this test file. This is
   shell behavior evidence, not an instrumented shell coverage percentage.
 - Build-shell acceptance and aggregate/full-suite/remote verification remain.
+
+
+### Checkpoint 151 — build shell acceptance and atomic phase-one download
+
+- Added 26 Bash acceptance tests with synthetic tools/artifacts: downloaded,
+  cached and local phase-one paths; unavailable prerequisites; bad checksums;
+  failed-download retry; six missing outputs; GNU/BSD/unavailable file sizes;
+  nine stage failures; explicit and generated development entropy. No public
+  network or ceremony is invoked by these control-flow tests.
+- One initial failure exposed a partial-download cache bug: curl failure left
+  the final ptau filename, so a later run bypassed downloading/checksum checks.
+  Downloads now use a temporary file, cleanup trap and a rename only after
+  checksum verification. All 26 tests pass in 26.13 seconds
+  (`compile-shell151.log`; initial failure in `compile-shell-before151.log`).
+- Executed the current actual build script in external `compile-real151-6rox58uf`
+  using the existing explicitly unapproved local phase-one material. Real Circom
+  compilation, Groth16 setup/contribution, verification-key export and Solidity
+  generation all pass. The key has 16 public signals and 17 IC points; temporary
+  zkey cleanup passes (`compile-real151.log`, `compile-real151-result.json`).
+- The real CLI demo generates and verifies a proof using these fresh artifacts
+  (`compile-proof151.log`). An initial direct snarkjs attempt used the SDK's
+  camelCase input vector and was rejected for signal naming; the supported CLI
+  performs the required mapping and passes. No circuit/artifact changes were
+  needed, and no production setup approval is implied. Artifacts remain external.
+- CI includes build-shell acceptance. Ruff, Bash syntax, whitespace and CI YAML
+  parsing pass. These three shell scripts now have explicit acceptance evidence;
+  this is not an instrumented Bash coverage percentage. Final aggregate/source
+  refresh and remote CI/review/merge remain incomplete.

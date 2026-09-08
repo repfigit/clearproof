@@ -23,7 +23,7 @@ removed from the Python denominator.
 | `generate_verifier.mjs` | 28/28 statements, 10/10 branches, 26/26 lines, 4/4 functions; exact committed output, real CLI and rejected inputs | Retain coverage and contract parity evidence |
 | `generate_verifier_bls.mjs` | 41/41 statements, 12/12 branches, 35/35 lines, 4/4 functions; exact benchmark output, real CLI and rejected inputs | Retain coverage; benchmark is not a production migration |
 | `check_eip2537.mjs` | 32/32 statements, 16/16 branches, 28/28 lines, 1/1 functions; response/fallback/timeout tests and actual local EVM pairing vector | Retain coverage; tests do not establish current public-chain availability |
-| `compile_circuits.sh` | Development artifacts exercised through isolated runner | Shell entry/options/failure audit in an isolated checkout |
+| `compile_circuits.sh` | 26 actual shell control-flow tests with synthetic tools; isolated real compile/setup/verifier build and CLI proof verification | Retain behavior evidence; real download/local phase-one branches use synthetic boundary tests, not live ceremonies |
 | `circuit_lint.sh` | Ten isolated Bash acceptance tests; actual Circomspect passes with five documented findings; seven real SARIF reports validated | Retain shell behavior evidence and verify remote run; no line/branch percentage claimed |
 | `regen_protobufs.sh` | 17 shell acceptance tests: real pinned-compiler output parity and all four stale/missing checks; postprocessor variants/failures and compiler failure | Retain behavior evidence; remote run verification pending |
 
@@ -44,6 +44,7 @@ uv run python -m pytest \
   tests/unit/test_development_setup.py \
   tests/unit/test_circuit_lint_script.py \
   tests/unit/test_regen_protobufs_script.py \
+  tests/unit/test_compile_circuits_script.py \
   --cov=scripts --cov-branch --cov-report=json:operational-coverage.json \
   --cov-report=term-missing -q
 ```

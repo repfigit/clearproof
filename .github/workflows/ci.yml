@@ -170,6 +170,7 @@ jobs:
           tests/unit/test_development_setup.py
           tests/unit/test_circuit_lint_script.py
           tests/unit/test_regen_protobufs_script.py
+          tests/unit/test_compile_circuits_script.py
           --cov=scripts --cov-branch --cov-report=json:operational-coverage.json
           --cov-report=term-missing -q
       - name: Preserve completed operational script coverage
