@@ -51,13 +51,12 @@ exercise every supported test layer with its required local dependencies.
 
 ## Next uncovered behavior to address
 
-Python: the ninety-fourth checkpoint combines the full suite and explicit EVM
-paths: 94 missed statements and 16 missed branches. Generated protobufs account
-for 82 statements and five branches and remain in the denominator. Authored gaps
-are proof-route unused hashing, bilateral CLI import behavior, discovery canonical
-encoding, history certificate bounds, pilot compliance/projection/root/valuation
-validation, issuance-tree fallback and observation cohort validation. Subprocess
-coverage is captured; defensive paths still require review rather than exclusions.
+Python: checkpoint 120 combines the full suite and explicit EVM paths:
+8335/8338 statements (99.964%) and 2070/2074 branches (99.807%). Generated
+protobufs remain included and are fully covered. Three missed statements and
+four branches remain: bilateral CLI import behavior, discovery canonical
+reconstruction, frozen projection length and observation disappearing during
+transactional scan. No new exclusions were introduced.
 
 CLI: source line/branch/function/statement coverage is now 100%, enforced by CI.
 Keep the actual artifact/service acceptance tests alongside mocked boundary tests.
@@ -2182,3 +2181,24 @@ still need completion and final merged-main verification.
 - Ruff and whitespace pass. No exclusions or generated-artifact changes. Full
   Python aggregation, remaining authored/other-workspace and operational coverage,
   and remote CI/merge requirements keep the full goal open.
+
+
+## One hundred and twentieth checkpoint
+
+- Full Python run with real PostgreSQL, both development proof bundles and policy
+  CLI enabled: 2272 passed, one skipped, 42 warnings in 471.55 seconds
+  (`full-coverage-python-twelfth.log`, `.data`, `.json`). The skipped checkpoint
+  test passes separately on its owned EVM: one passed, two warnings, 3.37 seconds.
+- The optional authorization/mirroring path passes separately against PostgreSQL
+  and its owned EVM: one passed, 222 deselected, six warnings, 165.37 seconds.
+  All three processes exit zero; owned EVMs have exited and PostgreSQL is stopped.
+- Combined exactly those three data files, retaining the originals. The resulting
+  `full-coverage-combined-twelfth.data` and `.json` report 8335/8338 statements
+  (99.964%) and 2070/2074 branches (99.807%). All generated protobuf code stays
+  included and fully covered. Three statements/four branches remain, inventoried
+  above. The pre-existing one-line exclusion is unchanged.
+- Full source/test Ruff and REUSE checks pass (723/723 files); generated bindings
+  and tracked worktree files remain unchanged by test execution. This refresh
+  replaces older Python aggregates, not other workspace evidence. Remaining
+  Python and Solidity/workspace gaps, operational coverage and remote CI/merge
+  still prevent completion of the full repository goal.
