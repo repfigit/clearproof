@@ -1837,3 +1837,24 @@ still need completion and final merged-main verification.
   generated bindings match committed normal bytecode and no production source
   changed. Other contract/Python/generated, workspace/operational and remote
   CI/merge requirements keep the full repository goal open.
+
+## One hundred and second checkpoint
+
+- Extended jurisdiction observations with four malformed two-character stored
+  jurisdictions, covering each ASCII bound. Added five invalid claimed codes
+  (overwide, low/high first character and low/high second character) and separate
+  mutations of all three threshold signals before the original valid submission.
+- Every rejected submission preserves empty proof state, unused nullifier and
+  empty event logs, including rollback of earlier jurisdiction observations.
+  The unchanged submission then succeeds. Pairing remains explicitly mocked in
+  this boundary suite; it does not establish cryptographic or legal validity.
+- Seven scenarios pass normally (two seconds), instrumented (four seconds) and
+  after restoring normal bytecode (two seconds). Both outcomes of every targeted
+  jurisdiction and threshold comparison are covered, including previously missed
+  encoder returns (`jurisdiction-boundaries-instrumented.log` and preserved
+  `.json`, `jurisdiction-boundaries-restored-normal.log`). The focused registry
+  report remains partial: 89.19% lines and 60% branches.
+- TypeScript and whitespace checks pass; generated bindings match committed
+  normal bytecode. No production source changed. Other proof-validation branches,
+  contract/Python/generated, workspace/operational and remote CI/merge requirements
+  remain open for the full repository goal.

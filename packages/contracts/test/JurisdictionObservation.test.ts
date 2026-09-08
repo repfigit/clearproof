@@ -6,7 +6,7 @@ import { routeVerifier } from "./helpers/verifier";
 // Mock pairing isolates the informational registry behavior; real pairing stays
 // covered by the separate legacy/pilot artifact suites.
 describe("Legacy jurisdiction observations", function () {
-  for (const registered of ["US", "EU", "malformed"]) {
+  for (const registered of ["US", "EU", "malformed", "@S", "[S", "U@", "U["]) {
     it(`reports ${registered} without changing acceptance`, async function () {
       const [admin, vaspWallet] = await ethers.getSigners();
       const mock = await (await ethers.getContractFactory("MockVerifier")).deploy();
@@ -26,6 +26,25 @@ describe("Legacy jurisdiction observations", function () {
         (await ethers.provider.getNetwork()).chainId,
         BigInt(ethers.solidityPackedKeccak256(["address"], [await registry.getAddress()])) % field,
         BigInt(ethers.solidityPackedKeccak256(["bytes32"], [transfer])) % field, 1n, now + 600n];
+      if (registered === "US") {
+        const rejectedClaims = [0x10000n, 0x4053n, 0x5b53n, 0x5540n, 0x555bn];
+        const changes = [
+          ...rejectedClaims.map(value => ({ index: 6, value, error: "MalformedJurisdictionCode" })),
+          ...[8, 9, 10].map(index => ({ index, value: signals[index] + 1n, error: "ThresholdMismatch" })),
+        ];
+        for (const { index, value, error } of changes) {
+          const altered = [...signals];
+          altered[index] = value;
+          await expect(registry.connect(vaspWallet).verifyAndRecord(
+            transfer, [1n, 2n], [[1n, 2n], [3n, 4n]], [1n, 2n], altered, did,
+          )).to.be.revertedWithCustomError(registry, error);
+          expect(await registry.isVerified(transfer)).to.equal(false);
+          expect((await registry.proofs(transfer)).timestamp).to.equal(0);
+          expect(await registry.usedNullifiers(ethers.zeroPadValue(ethers.toBeHex(signals[14]), 32))).to.equal(false);
+          expect(await registry.queryFilter(registry.filters.JurisdictionCodeMismatch())).to.have.length(0);
+          expect(await registry.queryFilter(registry.filters.ProofVerified())).to.have.length(0);
+        }
+      }
       const tx = registry.connect(vaspWallet).verifyAndRecord(
         transfer, [1n, 2n], [[1n, 2n], [3n, 4n]], [1n, 2n], signals, did,
       );
