@@ -167,6 +167,7 @@ jobs:
           tests/unit/test_pilot_local_runner.py
           tests/unit/test_pilot_mirror_reports.py
           tests/unit/test_pilot_mirror_runner.py
+          tests/unit/test_development_setup.py
           --cov=scripts --cov-branch --cov-report=json:operational-coverage.json
           --cov-report=term-missing -q
       - name: Preserve completed operational script coverage
@@ -248,7 +249,17 @@ jobs:
           echo 'f3d8d1fdbc123779b80e210c909ee941d7a1e130c70365524646b48b8b0fe9d5  /tmp/pilot-circom' | sha256sum --check
           sudo install /tmp/pilot-circom /usr/local/bin/circom
       - name: Isolated development setup and real proofs for both profiles
-        run: uv run python scripts/test_development_circuits.py "$RUNNER_TEMP/clearproof-development-circuits"
+        env:
+          COVERAGE_FILE: ${{ runner.temp }}/python-coverage-development.data
+        run: uv run python -m coverage run --branch --source=scripts scripts/test_development_circuits.py "$RUNNER_TEMP/clearproof-development-circuits"
+      - name: Development setup failure paths and coverage gate
+        run: |
+          COVERAGE_FILE="$RUNNER_TEMP/python-coverage-development.data" uv run python -m coverage combine --keep "$RUNNER_TEMP"
+          COVERAGE_FILE="$RUNNER_TEMP/python-coverage-development-unit.data" uv run python -m pytest tests/unit/test_development_setup.py tests/unit/test_development_runner.py --cov=scripts --cov-branch --cov-report= -q
+          export COVERAGE_FILE="$RUNNER_TEMP/python-coverage-development-combined.data"
+          uv run python -m coverage combine --keep "$RUNNER_TEMP/python-coverage-development.data" "$RUNNER_TEMP/python-coverage-development-unit.data"
+          uv run python -m coverage json -o "$RUNNER_TEMP/python-coverage-development-combined.json"
+          uv run python -m coverage report --include=scripts/test_development_circuits.py --fail-under=100
       - name: Contract fixture generation and rejection with real proofs
         env:
           CLEARPROOF_PILOT_TEST_ARTIFACTS: ${{ runner.temp }}/clearproof-development-circuits/pilot

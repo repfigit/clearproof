@@ -2,7 +2,8 @@
 
 This inventory complements application coverage. The ten Python files in
 `scripts/` contain 1045 executable statements and 238 branches at checkpoint 136.
-The four JavaScript helpers and three shell scripts need separate acceptance and
+All 1045 statements and 238 branches are covered in the local incremental
+aggregate at checkpoint 145. The four JavaScript helpers and three shell scripts need separate acceptance and
 coverage evidence; Python coverage cannot measure them. No scripts are silently
 removed from the Python denominator.
 
@@ -15,7 +16,7 @@ removed from the Python denominator.
 | `make_bls_input.py` | 87/87 statements, 14/14 branches; full vector parity, fresh CLI, corrupt references and cross-field path inconsistency | Retain coverage in final aggregate; benchmark remains non-standard BLS Poseidon |
 | `pilot_contract_fixture.py` | 48/48 statements, 8/8 branches; actual proof generation, altered-nullifier rejection, prover timeout/exit and temporary cleanup | Retain coverage in final aggregate; separate artifact-backed CI gate |
 | `test_checkpoint_evm.py` | 44/44 statements, 6/6 branches; startup/retry/deadline/child-failure and cleanup tests, separate owned-EVM integration | Retain coverage and real execution in final aggregate |
-| `test_development_circuits.py` | Actual development proof runner plus subprocess lifecycle tests | Remaining setup, validation and cleanup branches |
+| `test_development_circuits.py` | 104/104 statements, 16/16 branches; current real compile/prove/contract workflow plus preconditions, both phase-one paths and process lifecycle | Retain real and unit coverage in final aggregate |
 | `test_pilot_local.py` | 43/43 statements, 8/8 branches; setup/failure/cleanup tests plus 223 passing tests through real owned-cluster/EVM acceptance | Retain aggregate and real execution evidence |
 | `test_pilot_mirror.py` | 105/105 statements, 38/38 branches; doctor/report checks, process startup/readiness/cleanup failures and actual 223-test acceptance run | Retain aggregate and real execution evidence |
 | `poseidon_hash.js` | 12 actual subprocess tests: large decimal input parity, both JSON forms, malformed shapes/values/arity | JavaScript instrumentation and remaining source audit |
@@ -40,13 +41,18 @@ uv run python -m pytest \
   tests/unit/test_pilot_local_runner.py \
   tests/unit/test_pilot_mirror_reports.py \
   tests/unit/test_pilot_mirror_runner.py \
+  tests/unit/test_development_setup.py \
   --cov=scripts --cov-branch --cov-report=json:operational-coverage.json \
   --cov-report=term-missing -q
 ```
 
 Node dependencies must be installed. CI retains this report separately from
 `src` coverage. The completed HPKE, L2 model, parameter generator, BLS input
-converter, sanctions builder, checkpoint, local-pilot and mirror runner scripts have a 100% regression
-gate; the all-script aggregate stays visibly partial until the remaining behavior
-is exercised. Synthetic sanctions fixtures do not update deployed roots;
+converter, sanctions builder, checkpoint, local-pilot and mirror runner scripts
+have a 100% regression gate. This focused report remains partial because artifact
+workflows run separately. The circuit job combines its
+real development workflow and failure-path tests for a 100% development-runner
+gate; the contract fixture also has an artifact-backed gate. Local aggregation
+covers all ten Python scripts, but cross-job remote aggregation is still pending.
+Synthetic sanctions fixtures do not update deployed roots;
 development proving material and ephemeral private keys are never committed.

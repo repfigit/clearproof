@@ -2706,3 +2706,35 @@ still need completion and final merged-main verification.
   only Python script with remaining missed lines/branches. JavaScript/shell
   measurement, browser/deployment audit and remote CI/review/merge also remain;
   the full repository goal is not complete.
+
+## One hundred and forty-fifth checkpoint
+
+- Added development setup precondition tests for missing tools/dependencies and
+  existing directories/symlinks. A dangling symlink exposed a real overwrite-guard
+  defect: resolving the destination first created the symlink target. Changed the
+  destination to an absolute, unresolved path so exclusive mkdir rejects the
+  symlink itself. The regression failed before the one-line fix and passes after.
+- Controlled phase-one orchestration covers both prepared-file copying and fresh
+  contribution/preparation ordering, explicit unapproved labels, SHA-256 output
+  and removal of intermediates, stopping at the compiler boundary. The separate
+  real subprocess lifecycle tests remain active. All ten tests pass in 2.20 seconds
+  (`development-unit145.log`/`.json`).
+- Ran the actual compiler/prover workflow under coverage with an existing local
+  unapproved prepared phase-one file and new external output. After the path fix,
+  reran the complete workflow into `development-coverage145-fixed`: four Python
+  integration tests pass in 23.87 seconds, all 32 contract tests pass in 15 seconds,
+  and the runner exits 0 (`development-current145.log`). No generated proving
+  material is committed; normal workspace outputs/bindings remain unchanged.
+- Combined exactly the current real run's three subprocess coverage files, then
+  its current unit evidence. The development runner passes 104/104 statements and
+  16/16 branches. The local all-script aggregate now passes 1045/1045 statements
+  and 238/238 branches across all ten Python scripts without exclusions
+  (`scripts-combined145.json`). Older unchanged-script evidence is incremental;
+  this is not a fresh full-repository suite execution.
+- CI now measures its actual development workflow, combines its own subprocess
+  data and failure-path tests, and gates the runner at exactly 100%. The same
+  combination/gate passes locally. Evidence uses the existing retained Python
+  artifact paths. Ruff, REUSE, whitespace and YAML parsing pass.
+- Cross-job/full-suite refresh, JavaScript/shell script measurement, broader
+  browser/deployment checks and remote CI/review/merge still keep the complete
+  repository goal open.

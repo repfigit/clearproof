@@ -53,7 +53,7 @@ def main():
         "--prepared-ptau", type=Path, help="Explicit local development input; never production approval"
     )
     args = parser.parse_args()
-    output = args.output.resolve()
+    output = args.output.absolute()
     # Refuse reuse or overwrite, including existing symlinks.
     output.mkdir(parents=True, exist_ok=False)
     node = shutil.which("node")
