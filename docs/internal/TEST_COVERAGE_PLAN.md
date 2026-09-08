@@ -2827,3 +2827,19 @@ still need completion and final merged-main verification.
   whitespace and CI YAML parsing pass. Shell coverage is behavioral evidence,
   not an instrumented percentage. Protobuf/build-script acceptance, aggregate
   coverage verification and remote CI/review/merge remain outstanding.
+
+
+### Checkpoint 150 — protobuf shell regeneration acceptance
+
+- Added 17 actual Bash entry-point tests in private project copies. Real pinned
+  grpcio-tools regeneration reproduces all four committed stubs byte-for-byte;
+  check mode leaves bytes and modification times unchanged. Every stale and
+  missing output is individually detected without publishing files.
+- Controlled compiler-format fixtures exercise both warnings-import variants,
+  all five required postprocessing patterns, and compiler exit failure. Failures
+  retain existing stubs and clean temporary generation directories. Generated
+  repository files and the regeneration script are unchanged.
+- All 17 tests pass in 8.33 seconds (`protobuf-shell150.log`); Ruff and whitespace
+  checks pass. CI operational acceptance now includes this test file. This is
+  shell behavior evidence, not an instrumented shell coverage percentage.
+- Build-shell acceptance and aggregate/full-suite/remote verification remain.

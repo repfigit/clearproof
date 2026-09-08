@@ -25,7 +25,7 @@ removed from the Python denominator.
 | `check_eip2537.mjs` | 32/32 statements, 16/16 branches, 28/28 lines, 1/1 functions; response/fallback/timeout tests and actual local EVM pairing vector | Retain coverage; tests do not establish current public-chain availability |
 | `compile_circuits.sh` | Development artifacts exercised through isolated runner | Shell entry/options/failure audit in an isolated checkout |
 | `circuit_lint.sh` | Ten isolated Bash acceptance tests; actual Circomspect passes with five documented findings; seven real SARIF reports validated | Retain shell behavior evidence and verify remote run; no line/branch percentage claimed |
-| `regen_protobufs.sh` | Existing CI freshness job | Verify exact output/freshness/failure behavior and remote run |
+| `regen_protobufs.sh` | 17 shell acceptance tests: real pinned-compiler output parity and all four stale/missing checks; postprocessor variants/failures and compiler failure | Retain behavior evidence; remote run verification pending |
 
 Run the current focused operational job from the repository root:
 
@@ -43,6 +43,7 @@ uv run python -m pytest \
   tests/unit/test_pilot_mirror_runner.py \
   tests/unit/test_development_setup.py \
   tests/unit/test_circuit_lint_script.py \
+  tests/unit/test_regen_protobufs_script.py \
   --cov=scripts --cov-branch --cov-report=json:operational-coverage.json \
   --cov-report=term-missing -q
 ```
