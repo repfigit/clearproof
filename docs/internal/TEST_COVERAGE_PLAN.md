@@ -2306,3 +2306,20 @@ still need completion and final merged-main verification.
 - This completes measured SDK source coverage, not repository completion. Full
   Python rerun, Solidity gaps, operational/browser coverage and remote CI/merge
   remain required. The full goal stays open.
+
+## One hundred and twenty-seventh checkpoint
+
+- Expanded actual pilot-verifier constructor checks for all three G2 key slots:
+  infinity rejects with InvalidKey and off-curve points reject through the pairing
+  precompile. Added off-curve G1 key rejection through the scalar precompile.
+  The original independent verifier still accepts its real proof afterward.
+- All three pilot verifier tests pass normally (3 seconds), instrumented (13
+  seconds) and after normal-bytecode restoration (4 seconds). Focused verifier
+  branch coverage rises to 93.75%, with 100% statements/lines/functions
+  (`pilot-key-boundaries-instrumented.log` and preserved `.json`,
+  `pilot-key-boundaries-restored-normal.log`). Pairing's scalar-precompile failure
+  outcome is also exercised. Other Pairing paths remain partial in this selection.
+- TypeScript and whitespace pass; normal generated bindings are unchanged.
+  No production source or proving artifacts changed. The final defensive G2
+  pairing-result outcome, other Solidity gaps, full Python rerun, operational
+  checks and remote CI/merge keep the full repository goal open.

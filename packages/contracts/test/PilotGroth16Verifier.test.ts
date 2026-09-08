@@ -93,7 +93,15 @@ const location = process.env.CLEARPROOF_PILOT_TEST_ARTIFACTS;
       .to.be.revertedWithCustomError(contract, "InvalidKey");
     await expect(factory.deploy({ ...key, alpha: [Q.toString(), "1"] }, "0x" + pin))
       .to.be.revertedWithCustomError(contract, "InvalidCoordinate");
-    await expect(factory.deploy({ ...key, beta: [["1", "1"], ["1", "1"]] }, "0x" + pin)).to.be.reverted;
+    for (const name of ["beta", "gamma", "delta"] as const) {
+      await expect(factory.deploy({ ...key, [name]: [["0", "0"], ["0", "0"]] }, "0x" + pin))
+        .to.be.revertedWithCustomError(contract, "InvalidKey");
+      await expect(factory.deploy({ ...key, [name]: [["1", "1"], ["1", "1"]] }, "0x" + pin))
+        .to.be.revertedWith("Pairing: ecpairing failed");
+    }
+    await expect(factory.deploy({ ...key, alpha: ["1", "1"] }, "0x" + pin))
+      .to.be.revertedWith("Pairing: ecmul failed");
+    expect(await contract.verifyProof(a, b, c, signals)).to.equal(true);
     const changed = { ...key, alpha: g1([key.alpha[0], (Q - BigInt(key.alpha[1])).toString()]) };
     const other = await factory.deploy(changed, "0x" + pin);
     expect(await other.verificationKeyCommitment()).not.to.equal(await contract.verificationKeyCommitment());
