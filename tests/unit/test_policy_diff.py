@@ -230,3 +230,25 @@ def test_duplicate_case_labels_reject_even_for_distinct_transfers(comparison):
     assert other.transfer.digest != case.transfer.digest
     with pytest.raises(ValueError, match="Duplicate comparison case ID"):
         PolicyDiffRequest.model_validate({**comparison.model_dump(), "cases": (case, other)})
+
+
+@pytest.mark.parametrize("failure", [ValueError, TypeError])
+async def test_http_comparison_failure_does_not_expose_internal_details(
+    comparison, authenticated_app, monkeypatch, failure
+):
+    from unittest.mock import Mock
+
+    from src.api.routes import policy as routes
+
+    app, token = authenticated_app
+    compare = Mock(side_effect=failure("synthetic-private-comparison-detail"))
+    monkeypatch.setattr(routes, "compare_policies", compare)
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        response = await client.post(
+            "/pilot/policy/diff",
+            json=comparison.model_dump(mode="json"),
+            headers={"Authorization": "Bearer " + token()},
+        )
+    assert response.status_code == 422
+    assert response.json() == {"detail": "Policy comparison scope or evidence is invalid"}
+    compare.assert_called_once()

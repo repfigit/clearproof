@@ -1315,3 +1315,30 @@ still need completion and final merged-main verification.
 - Full objective remains incomplete. Fireblocks/policy error mapping, remaining
   Python service/verifier and generated-code paths, other workspaces, operational
   checks and final remote CI/merge verification remain outstanding.
+
+## Seventy-second checkpoint
+
+- Extended the real Fireblocks relay scenario with intake conflict/type/value/
+  recursion failures, duplicate integration IDs and an empty verification-key
+  inventory. Intake exceptions are injected; existing JWT, provider signatures,
+  PostgreSQL retention and retries remain real. Configuration validation uses
+  actual malformed configuration, not a mocked constructor.
+- Failed requests preserve the original retained notification: subsequent exact
+  replay is still a duplicate and retained record counts stay unchanged.
+- Both selected Fireblocks integration tests pass in 7.93 seconds (146 others
+  deselected), measuring 62/62 statements and 6/6 branches in the HTTP route
+  (`fireblocks-route-complete.log`/`.data`).
+
+## Seventy-third checkpoint
+
+- Added a real PostgreSQL policy-approval idempotency conflict with a different
+  valid review, followed by successful replay of the original review and
+  successful approval under a fresh key. Added two real-JWT HTTP cases mapping
+  injected comparison errors to a redacted 422 response.
+- Together with existing policy and route-configuration tests, all 44 selected
+  cases pass in 20.56 seconds. Policy route measures 68/68 statements and 6/6
+  branches (`policy-route-complete.log`/`.data`).
+- Ruff/format/whitespace pass; owned PostgreSQL stopped. No production source
+  changed. Full repository coverage remains incomplete; checkpoint 69 is the
+  latest complete Python baseline, with remaining service/verifier/generated
+  paths, other workspaces, operational checks and remote CI/merge still open.

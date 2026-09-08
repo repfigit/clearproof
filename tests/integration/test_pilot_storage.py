@@ -837,6 +837,12 @@ async def test_policy_http_approval_and_stored_comparison_real_jwt(db, monkeypat
             },
             "idempotency_key": "http-approval-2",
         }
+        conflict = await client.post(
+            "/pilot/policy/approve", json={**second, "idempotency_key": body["idempotency_key"]}, headers=headers
+        )
+        assert conflict.status_code == 409
+        assert conflict.json() == {"detail": "Policy approval or idempotency conflict"}
+        assert (await client.post("/pilot/policy/approve", json=body, headers=headers)).json() == first.json()
         assert (await client.post("/pilot/policy/approve", json=second, headers=headers)).status_code == 200
         await db.close()
         await db.connect()
@@ -1368,6 +1374,35 @@ async def test_fireblocks_relay_requires_jwt_signature_and_operator_binding(db, 
                 headers={**headers, "Fireblocks-Webhook-Signature": fixtures["sign"](wrong_scope, key)},
             )
         ).status_code == 422
+        from unittest.mock import AsyncMock
+
+        for failure, expected in ((RecordConflict, 409), (ValueError, 422), (TypeError, 422), (RecursionError, 422)):
+            with monkeypatch.context() as patch:
+                rejected = AsyncMock(side_effect=failure("synthetic-private-intake-detail"))
+                patch.setattr(routes.FireblocksIntake, "ingest", rejected)
+                response = await client.post(url, content=raw, headers=headers)
+                assert response.status_code == expected
+                assert "synthetic-private-intake-detail" not in response.text
+                rejected.assert_awaited_once()
+        for invalid_configuration in ("duplicate", "jwks"):
+            malformed = json.loads(json.dumps(config))
+            if invalid_configuration == "duplicate":
+                malformed["integrations"].append(malformed["integrations"][0])
+            else:
+                malformed["integrations"][0]["jwks"] = {"keys": []}
+            with monkeypatch.context() as patch:
+                patch.setenv("PILOT_FIREBLOCKS_INTEGRATIONS", json.dumps(malformed))
+                response = await client.post(url, content=raw, headers=headers)
+                assert response.status_code == 503
+                expected_detail = (
+                    "Fireblocks relay configuration is unavailable"
+                    if invalid_configuration == "duplicate"
+                    else "Fireblocks verification configuration is unavailable"
+                )
+                assert response.json() == {"detail": expected_detail}
+        # All failed retries preserve the original successful notification.
+        recovered = await client.post(url, content=raw, headers=headers)
+        assert recovered.status_code == 200 and recovered.json()["duplicate"]
         monkeypatch.setenv("PILOT_EVENT_AUTHORITIES", '{"authorities":[]}')
         assert (await client.post(url, content=raw, headers=headers)).status_code == 403
         monkeypatch.delenv("PILOT_FIREBLOCKS_INTEGRATIONS")
