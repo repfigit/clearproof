@@ -62,12 +62,13 @@ coverage is captured; defensive paths still require review rather than exclusion
 CLI: source line/branch/function/statement coverage is now 100%, enforced by CI.
 Keep the actual artifact/service acceptance tests alongside mocked boundary tests.
 
-Solidity: checkpoint 100 measures 378/383 lines, 266/271 statements, 293/408
-branches and 79/83 functions with all 110 tests passing. Remaining gaps are in
-ComplianceRegistry, PilotCurrentRegistry, Pairing, PilotGroth16Verifier and the
-BLS benchmark verifier. Router, oracle, VASP registry, relay and checkpoint have
-full measured coverage. Preserve normal-bytecode proof verification alongside
-instrumentation; generated instrumented factory bytecode must not be committed.
+Solidity: checkpoint 112 measures 381/382 lines, 269/270 statements, 392/406
+branches and 82/83 functions with all 127 instrumented tests passing. Remaining
+gaps are in PilotCurrentRegistry, Pairing, PilotGroth16Verifier and the BLS
+benchmark verifier. ComplianceRegistry, Groth16Verifier, router, oracle, VASP
+registry, relay and checkpoint have full measured coverage. Preserve
+normal-bytecode proof verification alongside instrumentation; generated
+instrumented factory bytecode must not be committed.
 
 These figures describe an intermediate worktree, not a released coverage claim.
 The full goal remains open.
@@ -2038,3 +2039,24 @@ still need completion and final merged-main verification.
 - TypeScript and whitespace checks pass. Normal generated bindings are unchanged;
   no production source changed. Remaining invariant/revision branches and the
   broader repository coverage, operational and remote requirements remain open.
+
+## One hundred and twelfth checkpoint
+
+- Refreshed full Solidity instrumentation with both explicit legacy and pilot
+  development artifact bundles: all 127 tests pass with no skips. Aggregate
+  coverage is 381/382 lines (99.74%), 269/270 statements (99.63%), 392/406
+  branches (96.55%) and 82/83 functions (98.80%). Line counts preserve the
+  Solidity report's explicit line map rather than reconstructing statement lines.
+- Preserved full reports as `full-contract-coverage-checkpoint112.json` and
+  `full-contract-coverage-checkpoint112-raw.json`, with the corresponding log.
+  Restored normal bytecode and ran the entire 127-test suite successfully with
+  both real-proof artifact bundles, again with no skips (`-normal.log`).
+- Remaining uncovered outcomes: three Pairing input/precompile error branches
+  and its P2 function; six current-registry invariant/revision branch outcomes;
+  two pilot-verifier key-validation outcomes; three BLS benchmark input/precompile
+  errors. None is excluded from reporting. The source inventory above now uses
+  this full aggregate instead of older focused estimates.
+- TypeScript and whitespace checks pass, and generated normal bindings remain
+  unchanged. No production source changed. Full repository coverage remains
+  unproven; other languages/workspaces, operational coverage and remote CI/merge
+  still require completion evidence.
