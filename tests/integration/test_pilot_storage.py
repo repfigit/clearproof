@@ -3318,6 +3318,25 @@ async def test_signed_fact_retention_atomic_retry_reconnect_and_current_trust(db
     assert await service().retain(tuple(reversed(approvals)), **{**operation, "now": args["now"] + 1}) == refs
     assert [await stored.get("fact-evidence", ref) for ref in refs] == original
     assert await service().load_current(refs, **operation) == trust.verify_for_context(approvals, **args)
+    for malformed in (list(refs), (refs[0], refs[0]), tuple(f"{index:064x}" for index in range(65))):
+        with pytest.raises(FactTrustError, match="at most 64 distinct fact references"):
+            await service().load_current(malformed, **operation)
+    assert len(original) >= 2 and original[0]["signed"] != original[1]["signed"]
+    original_get = PilotTransaction.get
+
+    async def substituted_fact(tx, kind, identifier):
+        if kind == "fact-evidence" and identifier == refs[0]:
+            return original[1]
+        return await original_get(tx, kind, identifier)
+
+    with monkeypatch.context() as patch:
+        patch.setattr(PilotTransaction, "get", substituted_fact)
+        with pytest.raises(FactTrustError, match="Retained fact evidence identity mismatch"):
+            await service().load_current(refs, **operation)
+        with pytest.raises(FactTrustError, match="Retained fact evidence identity mismatch"):
+            await service().retain(approvals, **operation)
+    assert [await stored.get("fact-evidence", ref) for ref in refs] == original
+    assert await service().load_current(refs, **operation) == trust.verify_for_context(approvals, **args)
     with pytest.raises(FactTrustError):
         await service().load_current(refs, **{**operation, "now": args["transfer"].expires_at})
     foreign = Principal.model_validate({**principal.model_dump(), "tenant_id": "foreign"})

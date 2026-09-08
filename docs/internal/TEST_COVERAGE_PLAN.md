@@ -1518,3 +1518,19 @@ still need completion and final merged-main verification.
 - Ruff/format/whitespace pass; owned PostgreSQL stopped. No source changed.
   Full repository coverage remains incomplete, including remaining Python/
   generated paths, other workspaces, operational and remote CI/merge checks.
+
+## Eighty-fourth checkpoint
+
+- Added five fact-evidence checks: list/duplicate/oversized reference inventories
+  and substituted signed record identity during both loading and retention.
+  Substitution uses another actually signed fixture approval at the read boundary;
+  original encrypted PostgreSQL records remain unchanged.
+- Original loading succeeds after the injected failures. Existing concurrent
+  retention, rollback, reconnect, expiry, tenant scope and wrong-key checks pass.
+  The selected integration test passes in 9.32 seconds; fact evidence measures
+  49/49 statements and 14/14 branches
+  (`fact-evidence-complete.log`/`.data`).
+- Ruff/format/whitespace pass; owned PostgreSQL stopped. No production source
+  changed. Full repository coverage remains incomplete; checkpoint 69 remains
+  the latest full Python baseline. Remaining Python/generated paths, other
+  workspaces, operational checks and final remote CI/merge remain outstanding.
