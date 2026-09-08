@@ -245,6 +245,13 @@ jobs:
           sudo install /tmp/pilot-circom /usr/local/bin/circom
       - name: Isolated development setup and real proofs for both profiles
         run: uv run python scripts/test_development_circuits.py "$RUNNER_TEMP/clearproof-development-circuits"
+      - name: Contract fixture generation and rejection with real proofs
+        env:
+          CLEARPROOF_PILOT_TEST_ARTIFACTS: ${{ runner.temp }}/clearproof-development-circuits/pilot
+          COVERAGE_FILE: ${{ runner.temp }}/python-coverage-contract-fixture.data
+        run: |
+          uv run python -m pytest tests/unit/test_pilot_contract_fixture_script.py --cov=scripts --cov-branch --cov-report=json:"$RUNNER_TEMP/python-coverage-contract-fixture.json" -q
+          uv run python -m coverage report --include=scripts/pilot_contract_fixture.py --fail-under=100
       - name: Durable current authorization and local EVM mirror with fresh proofs
         env:
           DATABASE_URL: postgresql://postgres:local-ci-only@localhost:5432/clearproof_test

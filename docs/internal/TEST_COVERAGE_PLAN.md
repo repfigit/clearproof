@@ -2606,3 +2606,27 @@ still need completion and final merged-main verification.
   162/162 branches. Ruff, whitespace, YAML parsing and REUSE pass.
 - Orchestration runners, JavaScript/shell verification, broader browser/deployment
   checks and remote CI/review/merge remain unfinished. The full goal stays active.
+
+## One hundred and forty-first checkpoint
+
+- Instrumented the pilot contract-fixture generator using actual inspected
+  development artifacts and fresh Groth16 proofs. Successful JSON identifies
+  synthetic/unapproved scope, the requested registry/time, eight checkpoint heads
+  and proof expiry. Altering the public authorization nullifier after real proof
+  generation makes actual pairing verification reject the fixture without JSON.
+- Both proof paths remove their owned temporary files. Separate injected prover
+  timeout and nonzero-exit tests verify exception propagation, no fixture JSON
+  and removal of the already-written witness input.
+- The real-proof pair passes in 9.75 seconds; the two process-failure cases pass
+  in 0.77 seconds. Runner coverage is 48/48 statements and 8/8 branches, with
+  no exclusions (`contract-fixture141.log`/`.json`). The exact 100% runner gate
+  passes locally. No application source or proving material is changed.
+- Added an explicit artifact-backed CI check after fresh proof setup. Its raw
+  script coverage and JSON use the retained Python evidence path, while the
+  existing three-file application aggregate remains scoped to its own runs.
+  This prevents the operational job from claiming a pass through missing-artifact
+  skips. Incremental operational coverage is 779/1045 statements and 173/238
+  branches (`scripts-combined141.json`).
+- Ruff and whitespace pass. Remaining orchestration scripts, JavaScript/shell
+  coverage, browser/deployment audit and remote CI/review/merge keep the full
+  repository goal open.
