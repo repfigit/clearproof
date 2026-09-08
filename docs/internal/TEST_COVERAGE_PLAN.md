@@ -2920,3 +2920,26 @@ still need completion and final merged-main verification.
   explicitly remain unmeasured; these gaps must be closed before full repository
   coverage can be claimed. Full fresh Python completion, broader final audit and
   remote CI/review/merge remain pending.
+
+
+### Checkpoint 154 — registry tools and gas benchmark coverage
+
+- Added 30 tests for transfer lookup and proof submission: deployment-file and
+  explicit configuration, default/text/bytes32 identities, recorded timestamps,
+  supported proof envelopes, G2 coordinate order, exact signal count, malformed
+  integers/files, missing metadata, RPC/submission/receipt rejection and nonzero
+  error exits. Both scripts reach 100% on all V8 metrics without source changes.
+- Added three gas benchmark tests covering successful gas reporting, unauthorized
+  registration, refusal of a non-ephemeral network and deployment failure. The
+  actual `hardhat run scripts/gas-bench.ts --network hardhat --no-compile` command
+  also passes (`gas-real154.log`) using normal bytecode.
+- All 44 contract-script tests pass with five per-file 100% gates
+  (`contract-scripts-gate154.log`, `contract-scripts154-summary.json`). The initial
+  two-default-flow-only run fails the registry thresholds, confirming success
+  paths alone cannot satisfy the gates (`registry-negative154.log`).
+- Overall contract-script coverage remains partial: 118/643 statements, 59/180
+  branches, 115/632 lines and 16/49 functions. Seven additional scripts still
+  require measurement. No public transactions or root updates were performed.
+- The existing full Python process remains live and progressing; do not replace
+  its still-running evidence with an earlier aggregate or restart it. Full
+  verification and remote CI/review/merge remain unfinished.

@@ -118,6 +118,15 @@ not a substitute for this missing TypeScript measurement.
 | `redeploy-verifier.ts` | 0% | Isolated replacement/error paths |
 | `relay-sanctions-root.ts` | 0% | Controlled relayer lifecycle and errors |
 | `update-sanctions-root.ts` | 0% | Synthetic update/consistency failures |
-| `check-transfer.ts` | 0% | Controlled read responses/errors |
-| `verify-onchain.ts` | 0% | Controlled proof verification/errors |
-| `gas-bench.ts` | 0% | Local benchmark/report errors |
+| `check-transfer.ts` | 100% all metrics | Retain controlled read responses/errors |
+| `verify-onchain.ts` | 100% all metrics | Retain proof formatting/submission and failure tests |
+| `gas-bench.ts` | 100% all metrics | Retain actual ephemeral-Hardhat benchmark and failure tests |
+
+Checkpoint 154 covers three more contract scripts: transfer lookup (26 statements,
+12 branches, 26 lines, four functions), proof submission (44 statements, 34
+branches, 44 lines, six functions), and gas benchmarking (32 statements, two
+branches, 31 lines, two functions), all fully gated. The 44-test suite now covers
+118/643 statements, 59/180 branches, 115/632 lines and 16/49 functions overall.
+Seven contract scripts remain unmeasured. Registry tool tests use controlled RPC,
+file and transaction responses; the gas benchmark also passes on a real ephemeral
+Hardhat network. No public transactions or sanctions updates are performed.
