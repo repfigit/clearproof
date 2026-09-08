@@ -1199,3 +1199,20 @@ still need completion and final merged-main verification.
 - Full repository coverage remains incomplete; checkpoint 54 remains the last
   full Python measurement. Other Python paths, SDK, Solidity, MDX/browser,
   operational scripts and remote CI/merge verification remain outstanding.
+
+## Sixty-sixth checkpoint
+
+- Added eight local exchange checks inside the real authorization scenario:
+  unsupported behavior, tenant mismatch, four invalid delivery clocks and
+  unavailable receipt/proof records. Missing records fault-inject the read
+  boundary; encrypted storage and idempotency remain real.
+- Rejected requests leave record counts unchanged. The same delivery identity
+  then succeeds concurrently and replays after reconnect. Existing recipient-key
+  retirement, evidence retention and event reconciliation checks also pass.
+- The selected integration test passes in 134.45 seconds, with local exchange
+  measuring 44/44 statements and 10/10 branches
+  (`local-exchange-complete.log`/`.data`). Ruff/format/whitespace pass;
+  owned PostgreSQL stopped. No production source changed.
+- Full repository coverage remains incomplete; checkpoint 54 is the latest full
+  Python report. Bilateral receiver guards, other Python paths, SDK, Solidity,
+  MDX/browser, scripts and final remote CI/merge verification remain outstanding.

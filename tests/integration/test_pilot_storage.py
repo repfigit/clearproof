@@ -4640,6 +4640,32 @@ async def check_durable_local_exchange(
     )
     async with db.connection() as conn:
         before = (await (await conn.execute("SELECT count(*) FROM pilot_records")).fetchone())[0]
+    from copy import copy
+
+    from src.storage.pilot import PilotTransaction
+
+    with pytest.raises(ValueError, match="Unsupported local counterparty behavior"):
+        LocalExchangeService(events, counterparty, source_id="local-bilateral", behavior="unsupported")
+    foreign_events = copy(events)
+    foreign_events.principal = Principal.model_validate({**reviewer.model_dump(), "tenant_id": "synthetic-foreign"})
+    with pytest.raises(ValueError, match="configuration differs from authenticated tenant"):
+        LocalExchangeService(foreign_events, counterparty, source_id="local-bilateral")
+    for invalid_clock in (True, str(now), now, 2**53):
+        with pytest.raises(ValueError, match="delivery precedes its declared observation"):
+            await accepted.deliver(second, now=invalid_clock)
+    original_get = PilotTransaction.get
+    for unavailable in ("receipt", "proof"):
+
+        async def missing_exchange_record(tx, kind, identity):
+            return None if kind == unavailable else await original_get(tx, kind, identity)
+
+        with pytest.MonkeyPatch.context() as patch:
+            patch.setattr(PilotTransaction, "get", missing_exchange_record)
+            expected = "receipt" if unavailable == "receipt" else "authorization evidence"
+            with pytest.raises(ValueError, match=f"Local exchange {expected} is unavailable"):
+                await accepted.deliver(second, now=now + 2)
+    async with db.connection() as conn:
+        assert (await (await conn.execute("SELECT count(*) FROM pilot_records")).fetchone())[0] == before
     replies = await asyncio.gather(accepted.deliver(second, now=now + 2), accepted.deliver(second, now=now + 2))
     assert replies[0] == replies[1] and replies[0]["result"]["outcome"] == "accepted"
     earlier = await requested.deliver(first, now=now + 3)
