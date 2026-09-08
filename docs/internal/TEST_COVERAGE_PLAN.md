@@ -2479,3 +2479,31 @@ still need completion and final merged-main verification.
   and retained HTML reports/failure traces. Documented commands and ignored
   generated reports. Remote execution, other browser engines, deployment tracing,
   operational scripts and the final CI/review/merge audit remain unfinished.
+
+## One hundred and thirty-sixth checkpoint
+
+- Inventoried all 17 operational executables separately from application source
+  in `OPERATIONAL_TEST_INVENTORY.md`. Ten Python scripts contain 1045 statements
+  and 238 branches; the four JavaScript and three shell scripts are explicit
+  separate obligations. Existing focused tests initially covered 366 statements
+  and 68 branches. This is a measured gap, not completed repository coverage.
+- Added real HPKE key-generator tests: silent import, executable entry, distinct
+  keys, independently derived X25519 public keys and SHA-256 fingerprints, actual
+  HPKE encryption/decryption, and a foreign-directory subprocess with no output
+  files. Ephemeral private output stays captured inside tests. All 15 statements
+  and both branches of the generator are covered. An initial filesystem assertion
+  counted the pre-existing shared fixture directory; corrected by creating a
+  dedicated empty working directory. Module-name coverage was also replaced with
+  the whole scripts source path so runpy execution is measured correctly.
+- Added 12 real Node Poseidon helper tests: both input formats with large decimal
+  strings, a large whitespace stdin prefix, and malformed JSON, shapes, values
+  and arity. Valid output agrees with native Python Poseidon; failures return
+  nonzero with no hash on stdout. No live sanctions source/root is changed.
+- The exact focused CI command passes 61 tests in 28.71 seconds. Its all-script
+  Python report measures 381/1045 statements and 70/238 branches, with no
+  exclusions (`scripts-combined136.log`/`.json`). JS subprocess acceptance is
+  reported separately, without pretending Python instrumentation covers Node.
+- Added an operational CI job and retained partial report, without a premature
+  100% gate. Ruff, whitespace, workflow parsing and REUSE (734 files) pass.
+  Remaining script branches, browser/deployment audit and remote CI/review/merge
+  continue to keep the original full-coverage goal open.

@@ -144,6 +144,32 @@ jobs:
             apps/docs/coverage/
           if-no-files-found: error
 
+  operational-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - run: npm ci
+      - run: uv sync --frozen --extra dev
+      - name: Operational Python coverage and real Node helper acceptance
+        run: >-
+          uv run python -m pytest
+          tests/unit/test_l2_cost_model.py tests/unit/test_poseidon.py
+          tests/unit/test_deterministic_tree.py tests/unit/test_development_runner.py
+          tests/unit/test_hpke_keygen_script.py tests/unit/test_poseidon_script.py
+          --cov=scripts --cov-branch --cov-report=json:operational-coverage.json
+          --cov-report=term-missing -q
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: operational-python-coverage
+          path: operational-coverage.json
+          if-no-files-found: error
+          retention-days: 7
+
   docs-browser:
     runs-on: ubuntu-latest
     steps:

@@ -68,6 +68,7 @@ packages/contracts/cache/
 htmlcov/
 coverage/
 coverage.json
+operational-coverage.json
 coverage.xml
 .coverage
 .coverage.*
