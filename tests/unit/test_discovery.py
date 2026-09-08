@@ -266,3 +266,199 @@ def test_numeric_chain_semantics_match_json_consumers():
 def test_rejects_low_order_and_noncanonical_x25519_points(integer):
     with pytest.raises(DiscoveryInvalid):
         decode_hpke_key(base64.urlsafe_b64encode(integer.to_bytes(32, "little")).decode())
+
+
+async def test_publisher_http_advertises_optional_metadata(publisher_env, monkeypatch):
+    from fastapi import FastAPI
+    from httpx import ASGITransport, AsyncClient
+
+    from src.api.routes.discovery import router
+
+    for name, value in {
+        "VASP_NAME": "Synthetic VASP",
+        "VASP_JURISDICTION": "840",
+        "COMPLIANCE_CONTACT": "synthetic-compliance@example.invalid",
+        "TECHNICAL_CONTACT": "synthetic-technical@example.invalid",
+        "SUPPORTED_CHAINS": "1, ,11155111,",
+        "CLEARPROOF_ENDPOINT": "https://beneficiary.example/exchange/v1",
+    }.items():
+        monkeypatch.setenv(name, value)
+    app = FastAPI()
+    app.include_router(router)
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        response = await client.get("/.well-known/clearproof.json")
+    assert response.status_code == 200
+    doc = response.json()
+    assert doc["vasp"]["name"] == "Synthetic VASP"
+    assert doc["vasp"]["jurisdiction"] == "840"
+    assert doc["contact"] == {
+        "compliance": "synthetic-compliance@example.invalid",
+        "technical": "synthetic-technical@example.invalid",
+    }
+    assert doc["clearproof"]["supportedChains"] == [1, 11155111]
+    assert doc["clearproof"]["endpoint"] == "https://beneficiary.example/exchange/v1"
+
+
+@pytest.mark.parametrize(
+    "name,value",
+    [
+        ("VASP_DOMAIN", ""),
+        ("VASP_DOMAIN", "https://beneficiary.example"),
+        ("VASP_DID", "did:web:other.example"),
+        ("SUPPORTED_CHAINS", "secret-invalid-chain"),
+        ("SUPPORTED_CHAINS", "1,1"),
+        ("CLEARPROOF_ENDPOINT", "http://beneficiary.example/exchange"),
+        ("VASP_HPKE_PRIVATE_KEY", "é-private-secret"),
+        ("VASP_HPKE_PRIVATE_KEY", base64.urlsafe_b64encode(b"short").decode()),
+        ("VASP_HPKE_PRIVATE_KEY", "!" + base64.urlsafe_b64encode(b"x" * 32).decode()),
+        ("VASP_HPKE_PUBLIC_KEY", "invalid-public-key"),
+    ],
+)
+async def test_publisher_http_configuration_errors_are_minimized(publisher_env, monkeypatch, name, value):
+    from fastapi import FastAPI
+    from httpx import ASGITransport, AsyncClient
+
+    from src.api.routes.discovery import router
+
+    monkeypatch.setenv(name, value)
+    app = FastAPI()
+    app.include_router(router)
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        response = await client.get("/.well-known/clearproof.json")
+    assert response.status_code == 503
+    assert response.json() == {"detail": "Discovery is not configured correctly"}
+
+
+def test_publisher_accepts_matching_private_and_public_keys(publisher_env, monkeypatch):
+    from src.api.routes.discovery import get_own_hpke_public_key
+    from src.sar.hpke_envelope import generate_keypair
+
+    private, public = generate_keypair()
+    monkeypatch.setenv("VASP_HPKE_PRIVATE_KEY", base64.urlsafe_b64encode(private).decode())
+    monkeypatch.setenv("VASP_HPKE_PUBLIC_KEY", base64.urlsafe_b64encode(public).decode())
+    assert get_own_hpke_public_key() == public
+
+
+@pytest.mark.parametrize("target", [None, 1, "a" * 513])
+def test_discovery_target_requires_bounded_string(target):
+    with pytest.raises(DiscoveryInvalid, match="Expected a canonical domain or did:web identifier"):
+        parse_target(target)
+
+
+@pytest.mark.parametrize("coordinate", [2**255 - 19, 2**255, 2**256 - 1])
+def test_discovery_key_rejects_noncanonical_x25519_coordinates(coordinate):
+    encoded = base64.urlsafe_b64encode(coordinate.to_bytes(32, "little")).decode()
+    with pytest.raises(DiscoveryInvalid, match="not a canonical X25519 point"):
+        decode_hpke_key(encoded)
+
+
+@pytest.mark.parametrize(
+    "document,message",
+    [
+        (None, "Discovery document must be an object"),
+        ([], "Discovery document must be an object"),
+        ({}, "Discovery version is required"),
+        ({"version": 4}, "Discovery version is required"),
+    ],
+)
+def test_discovery_document_requires_object_and_version(document, message):
+    with pytest.raises(DiscoveryInvalid, match=message):
+        validate_document(document, parse_target("beneficiary.example"))
+
+
+@pytest.mark.parametrize("capabilities", [None, [], "unsupported"])
+def test_discovery_document_requires_capability_object(capabilities):
+    document = {**DOCUMENT, "clearproof": capabilities}
+    with pytest.raises(DiscoveryInvalid, match="Missing clearproof capabilities"):
+        validate_document(document, parse_target("beneficiary.example"))
+
+
+def test_discovery_key_rejects_base64_padding_bit_alias():
+    encoded = DOCUMENT["clearproof"]["hpkePublicKey"].rstrip("=")
+    alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_"
+    last = alphabet.index(encoded[-1])
+    assert last % 4 == 0
+    alias = encoded[:-1] + alphabet[last + 1]
+    assert base64.urlsafe_b64decode(alias + "=") == base64.urlsafe_b64decode(encoded + "=")
+    with pytest.raises(DiscoveryInvalid, match="HPKE public key has noncanonical encoding"):
+        decode_hpke_key(alias)
+
+
+@pytest.mark.parametrize("settings", ["[]", "null", '"synthetic"', "{", " " * 16385])
+async def test_invalid_operator_egress_settings_do_not_replace_or_use_cached_client(monkeypatch, settings):
+    import src.protocol.discovery as discovery
+
+    client = DiscoveryClient()
+    fetch = AsyncMock(return_value=DOCUMENT)
+    monkeypatch.setattr(discovery, "fetch_document", fetch)
+    await client.discover("beneficiary.example")
+    assert client._cache
+    monkeypatch.setattr(discovery, "_default_client", client)
+    monkeypatch.setattr(discovery, "_default_settings", ("{}", None, None))
+    monkeypatch.setenv("DISCOVERY_PRIVATE_DESTINATIONS", settings)
+    monkeypatch.delenv("SSL_CERT_FILE", raising=False)
+    monkeypatch.delenv("SSL_CERT_DIR", raising=False)
+    with pytest.raises(DiscoveryInvalid, match="^Invalid operator discovery egress configuration$"):
+        await discovery.resolve_hpke_public_key("beneficiary.example")
+    assert discovery._default_client is client
+    assert discovery._default_settings == ("{}", None, None)
+    fetch.assert_awaited_once()
+
+
+async def test_public_cache_clear_forces_key_refetch(monkeypatch):
+    import src.protocol.discovery as discovery
+
+    client = DiscoveryClient()
+    monkeypatch.setattr(discovery, "_default_client", client)
+    monkeypatch.setattr(discovery, "_default_settings", ("{}", None, None))
+    monkeypatch.setenv("DISCOVERY_PRIVATE_DESTINATIONS", "{}")
+    monkeypatch.delenv("SSL_CERT_FILE", raising=False)
+    monkeypatch.delenv("SSL_CERT_DIR", raising=False)
+    fetch = AsyncMock(return_value=DOCUMENT)
+    monkeypatch.setattr(discovery, "fetch_document", fetch)
+    first = await discovery.resolve_hpke_public_key("beneficiary.example")
+    assert await discovery.resolve_hpke_public_key("beneficiary.example") == first
+    fetch.assert_awaited_once()
+    discovery.clear_discovery_cache()
+    assert await discovery.resolve_hpke_public_key("beneficiary.example") == first
+    assert fetch.await_count == 2
+
+
+async def test_system_resolver_deduplicates_addresses_in_answer_order(monkeypatch):
+    import socket
+
+    from src.protocol.discovery_transport import resolve_addresses
+
+    answers = [
+        (socket.AF_INET, socket.SOCK_STREAM, 6, "", ("93.184.216.34", 443)),
+        (socket.AF_INET6, socket.SOCK_STREAM, 6, "", ("2606:4700::1111", 443, 0, 0)),
+        (socket.AF_INET, socket.SOCK_STREAM, 6, "", ("93.184.216.34", 443)),
+    ]
+    lookup = AsyncMock(return_value=answers)
+    monkeypatch.setattr(asyncio.get_running_loop(), "getaddrinfo", lookup)
+    assert await resolve_addresses("beneficiary.example", 443) == ("93.184.216.34", "2606:4700::1111")
+    lookup.assert_awaited_once_with("beneficiary.example", 443, type=socket.SOCK_STREAM)
+
+
+@pytest.mark.parametrize("host,port", [("other.example", 443), ("beneficiary.example", 8443)])
+async def test_pinned_backend_rejects_destination_change_before_dns(host, port):
+    resolver = AsyncMock()
+    backend = PinnedBackend(parse_target("beneficiary.example"), EgressPolicy(), resolver)
+    with pytest.raises(DiscoveryInvalid, match="Unexpected discovery connection destination"):
+        await backend.connect_tcp(host, port)
+    resolver.assert_not_called()
+
+
+@pytest.mark.parametrize("host", ["a.example", "a-b.sub.example", "xn--bcher-kva.example"])
+@pytest.mark.parametrize("port", [None, 1, 65535])
+@pytest.mark.parametrize("path", ["", ":vasps:EU", ":a_b:c.d-e", ":8443"])
+def test_validated_did_preserves_exact_canonical_identity(host, port, path):
+    authority = host if port is None else f"{host}:{port}"
+    did = "did:web:" + authority.replace(":", "%3A") + path
+    target = parse_target(did)
+    assert target.did == did
+    assert target.authority == authority
+    assert target.host == host
+    assert target.port == (443 if port is None else port)
+    assert target.url == f"https://{authority}/.well-known/clearproof.json"
+    assert parse_target(target.did) == target

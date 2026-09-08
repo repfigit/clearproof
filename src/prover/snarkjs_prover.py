@@ -19,6 +19,9 @@ import time
 from pathlib import Path
 from typing import Any
 
+from src.prover._subprocess import run_tool
+from src.prover.verifier import verify_proof
+
 
 class ProverError(Exception):
     """Raised when proof generation or verification fails."""
@@ -77,108 +80,48 @@ class SnarkJSProver:
         self._check_artifacts()
         start = time.monotonic()
 
-        input_file = tempfile.NamedTemporaryFile(mode="w", suffix=".json", delete=False)
-        proof_file = tempfile.NamedTemporaryFile(suffix="_proof.json", delete=False)
-        public_file = tempfile.NamedTemporaryFile(suffix="_public.json", delete=False)
-        input_path = Path(input_file.name)
-        proof_path = Path(proof_file.name)
-        public_path = Path(public_file.name)
-        proof_file.close()
-        public_file.close()
-
-        try:
-            json.dump(inputs, input_file)
-            input_file.close()
-
-            # --- witness generation (uses create_subprocess_exec, no shell) ---
-            witness_path = Path(tempfile.mktemp(suffix=".wtns"))
-            proc = await asyncio.create_subprocess_exec(
-                "node",
-                str(self.witness_js),
-                str(self.wasm_path),
-                str(input_path),
-                str(witness_path),
-                stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.PIPE,
-            )
-            stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=self.witness_timeout)
-            if proc.returncode != 0:
-                raise ProverError(f"Witness generation failed (rc={proc.returncode}): {stderr.decode().strip()}")
-
-            # --- groth16 prove (uses create_subprocess_exec, no shell) ---
-            proc = await asyncio.create_subprocess_exec(
-                "npx",
-                "snarkjs",
-                "groth16",
-                "prove",
-                str(self.zkey_path),
-                str(witness_path),
-                str(proof_path),
-                str(public_path),
-                stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.PIPE,
-            )
-            stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=self.prove_timeout)
-            if proc.returncode != 0:
-                raise ProverError(f"Proof generation failed (rc={proc.returncode}): {stderr.decode().strip()}")
-
-            with open(proof_path) as f:
-                proof = json.load(f)
-            with open(public_path) as f:
-                public_signals = json.load(f)
-
-            elapsed_ms = int((time.monotonic() - start) * 1000)
-            proof["_meta"] = {"proving_time_ms": elapsed_ms}
-
-            return proof, public_signals
-
-        except asyncio.TimeoutError as exc:
-            raise ProverError("Proof generation timed out") from exc
-
-        finally:
-            for p in [input_path, proof_path, public_path]:
-                p.unlink(missing_ok=True)
-            if "witness_path" in locals():
-                witness_path.unlink(missing_ok=True)
+        with tempfile.TemporaryDirectory(prefix="clearproof-prove-") as directory:
+            base = Path(directory)
+            input_path = base / "input.json"
+            witness_path = base / "witness.wtns"
+            proof_path = base / "proof.json"
+            public_path = base / "public.json"
+            input_path.write_text(json.dumps(inputs))
+            try:
+                code = await run_tool(
+                    "node",
+                    str(self.witness_js),
+                    str(self.wasm_path),
+                    str(input_path),
+                    str(witness_path),
+                    timeout=self.witness_timeout,
+                )
+                if code != 0:
+                    raise ProverError(f"Witness generation failed (rc={code})")
+                code = await run_tool(
+                    "npx",
+                    "--no-install",
+                    "snarkjs",
+                    "groth16",
+                    "prove",
+                    str(self.zkey_path),
+                    str(witness_path),
+                    str(proof_path),
+                    str(public_path),
+                    timeout=self.prove_timeout,
+                )
+                if code != 0:
+                    raise ProverError(f"Proof generation failed (rc={code})")
+                proof = json.loads(proof_path.read_text())
+                public_signals = json.loads(public_path.read_text())
+                proof["_meta"] = {"proving_time_ms": int((time.monotonic() - start) * 1000)}
+                return proof, public_signals
+            except asyncio.TimeoutError as exc:
+                raise ProverError("Proof generation timed out") from exc
 
     async def verify(self, proof: dict[str, Any], public_signals: list[str]) -> bool:
         """
         Verify a Groth16 proof locally using the verification key.
         Deterministic, typically <50 ms.
         """
-        self._check_artifacts()
-
-        proof_clean = {k: v for k, v in proof.items() if k != "_meta"}
-
-        proof_fd = tempfile.NamedTemporaryFile(mode="w", suffix="_proof.json", delete=False)
-        public_fd = tempfile.NamedTemporaryFile(mode="w", suffix="_public.json", delete=False)
-        proof_path = Path(proof_fd.name)
-        public_path = Path(public_fd.name)
-
-        try:
-            json.dump(proof_clean, proof_fd)
-            proof_fd.close()
-            json.dump(public_signals, public_fd)
-            public_fd.close()
-
-            # Uses create_subprocess_exec (argument-list, no shell injection)
-            proc = await asyncio.create_subprocess_exec(
-                "npx",
-                "snarkjs",
-                "groth16",
-                "verify",
-                str(self.vkey_path),
-                str(public_path),
-                str(proof_path),
-                stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.PIPE,
-            )
-            stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=10)
-            return "OK" in stdout.decode()
-
-        except asyncio.TimeoutError:
-            return False
-
-        finally:
-            proof_path.unlink(missing_ok=True)
-            public_path.unlink(missing_ok=True)
+        return await verify_proof(proof, public_signals, str(self.vkey_path))

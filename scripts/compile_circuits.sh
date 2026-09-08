@@ -102,15 +102,19 @@ if [ ! -f "$PTAU_FILE" ]; then
         echo "Powers of tau ceremony complete."
     else
         echo "Downloading audited Hermez powers of tau (2^${PTAU_POWER})..."
-        curl -L --fail --max-time 600 "$PTAU_URL" -o "$PTAU_FILE"
-        ACTUAL_SHA256=$(sha256sum "$PTAU_FILE" | awk '{print $1}')
+        # Never expose a partial or unverified download as a reusable cache.
+        PTAU_DOWNLOAD=$(mktemp "$BUILD_DIR/pot${PTAU_POWER}.download.XXXXXX")
+        trap 'rm -f "$PTAU_DOWNLOAD"' EXIT
+        curl -L --fail --max-time 600 "$PTAU_URL" -o "$PTAU_DOWNLOAD"
+        ACTUAL_SHA256=$(sha256sum "$PTAU_DOWNLOAD" | awk '{print $1}')
         if [ "$ACTUAL_SHA256" != "$PTAU_SHA256" ]; then
             echo "ERROR: ptau SHA256 mismatch!"
             echo "  Expected: $PTAU_SHA256"
             echo "  Actual:   $ACTUAL_SHA256"
-            rm -f "$PTAU_FILE"
             exit 1
         fi
+        mv "$PTAU_DOWNLOAD" "$PTAU_FILE"
+        trap - EXIT
         echo "ptau checksum verified."
     fi
 else

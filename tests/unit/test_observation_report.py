@@ -1,5 +1,9 @@
 """Cohort denominators and baseline semantics using minimized synthetic records."""
 
+from contextlib import asynccontextmanager
+from types import SimpleNamespace
+from unittest.mock import AsyncMock
+
 import pytest
 
 from src.policy.evaluator import PolicyEvaluation
@@ -139,3 +143,69 @@ def test_latency_coverage_preserves_legacy_records_and_exact_integer_totals():
             TimedObservationRecord.model_validate({**timed.model_dump(), "evaluation_duration_ns": value})
     with pytest.raises(ValueError):
         decode_observation(timed.model_dump(mode="json"), tenant_id=old.tenant_id, observation_id=old.digest)
+
+
+@pytest.mark.parametrize("facts", [("aa" * 32, "aa" * 32), ("bb" * 32, "aa" * 32)])
+def test_observation_fact_references_require_sorted_unique_identity(facts):
+    value = observation("ALLOW").model_dump()
+    with pytest.raises(ValueError, match="distinct and sorted"):
+        ObservationRecord.model_validate({**value, "fact_ids": facts})
+
+
+@pytest.mark.parametrize("valid", [False, True])
+def test_observation_policy_presence_matches_pairing_result(valid):
+    value = observation("ALLOW" if not valid else None).model_dump()
+    with pytest.raises(ValueError, match="policy requires successful pairing"):
+        ObservationRecord.model_validate({**value, "cryptographic_valid": valid})
+
+
+@pytest.mark.parametrize(
+    "field,value", [("policy_digest", "cd" * 32), ("transfer_digest", "de" * 32), ("evaluated_at", 1001)]
+)
+def test_observation_evaluation_must_match_retained_scope_and_clock(field, value):
+    record = observation("ALLOW").model_dump()
+    record["policy"][field] = value
+    with pytest.raises(ValueError, match="policy scope or clock mismatch"):
+        ObservationRecord.model_validate(record)
+
+
+@pytest.mark.parametrize("version", [None, "", "clearproof-proof-observation-v3"])
+def test_observation_parser_rejects_unknown_versions(version):
+    from src.services.proof_observation import parse_observation
+
+    record = observation("ALLOW").model_dump(mode="json")
+    record["schema_version"] = version
+    with pytest.raises(ValueError, match="Unsupported observation version"):
+        parse_observation(record)
+
+
+@pytest.mark.asyncio
+async def test_observation_scan_rejects_disappeared_record_and_exits_transaction(monkeypatch):
+    from src.auth.principal import Principal
+    from src.services import observation_report as service
+
+    record = observation("ALLOW")
+    principal = Principal(tenant_id=record.tenant_id, actor_id="reader", roles=("policy:read", "evidence:decrypt"))
+    tx = SimpleNamespace(record_ids=AsyncMock(return_value=[record.digest]), get=AsyncMock(return_value=None))
+    exits = []
+
+    @asynccontextmanager
+    async def transaction():
+        try:
+            yield tx
+        finally:
+            exits.append(True)
+
+    # Inject inconsistent storage at the transaction boundary; decoding remains real.
+    monkeypatch.setattr(service, "PilotStore", lambda *args: SimpleNamespace(transaction=transaction))
+    request = service.ObservationPageRequest(limit=1)
+    with pytest.raises(ValueError, match="^Observation disappeared during scan$"):
+        await service.list_observations(None, None, principal, request)
+    assert exits == [True]
+    tx.record_ids.assert_awaited_once_with("observation", after=None, limit=2)
+    tx.get.assert_awaited_once_with("observation", record.digest)
+    tx.get.return_value = record.model_dump(mode="json")
+    result = await service.list_observations(None, None, principal, request)
+    assert exits == [True, True]
+    assert result["observations"] == [record.report()]
+    assert result["next_after"] is None

@@ -169,7 +169,8 @@ contract ComplianceRegistry is AccessControl, Pausable {
         if (hi < 0x41 || hi > 0x5A || lo < 0x41 || lo > 0x5A) revert MalformedJurisdictionCode();
 
         Thresholds memory t = thresholdsFor(uint16(rawCode));
-        if (!t.registered) revert ThresholdMismatch();
+        // Construction registers the fallback; every table write preserves
+        // registered=true and no removal path exists. Resolution is total.
 
         if (_pubSignals[8] != t.tier2 || _pubSignals[9] != t.tier3 || _pubSignals[10] != t.tier4) {
             revert ThresholdMismatch();

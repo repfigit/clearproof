@@ -1,7 +1,10 @@
 from __future__ import annotations
 
 import logging
-from typing import Optional
+from collections.abc import Mapping
+from typing import Any, Optional
+
+from psycopg.rows import dict_row
 
 from src.storage.database import Database
 from src.storage.models import StoredCredential
@@ -15,14 +18,14 @@ class CredentialStore:
 
     async def get_by_id(self, credential_id: str) -> Optional[StoredCredential]:
         async with self._db.connection() as conn:
-            async with conn.cursor() as cur:
+            async with conn.cursor(row_factory=dict_row) as cur:
                 await cur.execute("SELECT * FROM credentials WHERE credential_id = %s", (credential_id,))
                 row = await cur.fetchone()
                 return self._row_to_credential(row) if row else None
 
     async def get_by_wallet(self, wallet: str) -> list[StoredCredential]:
         async with self._db.connection() as conn:
-            async with conn.cursor() as cur:
+            async with conn.cursor(row_factory=dict_row) as cur:
                 await cur.execute(
                     "SELECT * FROM credentials WHERE subject_wallet = %s ORDER BY issued_at DESC",
                     (wallet,),
@@ -32,7 +35,7 @@ class CredentialStore:
 
     async def get_by_commitment(self, commitment: str) -> Optional[StoredCredential]:
         async with self._db.connection() as conn:
-            async with conn.cursor() as cur:
+            async with conn.cursor(row_factory=dict_row) as cur:
                 await cur.execute("SELECT * FROM credentials WHERE commitment = %s", (commitment,))
                 row = await cur.fetchone()
                 return self._row_to_credential(row) if row else None
@@ -71,7 +74,7 @@ class CredentialStore:
                     "UPDATE credentials SET revoked = TRUE, updated_at = now() WHERE credential_id = %s",
                     (credential_id,),
                 )
-                return (await cur.rowcount()) > 0
+                return cur.rowcount > 0
 
     async def is_revoked(self, credential_id: str) -> bool:
         async with self._db.connection() as conn:
@@ -95,6 +98,5 @@ class CredentialStore:
                 return int(time.time()) > row[0]
 
     @staticmethod
-    def _row_to_credential(row) -> StoredCredential:
-        columns = [desc[0] for desc in row.cursor.description]
-        return StoredCredential(**dict(zip(columns, row)))
+    def _row_to_credential(row: Mapping[str, Any]) -> StoredCredential:
+        return StoredCredential.model_validate(row)

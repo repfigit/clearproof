@@ -55,7 +55,7 @@ class TRISAError(Exception):
         super().__init__(f"TRISA Error {code}: {message}")
 
     @classmethod
-    def from_pb2(cls, error: pb2.Error) -> "TRISAError":
+    def from_pb2(cls, error: errors_pb2.Error) -> "TRISAError":
         """Create TRISAError from a protobuf Error message."""
         return cls(
             code=error.code,
@@ -446,17 +446,18 @@ class TRISAServer(pb2_grpc.TRISANetworkServicer):
         except TRISAError as e:
             return pb2.SecureEnvelope(
                 id=request.id,
-                error=pb2.Error(
+                error=errors_pb2.Error(
                     code=e.code,
                     message=e.message,
                     retry=e.retry,
                 ),
             )
         except Exception:
-            _logger.exception("Unhandled error processing transfer %s", request.id)
+            # Exception text and request identifiers may contain decrypted or caller-supplied data.
+            _logger.error("Unhandled error processing TRISA transfer")
             return pb2.SecureEnvelope(
                 id=request.id,
-                error=pb2.Error(
+                error=errors_pb2.Error(
                     code=errors_pb2.Error.INTERNAL_ERROR,
                     message="Internal server error",
                     retry=True,
@@ -483,7 +484,7 @@ class TRISAServer(pb2_grpc.TRISANetworkServicer):
     ) -> pb2.AddressConfirmation:
         """Handle an incoming ConfirmAddress RPC."""
         # Implement wallet control verification
-        raise NotImplementedError("Override ConfirmAddress in subclass")
+        await context.abort(grpc.StatusCode.UNIMPLEMENTED, "Address confirmation is not implemented")
 
     async def KeyExchange(
         self,

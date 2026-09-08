@@ -168,3 +168,39 @@ def test_real_extension_witness(compiled, tmp_path, extension, attack):
 def test_shared_sdk_signing_vector():
     vector = json.loads((ROOT / "tests/vectors/wallet-ownership/challenge.json").read_text())
     assert WalletChallenge.model_validate(vector["challenge"]).message() == vector["message"]
+
+
+@pytest.mark.parametrize("changes", [{"nonce": "00" * 32}, {"registry_address": "0x" + "00" * 20}])
+def test_challenge_rejects_zero_nonce_and_registry(challenge, changes):
+    with pytest.raises(ValueError, match="Wallet challenge requires a nonzero nonce and registry"):
+        WalletChallenge.model_validate({**challenge[0].model_dump(), **changes})
+
+
+@pytest.mark.parametrize("boundary", ["before", "expiry"])
+def test_challenge_requires_current_credential_at_issuance(challenge, boundary):
+    value = challenge[0]
+    timestamp = value.credential.issued_at - 1 if boundary == "before" else value.credential.expires_at
+    with pytest.raises(ValueError, match="Credential is not current at challenge issuance"):
+        WalletChallenge.model_validate({**value.model_dump(), "timestamp": timestamp, "expires_at": timestamp + 300})
+
+
+@pytest.mark.parametrize(
+    "change,message",
+    [
+        ({"issued_at": 1099, "expires_at": 87499}, "outside the challenge validity interval"),
+        ({"issued_at": 1400, "expires_at": 87800}, "outside the challenge validity interval"),
+        ({"expires_at": 87601}, "24-hour TTL"),
+        ({"attestation_id": "ef" * 32}, "identifier must bind the consumed challenge"),
+    ],
+)
+def test_attestation_requires_challenge_identity_and_exact_ttl(challenge, change, message):
+    value, signature = challenge
+    fields = dict(attestation_id=value.nonce, challenge=value, signature=signature, issued_at=1200, expires_at=87600)
+    with pytest.raises(ValueError, match=message):
+        WalletAttestation.model_validate({**fields, **change})
+
+
+@pytest.mark.parametrize("offset", [0, -1])
+def test_extension_requires_positive_validity(extension, offset):
+    with pytest.raises(ValueError, match="Extension requires a positive validity interval"):
+        WalletCredentialExtension.model_validate({**extension.model_dump(), "expires_at": extension.issued_at + offset})

@@ -15,6 +15,7 @@ import math
 import os
 from typing import Any
 
+from src.registry.merkle_depth import extend_depth, validate_depth
 from src.registry.poseidon import poseidon_hash
 
 # ---------------------------------------------------------------------------
@@ -82,7 +83,9 @@ class SanctionsMerkleTree:
     # Default: 86400 (24 hours) — matches OFAC SDN daily update cadence.
     MAX_TREE_AGE_SECONDS = int(os.environ.get("SANCTIONS_TREE_MAX_AGE", "86400"))
 
-    def __init__(self) -> None:
+    def __init__(self, *, depth: int | None = None) -> None:
+        validate_depth(depth)
+        self._target_depth = depth
         self.sorted_leaves: list[int] = []
         self.sorted_addresses: list[str] = []
         self._tree: list[list[str]] = []  # tree[level][index] = hash string
@@ -132,7 +135,9 @@ class SanctionsMerkleTree:
         """
         with open(path) as f:
             data = json.load(f)
-        tree = cls()
+        if data["depth"] is None:
+            raise ValueError("Merkle depth must be an integer between 1 and 32")
+        tree = cls(depth=data["depth"])
         tree.root = data["root"]
         tree.sorted_leaves = [int(leaf) for leaf in data["sorted_leaves"]]
         tree.sorted_addresses = data.get("sorted_addresses", [])
@@ -159,13 +164,9 @@ class SanctionsMerkleTree:
         hashed.sort()
         # Insert boundary sentinels (H-6)
         hashed = [0] + hashed + [self._MAX_SENTINEL]
+        if self._target_depth is not None and len(hashed) > 2**self._target_depth:
+            raise ValueError("Merkle tree exceeds configured depth")
         self.sorted_leaves = hashed
-
-        if not hashed:
-            self.root = "0"
-            self._tree = [["0"]]
-            self.depth = 0
-            return self.root
 
         # Determine depth (next power of 2)
         n = len(hashed)
@@ -186,7 +187,11 @@ class SanctionsMerkleTree:
             self._tree.append(next_level)
             current = next_level
 
-        self.root = current[0]
+        if self._target_depth is not None:
+            self.root = await extend_depth(self._tree, self._target_depth, _poseidon_hash)
+            self.depth = self._target_depth
+        else:
+            self.root = current[0]
         return self.root
 
     def get_root(self) -> str:
@@ -229,26 +234,8 @@ class SanctionsMerkleTree:
             else:
                 break
 
-        if left_idx == -1:
-            # addr_hash is smaller than all leaves — boundary gap proof
-            # using minimum sentinel (0) at position 0 as left neighbor.
-            return {
-                "left_neighbor": self.sorted_leaves[0],  # sentinel: 0
-                "right_neighbor": self.sorted_leaves[1],
-                "left_path": self._get_merkle_path(0),
-                "right_path": self._get_merkle_path(1),
-            }
-
-        if left_idx >= len(self.sorted_leaves) - 1:
-            # addr_hash is larger than all leaves — boundary gap proof
-            # using maximum sentinel (2^252 - 1) at last position as right neighbor.
-            last = len(self.sorted_leaves) - 1
-            return {
-                "left_neighbor": self.sorted_leaves[last - 1],
-                "right_neighbor": self.sorted_leaves[last],  # sentinel: 2^252 - 1
-                "left_path": self._get_merkle_path(last - 1),
-                "right_path": self._get_merkle_path(last),
-            }
+        if left_idx < 0 or left_idx >= len(self.sorted_leaves) - 1:
+            raise ValueError("Wallet hash is not bracketed by retained sanctions leaves")
 
         return {
             "left_neighbor": self.sorted_leaves[left_idx],

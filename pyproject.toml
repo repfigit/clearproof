@@ -23,6 +23,7 @@ dependencies = [
     "asyncpg>=0.30",
     "pyhpke>=0.6.5",
     "rfc3161-client>=1.0.8,<2",
+    "portalocker>=4.3.0",
 ]
 
 [project.optional-dependencies]
@@ -42,6 +43,7 @@ dev = [
     "httpx>=0.27",
     "grpcio>=1.62",
     "aiosqlite>=0.20",
+    "pytest-cov>=7.1.0",
 ]
 all = ["clearproof[zk,dev]"]
 
@@ -52,6 +54,15 @@ build-backend = "setuptools.build_meta"
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 testpaths = ["tests"]
+markers = ["integration: tests exercising component boundaries"]
+
+[tool.coverage.run]
+patch = ["subprocess"]
+branch = true
+source = ["src"]
+
+[tool.coverage.report]
+show_missing = true
 
 [tool.ruff]
 target-version = "py311"

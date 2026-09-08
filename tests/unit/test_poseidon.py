@@ -136,3 +136,27 @@ def test_live_parity_with_circomlibjs() -> None:
     if proc.returncode != 0:
         pytest.skip(f"circomlibjs unavailable: {proc.stderr.strip()}")
     assert poseidon_hash([1, 2, 3]) == int(proc.stdout.strip())
+
+
+def test_numeric_constant_encoding_preserves_reference_vectors(tmp_path, monkeypatch):
+    from src.registry import poseidon
+
+    original = json.loads(Path(poseidon._CONSTANTS_PATH).read_text())
+
+    def numeric(value):
+        if isinstance(value, list):
+            return [numeric(item) for item in value]
+        return int(value, 16) if isinstance(value, str) and value.startswith("0x") else int(value)
+
+    converted = {name: numeric(original[name]) for name in ("C", "M")}
+    path = tmp_path / "numeric-constants.json"
+    path.write_text(json.dumps(converted))
+    poseidon._load_constants.cache_clear()
+    try:
+        with monkeypatch.context() as patch:
+            patch.setattr(poseidon, "_CONSTANTS_PATH", str(path))
+            for values, expected in VECTORS:
+                assert poseidon.poseidon_hash(values) == expected
+    finally:
+        poseidon._load_constants.cache_clear()
+    assert poseidon.poseidon_hash(VECTORS[0][0]) == VECTORS[0][1]

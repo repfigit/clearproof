@@ -200,3 +200,108 @@ async def test_vasp_information_cache_is_scoped_and_immutable():
     assert (await second.get_vasp_info("did:web:vasp.example"))[1] == "EU"
     assert await first.get_vasp_info("did:web:vasp.example") == record
     first._contracts["vasp_registry"].functions.vasps.return_value.call.assert_awaited_once()
+
+
+@pytest.mark.parametrize("limit", [True, 0, -1, 1.0, "2"])
+def test_cache_capacity_requires_positive_integer(limit):
+    with pytest.raises(ValueError, match="entry limit"):
+        make_reader(max_cache_entries=limit)
+
+
+@pytest.mark.parametrize("value", [None, 12, "aa" * 31 + "  "])
+async def test_identifier_rejects_nonstring_and_whitespace_byte_shortening(value):
+    reader, calls = make_reader()
+    with pytest.raises(ValueError, match="32-byte"):
+        await reader.is_credential_revoked(value)
+    calls["revoked"].assert_not_awaited()
+
+
+@pytest.mark.parametrize("root", [None, "00" * 32, b"", bytes(31), bytes(33)])
+async def test_malformed_chain_root_is_not_cached(root):
+    reader, calls = make_reader()
+    calls["root"].side_effect = [root, bytes(32)]
+    with pytest.raises(ValueError, match="exactly 32 bytes"):
+        await reader.get_sanctions_root()
+    assert await reader.get_sanctions_root() == "0x" + "00" * 32
+    assert calls["root"].await_count == 2
+
+
+async def test_missing_contract_address_fails_before_network():
+    reader = ChainReader("https://unused.example", {})
+    with pytest.raises(RuntimeError, match="sanctions_oracle.*not configured"):
+        await reader.get_sanctions_root()
+    assert reader._contracts == {}
+
+
+@pytest.mark.parametrize("did", [None, 1, "", "did:key:abc", "did:web:" + "a" * 1017])
+async def test_invalid_vasp_did_fails_before_contract_call(did):
+    reader, _ = make_reader()
+    with pytest.raises(ValueError, match="Invalid VASP DID"):
+        await reader.get_vasp_info(did)
+    reader._contracts["vasp_registry"].functions.vasps.assert_not_called()
+
+
+@pytest.mark.parametrize("record", [[], ["a", "US", "", 1, 1], ["a", "US", "", True, True]])
+async def test_malformed_vasp_record_is_not_cached(record):
+    reader, _ = make_reader()
+    valid = ["0x" + "11" * 20, "US", "", True, 1]
+    call = AsyncMock(side_effect=[record, valid])
+    reader._contracts["vasp_registry"].functions.vasps.return_value.call = call
+    with pytest.raises(ValueError, match="Malformed VASP record"):
+        await reader.get_vasp_info("did:web:synthetic.example")
+    assert await reader.get_vasp_info("did:web:synthetic.example") == tuple(valid)
+    assert call.await_count == 2
+
+
+@pytest.mark.parametrize("record", [(), (bytes(32), True, True), (bytes(32), 1, 1), (bytes(32), -1, False)])
+async def test_malformed_proof_record_is_not_reported_as_absent(record):
+    reader, calls = make_reader()
+    calls["proof"].side_effect = [record, (bytes(32), 0, False)]
+    with pytest.raises(ValueError, match="Malformed chain proof record"):
+        await reader.get_proof_record("a" * 64)
+    assert await reader.get_proof_record("a" * 64) is None
+    assert calls["proof"].await_count == 2
+
+
+async def test_cancelled_rpc_is_removed_and_next_read_retries():
+    reader, calls = make_reader()
+    calls["root"].side_effect = [asyncio.CancelledError(), bytes(32)]
+    with pytest.raises(asyncio.CancelledError):
+        await reader.get_sanctions_root()
+    assert not reader._inflight and not reader._cache
+    assert await reader.get_sanctions_root() == "0x" + "00" * 32
+    assert calls["root"].await_count == 2
+
+
+async def test_old_completion_callback_does_not_remove_replacement_rpc(monkeypatch):
+    now = [100.0]
+    monkeypatch.setattr(reader_module, "monotonic", lambda: now[0])
+    reader, calls = make_reader(cache_ttl=1)
+    replacement_started, release = asyncio.Event(), asyncio.Event()
+    replacements = []
+    count = 0
+
+    async def rpc():
+        nonlocal count
+        count += 1
+        if count == 1:
+            now[0] += 2  # This response cannot populate the cache.
+            # Queue a new caller before this task's completion callback runs.
+            replacements.append(asyncio.create_task(reader.get_sanctions_root()))
+            return bytes([1]) * 32
+        replacement_started.set()
+        await release.wait()
+        return bytes([2]) * 32
+
+    calls["root"].side_effect = rpc
+    try:
+        assert await reader.get_sanctions_root() == "0x" + "01" * 32
+        await asyncio.wait_for(replacement_started.wait(), 2)
+        assert len(reader._inflight) == 1
+        release.set()
+        assert await replacements[0] == "0x" + "02" * 32
+        assert await reader.get_sanctions_root() == "0x" + "02" * 32
+        assert calls["root"].await_count == 2
+    finally:
+        release.set()
+        await asyncio.gather(*replacements, return_exceptions=True)

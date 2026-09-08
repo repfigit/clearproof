@@ -1,10 +1,11 @@
 """
-Encrypted audit trail with hash-chain integrity.
+In-memory payload-hash audit trail.
 
 Each audit entry is chained via SHA-256:
   entry_hash = SHA256(data_hash || prev_entry_hash || sequence_number)
 
-This provides tamper-evident logging for compliance examination.
+The legacy hash binds the payload digest, predecessor and sequence number.
+It does not authenticate entry metadata or provide an external chain anchor.
 In-memory (list-based) for MVP; pluggable storage for production.
 """
 
@@ -57,7 +58,7 @@ class AuditLog:
     @property
     def entries(self) -> list[AuditEntry]:
         """Read-only view of all entries."""
-        return list(self._entries)
+        return [entry.model_copy(deep=True) for entry in self._entries]
 
     def append(
         self,
@@ -87,7 +88,7 @@ class AuditLog:
 
         entry = AuditEntry(
             sequence_number=seq,
-            timestamp=timestamp or int(time.time()),
+            timestamp=int(time.time()) if timestamp is None else timestamp,
             entry_type=entry_type,
             actor=actor,
             transaction_ref=transaction_ref,
@@ -96,7 +97,7 @@ class AuditLog:
             entry_hash=entry_hash,
         )
         self._entries.append(entry)
-        return entry
+        return entry.model_copy(deep=True)
 
     def verify_chain(self) -> bool:
         """
@@ -104,12 +105,12 @@ class AuditLog:
 
         Returns:
             True if all entry hashes are valid and properly chained.
-            False if any entry has been tampered with.
+            False if a payload hash, predecessor link or sequence is inconsistent.
         """
         for i, entry in enumerate(self._entries):
             expected_prev = self._entries[i - 1].entry_hash if i > 0 else _GENESIS_HASH
 
-            if entry.prev_entry_hash != expected_prev:
+            if entry.sequence_number != i or entry.prev_entry_hash != expected_prev:
                 return False
 
             expected_hash = AuditEntry.compute_hash(entry.data_hash, entry.prev_entry_hash, entry.sequence_number)
@@ -120,7 +121,7 @@ class AuditLog:
 
     def get_entries_for_transaction(self, transaction_ref: str) -> list[AuditEntry]:
         """Return all audit entries related to a specific transaction."""
-        return [e for e in self._entries if e.transaction_ref == transaction_ref]
+        return [e.model_copy(deep=True) for e in self._entries if e.transaction_ref == transaction_ref]
 
     def export_examination_bundle(
         self,
@@ -136,7 +137,7 @@ class AuditLog:
         Returns:
             Dict with entries, chain verification status, and metadata.
         """
-        if transaction_ref:
+        if transaction_ref is not None:
             entries = self.get_entries_for_transaction(transaction_ref)
         else:
             entries = list(self._entries)

@@ -1,4 +1,7 @@
-import { describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { requestReport } from '../src/api-client.js';
+vi.mock('../src/api-client.js', () => ({ requestReport: vi.fn() }));
+beforeEach(() => { vi.mocked(requestReport).mockReset(); });
 import { recordDigest } from '../src/canonical.js';
 import { authorizeCurrentProof, validateAuthorizationReport } from '../src/authorization.js';
 
@@ -38,4 +41,21 @@ describe('recorded local authorization response', () => {
     await expect(authorizeCurrentProof('http://127.0.0.1:1', 'private-token', Buffer.alloc(16385)))
       .rejects.toThrow('retry only the same request and idempotency key');
   });
+});
+
+it('sends exact authorization bytes and validates the returned receipt', async () => {
+  const input = Buffer.from(JSON.stringify({ public_signals: signals, idempotency_key: 'same-request' }));
+  vi.mocked(requestReport).mockResolvedValue(report());
+  expect(await authorizeCurrentProof('https://operator.example', 'token', input)).toEqual(report());
+  expect(requestReport).toHaveBeenCalledWith('https://operator.example', 'token', '/pilot/proof/authorize', input);
+  vi.mocked(requestReport).mockRejectedValue(new Error('PRIVATE-MARKER'));
+  await expect(authorizeCurrentProof('https://operator.example', 'token', input))
+    .rejects.toThrow('retry only the same request and idempotency key');
+});
+
+it('rejects empty, malformed and wrong-type authorization input before transport', async () => {
+  for (const input of [Buffer.alloc(0), Buffer.from('{'), 'private' as unknown as Uint8Array]) {
+    await expect(authorizeCurrentProof('https://operator.example', 'token', input)).rejects.toThrow('retry only');
+  }
+  expect(requestReport).not.toHaveBeenCalled();
 });

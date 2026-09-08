@@ -140,6 +140,17 @@ _SCHEMA_MIGRATIONS = [
 ]
 
 
+class Transaction:
+    """Connection provider for stores participating in one owned transaction."""
+
+    def __init__(self, connection: psycopg.AsyncConnection) -> None:
+        self._connection = connection
+
+    @asynccontextmanager
+    async def connection(self) -> AsyncIterator[psycopg.AsyncConnection]:
+        yield self._connection
+
+
 class Database:
     def __init__(self, pool_min: int = 2, pool_max: int = 10) -> None:
         self._pool_min = pool_min
@@ -181,6 +192,13 @@ class Database:
             raise RuntimeError("Database not connected")
         async with self._pool.connection() as conn:
             yield conn
+
+    @asynccontextmanager
+    async def transaction(self) -> AsyncIterator[Transaction]:
+        """Share one connection across stores, committing or rolling back together."""
+        async with self.connection() as conn:
+            async with conn.transaction():
+                yield Transaction(conn)
 
     async def _migrate(self, pool: AsyncConnectionPool) -> None:
         # The pool context commits schema, data and version rows together, or

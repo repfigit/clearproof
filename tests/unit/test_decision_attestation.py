@@ -100,3 +100,24 @@ def test_purpose_and_time_checks(case):
         DecisionTrustStore([authority]).verify(signed, receipt, context, verified_at=now - 1)
     with pytest.raises(DecisionTrustError):
         DecisionSigner(authority, key).sign({**receipt, "authorized_at": now + 60}, context)
+
+
+@pytest.mark.parametrize("offset", [0, -1])
+def test_decision_authority_requires_positive_interval(case, offset):
+    authority = case[3]
+    with pytest.raises(ValueError, match="Invalid decision authority interval"):
+        DecisionAuthority.model_validate({**authority.model_dump(), "not_after": authority.not_before + offset})
+
+
+@pytest.mark.parametrize("count", [0, 2, 257])
+def test_decision_inventory_rejects_missing_duplicate_and_excessive_keys(case, count):
+    with pytest.raises(ValueError, match="Expected distinct independently approved decision keys"):
+        DecisionTrustStore([case[3]] * count)
+
+
+def test_decision_signer_rejects_mismatched_private_key(case):
+    context, _, _, authority, receipt = case
+    before = receipt.copy()
+    with pytest.raises(DecisionTrustError, match="^Decision signing key mismatch$"):
+        DecisionSigner(authority, Ed25519PrivateKey.generate()).sign(receipt, context)
+    assert receipt == before

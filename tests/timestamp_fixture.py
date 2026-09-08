@@ -10,7 +10,7 @@ from cryptography.hazmat.primitives.asymmetric import rsa
 from cryptography.x509.oid import NameOID
 
 
-def timestamp_authority(directory: Path, *, accuracy: str = "secs:1"):
+def timestamp_authority(directory: Path, *, accuracy: str | None = "secs:1"):
     directory.mkdir(parents=True, exist_ok=True)
     now = datetime.now(UTC)
     root_key, tsa_key = (rsa.generate_private_key(public_exponent=65537, key_size=2048) for _ in range(2))
@@ -49,6 +49,7 @@ def timestamp_authority(directory: Path, *, accuracy: str = "secs:1"):
     )
     (directory / "serial").write_text("01")
     config = directory / "tsa.cnf"
+    accuracy_config = "" if accuracy is None else f"accuracy = {accuracy}"
     config.write_text(f"""[tsa]
 default_tsa = local
 [local]
@@ -58,7 +59,7 @@ signer_key = {key_path}
 signer_digest = sha256
 default_policy = 1.2.3.4
 digests = sha256
-accuracy = {accuracy}
+{accuracy_config}
 clock_precision_digits = 0
 ordering = yes
 tsa_name = yes

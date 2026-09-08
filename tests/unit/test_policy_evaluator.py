@@ -158,3 +158,80 @@ def test_foreign_or_conflicting_fact_snapshot_rejected(case):
         evaluate((policy, transfer, context, PolicyFacts.model_validate({**facts.model_dump(), "tenant_id": "other"})))
     with pytest.raises(ValueError, match="duplicate facts"):
         PolicyFacts.model_validate({**facts.model_dump(), "facts": (*facts.facts, facts.facts[0])})
+
+
+@pytest.mark.parametrize("now", [-1, 2**53, True, 1.0])
+def test_evaluation_clock_requires_exact_safe_integer(case, now):
+    with pytest.raises(ValueError, match="^Invalid policy evaluation time$"):
+        evaluate_policy(*case, now=now)
+
+
+@pytest.mark.parametrize("expires_at", [99, 100])
+def test_fact_validity_requires_positive_interval(expires_at):
+    with pytest.raises(ValueError, match="Fact requires a positive validity interval"):
+        PolicyFact(
+            predicate="credential_valid", value=True, observed_at=100, expires_at=expires_at, evidence_digest="ab" * 32
+        )
+
+
+def test_replay_before_effective_intervals_is_indeterminate(case):
+    policy, transfer, context, _ = case
+    now = min(policy.effective_from, transfer.created_at, context.evaluated_at) - 1
+    assert now >= 0
+    result = evaluate_policy(*case, now=now)
+    assert result.outcome == "INDETERMINATE"
+    assert {"policy_not_effective", "transfer_not_effective", "source_not_effective", "context_not_effective"} <= set(
+        result.reasons
+    )
+
+
+def test_unresolved_applicability_prevents_allow(case):
+    policy, transfer, context, facts = case
+    facts = PolicyFacts.model_validate(
+        {
+            **facts.model_dump(),
+            "facts": tuple(
+                PolicyFact.model_validate({**fact.model_dump(), "value": False})
+                if fact.predicate == "applicability_resolved"
+                else fact
+                for fact in facts.facts
+            ),
+        }
+    )
+    result = evaluate((policy, transfer, context, facts))
+    assert result.outcome == "INDETERMINATE"
+    assert result.reasons == ("applicability_unresolved",)
+    assert "allow-small" in result.matched_rule_ids
+
+
+def test_verified_statement_facts_preserve_external_scope_and_reject_duplicates(case):
+    from src.policy.evaluator import with_verified_statement_facts
+
+    _, transfer, _, facts = case
+    derived = {"credential_valid", "sanctions_clear", "valuation_authenticated", "proof_valid"}
+    external = PolicyFacts.model_validate(
+        {
+            **facts.model_dump(),
+            "facts": tuple(fact for fact in facts.facts if fact.predicate not in derived),
+        }
+    )
+    before = external.canonical_bytes()
+    result = with_verified_statement_facts(
+        external,
+        proof_digest="cd" * 32,
+        observed_at=transfer.created_at,
+        expires_at=transfer.expires_at,
+    )
+    assert external.canonical_bytes() == before
+    assert (result.tenant_id, result.transfer_digest) == (external.tenant_id, external.transfer_digest)
+    assert result.facts[: len(external.facts)] == external.facts
+    added = result.facts[len(external.facts) :]
+    assert {fact.predicate for fact in added} == derived
+    assert all(fact.value and fact.evidence_digest == "cd" * 32 for fact in added)
+    with pytest.raises(ValueError, match="Conflicting duplicate facts"):
+        with_verified_statement_facts(
+            result,
+            proof_digest="ef" * 32,
+            observed_at=transfer.created_at,
+            expires_at=transfer.expires_at,
+        )

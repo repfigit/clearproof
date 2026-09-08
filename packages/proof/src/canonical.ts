@@ -1,5 +1,9 @@
 /** Restricted canonical encoding for pilot records; no policy or authorization decision. */
 import { createHash } from 'node:crypto';
+/** @internal Shared code-unit ordering for canonical keys and cohort identities. */
+export function compareCanonicalStrings(a: string, b: string): number {
+  return a < b ? -1 : a > b ? 1 : 0;
+}
 export function canonicalBytes(value: unknown): Buffer {
   let budget = 65536;
   const charge = (n: number) => { budget -= n; if (budget < 0) throw new Error('Canonical record exceeds validation budget'); };
@@ -24,8 +28,8 @@ export function canonicalBytes(value: unknown): Buffer {
       if (Object.values(Object.getOwnPropertyDescriptors(item)).some(d => d.get || d.set)) throw new Error('Canonical accessors are forbidden');
       const entries = Object.entries(item);
       if (entries.length > 64 || Reflect.ownKeys(item).length !== entries.length) throw new Error('Invalid canonical object');
-      return '{' + entries.sort(([a], [b]) => a < b ? -1 : a > b ? 1 : 0).map(([key, child]) => {
-        if (!/^[ -~]{1,128}$/.test(key) || /[\r\n]/.test(key)) throw new Error('Invalid canonical record key');
+      return '{' + entries.sort(([a], [b]) => compareCanonicalStrings(a, b)).map(([key, child]) => {
+        if (!/^[ -~]{1,128}$/.test(key)) throw new Error('Invalid canonical record key');
         charge(key.length + 3);
         return JSON.stringify(key) + ':' + encode(child, depth + 1);
       }).join(',') + '}';

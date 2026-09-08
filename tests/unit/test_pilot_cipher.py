@@ -42,3 +42,55 @@ def test_random_nonce_tenant_tags_and_copied_key_material():
     assert cipher.open("tenant-a", "credential", "record-1", {**first, "revision": 1}) == {"x": 1}
     with pytest.raises(ValueError):
         make_cipher(b"short")
+
+
+@pytest.mark.parametrize("value", [None, [], "synthetic", 1])
+def test_seal_requires_record_object(value):
+    with pytest.raises(ValueError, match="^Stored record must be an object$"):
+        make_cipher().seal("tenant-a", "credential", "record-1", 1, value)
+
+
+def test_cipher_requires_active_key_in_inventory():
+    from types import SimpleNamespace
+
+    ring = SimpleNamespace(all_versions=[KeyVersion("old", b"a" * 32, 0)], active_key=KeyVersion("new", b"b" * 32, 1))
+    with pytest.raises(ValueError, match="^Active storage key is unavailable$"):
+        RecordCipher(ring)
+
+
+@pytest.mark.parametrize("raw", [b"[]", b'{ "x": 1 }', b'{"x":1,"x":1}', b'{"z":1,"a":2}'])
+def test_authenticated_but_noncanonical_plaintext_rejects(raw):
+    row, cipher = authenticated_row(raw)
+    with pytest.raises(RecordIntegrityError, match="^Stored record is not canonical$"):
+        cipher.open("tenant-a", "credential", "record-1", row)
+
+
+def authenticated_row(plaintext, *, wrong_tag=False):
+    """Craft an AEAD-valid synthetic row to reach post-decryption integrity checks."""
+    import hashlib
+    import hmac
+
+    from cryptography.hazmat.primitives.ciphers.aead import AESGCM
+
+    cipher = make_cipher()
+    kid = cipher.key_id(b"a" * 32)
+    tag = hmac.new(cipher._derive(kid, "tenant-a", "content-tag"), plaintext, hashlib.sha256).hexdigest()
+    if wrong_tag:
+        tag = "00" * 32
+    nonce = b"synthetic-iv" + b"!"
+    aad = cipher._aad("tenant-a", "credential", "record-1", 1, kid, tag)
+    ciphertext = AESGCM(cipher._derive(kid, "tenant-a", "encryption")).encrypt(nonce, plaintext, aad)
+    return dict(key_id=kid, content_tag=tag, nonce=nonce, ciphertext=ciphertext, revision=1), cipher
+
+
+def test_content_tag_is_checked_even_for_authenticated_ciphertext():
+    row, cipher = authenticated_row(b'{"x":1}', wrong_tag=True)
+    with pytest.raises(RecordIntegrityError, match="^Stored record content authentication failed$"):
+        cipher.open("tenant-a", "credential", "record-1", row)
+
+
+@pytest.mark.parametrize("raw", [b"{", b"\xff"])
+def test_authenticated_invalid_json_fails_with_bounded_error(raw):
+    row, cipher = authenticated_row(raw)
+    with pytest.raises(RecordIntegrityError, match="^Stored record authentication failed$"):
+        cipher.open("tenant-a", "credential", "record-1", row)

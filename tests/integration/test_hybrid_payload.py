@@ -99,3 +99,10 @@ class TestEncryptionRoundtrip:
         # Nonces should differ (random), so ciphertexts should differ
         assert nonce1 != nonce2
         assert ct1 != ct2
+
+
+@pytest.mark.parametrize("envelope,expected", [(None, False), ({}, False), ({"v": 1}, False), ({"v": 2}, True)])
+def test_hpke_version_indicator_reads_envelope_version(sample_hybrid_payload, envelope, expected):
+    # This property identifies an envelope version; it does not validate HPKE.
+    payload = sample_hybrid_payload.model_copy(update={"pii_envelope": envelope})
+    assert payload.is_hpke_v2 is expected

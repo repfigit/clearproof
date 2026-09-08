@@ -39,3 +39,13 @@ describe('observation discovery pages', () => {
     }
   });
 });
+
+it('rejects nonobject page requests, nonobject responses and invalid byte inputs', async () => {
+  for (const value of [null, 'private', []]) {
+    expect(() => validateObservationPage(value, {})).toThrow('Invalid page');
+    expect(() => validateObservationPage({}, value as never)).toThrow('Invalid page request');
+  }
+  for (const value of [Buffer.alloc(0), Buffer.alloc(1025), null as unknown as Uint8Array]) {
+    await expect(listObservations('https://operator.example', 'token', value)).rejects.toThrow('unavailable or rejected');
+  }
+});

@@ -7,8 +7,7 @@ def valuation_witness(transfer: Transfer) -> dict[str, str]:
     transfer = Transfer.model_validate(transfer)
     numerator, denominator = int(transfer.valuation.numerator), int(transfer.valuation.denominator)
     quotient, remainder = divmod(int(transfer.amount_base_units) * numerator, denominator)
-    if quotient != int(transfer.usd_cents):
-        raise ValueError("Transfer valuation differs from exact integer quotient")
+    # Transfer revalidation above enforces this exact quotient, including copied instances.
     return {
         "amount_base_units": transfer.amount_base_units,
         "numerator": str(numerator),

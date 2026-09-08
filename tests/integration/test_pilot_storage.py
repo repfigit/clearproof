@@ -357,6 +357,18 @@ async def test_signed_root_publication_revision_chain_rotation_and_tenant_bounda
         key_id=authority.key_id,
     )
     signed = sign_root(root, key)
+    from src.services.root_publication import persist_approved_root
+
+    skipped_revision = RootSnapshot.model_validate({**root.model_dump(), "revision": 2, "previous_digest": root.digest})
+    with pytest.raises(RecordConflict, match="Initial root revision must be one"):
+        await service.publish(sign_root(skipped_revision, key), idempotency_key="root-1", now=150)
+    assert await service._store.get("issuer-root", root_record_id(root)) is None
+    foreign_principal = Principal.model_validate({**principal.model_dump(), "tenant_id": "tenant-b"})
+    foreign_store = PilotStore(db, cipher(), foreign_principal)
+    async with foreign_store.transaction() as tx:
+        with pytest.raises(RootTrustError, match="Root publication tenant mismatch"):
+            await persist_approved_root(tx, signed, trust, now=150)
+        assert await tx.record_ids("issuer-root") == []
     first = await service.publish(signed, idempotency_key="root-1", now=150)
     assert first["snapshot_digest"] == root.digest
     assert await service.publish(signed, idempotency_key="root-1", now=150) == first
@@ -398,7 +410,7 @@ async def test_signed_root_publication_revision_chain_rotation_and_tenant_bounda
     assert (await reader.read("issuer-root", root_record_id(root))).revision == 2
 
 
-async def test_durable_revocation_scope_retry_and_proving_precondition(db):
+async def test_durable_revocation_scope_retry_and_proving_precondition(db, monkeypatch):
     from eth_account import Account
 
     from src.protocol.credential import PilotCredential, holder_commitment
@@ -477,7 +489,41 @@ async def test_durable_revocation_scope_retry_and_proving_precondition(db):
                 await load_unrevoked_enrollment(
                     tx, "a" * 64, chain_id=31337, registry_address="0x" + "1" * 40, now=invalid_time
                 )
+    from copy import deepcopy
+    from unittest.mock import AsyncMock
+
+    from src.storage.pilot import PilotTransaction
+
+    original = await store(db).get("credential", credential.credential_nonce)
+    async with store(db).transaction() as tx:
+        with pytest.raises(EnrollmentNotFound, match="Enrollment not found"):
+            await load_unrevoked_enrollment(tx, "ff" * 32, chain_id=31337, registry_address="0x" + "1" * 40, now=120)
+    for mutation in ("tenant", "identity", "commitment"):
+        altered = deepcopy(original)
+        if mutation == "commitment":
+            altered["credential_commitment"] = str(int(credential.commitment) + 1)
+        else:
+            field = "tenant_id" if mutation == "tenant" else "credential_nonce"
+            altered["consent"]["credential"][field] = "tenant-b" if mutation == "tenant" else "cd" * 32
+        async with store(db).transaction() as tx:
+            with monkeypatch.context() as patch:
+                patch.setattr(PilotTransaction, "get", AsyncMock(return_value=altered))
+                with pytest.raises(EnrollmentIntegrityError, match="identity or commitment failed"):
+                    await load_unrevoked_enrollment(
+                        tx, credential.credential_nonce, chain_id=31337, registry_address="0x" + "1" * 40, now=120
+                    )
+    assert await store(db).get("credential", credential.credential_nonce) == original
     request = RevocationRequest(credential_id="a" * 64, idempotency_key="revoke-1", reason_code="issuer-withdrawal")
+    with pytest.raises(EnrollmentIneligible, match="Revocation precedes enrollment"):
+        await service().revoke(request, now=109)
+    target = service()
+    foreign_record = deepcopy(original)
+    foreign_record["consent"]["credential"]["tenant_id"] = "tenant-b"
+    with monkeypatch.context() as patch:
+        patch.setattr(target._store, "get", AsyncMock(return_value=foreign_record))
+        with pytest.raises(ValueError, match="Stored enrollment tenant mismatch"):
+            await target.revoke(request, now=120)
+    assert await store(db).get("revocation", credential.credential_nonce) is None
     for changes in [{"issuer_dids": ("did:web:other.example",)}, {"roles": ("evidence:decrypt",)}]:
         unauthorized = Principal.model_validate({**principal.model_dump(), **changes})
         with pytest.raises(HTTPException) as err:
@@ -837,6 +883,12 @@ async def test_policy_http_approval_and_stored_comparison_real_jwt(db, monkeypat
             },
             "idempotency_key": "http-approval-2",
         }
+        conflict = await client.post(
+            "/pilot/policy/approve", json={**second, "idempotency_key": body["idempotency_key"]}, headers=headers
+        )
+        assert conflict.status_code == 409
+        assert conflict.json() == {"detail": "Policy approval or idempotency conflict"}
+        assert (await client.post("/pilot/policy/approve", json=body, headers=headers)).json() == first.json()
         assert (await client.post("/pilot/policy/approve", json=second, headers=headers)).status_code == 200
         await db.close()
         await db.connect()
@@ -1368,6 +1420,35 @@ async def test_fireblocks_relay_requires_jwt_signature_and_operator_binding(db, 
                 headers={**headers, "Fireblocks-Webhook-Signature": fixtures["sign"](wrong_scope, key)},
             )
         ).status_code == 422
+        from unittest.mock import AsyncMock
+
+        for failure, expected in ((RecordConflict, 409), (ValueError, 422), (TypeError, 422), (RecursionError, 422)):
+            with monkeypatch.context() as patch:
+                rejected = AsyncMock(side_effect=failure("synthetic-private-intake-detail"))
+                patch.setattr(routes.FireblocksIntake, "ingest", rejected)
+                response = await client.post(url, content=raw, headers=headers)
+                assert response.status_code == expected
+                assert "synthetic-private-intake-detail" not in response.text
+                rejected.assert_awaited_once()
+        for invalid_configuration in ("duplicate", "jwks"):
+            malformed = json.loads(json.dumps(config))
+            if invalid_configuration == "duplicate":
+                malformed["integrations"].append(malformed["integrations"][0])
+            else:
+                malformed["integrations"][0]["jwks"] = {"keys": []}
+            with monkeypatch.context() as patch:
+                patch.setenv("PILOT_FIREBLOCKS_INTEGRATIONS", json.dumps(malformed))
+                response = await client.post(url, content=raw, headers=headers)
+                assert response.status_code == 503
+                expected_detail = (
+                    "Fireblocks relay configuration is unavailable"
+                    if invalid_configuration == "duplicate"
+                    else "Fireblocks verification configuration is unavailable"
+                )
+                assert response.json() == {"detail": expected_detail}
+        # All failed retries preserve the original successful notification.
+        recovered = await client.post(url, content=raw, headers=headers)
+        assert recovered.status_code == 200 and recovered.json()["duplicate"]
         monkeypatch.setenv("PILOT_EVENT_AUTHORITIES", '{"authorities":[]}')
         assert (await client.post(url, content=raw, headers=headers)).status_code == 403
         monkeypatch.delenv("PILOT_FIREBLOCKS_INTEGRATIONS")
@@ -1673,6 +1754,23 @@ async def test_durable_registrar_witness_real_proof(db, tmp_path, monkeypatch):
             credential.credential_nonce, secret="123456", sanctions_tree=PilotSanctionsTree([]), now=now
         )
 
+    from src.services.proof_inspection import ProofInspectionService
+
+    for invalid_configuration in (None, inputs):
+        with pytest.raises(ValueError, match="Expected server statement configuration"):
+            ProofInspectionService(db, cipher(), principal, verifier, invalid_configuration)
+    original_read = PilotTransaction.read
+    for missing_kind in ("issuance-root", "issuer-root", "sanctions-root"):
+
+        async def missing_root(tx, kind, record_id, **kwargs):
+            if kind == missing_kind:
+                return None
+            return await original_read(tx, kind, record_id, **kwargs)
+
+        with monkeypatch.context() as patch:
+            patch.setattr(PilotTransaction, "read", missing_root)
+            with pytest.raises(RootTrustError, match="Current root is not retained in this tenant"):
+                await prepare()
     witness = await prepare()
     assert witness["credential_commitment"] == credential.commitment
     await db.close()
@@ -1714,6 +1812,61 @@ async def test_durable_registrar_witness_real_proof(db, tmp_path, monkeypatch):
         patch.setattr(PilotTransaction, "get", altered_source)
         with pytest.raises(RootTrustError, match="inconsistent"):
             await prepare()
+    # Isolate source consistency after the current-credential trust boundary.
+    # Recompute real source digests; altered snapshots are deliberately not
+    # claimed to be valid registrar signatures.
+    from unittest.mock import AsyncMock
+
+    from src.protocol.canonical import record_digest
+    from src.services import proof_preparation
+
+    for mutation in ("source-scope", "issuance-issuer", "missing-issuer", "wrong-issuance-binding"):
+        target = service()
+        name = "issuers" if mutation in ("missing-issuer", "wrong-issuance-binding") else "issuance"
+        domain = "issuer" if name == "issuers" else "issuance"
+        signed = target._inputs[name]
+        source_value = await reader.get("root-source", signed.snapshot.source_digest)
+        if mutation == "source-scope":
+            source_value["evaluated_at"] += 1
+            expected_error = "source scope differs"
+        elif mutation == "issuance-issuer":
+            source_value["issuer_did"] = "did:web:other.example"
+            expected_error = "source issuer differs"
+        elif mutation == "missing-issuer":
+            source_value["issuers"] = []
+            expected_error = "issuer inventory does not bind"
+        else:
+            source_value["issuers"][0]["issuance_snapshot_digest"] = "00" * 32
+            expected_error = "issuer inventory does not bind"
+        source_digest = record_digest(f"clearproof/{domain}-source/v1", source_value)
+        target._inputs[name] = signed.model_copy(
+            update={"snapshot": signed.snapshot.model_copy(update={"source_digest": source_digest})}
+        )
+
+        async def selected_source(tx, kind, record_id):
+            if kind == "root-source" and record_id == source_digest:
+                return source_value
+            return await original_get(tx, kind, record_id)
+
+        with monkeypatch.context() as patch:
+            patch.setattr(target, "_load_current_credential", AsyncMock(return_value=credential))
+            patch.setattr(PilotTransaction, "get", selected_source)
+            with pytest.raises(RootTrustError, match=expected_error):
+                await target.prepare_witness(
+                    credential.credential_nonce, secret="123456", sanctions_tree=PilotSanctionsTree([]), now=now
+                )
+    original_expected = proof_preparation.expected_current_signals
+
+    def different_statement(**kwargs):
+        expected = list(original_expected(**kwargs))
+        expected[0] = str(int(expected[0]) + 1)
+        return tuple(expected)
+
+    with monkeypatch.context() as patch:
+        patch.setattr(proof_preparation, "expected_current_signals", different_statement)
+        with pytest.raises(RootTrustError, match="Prepared witness differs from current statement"):
+            await prepare()
+    assert await prepare() == witness
     alternate = PilotCredential.model_validate({**credential.model_dump(), "credential_nonce": "cd" * 32})
     await enroll(alternate, "enroll-after-publication")
     with pytest.raises(RootTrustError, match="absent"):
@@ -2098,8 +2251,7 @@ async def test_durable_current_inspection_real_pairing_and_revocation(db, monkey
                     signals,
                     references,
                     idempotency_key=key,
-                    **args,
-                    **{**payload_args, **changes},
+                    **{**args, **payload_args, **changes},
                 )
 
             for references in ((), await retain(False)):
@@ -2114,6 +2266,15 @@ async def test_durable_current_inspection_real_pairing_and_revocation(db, monkey
                 await authorize(who=ProofAuthorizationService(db, cipher(), restricted, verifier, configuration))
             async with db.connection() as conn:
                 baseline = (await (await conn.execute("SELECT count(*) FROM pilot_records")).fetchone())[0]
+            for invalid_clock in (None, True, str(now), -1, 2**53):
+                with pytest.raises(ValueError, match="Invalid authorization clock"):
+                    await authorize(now=invalid_clock)
+            for invalid_payload in (None, "synthetic", b"", b"x" * 32769):
+                with pytest.raises(ValueError, match="payload bytes"):
+                    await authorize(pii=invalid_payload)
+            for invalid_refs in ((refs[0], refs[0]), tuple(f"{i:064x}" for i in range(65))):
+                with pytest.raises(ValueError, match="64 distinct fact references"):
+                    await authorize(references=invalid_refs)
             for invalid_information in (b"opaque-unvalidated-information", b"{}"):
                 with pytest.raises(ValueError, match="transfer information"):
                     await authorize(pii=invalid_information)
@@ -2312,6 +2473,32 @@ async def test_durable_current_inspection_real_pairing_and_revocation(db, monkey
             )
             with pytest.raises(ValueError):
                 await timestamp_service.attach(receipt["receipt_id"], b"invalid", now=timestamp_at)
+            for invalid_response in (None, "synthetic", bytearray(b"x"), b"", b"x" * 32769):
+                with pytest.raises(ValueError, match="Invalid timestamp response size"):
+                    await timestamp_service.attach(receipt["receipt_id"], invalid_response, now=timestamp_at)
+            original_timestamp_get = PilotTransaction.get
+            for missing_or_changed in ("receipt", "tenant", "digest", "proof"):
+
+                async def incomplete_timestamp_input(tx, kind, record_id):
+                    value = await original_timestamp_get(tx, kind, record_id)
+                    if kind == "receipt":
+                        if missing_or_changed == "receipt":
+                            return None
+                        if missing_or_changed == "tenant":
+                            return {**value, "tenant_id": "synthetic-other-tenant"}
+                        if missing_or_changed == "digest":
+                            return {**value, "expires_at": value["expires_at"] + 1}
+                    if kind == "proof" and missing_or_changed == "proof":
+                        return None
+                    return value
+
+                with monkeypatch.context() as patch:
+                    patch.setattr(PilotTransaction, "get", incomplete_timestamp_input)
+                    expected = "proof" if missing_or_changed == "proof" else "receipt"
+                    with pytest.raises(ValueError, match=f"Authorization {expected} unavailable"):
+                        await timestamp_service.attach(receipt["receipt_id"], timestamp_response, now=timestamp_at)
+            async with db.connection() as conn:
+                assert (await (await conn.execute("SELECT count(*) FROM pilot_records")).fetchone())[0] == baseline + 9
             denied_timestamp = TimestampEvidenceService(
                 db,
                 cipher(),
@@ -2326,6 +2513,13 @@ async def test_durable_current_inspection_real_pairing_and_revocation(db, monkey
                 await timestamp_service.attach(receipt["receipt_id"], timestamp_response, now=timestamp_at)
                 == timestamp_id
             )
+            # A second authentic response has a different TSA serial, even within
+            # the same second. It must not replace the first retained timestamp.
+            alternate_timestamp = issue_timestamp(timestamp_request(signed_decision))
+            assert alternate_timestamp != timestamp_response
+            conflict_at = int(time.time()) + 2
+            with pytest.raises(RecordConflict, match="A different timestamp is already retained"):
+                await timestamp_service.attach(receipt["receipt_id"], alternate_timestamp, now=conflict_at)
             await db.close()
             await db.connect()
             timestamp_record = await retained.get("authorization-evidence", timestamp_id)
@@ -2463,6 +2657,9 @@ async def test_durable_current_inspection_real_pairing_and_revocation(db, monkey
                 expected_tenant=principal.tenant_id,
                 verified_at=credential.expires_at + 100,
             )
+            for invalid_clock in (None, True, "100", -1, 2**53):
+                with pytest.raises(ValueError, match="Invalid history verification clock"):
+                    await inspect_history_bundle(bundle, verifier, **{**history_args, "verified_at": invalid_clock})
             historical = await inspect_history_bundle(bundle, verifier, **history_args)
             assert historical.integrity_valid and historical.cryptographic_valid
             assert historical.outcome == "indeterminate"
@@ -2479,6 +2676,9 @@ async def test_durable_current_inspection_real_pairing_and_revocation(db, monkey
                 valuation_trust=configuration.valuation_trust,
                 root_trust=configuration.root_trust,
                 root_pins=configuration.root_pins,
+            )
+            check_history_reconstruction_guards(
+                bundle, verifier, historical_trust, trust, signals, verified_at=history_args["verified_at"]
             )
             reconstructed = await inspect_history_bundle(
                 bundle, verifier, statement_trust=historical_trust, **history_args
@@ -2742,6 +2942,46 @@ async def test_durable_current_inspection_real_pairing_and_revocation(db, monkey
                 )
             assert unavailable.statement_valid and unavailable.cryptographic_valid is None
             assert unavailable.outcome == "indeterminate" and unavailable.reasons == ("pairing_unavailable",)
+            from unittest.mock import AsyncMock, Mock
+
+            from src.prover import history as history_module
+            from src.prover.pilot_verifier import PairingInspection
+
+            # Isolate outcome mapping at the reconstruction/pairing boundaries;
+            # actual pairing and reconstruction run above with the original bundle.
+            changed_signals = list(signals)
+            changed_signals[0] = str(int(changed_signals[0]) + 1)
+            pairing = AsyncMock()
+            with monkeypatch.context() as patch:
+                reconstruction = Mock(return_value=tuple(changed_signals))
+                patch.setattr(history_module, "reconstruct_history_statement", reconstruction)
+                patch.setattr(PilotPairingVerifier, "inspect", pairing)
+                mismatch = await inspect_history_bundle(
+                    bundle, verifier, statement_trust=historical_trust, **history_args
+                )
+            reconstruction.assert_called_once()
+            pairing.assert_not_awaited()
+            assert mismatch.outcome == "contradicted" and mismatch.reasons == ("statement_signal_mismatch",)
+            assert mismatch.integrity_valid and mismatch.statement_valid is False
+            assert mismatch.cryptographic_valid is None
+            pairing = AsyncMock(
+                return_value=PairingInspection(False, verifier.artifacts.manifest.digest, "pilot-transfer-v2")
+            )
+            with monkeypatch.context() as patch:
+                patch.setattr(PilotPairingVerifier, "inspect", pairing)
+                invalid = await inspect_history_bundle(
+                    bundle, verifier, statement_trust=historical_trust, **history_args
+                )
+            pairing.assert_awaited_once()
+            assert invalid.outcome == "contradicted" and invalid.reasons == ("invalid_pairing",)
+            assert invalid.integrity_valid and invalid.statement_valid
+            assert invalid.cryptographic_valid is False and invalid.policy_reproduced is None
+            for name in bundle["configuration_base64"]:
+                incomplete_configuration = deepcopy(bundle)
+                del incomplete_configuration["configuration_base64"][name]
+                missing = await inspect_history_bundle(incomplete_configuration, verifier, **history_args)
+                assert missing.outcome == "indeterminate" and missing.reasons == ("missing_evidence",)
+                assert not missing.integrity_valid and missing.cryptographic_valid is None
             for mutation_kind in ("receipt", "root", "key", "policy", "envelope", "signal", "extra_record"):
                 changed_bundle = deepcopy(bundle)
                 if mutation_kind == "receipt":
@@ -3127,6 +3367,25 @@ async def test_signed_fact_retention_atomic_retry_reconnect_and_current_trust(db
     await db.close()
     await db.connect()
     assert await service().retain(tuple(reversed(approvals)), **{**operation, "now": args["now"] + 1}) == refs
+    assert [await stored.get("fact-evidence", ref) for ref in refs] == original
+    assert await service().load_current(refs, **operation) == trust.verify_for_context(approvals, **args)
+    for malformed in (list(refs), (refs[0], refs[0]), tuple(f"{index:064x}" for index in range(65))):
+        with pytest.raises(FactTrustError, match="at most 64 distinct fact references"):
+            await service().load_current(malformed, **operation)
+    assert len(original) >= 2 and original[0]["signed"] != original[1]["signed"]
+    original_get = PilotTransaction.get
+
+    async def substituted_fact(tx, kind, identifier):
+        if kind == "fact-evidence" and identifier == refs[0]:
+            return original[1]
+        return await original_get(tx, kind, identifier)
+
+    with monkeypatch.context() as patch:
+        patch.setattr(PilotTransaction, "get", substituted_fact)
+        with pytest.raises(FactTrustError, match="Retained fact evidence identity mismatch"):
+            await service().load_current(refs, **operation)
+        with pytest.raises(FactTrustError, match="Retained fact evidence identity mismatch"):
+            await service().retain(approvals, **operation)
     assert [await stored.get("fact-evidence", ref) for ref in refs] == original
     assert await service().load_current(refs, **operation) == trust.verify_for_context(approvals, **args)
     with pytest.raises(FactTrustError):
@@ -3582,6 +3841,15 @@ async def check_durable_observations(
             },
         )
 
+    for clock in (True, "100", -1, 2**53):
+        with pytest.raises(ValueError, match="Invalid observation clock"):
+            await observe(now=clock)
+    for references in ([], ("aa" * 32,) * 2, tuple(f"{index:064x}" for index in range(65))):
+        with pytest.raises(ValueError, match="at most 64 distinct fact references"):
+            await observe(refs=references)
+    async with db.connection() as conn:
+        assert (await (await conn.execute("SELECT count(*) FROM pilot_records")).fetchone())[0] == baseline
+    # Reuse the same idempotency key: rejected validation wrote no retry entry.
     first, repeated = await asyncio.gather(observe(), observe())
     assert first == repeated
     assert first["mode"] == "observation" and first["authorization_consumed"] is False
@@ -4174,6 +4442,8 @@ async def prepare_authorization_http(
     import json
     import time
     from dataclasses import replace
+    from types import SimpleNamespace
+    from unittest.mock import AsyncMock
 
     import jwt
     from cryptography.hazmat.primitives import serialization
@@ -4285,6 +4555,30 @@ async def prepare_authorization_http(
     )
     assert (await invoke()).status_code == 503
     targets[(principal.tenant_id, "local-transfer")] = target
+    # Reject unexpected operator-provided assurance before decrypting or consuming.
+    # This stand-in is deliberately not a validated artifact manifest.
+    targets[(principal.tenant_id, "local-transfer")] = replace(
+        target,
+        verifier=SimpleNamespace(artifacts=SimpleNamespace(manifest=SimpleNamespace(assurance="unsupported"))),
+    )
+    rejected = await invoke()
+    assert rejected.status_code == 503
+    assert rejected.json()["detail"] == "Pilot authorization configuration is unavailable"
+    targets[(principal.tenant_id, "local-transfer")] = target
+    # Inject service boundary failures with otherwise valid authenticated input.
+    # The real service is restored before the subsequent consumption race.
+    for error_type, status, detail in (
+        (authorization.EnrollmentNotFound, 404, "Pilot enrollment is unavailable"),
+        (authorization.RecordIntegrityError, 503, "Stored authorization evidence cannot be read"),
+    ):
+        failure = AsyncMock(side_effect=error_type("PRIVATE-MARKER"))
+        with monkeypatch.context() as fault:
+            fault.setattr(authorization.ProofAuthorizationService, "authorize", failure)
+            rejected = await invoke()
+        failure.assert_awaited_once()
+        assert rejected.status_code == status
+        assert rejected.json()["detail"] == detail
+        assert "PRIVATE-MARKER" not in rejected.text
     app.state.pilot_authorization_targets = None
     assert (await invoke()).status_code == 503
     app.state.pilot_authorization_targets = targets
@@ -4443,6 +4737,7 @@ async def check_authorization_mirror(
     restricted = AuthorizationMirrorService(db, cipher(), principal, verifier, configuration, consumer=consumer)
     with pytest.raises(HTTPException):
         await restricted.prepare(receipt["receipt_id"], **arguments)
+    await check_authorization_mirror_rejections(service, arguments, receipt, payload["decision_signer"])
     if mirror_evm:
         import time
 
@@ -4504,6 +4799,31 @@ def check_bilateral_scenarios(record, receipt, configuration, decision_authority
         private_keys={receipt["recipient_key_id"]: private},
     )
     receiver = LocalBilateralCounterparty(**configuration_args)
+    from src.protocol.transfer import Transfer, VerificationContext
+
+    self_hosted_value = configuration.transfer.model_dump(mode="json")
+    self_hosted_value["beneficiary"].update(kind="self_hosted", vasp_did=None)
+    self_hosted = Transfer.model_validate(self_hosted_value)
+    self_hosted_context = VerificationContext.model_validate(
+        {**configuration.context.model_dump(), "transfer_digest": self_hosted.digest}
+    )
+    with pytest.raises(ValueError, match="requires a beneficiary VASP"):
+        LocalBilateralCounterparty(**{**configuration_args, "transfer": self_hosted, "context": self_hosted_context})
+    for overrides in ({"behavior": "unsupported"}, {"now": True}, {"now": str(now)}, {"now": -1}):
+        with pytest.raises(ValueError, match="Invalid local bilateral message or recipient configuration"):
+            receiver.receive(request, **{"now": now, **overrides})
+    for malformed in ({**request, "unexpected": "synthetic"}, {k: v for k, v in request.items() if k != "profile"}):
+        with pytest.raises(ValueError, match="Invalid local bilateral message or recipient configuration"):
+            receiver.receive(malformed, now=now)
+    for deadline in (None, True, str(now + 1), receipt["authorized_at"], receipt["expires_at"]):
+        with pytest.raises(ValueError, match="Invalid local bilateral message or recipient configuration"):
+            receiver.receive(request, now=now, behavior="timeout", deadline=deadline)
+    changed_signature = copy.deepcopy(request)
+    changed_signature["information_approval"]["signature"] = "00" * 64
+    with pytest.raises(ValueError, match="Bilateral information approval differs from authorized evidence"):
+        receiver._receive(changed_signature, now=now, behavior="accept", deadline=None)
+    with pytest.raises(ValueError, match="Invalid local bilateral message or recipient configuration"):
+        receiver.receive(changed_signature, now=now)
     for behavior, outcome in (
         ("accept", "accepted"),
         ("reject", "rejected"),
@@ -4594,6 +4914,32 @@ async def check_durable_local_exchange(
     )
     async with db.connection() as conn:
         before = (await (await conn.execute("SELECT count(*) FROM pilot_records")).fetchone())[0]
+    from copy import copy
+
+    from src.storage.pilot import PilotTransaction
+
+    with pytest.raises(ValueError, match="Unsupported local counterparty behavior"):
+        LocalExchangeService(events, counterparty, source_id="local-bilateral", behavior="unsupported")
+    foreign_events = copy(events)
+    foreign_events.principal = Principal.model_validate({**reviewer.model_dump(), "tenant_id": "synthetic-foreign"})
+    with pytest.raises(ValueError, match="configuration differs from authenticated tenant"):
+        LocalExchangeService(foreign_events, counterparty, source_id="local-bilateral")
+    for invalid_clock in (True, str(now), now, 2**53):
+        with pytest.raises(ValueError, match="delivery precedes its declared observation"):
+            await accepted.deliver(second, now=invalid_clock)
+    original_get = PilotTransaction.get
+    for unavailable in ("receipt", "proof"):
+
+        async def missing_exchange_record(tx, kind, identity):
+            return None if kind == unavailable else await original_get(tx, kind, identity)
+
+        with pytest.MonkeyPatch.context() as patch:
+            patch.setattr(PilotTransaction, "get", missing_exchange_record)
+            expected = "receipt" if unavailable == "receipt" else "authorization evidence"
+            with pytest.raises(ValueError, match=f"Local exchange {expected} is unavailable"):
+                await accepted.deliver(second, now=now + 2)
+    async with db.connection() as conn:
+        assert (await (await conn.execute("SELECT count(*) FROM pilot_records")).fetchone())[0] == before
     replies = await asyncio.gather(accepted.deliver(second, now=now + 2), accepted.deliver(second, now=now + 2))
     assert replies[0] == replies[1] and replies[0]["result"]["outcome"] == "accepted"
     earlier = await requested.deliver(first, now=now + 3)
@@ -4729,3 +5075,1116 @@ def check_bilateral_cli(request, args, authority, successor, new_private, now, t
         assert "PRIVATE-MARKER" not in json.dumps(report)
 
     retain_output("counterparty-scenarios.json", dispositions)
+
+
+@pytest.mark.parametrize("record_id", [None, 1, "", "UPPER", "../record", "a" * 65])
+async def test_storage_rejects_noncanonical_identifiers(db, record_id):
+    with pytest.raises(ValueError, match="Expected opaque record identifier"):
+        await store(db).read("proof", record_id)
+
+
+async def test_storage_rejects_unknown_kind_and_operation_before_callback(db):
+    target = store(db)
+    with pytest.raises(ValueError, match="Unsupported pilot record kind"):
+        await target.read("unknown-kind", "synthetic-id")
+
+    async def unexpected(tx):
+        pytest.fail("Unsupported operation must not invoke its callback")
+
+    with pytest.raises(ValueError, match="Unsupported pilot operation"):
+        await target.run_idempotent("unknown-operation", "synthetic-key", {}, unexpected)
+    async with target.transaction() as tx:
+        assert await tx.record_ids("proof") == []
+
+
+@pytest.mark.parametrize("result", [None, [], True])
+async def test_nonobject_idempotent_result_rolls_back_and_allows_retry(db, result):
+    target = store(db)
+
+    async def invalid(tx):
+        await tx.put("proof", "synthetic-proof", {"fixture": "synthetic"})
+        await tx.consume("a" * 64, "synthetic-proof")
+        return result
+
+    with pytest.raises(ValueError, match="Idempotent operation result must be an object"):
+        await target.run_idempotent("consume-proof", "synthetic-key", {}, invalid)
+    assert await target.get("proof", "synthetic-proof") is None
+    async with target.transaction() as tx:
+        assert not await tx.is_consumed("a" * 64)
+
+    async def retry(tx):
+        await tx.put("proof", "synthetic-proof", {"fixture": "synthetic"})
+        await tx.consume("a" * 64, "synthetic-proof")
+        return {"accepted": True}
+
+    assert await target.run_idempotent("consume-proof", "synthetic-key", {}, retry) == {"accepted": True}
+
+
+@pytest.mark.parametrize("revision", [True, "1", 0, -1, 2**53])
+async def test_storage_read_revision_rejects_invalid_safe_integer(db, revision):
+    with pytest.raises(ValueError, match="Revision must be a positive safe integer"):
+        await store(db).read("proof", "synthetic-proof", revision=revision)
+
+
+@pytest.mark.parametrize("revision", [True, "1", 0, -1, 2**53 - 1])
+async def test_storage_write_revision_rejects_invalid_successor_without_mutation(db, revision):
+    target = store(db)
+    async with target.transaction() as tx:
+        await tx.put("issuance-root", "synthetic-root", {"root": "original"})
+    with pytest.raises(ValueError, match="Expected revision must allow a positive safe-integer successor"):
+        async with target.transaction() as tx:
+            await tx.put("issuance-root", "synthetic-root", {"root": "replacement"}, expected_revision=revision)
+    snapshot = await target.read("issuance-root", "synthetic-root")
+    assert snapshot.revision == 1 and snapshot.value == {"root": "original"}
+
+
+@pytest.mark.parametrize("limit", [True, "1", 0, 257])
+async def test_storage_record_scan_rejects_invalid_limits(db, limit):
+    async with store(db).transaction() as tx:
+        with pytest.raises(ValueError, match="Scan limit must be"):
+            await tx.record_ids("event", limit=limit)
+
+
+@pytest.mark.parametrize("limit", [True, "1", 0, 17])
+async def test_storage_event_scope_scan_rejects_invalid_limits(db, limit):
+    async with store(db).transaction() as tx:
+        with pytest.raises(ValueError, match="Invalid scope page limit"):
+            await tx.event_scopes(after=None, limit=limit)
+
+
+@pytest.mark.parametrize("sequence", [True, "1", 0, -1, 2**53])
+async def test_storage_event_index_rejects_invalid_sequences(db, sequence):
+    target = store(db)
+    with pytest.raises(ValueError, match="Invalid source sequence"):
+        async with target.transaction() as tx:
+            await tx.put("event", "a" * 64, {"fixture": "synthetic"})
+            await tx.index_event("a" * 64, "b" * 64, "c" * 64, sequence)
+    assert await target.get("event", "a" * 64) is None
+    async with target.transaction() as tx:
+        assert await tx.event_ids("b" * 64) == []
+
+
+@pytest.mark.parametrize("nullifier", [None, 1, "", "a" * 63, "a" * 65, "A" * 64, "g" * 64])
+async def test_storage_rejects_noncanonical_consumption_nullifiers(db, nullifier):
+    async with store(db).transaction() as tx:
+        with pytest.raises(ValueError, match="Expected canonical 32-byte nullifier"):
+            await tx.consume(nullifier, "synthetic-proof")
+        with pytest.raises(ValueError, match="Expected canonical 32-byte nullifier"):
+            await tx.consumed_proof_id(nullifier)
+        assert not await tx.is_consumed("a" * 64)
+
+
+async def test_storage_event_capacity_rejects_overflow_without_truncating(db):
+    target = store(db)
+    scope, stream = "b" * 64, "c" * 64
+    async with target.transaction() as tx:
+        for sequence in range(1, 257):
+            record_id = f"{sequence:064x}"
+            await tx.put("event", record_id, {"fixture": "synthetic"})
+            await tx.index_event(record_id, scope, stream, sequence)
+        expected = [f"{sequence:064x}" for sequence in range(1, 257)]
+        assert await tx.event_ids(scope) == expected
+    # The low-level index admits a 257th retained record. Readers must reject
+    # the oversized scope explicitly rather than report an incomplete history.
+    async with target.transaction() as tx:
+        await tx.put("event", f"{257:064x}", {"fixture": "synthetic"})
+        await tx.index_event(f"{257:064x}", scope, stream, 257)
+    async with target.transaction() as tx:
+        with pytest.raises(ValueError, match="Transfer event capacity exceeded"):
+            await tx.event_ids(scope)
+    async with store(db, tenant="tenant-b").transaction() as tx:
+        assert await tx.event_ids(scope) == []
+
+
+@pytest.fixture
+def policy_review_case(db):
+    import runpy
+    from pathlib import Path
+
+    from src.policy.diff import PolicyCase
+    from src.services.policy_review import PolicyReviewRequest, PolicyReviewService, ReviewedCase
+
+    policy, transfer, context, facts = runpy.run_path(
+        str(Path(__file__).resolve().parents[1] / "unit/test_policy_evaluator.py")
+    )["case"].__wrapped__()
+    case = PolicyCase(
+        case_id="synthetic-case", transfer=transfer, context=context, facts=facts, evaluated_at=context.evaluated_at
+    )
+    request = PolicyReviewRequest(policy=policy, cases=(ReviewedCase(case=case, expected="ALLOW"),))
+    principal = Principal(
+        tenant_id=policy.tenant_id,
+        actor_id="synthetic-reviewer",
+        roles=("policy:approve", "policy:read", "evidence:decrypt"),
+    )
+    return PolicyReviewService(db, cipher(), principal), request, context.evaluated_at
+
+
+@pytest.mark.parametrize("clock", [True, "100", "before", "expiry"])
+async def test_policy_review_requires_effective_integer_clock(policy_review_case, clock):
+    service, request, now = policy_review_case
+    if clock == "before":
+        clock = request.policy.effective_from - 1
+    elif clock == "expiry":
+        clock = request.policy.effective_until
+    with pytest.raises(ValueError, match="currently effective policy"):
+        await service.approve(request, idempotency_key="synthetic-review", now=clock)
+    assert await service.store.get("policy", request.policy.digest) is None
+    assert (await service.approve(request, idempotency_key="synthetic-review", now=now))["approved_at"] == now
+
+
+@pytest.mark.parametrize("duplicate", ["case", "transfer"])
+async def test_policy_review_rejects_duplicate_review_inventory(policy_review_case, duplicate):
+    from src.services.policy_review import PolicyReviewRequest
+
+    service, request, now = policy_review_case
+    item = request.cases[0]
+    value = item.model_dump()
+    if duplicate == "transfer":
+        value["case"]["case_id"] = "synthetic-other-case"
+    else:
+        value["case"]["transfer"]["transfer_id"] = "synthetic-other-transfer"
+    invalid = PolicyReviewRequest.model_validate({**request.model_dump(), "cases": (item.model_dump(), value)})
+    with pytest.raises(ValueError, match="unique business transfers and case IDs"):
+        await service.approve(invalid, idempotency_key="synthetic-review", now=now)
+    assert await service.store.get("policy", request.policy.digest) is None
+
+
+async def test_policy_review_rejects_future_observation(policy_review_case):
+    from src.services.policy_review import PolicyReviewRequest
+
+    service, request, now = policy_review_case
+    value = request.model_dump()
+    value["cases"][0]["case"]["evaluated_at"] = now + 1
+    with pytest.raises(ValueError, match="future observations"):
+        await service.approve(PolicyReviewRequest.model_validate(value), idempotency_key="synthetic-review", now=now)
+    assert await service.store.get("policy", request.policy.digest) is None
+
+
+@pytest.mark.parametrize("mutation", ["digest", "scope", "policy-id", "revision", "future-approval"])
+async def test_policy_review_rejects_inconsistent_retained_parent(policy_review_case, mutation):
+    from src.policy.model import PilotPolicy
+    from src.services.policy_review import PolicyReviewRequest
+
+    service, request, now = policy_review_case
+    parent = request.policy
+    if mutation == "scope":
+        parent = PilotPolicy.model_validate(
+            {**parent.model_dump(), "jurisdiction": "EU" if parent.jurisdiction != "EU" else "US"}
+        )
+    child = {**request.policy.model_dump(), "previous_digest": parent.digest, "revision": 2}
+    retained = {
+        "schema_version": "clearproof-policy-approval-v1",
+        "policy": parent.model_dump(mode="json"),
+        "approved_at": now,
+    }
+    if mutation == "digest":
+        retained["policy"]["policy_id"] = "synthetic-different-policy"
+    elif mutation == "policy-id":
+        child["policy_id"] = "synthetic-different-policy"
+    elif mutation == "revision":
+        child["revision"] = 3
+    elif mutation == "future-approval":
+        retained["approved_at"] = now + 1
+    child = PilotPolicy.model_validate(child)
+    async with service.store.transaction() as tx:
+        await tx.put("policy", parent.digest, retained)
+    # Evaluate the candidate normally before testing its retained predecessor.
+    # The scope case uses a foreign-scope parent and a locally valid candidate.
+    from src.policy.evaluator import evaluate_policy
+    from src.services.policy_review import ReviewedCase
+
+    case = request.cases[0].case
+    expected = evaluate_policy(child, case.transfer, case.context, case.facts, now=case.evaluated_at).outcome
+    candidate = PolicyReviewRequest(policy=child, cases=(ReviewedCase(case=case, expected=expected),))
+    with pytest.raises(ValueError, match="does not extend the retained policy history"):
+        await service.approve(candidate, idempotency_key="synthetic-child", now=now)
+    assert await service.store.get("policy", child.digest) is None
+    async with service.store.transaction() as tx:
+        assert await tx.record_ids("policy") == [parent.digest]
+
+
+async def test_policy_review_rejects_conflicting_retained_case(policy_review_case):
+    from src.protocol.canonical import record_digest
+
+    service, request, now = policy_review_case
+    value = request.cases[0].case.model_dump(mode="json")
+    digest = record_digest("clearproof/review-case/v1", value)
+    async with service.store.transaction() as tx:
+        await tx.put(
+            "policy", digest, {"schema_version": "clearproof-reviewed-case-v1", "case": {"fixture": "synthetic"}}
+        )
+    with pytest.raises(RecordConflict, match="Reviewed case content differs"):
+        await service.approve(request, idempotency_key="synthetic-review", now=now)
+    assert await service.store.get("policy", request.policy.digest) is None
+
+
+@pytest.mark.parametrize(
+    "mutation", ["duplicate", "policy-digest", "policy-tenant", "case-missing", "case-schema", "case-digest"]
+)
+async def test_policy_review_rejects_invalid_retained_comparison(policy_review_case, mutation):
+    from src.policy.model import PilotPolicy
+    from src.protocol.canonical import record_digest
+    from src.services.policy_review import StoredPolicyComparison
+
+    service, request, _ = policy_review_case
+    policy = request.policy
+    if mutation == "policy-tenant":
+        policy = PilotPolicy.model_validate({**policy.model_dump(), "tenant_id": "tenant-b"})
+    case = request.cases[0].case.model_dump(mode="json")
+    digest = record_digest("clearproof/review-case/v1", case)
+    policy_record = {"schema_version": "clearproof-policy-approval-v1", "policy": policy.model_dump(mode="json")}
+    case_record = {"schema_version": "clearproof-reviewed-case-v1", "case": case}
+    if mutation == "policy-digest":
+        policy_record["policy"]["policy_id"] = "synthetic-other-policy"
+    elif mutation == "case-schema":
+        case_record["schema_version"] = "unknown-synthetic-schema"
+    elif mutation == "case-digest":
+        case_record["case"]["case_id"] = "synthetic-other-case"
+    async with service.store.transaction() as tx:
+        await tx.put("policy", policy.digest, policy_record)
+        if mutation != "case-missing":
+            await tx.put("policy", digest, case_record)
+    comparison = StoredPolicyComparison(
+        before_digest=policy.digest,
+        after_digest=policy.digest,
+        case_digests=(digest,) * (2 if mutation == "duplicate" else 1),
+    )
+    expected = {
+        "duplicate": "Duplicate retained case",
+        "policy-digest": "Retained policy binding is invalid",
+        "policy-tenant": "Retained policy binding is invalid",
+        "case-missing": "unavailable",
+        "case-schema": "unavailable",
+        "case-digest": "Retained case binding is invalid",
+    }[mutation]
+    with pytest.raises(ValueError, match=expected):
+        await service.compare_stored(comparison)
+    assert await service.store.get("policy", policy.digest) == policy_record
+
+
+@pytest.fixture
+def event_service(db, event_case):
+    from src.services.event_ingestion import EventIngestionService
+
+    _, authority = event_case
+    principal = Principal(
+        tenant_id="tenant-a", actor_id="actor-a", roles=("events:ingest", "evidence:decrypt", "evidence:read")
+    )
+    return EventIngestionService(db, cipher(), principal, authorities=(authority,))
+
+
+@pytest.mark.parametrize(
+    "changes", [{"valid_until": 1}, {"actors": ("actor-a", "actor-a")}, {"dimensions": ("custody", "custody")}]
+)
+async def test_event_ingestion_authority_rejects_incoherent_configuration(event_case, changes):
+    from src.services.event_ingestion import EventAuthority
+
+    _, authority = event_case
+    with pytest.raises(ValueError, match="Invalid event authority"):
+        EventAuthority.model_validate({**authority.model_dump(), **changes})
+
+
+@pytest.mark.parametrize("inventory", ["list", "overflow"])
+async def test_event_ingestion_authority_inventory_bounds(db, event_case, inventory):
+    from src.services.event_ingestion import EventIngestionService
+
+    _, authority = event_case
+    values = [authority] if inventory == "list" else (authority,) * 257
+    principal = Principal(tenant_id="tenant-a", actor_id="actor-a", roles=("events:ingest", "evidence:decrypt"))
+    with pytest.raises(ValueError, match="bounded authority inventory"):
+        EventIngestionService(db, cipher(), principal, authorities=values)
+
+
+@pytest.mark.parametrize("evidence", [[], ({"fixture": "synthetic"},) * 34])
+async def test_event_ingestion_provider_evidence_bounds_before_retention(event_service, event_case, evidence):
+    source, _ = event_case
+    with pytest.raises(ValueError, match="Provider evidence exceeds retention bounds"):
+        await event_service._ingest_with_evidence(source, now=110, evidence=evidence)
+    async with event_service.store.transaction() as tx:
+        assert await tx.record_ids("event") == []
+        assert await tx.record_ids("provider-evidence") == []
+
+
+async def test_event_ingestion_conflicting_provider_evidence_rolls_back(event_service, event_case):
+    from src.protocol.canonical import record_digest
+
+    source, _ = event_case
+    evidence = {"fixture": "synthetic-provider-evidence"}
+    digest = record_digest("clearproof/provider-evidence/v1", evidence)
+    retained = {"fixture": "synthetic-conflicting-content"}
+    async with event_service.store.transaction() as tx:
+        await tx.put("provider-evidence", digest, retained)
+    with pytest.raises(RecordConflict, match="Provider evidence identity differs"):
+        await event_service._ingest_with_evidence(source, now=110, evidence=(evidence,))
+    async with event_service.store.transaction() as tx:
+        assert await tx.record_ids("event") == []
+        assert await tx.event_ids(source.scope.digest) == []
+        assert await tx.get("provider-evidence", digest) == retained
+
+
+async def test_event_ingestion_capacity_rejects_new_event_but_allows_exact_retry(event_service, event_case):
+    from src.reconciliation.events import SourceEvent
+
+    source, _ = event_case
+    first = await event_service.ingest(source, now=110)
+    for sequence in range(2, 257):
+        current = SourceEvent.model_validate(
+            {**source.model_dump(), "source_event_id": f"synthetic-{sequence}", "source_sequence": sequence}
+        )
+        await event_service.ingest(current, now=110)
+    overflow = SourceEvent.model_validate(
+        {**source.model_dump(), "source_event_id": "synthetic-overflow", "source_sequence": 257}
+    )
+    with pytest.raises(ValueError, match="Transfer event capacity exceeded"):
+        await event_service.ingest(overflow, now=110)
+    assert await event_service.ingest(source, now=111) == {**first, "duplicate": True}
+    async with event_service.store.transaction() as tx:
+        assert len(await tx.event_ids(source.scope.digest)) == 256
+        assert len(await tx.record_ids("event")) == 256
+
+
+@pytest.mark.parametrize("mutation", ["identity", "scope", "tenant"])
+async def test_event_ingestion_investigation_rejects_misbound_retained_event(event_service, event_case, mutation):
+    from src.protocol.canonical import record_digest
+    from src.reconciliation.events import TransferEvent
+
+    source, _ = event_case
+    record_id = record_digest(
+        "clearproof/source-event-id/v1",
+        {"tenant_id": "tenant-a", "source_id": source.source_id, "source_event_id": source.source_event_id},
+    )
+    value = {**source.model_dump(), "ingested_at": 110}
+    if mutation == "identity":
+        value["source_event_id"] = "synthetic-different-event"
+    else:
+        value["scope"]["tenant_id" if mutation == "tenant" else "transfer_id"] = "synthetic-foreign"
+    retained = TransferEvent.model_validate(value).model_dump(mode="json")
+    async with event_service.store.transaction() as tx:
+        await tx.put("event", record_id, {"event": retained})
+        await tx.index_event(record_id, source.scope.digest, "a" * 64, 1)
+    with pytest.raises(ValueError, match="Indexed event identity or scope differs"):
+        await event_service.investigate(source.scope, now=120)
+
+
+async def test_event_ingestion_investigation_rejects_missing_indexed_record(event_service, event_case, monkeypatch):
+    from src.storage.pilot import PilotTransaction
+
+    source, _ = event_case
+    await event_service.ingest(source, now=110)
+    original = PilotTransaction.get
+
+    async def missing(tx, kind, record_id):
+        if kind == "event":
+            return None
+        return await original(tx, kind, record_id)
+
+    # Inject a broken storage read contract. PostgreSQL foreign keys ordinarily
+    # prevent missing indexed rows; the service must not silently omit one.
+    monkeypatch.setattr(PilotTransaction, "get", missing)
+    with pytest.raises(ValueError, match="Indexed event is missing"):
+        await event_service.investigate(source.scope, now=120)
+
+
+async def test_event_ingestion_queue_rejects_indexed_scope_without_events(event_service, event_case, monkeypatch):
+    from unittest.mock import AsyncMock
+
+    from src.reconciliation.queue import QueueRequest
+    from src.storage.pilot import PilotTransaction
+
+    source, _ = event_case
+    await event_service.ingest(source, now=110)
+    # Fault-inject an inconsistent index scan after retaining a genuine scope.
+    monkeypatch.setattr(PilotTransaction, "event_ids", AsyncMock(return_value=[]))
+    with pytest.raises(ValueError, match="Indexed transfer has no events"):
+        await event_service.queue(QueueRequest(), now=120)
+
+
+async def check_authorization_mirror_rejections(service, arguments, receipt, signer):
+    """Fault-inject dependency results after establishing a real valid baseline."""
+    from dataclasses import replace
+    from unittest.mock import AsyncMock
+
+    from src.services.authorization_mirror import MirrorDestination
+    from src.storage.pilot import PilotTransaction
+
+    with pytest.raises(ValueError, match="Mirror consumer must be configured"):
+        MirrorDestination(consumer="0x" + "00" * 20)
+    original_get = PilotTransaction.get
+    for missing in (None, {"schema_version": "synthetic-wrong-schema"}):
+
+        async def unavailable(tx, kind, record_id):
+            if kind == "proof":
+                return missing
+            return await original_get(tx, kind, record_id)
+
+        with pytest.MonkeyPatch.context() as patch:
+            patch.setattr(PilotTransaction, "get", unavailable)
+            with pytest.raises(ValueError, match="Retained authorization proof is unavailable"):
+                await service.prepare(receipt["receipt_id"], **arguments)
+
+    observed = []
+    original_evaluate = service._evaluate_transaction
+
+    async def capture(*args, **kwargs):
+        result = await original_evaluate(*args, **kwargs)
+        observed.append(result)
+        return result
+
+    with pytest.MonkeyPatch.context() as patch:
+        patch.setattr(service, "_evaluate_transaction", capture)
+        await service.prepare(receipt["receipt_id"], **arguments)
+    inspection, decision = observed[0]
+    assert inspection.cryptographic_valid and decision.outcome == "ALLOW"
+    rejected = [
+        (replace(inspection, cryptographic_valid=False), decision),
+        (inspection, None),
+        (inspection, decision.model_copy(update={"outcome": "DENY"})),
+        (inspection, decision.model_copy(update={"policy_digest": "ab" * 32})),
+        (replace(inspection, proof_profile="synthetic-unsupported-profile"), decision),
+        (replace(inspection, manifest_digest="ab" * 32), decision),
+    ]
+    # These are dependency-contract tests: signatures, proof and retained inputs
+    # were verified above. Altered inspection results must never authorize a plan.
+    for result in rejected:
+        with pytest.MonkeyPatch.context() as patch:
+            patch.setattr(service, "_evaluate_transaction", AsyncMock(return_value=result))
+            with pytest.raises(ValueError, match="Current authorization checks did not confirm ALLOW"):
+                await service.prepare(receipt["receipt_id"], **arguments)
+
+    original_read = PilotTransaction.read
+    for missing_kind in ("policy-activation", "credential"):
+
+        async def missing_source(tx, kind, record_id, **kwargs):
+            if kind == missing_kind:
+                return None
+            return await original_read(tx, kind, record_id, **kwargs)
+
+        with pytest.MonkeyPatch.context() as patch:
+            patch.setattr(service, "_evaluate_transaction", AsyncMock(return_value=(inspection, decision)))
+            patch.setattr(PilotTransaction, "read", missing_source)
+            with pytest.raises(ValueError, match="Current source records are unavailable"):
+                await service.prepare(receipt["receipt_id"], **arguments)
+
+    with pytest.MonkeyPatch.context() as patch:
+        patch.setattr(service, "_evaluate_transaction", AsyncMock(return_value=(inspection, decision)))
+        patch.setattr(service._inputs["valuation_trust"], "current_valid_until", lambda *a, **k: arguments["now"])
+        with pytest.raises(ValueError, match="Mirror checkpoint interval is not current"):
+            await service.prepare(receipt["receipt_id"], **arguments)
+    # Every patch has been restored; the original evidence remains usable.
+    assert (await service.prepare(receipt["receipt_id"], **arguments))["receipt_id"] == receipt["receipt_id"]
+
+    await check_mirror_rebound_evidence(service, arguments, receipt, signer, (inspection, decision))
+
+
+async def check_mirror_rebound_evidence(service, arguments, receipt, signer, evaluation):
+    """Rebind synthetic encrypted evidence without bypassing digest/signature checks."""
+    from copy import deepcopy
+    from unittest.mock import AsyncMock
+
+    from src.protocol.canonical import record_digest
+
+    target = service._store
+    db = target._db
+    original_proof_id = receipt["proof_id"]
+    original_proof = await target.get("proof", original_proof_id)
+    original_receipt = await target.get("receipt", receipt["receipt_id"])
+    tenant = target.tenant_id
+    async with db.connection() as conn:
+        original_sealed = await (
+            await conn.execute(
+                "SELECT key_id,content_tag,nonce,ciphertext FROM pilot_records "
+                "WHERE tenant_id=%s AND kind='proof' AND record_id=%s AND revision=1",
+                (tenant, original_proof_id),
+            )
+        ).fetchone()
+
+    async def retain(conn, kind, identity, value):
+        sealed = cipher().seal(tenant, kind, identity, 1, value)
+        await conn.execute(
+            "INSERT INTO pilot_records (tenant_id,kind,record_id,revision,key_id,content_tag,nonce,ciphertext) "
+            "VALUES (%s,%s,%s,1,%s,%s,%s,%s) ON CONFLICT (tenant_id,kind,record_id,revision) "
+            "DO UPDATE SET key_id=EXCLUDED.key_id,content_tag=EXCLUDED.content_tag,"
+            "nonce=EXCLUDED.nonce,ciphertext=EXCLUDED.ciphertext",
+            (tenant, kind, identity, sealed["key_id"], sealed["content_tag"], sealed["nonce"], sealed["ciphertext"]),
+        )
+
+    for mutation, message in (
+        ("information", "Authorization information binding does not match"),
+        ("envelope", "Recipient envelope binding does not match"),
+        ("participants", "Mirror requires retained participant evidence"),
+    ):
+        proof_record, candidate = deepcopy(original_proof), deepcopy(original_receipt)
+        if mutation == "information":
+            candidate["information_signature_digest"] = "ab" * 32
+        elif mutation == "envelope":
+            proof_record["recipient_envelope"]["binding"]["sealed_at"] += 1
+        else:
+            proof_record["fact_ids"] = []
+        candidate["envelope_digest"] = record_digest("clearproof/pilot-envelope/v1", proof_record["recipient_envelope"])
+        request = {
+            k: proof_record[k]
+            for k in (
+                "credential_id",
+                "proof_digest",
+                "signals",
+                "fact_ids",
+                "transfer_digest",
+                "context_digest",
+                "recipient_key_id",
+                "information_signature_digest",
+            )
+        }
+        candidate["proof_id"] = record_digest(
+            "clearproof/authorized-proof/v1", {**request, "envelope_digest": candidate["envelope_digest"]}
+        )
+        identity = record_digest("clearproof/local-authorization/v1", candidate)
+        assert identity != receipt["receipt_id"]
+        proof_record["decision_attestation"] = signer.sign(candidate, service._context).model_dump(mode="json")
+        try:
+            # Only the isolated synthetic test schema is changed. Re-encrypt the
+            # records and maintain the consumption foreign key so earlier checks
+            # authenticate the candidate before its targeted inconsistency fails.
+            async with db.connection() as conn:
+                await retain(conn, "proof", candidate["proof_id"], proof_record)
+                await retain(conn, "receipt", identity, candidate)
+                await conn.execute(
+                    "UPDATE pilot_consumptions SET proof_id=%s WHERE tenant_id=%s AND nullifier=%s",
+                    (candidate["proof_id"], tenant, receipt["nullifier"]),
+                )
+            with pytest.MonkeyPatch.context() as patch:
+                if mutation == "participants":
+                    # Independently test the final participant-evidence gate even
+                    # if a policy dependency reports ALLOW without participant facts.
+                    patch.setattr(service, "_evaluate_transaction", AsyncMock(return_value=evaluation))
+                with pytest.raises(ValueError, match=message):
+                    await service.prepare(identity, **arguments)
+        finally:
+            async with db.connection() as conn:
+                await conn.execute(
+                    "UPDATE pilot_consumptions SET proof_id=%s WHERE tenant_id=%s AND nullifier=%s",
+                    (original_proof_id, tenant, receipt["nullifier"]),
+                )
+                await conn.execute(
+                    "UPDATE pilot_records SET key_id=%s,content_tag=%s,nonce=%s,ciphertext=%s "
+                    "WHERE tenant_id=%s AND kind='proof' AND record_id=%s AND revision=1",
+                    (*original_sealed, tenant, original_proof_id),
+                )
+                await conn.execute(
+                    "DELETE FROM pilot_records WHERE tenant_id=%s AND kind='receipt' AND record_id=%s",
+                    (tenant, identity),
+                )
+                if candidate["proof_id"] != original_proof_id:
+                    await conn.execute(
+                        "DELETE FROM pilot_records WHERE tenant_id=%s AND kind='proof' AND record_id=%s",
+                        (tenant, candidate["proof_id"]),
+                    )
+        assert await target.get("proof", original_proof_id) == original_proof
+        assert (await service.prepare(receipt["receipt_id"], **arguments))["receipt_id"] == receipt["receipt_id"]
+
+
+@pytest.fixture
+async def activation_case(db, policy_review_case):
+    from src.services.policy_activation import PolicyActivationService
+
+    review, request, now = policy_review_case
+    await review.approve(request, idempotency_key="synthetic-approved", now=now)
+    principal = Principal.model_validate(
+        {**review.principal.model_dump(), "roles": (*review.principal.roles, "policy:activate")}
+    )
+    return PolicyActivationService(db, cipher(), principal), request.policy, now
+
+
+@pytest.mark.parametrize("clock", [True, "100", -1, 2**53])
+async def test_policy_activation_rejects_invalid_clocks_without_selection(activation_case, clock):
+    from src.services.policy_activation import PolicyActivationRequest, activation_scope
+
+    service, policy, now = activation_case
+    scope = activation_scope(policy)
+    request = PolicyActivationRequest(policy_digest=policy.digest)
+    with pytest.raises(ValueError, match="Invalid activation clock"):
+        await service.activate(request, idempotency_key="synthetic-select", now=clock)
+    with pytest.raises(ValueError, match="Invalid activation clock"):
+        await service.current(scope, now=clock)
+    assert await service.store.get("policy-activation", scope) is None
+    assert (await service.activate(request, idempotency_key="synthetic-select", now=now))["revision"] == 1
+
+
+@pytest.mark.parametrize(
+    "changes",
+    [
+        {"schema_version": "synthetic-wrong-schema"},
+        {"scope_digest": "ab" * 32},
+        {"revision": True},
+        {"revision": 2},
+        {"activated_at": True},
+    ],
+)
+async def test_policy_activation_rejects_malformed_encrypted_head(activation_case, changes):
+    from src.services.policy_activation import PolicyActivationRequest, activation_scope
+
+    service, policy, now = activation_case
+    scope = activation_scope(policy)
+    value = {
+        "schema_version": "clearproof-policy-activation-v1",
+        "scope_digest": scope,
+        "policy_digest": policy.digest,
+        "revision": 1,
+        "previous_digest": None,
+        "activated_at": now,
+        "actor_id": "synthetic-reviewer",
+        **changes,
+    }
+    async with service.store.transaction() as tx:
+        await tx.put("policy-activation", scope, value)
+    with pytest.raises(ValueError, match="Invalid policy activation head"):
+        await service.current(scope, now=now)
+    with pytest.raises(ValueError, match="Invalid predecessor activation"):
+        await service.activate(
+            PolicyActivationRequest(policy_digest=policy.digest, expected_revision=1),
+            idempotency_key="synthetic-next",
+            now=now,
+        )
+    head = await service.store.read("policy-activation", scope)
+    assert head.revision == 1 and head.value == value
+
+
+@pytest.mark.parametrize("future", [False, True])
+async def test_policy_activation_rejects_redundant_or_backdated_selection(activation_case, future):
+    from src.services.policy_activation import PolicyActivationRequest, activation_scope
+
+    service, policy, now = activation_case
+    scope = activation_scope(policy)
+    value = {
+        "schema_version": "clearproof-policy-activation-v1",
+        "scope_digest": scope,
+        "policy_digest": "ab" * 32 if future else policy.digest,
+        "revision": 1,
+        "previous_digest": None,
+        "activated_at": now + int(future),
+        "actor_id": "synthetic-reviewer",
+    }
+    async with service.store.transaction() as tx:
+        await tx.put("policy-activation", scope, value)
+    with pytest.raises(RecordConflict, match="redundant or precedes its predecessor"):
+        await service.activate(
+            PolicyActivationRequest(policy_digest=policy.digest, expected_revision=1),
+            idempotency_key="synthetic-next",
+            now=now,
+        )
+    if future:
+        with pytest.raises(ValueError, match="Invalid policy activation head"):
+            await service.current(scope, now=now)
+    else:
+        assert await service.current(scope, now=now) == policy
+    assert (await service.store.read("policy-activation", scope)).revision == 1
+
+
+async def test_policy_activation_scope_key_must_match_selected_policy(activation_case):
+    service, policy, now = activation_case
+    scope = "ab" * 32
+    async with service.store.transaction() as tx:
+        await tx.put(
+            "policy-activation",
+            scope,
+            {
+                "schema_version": "clearproof-policy-activation-v1",
+                "scope_digest": scope,
+                "policy_digest": policy.digest,
+                "revision": 1,
+                "previous_digest": None,
+                "activated_at": now,
+                "actor_id": "synthetic-reviewer",
+            },
+        )
+    with pytest.raises(ValueError, match="Active policy scope mismatch"):
+        await service.current(scope, now=now)
+
+
+@pytest.mark.parametrize("evaluation", [True, "before", "future"])
+async def test_policy_activation_must_cover_proof_evaluation_time(activation_case, evaluation):
+    from src.services.policy_activation import PolicyActivationRequest, activation_scope, load_active_policy
+
+    service, policy, now = activation_case
+    await service.activate(
+        PolicyActivationRequest(policy_digest=policy.digest), idempotency_key="synthetic-select", now=now
+    )
+    evaluated_at = now - 1 if evaluation == "before" else now + 2 if evaluation == "future" else evaluation
+    async with service.store.transaction() as tx:
+        with pytest.raises(ValueError, match="does not cover proof evaluation time"):
+            await load_active_policy(tx, activation_scope(policy), now=now + 1, evaluated_at=evaluated_at)
+        assert await load_active_policy(tx, activation_scope(policy), now=now + 1, evaluated_at=now) == policy
+
+
+@pytest.fixture
+async def capture_case(db, policy_review_case):
+    from types import SimpleNamespace
+
+    from pydantic import RootModel
+
+    from src.protocol.root_snapshot import RootSnapshot, root_scope_id
+    from src.services.policy_activation import activation_scope
+
+    review, request, now = policy_review_case
+    policy, case = request.policy, request.cases[0].case
+    target = store(db, roles=(*ROLES, "facts:ingest", "policy:activate"))
+    credential_id, fact_id = "ca" * 32, "fa" * 32
+    # This function captures already-validated inputs; these minimal synthetic
+    # records test capture/pinning, not enrollment, root trust or proof validity.
+    inputs = {
+        "transfer": case.transfer,
+        "context": case.context,
+        "registry": SimpleNamespace(definitions=()),
+        "valuation_approval": RootModel({"fixture": "synthetic-valuation"}),
+        "root_pins": RootModel({"fixture": "synthetic-pins"}),
+    }
+    async with target.transaction() as tx:
+        await tx.put(
+            "credential", credential_id, {"consent": {"credential": {"issuer_did": "did:web:synthetic.example"}}}
+        )
+        await tx.put("policy", policy.digest, policy.model_dump(mode="json"))
+        await tx.put("policy-activation", activation_scope(policy), {"fixture": "synthetic-activation"})
+        await tx.put("fact-evidence", fact_id, {"fixture": "synthetic-fact"})
+        for name, kind in (("issuance", "issuance-root"), ("issuers", "issuer-root"), ("sanctions", "sanctions-root")):
+            snapshot = RootSnapshot(
+                tenant_id=target.tenant_id,
+                chain_id=int(case.context.deployment_chain_id),
+                registry_address=case.context.deployment_address,
+                kind=kind,
+                issuer_did="did:web:synthetic.example" if name == "issuance" else None,
+                root="123",
+                tree_depth=8,
+                source_digest="ab" * 32,
+                revision=1,
+                issued_at=now,
+                expires_at=now + 100,
+                key_id="cd" * 32,
+            )
+            inputs[name] = SimpleNamespace(snapshot=snapshot)
+            await tx.put(kind, root_scope_id(snapshot), snapshot.model_dump(mode="json"))
+    verifier = SimpleNamespace(
+        artifacts=SimpleNamespace(
+            manifest=RootModel({"fixture": "synthetic-manifest"}), verification_key_bytes=b"synthetic-key"
+        ),
+        bundle=b"synthetic-runtime",
+    )
+    arguments = dict(
+        inputs=inputs, verifier=verifier, credential_id=credential_id, fact_ids=(fact_id,), policy=policy, now=now
+    )
+    return target, arguments
+
+
+@pytest.mark.parametrize(
+    "kind",
+    ["credential", "policy", "policy-activation", "issuance-root", "issuer-root", "sanctions-root", "fact-evidence"],
+)
+async def test_authorization_capture_requires_each_selected_record(capture_case, monkeypatch, kind):
+    from src.services.authorization_evidence import retain_authorization_evidence
+    from src.storage.pilot import PilotTransaction
+
+    target, arguments = capture_case
+    original = PilotTransaction.read
+
+    async def missing(tx, selected_kind, identity, **kwargs):
+        if selected_kind == kind:
+            return None
+        return await original(tx, selected_kind, identity, **kwargs)
+
+    monkeypatch.setattr(PilotTransaction, "read", missing)
+    with pytest.raises(ValueError, match="Required authorization evidence is unavailable"):
+        async with target.transaction() as tx:
+            await retain_authorization_evidence(tx, **arguments)
+    async with target.transaction() as tx:
+        assert await tx.record_ids("authorization-evidence") == []
+
+
+async def test_authorization_capture_rechecks_local_revocation(capture_case):
+    from src.services.authorization_evidence import retain_authorization_evidence
+
+    target, arguments = capture_case
+    async with target.transaction() as tx:
+        await tx.put("revocation", arguments["credential_id"], {"fixture": "synthetic-revoked"})
+    with pytest.raises(ValueError, match="Credential was revoked during authorization"):
+        async with target.transaction() as tx:
+            await retain_authorization_evidence(tx, **arguments)
+    async with target.transaction() as tx:
+        assert await tx.record_ids("authorization-evidence") == []
+
+
+@pytest.mark.parametrize("size", [0, 131073])
+async def test_authorization_capture_size_failure_rolls_back_earlier_chunks(capture_case, size):
+    from src.services.authorization_evidence import retain_authorization_evidence
+
+    target, arguments = capture_case
+    arguments["verifier"].artifacts.verification_key_bytes = b"x" * size
+    with pytest.raises(ValueError, match="configuration exceeds capture limit"):
+        async with target.transaction() as tx:
+            await retain_authorization_evidence(tx, **arguments)
+    async with target.transaction() as tx:
+        assert await tx.record_ids("authorization-evidence") == []
+
+
+@pytest.mark.parametrize("size", [32768, 32769, 131072])
+async def test_authorization_capture_chunks_roundtrip_and_are_reused(capture_case, size):
+    import base64
+    import hashlib
+
+    from src.services.authorization_evidence import retain_authorization_evidence
+
+    target, arguments = capture_case
+    raw = b"x" * size
+    arguments["verifier"].artifacts.verification_key_bytes = raw
+    async with target.transaction() as tx:
+        identity = await retain_authorization_evidence(tx, **arguments)
+    manifest = await target.get("authorization-evidence", identity)
+    config = manifest["configuration"]["verification_key"]
+    chunks = [await target.get("authorization-evidence", key) for key in config["chunks"]]
+    assert b"".join(base64.b64decode("".join(c["data"]), validate=True) for c in chunks) == raw
+    assert config["size"] == size and config["sha256"] == hashlib.sha256(raw).hexdigest()
+    assert len(config["chunks"]) == (size + 32767) // 32768
+    assert all(len(part) <= 2048 for chunk in chunks for part in chunk["data"])
+    async with target.transaction() as tx:
+        before = await tx.record_ids("authorization-evidence")
+        later = await retain_authorization_evidence(tx, **{**arguments, "now": arguments["now"] + 1})
+        after = await tx.record_ids("authorization-evidence")
+    assert set(after) - set(before) == {later}
+    assert manifest["records"] == (await target.get("authorization-evidence", later))["records"]
+
+
+async def test_authorization_capture_rejects_conflicting_encrypted_chunk(capture_case):
+    import base64
+
+    from src.protocol.canonical import canonical_bytes, record_digest
+    from src.services.authorization_evidence import retain_authorization_evidence
+
+    target, arguments = capture_case
+    raw = canonical_bytes(arguments["verifier"].artifacts.manifest.model_dump(mode="json"))
+    value = {"schema_version": "clearproof-evidence-chunk-v1", "data": [base64.b64encode(raw).decode("ascii")]}
+    identity = record_digest("clearproof/evidence-chunk/v1", value)
+    conflicting = {"fixture": "synthetic-conflict"}
+    async with target.transaction() as tx:
+        await tx.put("authorization-evidence", identity, conflicting)
+    with pytest.raises(ValueError, match="Authorization evidence chunk mismatch"):
+        async with target.transaction() as tx:
+            await retain_authorization_evidence(tx, **arguments)
+    async with target.transaction() as tx:
+        assert await tx.record_ids("authorization-evidence") == [identity]
+        assert await tx.get("authorization-evidence", identity) == conflicting
+
+
+async def test_authorization_capture_pins_record_revision_across_later_update(capture_case):
+    import hashlib
+
+    from src.protocol.canonical import canonical_bytes
+    from src.protocol.root_snapshot import root_scope_id
+    from src.services.authorization_evidence import retain_authorization_evidence
+
+    target, arguments = capture_case
+    async with target.transaction() as tx:
+        identity = await retain_authorization_evidence(tx, **arguments)
+    manifest = await target.get("authorization-evidence", identity)
+    scope = root_scope_id(arguments["inputs"]["issuers"].snapshot)
+    reference = next(r for r in manifest["records"] if r["kind"] == "issuer-root")
+    async with target.transaction() as tx:
+        original = await tx.read("issuer-root", scope)
+        await tx.put("issuer-root", scope, {**original.value, "root": "124"}, expected_revision=1)
+    retained = await target.read("issuer-root", scope, revision=reference["revision"])
+    current = await target.read("issuer-root", scope)
+    assert retained.revision == reference["revision"] == 1 and current.revision == 2
+    assert hashlib.sha256(canonical_bytes(retained.value)).hexdigest() == reference["sha256"]
+    assert hashlib.sha256(canonical_bytes(current.value)).hexdigest() != reference["sha256"]
+    assert await target.get("authorization-evidence", identity) == manifest
+
+
+@pytest.fixture
+def registrar_case(db):
+    from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
+
+    from src.protocol.root_snapshot import RootAuthority, RootTrustStore
+    from src.services.registrar import PilotRegistrar
+
+    key = Ed25519PrivateKey.generate()
+    issuer = "did:web:synthetic.example"
+    principal = Principal(
+        tenant_id="tenant-a",
+        actor_id="synthetic-registrar",
+        roles=("tenant:admin", "credential:issue", "evidence:decrypt"),
+        issuer_dids=(issuer,),
+    )
+    authority = RootAuthority(
+        public_key=key.public_key().public_bytes_raw().hex(),
+        tenant_id=principal.tenant_id,
+        chain_id=31337,
+        registry_address="0x" + "12" * 20,
+        kinds=("issuance-root", "issuer-root"),
+        issuer_dids=(issuer,),
+        not_before=1,
+        not_after=1000,
+    )
+
+    def construct(issuers=(issuer,)):
+        return PilotRegistrar(
+            db,
+            cipher(),
+            principal,
+            RootTrustStore([authority]),
+            key,
+            issuers=issuers,
+            chain_id=31337,
+            registry_address=authority.registry_address,
+        )
+
+    return construct, authority
+
+
+@pytest.mark.parametrize("inventory", ["empty", "list", "duplicate", "overflow"])
+async def test_registrar_rejects_invalid_issuer_inventory(registrar_case, inventory):
+    construct, authority = registrar_case
+    issuer = authority.issuer_dids[0]
+    values = {
+        "empty": (),
+        "list": [issuer],
+        "duplicate": (issuer, issuer),
+        "overflow": tuple(f"did:web:synthetic-{index}.example" for index in range(17)),
+    }
+    with pytest.raises(ValueError, match="1–16 unique issuer identities"):
+        construct(values[inventory])
+
+
+@pytest.mark.parametrize("revision", [True, "0", -1, 2**53 - 1, 2**53])
+async def test_registrar_rejects_invalid_expected_revision_before_writing(registrar_case, revision):
+    construct, _ = registrar_case
+    service = construct()
+    with pytest.raises(ValueError, match="nonnegative safe integer"):
+        await service.refresh(expected_revision=revision, idempotency_key="synthetic-refresh", now=100)
+    async with service._store.transaction() as tx:
+        assert await tx.record_ids("issuance-root") == []
+        assert await tx.record_ids("issuer-root") == []
+        assert await tx.record_ids("root-source") == []
+
+
+@pytest.mark.parametrize("ttl", [True, "300", 0, 86401])
+async def test_registrar_rejects_invalid_approval_lifetime_before_writing(registrar_case, ttl):
+    construct, _ = registrar_case
+    service = construct()
+    with pytest.raises(ValueError, match="1–86400 seconds"):
+        await service.refresh(expected_revision=0, idempotency_key="synthetic-refresh", now=100, ttl=ttl)
+    async with service._store.transaction() as tx:
+        assert await tx.record_ids("issuance-root") == []
+        assert await tx.record_ids("issuer-root") == []
+        assert await tx.record_ids("root-source") == []
+
+
+@pytest.mark.parametrize("conflict", [False, True])
+async def test_registrar_reuses_exact_source_or_rolls_back_collision(registrar_case, conflict):
+    from src.services.issuance_tree import build_issuance_tree
+
+    construct, authority = registrar_case
+    service = construct()
+    async with service._store.transaction() as tx:
+        candidate = await build_issuance_tree(
+            tx,
+            issuer_did=authority.issuer_dids[0],
+            chain_id=authority.chain_id,
+            registry_address=authority.registry_address,
+            now=100,
+        )
+        retained = {"fixture": "synthetic-conflicting-source"} if conflict else candidate.source
+        await tx.put("root-source", candidate.source_digest, retained)
+    if conflict:
+        with pytest.raises(RecordConflict, match="Root source digest collision or inconsistent record"):
+            await service.refresh(expected_revision=0, idempotency_key="synthetic-refresh", now=100)
+        async with service._store.transaction() as tx:
+            assert await tx.record_ids("issuance-root") == []
+            assert await tx.record_ids("issuer-root") == []
+            assert await tx.record_ids("root-source") == [candidate.source_digest]
+    else:
+        first = await service.refresh(expected_revision=0, idempotency_key="synthetic-refresh", now=100)
+        assert first["revision"] == 1
+        assert await service.refresh(expected_revision=0, idempotency_key="synthetic-refresh", now=101) == first
+    assert await service._store.get("root-source", candidate.source_digest) == retained
+
+
+def check_history_reconstruction_guards(bundle, verifier, statement_trust, fact_trust, signals, *, verified_at):
+    """Exercise inner reconstruction guards independently of outer bundle hashing."""
+    from copy import deepcopy
+
+    from src.prover.history_policy import replay_history_policy
+    from src.prover.history_statement import reconstruct_history_statement
+
+    def statement(candidate, trust=statement_trust):
+        return reconstruct_history_statement(candidate, verifier, trust, signals, verified_at=verified_at)
+
+    def policy(candidate):
+        return replay_history_policy(candidate, statement_trust, fact_trust, signals, verified_at=verified_at)
+
+    with pytest.raises(ValueError, match="Independent statement trust required"):
+        statement(bundle, None)
+    for at in (True, "100", bundle["proof"]["context"]["evaluated_at"] - 1, int(signals[5])):
+        candidate = deepcopy(bundle)
+        candidate["receipt"]["authorized_at"] = at
+        with pytest.raises(ValueError, match="Invalid claimed authorization time"):
+            statement(candidate)
+    for duplicate in (False, True):
+        candidate = deepcopy(bundle)
+        enrollment = next(r for r in candidate["records"] if r["kind"] == "credential")
+        if duplicate:
+            candidate["records"].append(deepcopy(enrollment))
+        else:
+            candidate["records"].remove(enrollment)
+        with pytest.raises(ValueError, match="Expected exact captured source record"):
+            statement(candidate)
+    for mutation in ("schema", "commitment", "accepted_type", "accepted_early", "accepted_expired"):
+        candidate = deepcopy(bundle)
+        enrollment = next(r["value"] for r in candidate["records"] if r["kind"] == "credential")
+        if mutation == "schema":
+            enrollment["schema_version"] = "unsupported"
+            expected = "Unsupported enrollment evidence"
+        else:
+            expected = "Enrollment acceptance scope mismatch"
+            if mutation == "commitment":
+                enrollment["credential_commitment"] = str(int(enrollment["credential_commitment"]) + 1)
+            elif mutation == "accepted_type":
+                enrollment["accepted_at"] = True
+            elif mutation == "accepted_early":
+                enrollment["accepted_at"] = enrollment["consent"]["credential"]["issued_at"] - 1
+            else:
+                enrollment["accepted_at"] = enrollment["consent"]["consent_expires_at"]
+        with pytest.raises(ValueError, match=expected):
+            statement(candidate)
+
+    status_changes = (
+        ("credential_id", "00" * 32),
+        ("revocation", "present"),
+        ("observed_at", True),
+        ("observed_at", bundle["receipt"]["authorized_at"] + 1),
+    )
+    for field, value in status_changes:
+        candidate = deepcopy(bundle)
+        candidate["evidence_manifest"]["credential_status"][field] = value
+        with pytest.raises(ValueError, match="Captured local status observation is unavailable"):
+            policy(candidate)
+    references = bundle["proof"]["fact_ids"]
+    assert references
+    for invalid in (tuple(references), [references[0]] * 2, [f"{index:064x}" for index in range(65)]):
+        candidate = deepcopy(bundle)
+        candidate["proof"]["fact_ids"] = invalid
+        with pytest.raises(ValueError, match="Invalid captured fact references"):
+            policy(candidate)
+    candidate = deepcopy(bundle)
+    candidate["proof"]["fact_ids"] = []
+    with pytest.raises(ValueError, match="Captured facts do not match the decision"):
+        policy(candidate)
+    for mutation in ("schema", "identity"):
+        candidate = deepcopy(bundle)
+        fact = next(r for r in candidate["records"] if r["kind"] == "fact-evidence")
+        if mutation == "schema":
+            fact["value"]["schema_version"] = "unsupported"
+            expected = "Unsupported retained fact schema"
+        else:
+            previous = fact["record_id"]
+            fact["record_id"] = "00" * 32
+            candidate["proof"]["fact_ids"] = ["00" * 32 if ref == previous else ref for ref in references]
+            expected = "Captured fact identity mismatch"
+        with pytest.raises(ValueError, match=expected):
+            policy(candidate)
+    assert policy(bundle)

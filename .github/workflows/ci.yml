@@ -89,7 +89,7 @@ jobs:
       - name: Real PostgreSQL proof storage, migration and parsing checks
         env:
           CLEARPROOF_POLICY_CLI_TEST: "1"
-        run: uv run python -m pytest tests/integration/test_proof_storage.py tests/integration/test_pilot_storage.py tests/integration/test_publication_journal.py tests/integration/test_wallet_ownership.py tests/unit/test_stored_signals.py tests/unit/test_pilot_cipher.py -q
+        run: uv run python -m pytest tests/integration/test_storage.py tests/integration/test_proof_persistence.py tests/integration/test_proof_storage.py tests/integration/test_pilot_storage.py tests/integration/test_publication_journal.py tests/integration/test_wallet_ownership.py tests/unit/test_stored_signals.py tests/unit/test_pilot_cipher.py -q
 
   python-tests:
     runs-on: ubuntu-latest
@@ -101,7 +101,15 @@ jobs:
           node-version: 20
       - run: npm ci
       - run: uv sync --frozen --all-extras
-      - run: uv run python -m pytest tests/ -v
+      - run: uv run python -m pytest tests/ -v --cov=src --cov-branch --cov-report=xml --cov-report=json
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: python-coverage
+          path: |
+            coverage.xml
+            coverage.json
+          if-no-files-found: error
 
   typescript-build:
     runs-on: ubuntu-latest
@@ -117,10 +125,112 @@ jobs:
         run: cd packages/proof && npx tsc
       - run: cd packages/proof && npx tsc --noEmit
       - run: cd packages/cli && npx tsc
-      - name: Policy CLI transport and built-command checks
-        run: cd packages/cli && npx vitest run test/policy.test.ts test/investigation.test.ts
-      - name: Off-chain parity tests (committed vector)
-        run: cd packages/proof && npx vitest run
+      - name: Content parser and catalogue coverage
+        run: npm run test:coverage --workspace=@clearproof/content
+      - name: All CLI tests and source coverage
+        run: npm run test:coverage --workspace=@clearproof/cli
+      - name: SDK tests and source coverage
+        run: npm run test:coverage --workspace=@clearproof/proof
+      - name: Docs content API tests and source coverage
+        run: npm run test:coverage --workspace=@clearproof/docs
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: typescript-coverage
+          path: |
+            packages/content/coverage/
+            packages/cli/coverage/
+            packages/proof/coverage/
+            apps/docs/coverage/
+          if-no-files-found: error
+
+  operational-tests:
+    runs-on: ubuntu-latest
+    env:
+      COVERAGE_FILE: operational-coverage.data
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - run: npm ci
+      - run: uv sync --frozen --extra dev
+      - name: Operational Python coverage and real Node helper acceptance
+        run: >-
+          uv run python -m pytest
+          tests/unit/test_l2_cost_model.py tests/unit/test_poseidon.py
+          tests/unit/test_deterministic_tree.py tests/unit/test_development_runner.py
+          tests/unit/test_hpke_keygen_script.py tests/unit/test_poseidon_script.py
+          tests/unit/test_poseidon_generator.py
+          tests/unit/test_bls_input_script.py
+          tests/unit/test_sanctions_sources.py
+          tests/unit/test_checkpoint_runner.py
+          tests/unit/test_pilot_local_runner.py
+          tests/unit/test_pilot_mirror_reports.py
+          tests/unit/test_pilot_mirror_runner.py
+          tests/unit/test_development_setup.py
+          tests/unit/test_circuit_lint_script.py
+          tests/unit/test_regen_protobufs_script.py
+          tests/unit/test_compile_circuits_script.py
+          --cov=scripts --cov-branch --cov-report=json:operational-coverage.json
+          --cov-report=term-missing -q
+      - name: Preserve completed operational script coverage
+        run: >-
+          uv run python -m coverage report
+          --include="scripts/hpke_keygen.py,scripts/l2_cost_model.py,scripts/generate_poseidon_constants.py,scripts/make_bls_input.py,scripts/build_sanctions_tree.py,scripts/test_checkpoint_evm.py,scripts/test_pilot_local.py,scripts/test_pilot_mirror.py"
+          --fail-under=100
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: operational-python-coverage
+          path: |
+            operational-coverage.json
+            operational-coverage.data
+          if-no-files-found: error
+          retention-days: 7
+
+  operational-javascript:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - run: npm ci
+      - run: npm run test:scripts:coverage
+      - run: npm run test:contract-scripts:coverage
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: operational-javascript-coverage
+          path: |
+            coverage/scripts/
+            coverage/contract-scripts/
+          if-no-files-found: error
+          retention-days: 7
+
+  docs-browser:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - run: npm ci
+      - run: npm exec --workspace=@clearproof/docs -- playwright install --with-deps chromium firefox webkit
+      - run: npm run build --workspace=@clearproof/content
+      - run: npm run build --workspace=@clearproof/docs
+      - name: Production MDX pages, navigation and content APIs
+        run: npm run test:e2e --workspace=@clearproof/docs
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: docs-browser-evidence
+          path: |
+            apps/docs/playwright-report/
+            apps/docs/test-results/
+          retention-days: 7
 
   hardhat-tests:
     runs-on: ubuntu-latest
@@ -166,14 +276,89 @@ jobs:
           echo 'f3d8d1fdbc123779b80e210c909ee941d7a1e130c70365524646b48b8b0fe9d5  /tmp/pilot-circom' | sha256sum --check
           sudo install /tmp/pilot-circom /usr/local/bin/circom
       - name: Isolated development setup and real proofs for both profiles
-        run: uv run python scripts/test_development_circuits.py "$RUNNER_TEMP/clearproof-development-circuits"
+        env:
+          COVERAGE_FILE: ${{ runner.temp }}/python-coverage-development.data
+        run: uv run python -m coverage run --parallel-mode --branch --source=scripts scripts/test_development_circuits.py "$RUNNER_TEMP/clearproof-development-circuits"
+      - name: Development setup failure paths and coverage gate
+        run: |
+          COVERAGE_FILE="$RUNNER_TEMP/python-coverage-development.data" uv run python -m coverage combine --keep "$RUNNER_TEMP"
+          COVERAGE_FILE="$RUNNER_TEMP/python-coverage-development-unit.data" uv run python -m pytest tests/unit/test_development_setup.py tests/unit/test_development_runner.py --cov=scripts --cov-branch --cov-report= -q
+          export COVERAGE_FILE="$RUNNER_TEMP/python-coverage-development-combined.data"
+          uv run python -m coverage combine --keep "$RUNNER_TEMP/python-coverage-development.data" "$RUNNER_TEMP/python-coverage-development-unit.data"
+          uv run python -m coverage json -o "$RUNNER_TEMP/python-coverage-development-combined.json"
+          uv run python -m coverage report --include=scripts/test_development_circuits.py --fail-under=100
+      - name: Contract fixture generation and rejection with real proofs
+        env:
+          CLEARPROOF_PILOT_TEST_ARTIFACTS: ${{ runner.temp }}/clearproof-development-circuits/pilot
+          COVERAGE_FILE: ${{ runner.temp }}/python-coverage-contract-fixture.data
+        run: |
+          uv run python -m pytest tests/unit/test_pilot_contract_fixture_script.py --cov=scripts --cov-branch --cov-report=json:"$RUNNER_TEMP/python-coverage-contract-fixture.json" -q
+          uv run python -m coverage report --include=scripts/pilot_contract_fixture.py --fail-under=100
       - name: Durable current authorization and local EVM mirror with fresh proofs
         env:
           DATABASE_URL: postgresql://postgres:local-ci-only@localhost:5432/clearproof_test
           CLEARPROOF_PILOT_TEST_ARTIFACTS: ${{ runner.temp }}/clearproof-development-circuits/pilot
           CLEARPROOF_POLICY_CLI_TEST: "1"
+          COVERAGE_FILE: ${{ runner.temp }}/python-coverage-mirror.data
+          PYTEST_ADDOPTS: --cov=src --cov-branch --cov-report=
         run: uv run python scripts/test_pilot_mirror.py "$CLEARPROOF_PILOT_TEST_ARTIFACTS" --output "$RUNNER_TEMP/clearproof-pilot-run"
+      - name: Build SDK and CLI for full Python acceptance tests
+        run: |
+          npm run build --workspace=@clearproof/content
+          npm run build --workspace=@clearproof/proof
+          npm run build --workspace=@clearproof/cli
+      - name: Full Python coverage with PostgreSQL and both proof profiles
+        env:
+          DATABASE_URL: postgresql://postgres:local-ci-only@localhost:5432/clearproof_test
+          CLEARPROOF_PILOT_TEST_ARTIFACTS: ${{ runner.temp }}/clearproof-development-circuits/pilot
+          CLEARPROOF_LEGACY_TEST_ARTIFACTS: ${{ runner.temp }}/clearproof-development-circuits/legacy
+          CLEARPROOF_POLICY_CLI_TEST: "1"
+          COVERAGE_FILE: ${{ runner.temp }}/python-coverage-suite.data
+        run: uv run python -m pytest tests --cov=src --cov-branch --cov-report=term -q
+      - name: Cover checkpoint verification on its owned EVM
+        env:
+          COVERAGE_FILE: ${{ runner.temp }}/python-coverage-checkpoint.data
+          PYTEST_ADDOPTS: --cov=src --cov-branch --cov-report=
+        run: uv run python scripts/test_checkpoint_evm.py
+      - name: Combine full Python evidence and require complete coverage
+        env:
+          COVERAGE_FILE: ${{ runner.temp }}/python-coverage-combined.data
+        run: |
+          uv run python -m coverage combine --keep "$RUNNER_TEMP/python-coverage-suite.data" "$RUNNER_TEMP/python-coverage-checkpoint.data" "$RUNNER_TEMP/python-coverage-mirror.data"
+          uv run python -m coverage json -o "$RUNNER_TEMP/python-coverage-combined.json"
+          uv run python -m coverage report --fail-under=100
+      - name: Retain full Python coverage evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: python-full-coverage
+          path: ${{ runner.temp }}/python-coverage-*
+          if-no-files-found: error
+          retention-days: 7
+      - name: Full Solidity coverage with fresh legacy and pilot proofs
+        env:
+          CLEARPROOF_PILOT_TEST_ARTIFACTS: ${{ runner.temp }}/clearproof-development-circuits/pilot
+          CLEARPROOF_LEGACY_TEST_ARTIFACTS: ${{ runner.temp }}/clearproof-development-circuits/legacy
+        run: npm run test:coverage --workspace=@clearproof/contracts
+      - name: Restore normal contract bytecode
+        if: always()
+        run: npm exec --workspace=@clearproof/contracts -- hardhat compile --force
+      - name: Full normal-bytecode contract verification
+        env:
+          CLEARPROOF_PILOT_TEST_ARTIFACTS: ${{ runner.temp }}/clearproof-development-circuits/pilot
+          CLEARPROOF_LEGACY_TEST_ARTIFACTS: ${{ runner.temp }}/clearproof-development-circuits/legacy
+        run: npm exec --workspace=@clearproof/contracts -- hardhat test --no-compile
+      - name: Retain Solidity coverage evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: solidity-coverage
+          path: |
+            packages/contracts/coverage/
+            packages/contracts/coverage.json
+          retention-days: 7
       - name: Upload synthetic pilot reports and encrypted export
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: SYNTHETIC-development-pilot-reports
@@ -182,6 +367,7 @@ jobs:
             ${{ runner.temp }}/clearproof-pilot-run/reports/
           if-no-files-found: error
       - name: Upload unapproved development artifacts
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: UNAPPROVED-development-circuit-artifacts
@@ -191,6 +377,40 @@ jobs:
             ${{ runner.temp }}/clearproof-development-circuits/source-inventory.json
             ${{ runner.temp }}/clearproof-development-circuits/legacy/
             ${{ runner.temp }}/clearproof-development-circuits/pilot/
+          retention-days: 7
+
+  python-aggregate-coverage:
+    runs-on: ubuntu-latest
+    needs: [operational-tests, circuits]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v4
+      - run: uv sync --frozen --extra dev
+      - uses: actions/download-artifact@v4
+        with:
+          name: operational-python-coverage
+          path: coverage-input/operational
+      - uses: actions/download-artifact@v4
+        with:
+          name: python-full-coverage
+          path: coverage-input/full
+      - name: Combine application and every operational Python script
+        env:
+          COVERAGE_FILE: ${{ runner.temp }}/repository-python-coverage.data
+        run: |
+          uv run python -m coverage combine --keep \
+            coverage-input/full/python-coverage-combined.data \
+            coverage-input/operational/operational-coverage.data \
+            coverage-input/full/python-coverage-development-combined.data \
+            coverage-input/full/python-coverage-contract-fixture.data
+          uv run python -m coverage json -o "$RUNNER_TEMP/repository-python-coverage.json"
+          uv run python -m coverage report --fail-under=100
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: repository-python-coverage
+          path: ${{ runner.temp }}/repository-python-coverage.*
+          if-no-files-found: error
           retention-days: 7
 
   circuit-lint:

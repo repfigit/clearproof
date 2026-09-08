@@ -218,3 +218,12 @@ async def test_operator_context_must_explicitly_require_tls12(tls_endpoint):
     with pytest.raises(DiscoveryInvalid, match="TLS 1.2"):
         await DiscoveryClient(**state.options).discover(state.authority)
     assert not state.requests
+
+
+@pytest.mark.parametrize("constant", [b"NaN", b"Infinity", b"-Infinity"])
+async def test_https_discovery_rejects_non_json_numeric_constants(tls_endpoint, constant):
+    state = tls_endpoint
+    state.body = b'{"synthetic":' + constant + b"}"
+    with pytest.raises(DiscoveryInvalid, match="Discovery response is not valid UTF-8 JSON"):
+        await DiscoveryClient(**state.options).discover(state.authority)
+    assert len(state.requests) == 1

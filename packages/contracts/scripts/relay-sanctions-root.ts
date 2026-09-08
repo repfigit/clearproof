@@ -57,6 +57,15 @@ async function confirm(prompt: string): Promise<boolean> {
   });
 }
 
+const providers: ethersLib.JsonRpcProvider[] = [];
+function closeProviders() {
+  while (providers.length) providers.pop()!.destroy();
+}
+function stop(code: number) {
+  closeProviders();
+  return process.exit(code);
+}
+
 async function main() {
   console.log("╔══════════════════════════════════════════╗");
   console.log("║    clearproof sanctions root relayer     ║");
@@ -66,12 +75,15 @@ async function main() {
   if (!fs.existsSync(TREE_PATH)) {
     console.error(`Sanctions tree not found at ${TREE_PATH}`);
     console.error("Run: python scripts/build_sanctions_tree.py");
-    process.exit(1);
+    return stop(1);
   }
 
   const tree = JSON.parse(fs.readFileSync(TREE_PATH, "utf-8"));
   const newRoot = tree.root;
   const newLeafCount = tree.leaf_count;
+  if (!Number.isSafeInteger(newLeafCount) || newLeafCount < 0 || newLeafCount > 0xffffffff) {
+    throw new Error("Tree leaf_count must be a uint32 integer");
+  }
   const newRootBytes32 = ethersLib.zeroPadValue(
     ethersLib.toBeHex(BigInt(newRoot)),
     32
@@ -88,12 +100,12 @@ async function main() {
 
   // 2. Determine target networks
   const targetNames = process.env.RELAY_NETWORKS
-    ? process.env.RELAY_NETWORKS.split(",").map((s) => s.trim())
+    ? [...new Set(process.env.RELAY_NETWORKS.split(",").map((s) => s.trim()).filter(Boolean))]
     : getDeployedNetworks();
 
   if (targetNames.length === 0) {
     console.error("No target networks. Set RELAY_NETWORKS or deploy to at least one network.");
-    process.exit(1);
+    return stop(1);
   }
 
   console.log(`\nTarget networks: ${targetNames.join(", ")}\n`);
@@ -102,22 +114,25 @@ async function main() {
   const privateKey = process.env.DEPLOYER_PRIVATE_KEY;
   if (!privateKey) {
     console.error("DEPLOYER_PRIVATE_KEY not set");
-    process.exit(1);
+    return stop(1);
   }
 
   // 4. Pre-flight: check each network's current state
   console.log("--- Pre-flight checks ---\n");
   const updates: { network: string; provider: ethersLib.JsonRpcProvider; deployment: any }[] = [];
 
+  const results: RelayResult[] = [];
   for (const name of targetNames) {
     const netConfig = NETWORKS[name];
     if (!netConfig) {
+      results.push({ network: name, success: false, error: "Unknown network" });
       console.log(`  ${name}: ✗ Unknown network, skipping`);
       continue;
     }
 
     const deploymentPath = path.join(DEPLOYMENTS_DIR, `${name}.json`);
     if (!fs.existsSync(deploymentPath)) {
+      results.push({ network: name, success: false, error: "No deployment found" });
       console.log(`  ${name}: ✗ No deployment found, skipping`);
       continue;
     }
@@ -126,7 +141,8 @@ async function main() {
     const relayAddr = deployment.contracts.SanctionsRootRelay;
     const oracleAddr = deployment.contracts.SanctionsOracle;
 
-    if (!relayAddr) {
+    if (!relayAddr || !oracleAddr) {
+      results.push({ network: name, success: false, error: "Missing relay or oracle address" });
       console.log(`  ${name}: ✗ No SanctionsRootRelay in deployment, skipping`);
       console.log(`         Redeploy with: npx hardhat run scripts/deploy-multichain.ts --network ${name}`);
       continue;
@@ -134,14 +150,19 @@ async function main() {
 
     const rpcUrl = getRpcUrl(netConfig);
     const provider = new ethersLib.JsonRpcProvider(rpcUrl);
+    providers.push(provider);
 
     try {
+      if ((await provider.getNetwork()).chainId !== BigInt(netConfig.chainId)) {
+        throw new Error("RPC chain does not match the target network");
+      }
       const oracle = new ethersLib.Contract(oracleAddr, ORACLE_ABI, provider);
       const currentRoot = await oracle.currentRoot();
       const currentLeafCount = await oracle.leafCount();
       const isStale = await oracle.isStale();
 
       if (currentRoot === newRootBytes32) {
+        if (currentLeafCount !== BigInt(newLeafCount)) throw new Error("Root matches but leaf count differs");
         console.log(`  ${name}: ✓ Already up to date`);
         continue;
       }
@@ -149,32 +170,31 @@ async function main() {
       console.log(`  ${name}: needs update (root: ${currentRoot.slice(0, 18)}... → ${newRootBytes32.slice(0, 18)}..., leaves: ${currentLeafCount} → ${newLeafCount}, stale: ${isStale})`);
       updates.push({ network: name, provider, deployment });
     } catch (e: any) {
-      console.log(`  ${name}: ✗ RPC error: ${e.message?.slice(0, 60)}`);
+      const error = e.message?.slice(0, 60) || "unknown preflight error";
+      results.push({ network: name, success: false, error });
+      console.log(`  ${name}: ✗ RPC error: ${error}`);
     }
   }
 
-  if (updates.length === 0) {
+  if (updates.length === 0 && results.length === 0) {
     console.log("\nAll networks are up to date. Nothing to do.");
-    process.exit(0);
+    return stop(0);
   }
 
   // 5. Confirm
-  const ok = await confirm(`\nUpdate ${updates.length} network(s)? [y/N] `);
+  const ok = updates.length === 0 || await confirm(`\nUpdate ${updates.length} network(s)? [y/N] `);
   if (!ok) {
     console.log("Aborted.");
-    process.exit(0);
+    return stop(0);
   }
 
   // 6. Execute updates sequentially
   console.log("\n--- Relaying ---\n");
-  const results: RelayResult[] = [];
-
   for (const { network, provider, deployment } of updates) {
     const relayAddr = deployment.contracts.SanctionsRootRelay;
-    const wallet = new ethersLib.Wallet(privateKey, provider);
-    const relay = new ethersLib.Contract(relayAddr, RELAY_ABI, wallet);
-
     try {
+      const wallet = new ethersLib.Wallet(privateKey, provider);
+      const relay = new ethersLib.Contract(relayAddr, RELAY_ABI, wallet);
       // Estimate gas first
       const gasEstimate = await relay.receiveRoot.estimateGas(newRootBytes32, newLeafCount);
       const feeData = await provider.getFeeData();
@@ -184,6 +204,12 @@ async function main() {
 
       const tx = await relay.receiveRoot(newRootBytes32, newLeafCount);
       const receipt = await tx.wait();
+      const oracle = new ethersLib.Contract(deployment.contracts.SanctionsOracle, ORACLE_ABI, provider);
+      const verifiedRoot = await oracle.currentRoot({ blockTag: receipt!.blockNumber });
+      const verifiedCount = await oracle.leafCount({ blockTag: receipt!.blockNumber });
+      if (verifiedRoot !== newRootBytes32 || verifiedCount !== BigInt(newLeafCount)) {
+        throw new Error("Post-relay state does not match the requested root and leaf count");
+      }
 
       console.log(`  ${network}: ✓ confirmed block ${receipt!.blockNumber} (gas: ${receipt!.gasUsed})`);
       results.push({
@@ -223,11 +249,11 @@ function getDeployedNetworks(): string[] {
   if (!fs.existsSync(DEPLOYMENTS_DIR)) return [];
   return fs
     .readdirSync(DEPLOYMENTS_DIR)
-    .filter((f) => f.endsWith(".json"))
+    .filter((f) => f.endsWith(".json") && !f.endsWith("-bls-bench.json"))
     .map((f) => f.replace(".json", ""));
 }
 
 main().catch((error) => {
   console.error(error);
   process.exitCode = 1;
-});
+}).finally(closeProviders);

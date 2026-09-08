@@ -41,8 +41,8 @@ export async function requestReport(base: string, token: string, path: ReportPat
       chunks.push(value);
     }
   } finally {
-    await reader.cancel();
-    reader.releaseLock();
+    try { await reader.cancel(); }
+    finally { reader.releaseLock(); }
   }
   const report = JSON.parse(Buffer.concat(chunks).toString('utf8'));
   if (!report || typeof report !== 'object' || Array.isArray(report)) throw new Error('Invalid report');

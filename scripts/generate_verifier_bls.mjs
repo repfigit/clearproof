@@ -25,6 +25,10 @@ if (vk.protocol !== 'groth16' || vk.curve !== 'bls12381') {
   process.exit(1);
 }
 const nPublic = vk.IC.length - 1;
+if (vk.nPublic !== nPublic) {
+  console.error(`IC length ${vk.IC.length} inconsistent with nPublic=${vk.nPublic}`);
+  process.exit(1);
+}
 
 // BLS12-381 base field modulus q (381 bits), split into 256-bit limbs for
 // the G1 negation (q - y) the contract performs in assembly.

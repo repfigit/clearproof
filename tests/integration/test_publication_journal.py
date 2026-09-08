@@ -251,7 +251,28 @@ async def test_explicit_same_transaction_rebroadcast_is_bounded_and_compare_and_
     assert (await journal.inspect(identity))["broadcast_attempts"] == 3
 
 
-@pytest.mark.parametrize("failure", [None, "known", "nonce", "runtime", "simulation", "expired", "source", "reorg"])
+@pytest.mark.parametrize(
+    "failure",
+    [
+        None,
+        "known",
+        "nonce",
+        "runtime",
+        "simulation",
+        "expired",
+        "source",
+        "reorg",
+        "boolean-attempt",
+        "string-attempt",
+        "zero-attempt",
+        "exhausted-attempt",
+        "stale-attempt",
+        "missing-intent",
+        "source-policy-change",
+        "stale-head",
+        "future-head",
+    ],
+)
 async def test_missing_recovery_requires_fresh_preconditions_before_claim(db, failure):
     import hashlib
     from types import SimpleNamespace
@@ -307,10 +328,31 @@ async def test_missing_recovery_requires_fresh_preconditions_before_claim(db, fa
         source.side_effect = ValueError("Synthetic source invalidation")
     elif failure == "reorg":
         eth.get_block.side_effect = [block, {**block, "hash": b"b" * 32}]
+    expected_attempts = {
+        "boolean-attempt": True,
+        "string-attempt": "1",
+        "zero-attempt": 0,
+        "exhausted-attempt": 3,
+        "stale-attempt": 2,
+    }.get(failure, 1)
+    requested_identity = "00" * 32 if failure == "missing-intent" else identity
+    if failure == "source-policy-change":
+
+        async def changed_policy(_):
+            reconciler.policy = reconciler.policy.model_copy(update={"minimum_confirmations": 2})
+
+        source.side_effect = changed_policy
+    elif failure == "stale-head":
+        reconciler.policy = reconciler.policy.model_copy(update={"max_block_age": 1})
+        block["timestamp"] = now - 2
+    elif failure == "future-head":
+        block["timestamp"] = now + 1
     service = PublicationRecoveryService(reconciler)
     if failure:
         with pytest.raises((ValueError, RecordConflict)):
-            await service.rebroadcast_missing(identity, expected_attempts=1, now=now, revalidate=source)
+            await service.rebroadcast_missing(
+                requested_identity, expected_attempts=expected_attempts, now=now, revalidate=source
+            )
         eth.send_raw_transaction.assert_not_awaited()
         assert (await journal.inspect(identity))["broadcast_attempts"] == 1
     else:
@@ -360,3 +402,172 @@ async def test_attempt_migration_preserves_existing_claims_and_unclaimed_intents
     assert before[0]["broadcast_attempts"] == 1 and before[1]["broadcast_attempts"] == 0
     with pytest.raises(RecordConflict):
         await journal.broadcast_once(first, revalidate=current, send_raw=crash)
+
+
+async def test_history_rejects_missing_intent_and_unknown_cursor(db):
+    from src.storage.publication_history import PublicationHistory
+
+    journal, account, transaction, binding = await seed(db)
+    identity = await journal.reserve(binding, bytes(account.sign_transaction(transaction).raw_transaction), now=1)
+    history = PublicationHistory(journal)
+    value = observation(identity, await journal.inspect(identity))
+    missing = "ff" * 32
+    with pytest.raises(ValueError, match="^Publication intent is unavailable$"):
+        await history.append(missing, {**value, "intent_id": missing}, policy_digest="11" * 32, observed_at=20)
+    await history.append(identity, value, policy_digest="11" * 32, observed_at=20)
+    with pytest.raises(ValueError, match="^History cursor does not identify a retained observation$"):
+        await history.page(identity, after=99)
+
+
+@pytest.mark.parametrize("corruption", ["index-mismatch", "sequence-gap", "cursor-gap"])
+async def test_history_rejects_index_substitution_and_authenticated_sequence_gaps(db, corruption):
+    from src.storage.publication_history import PublicationHistory
+
+    journal, account, transaction, binding = await seed(db)
+    identity = await journal.reserve(binding, bytes(account.sign_transaction(transaction).raw_transaction), now=1)
+    history = PublicationHistory(journal)
+    first = await history.append(
+        identity,
+        observation(identity, await journal.inspect(identity)),
+        policy_digest="11" * 32,
+        observed_at=20,
+    )
+    async with db.connection() as conn:
+        if corruption == "index-mismatch":
+            # SQL metadata is not authenticated by the encrypted payload's digest.
+            await conn.execute(
+                "UPDATE pilot_publication_observations SET sequence=2 WHERE tenant_id=%s AND intent_id=%s",
+                (journal.store.tenant_id, identity),
+            )
+        else:
+            # Deliberately retain an authenticated but noncontiguous history row.
+            # This tests semantic chain validation beyond AEAD/digest integrity.
+            value = {key: value for key, value in first.items() if key != "observation_id"}
+            value["sequence"] = 2
+            record_id = record_digest("clearproof/publication-observation/v1", value)
+            sealed = journal.cipher.seal(journal.store.tenant_id, "publication-observation", record_id, 1, value)
+            await conn.execute(
+                "UPDATE pilot_publication_observations SET sequence=2, observation_id=%s, key_id=%s, "
+                "content_tag=%s, cipher_nonce=%s, ciphertext=%s WHERE tenant_id=%s AND intent_id=%s",
+                (
+                    record_id,
+                    sealed["key_id"],
+                    sealed["content_tag"],
+                    sealed["nonce"],
+                    sealed["ciphertext"],
+                    journal.store.tenant_id,
+                    identity,
+                ),
+            )
+        await conn.commit()
+    message = {
+        "index-mismatch": "Publication history identity differs from retained evidence",
+        "sequence-gap": "Publication history chain is incomplete",
+        "cursor-gap": "History cursor does not identify a retained observation",
+    }[corruption]
+    with pytest.raises(ValueError, match=f"^{message}$"):
+        await history.page(identity, after=1 if corruption == "cursor-gap" else 0)
+    assert not (await journal.inspect(identity))["broadcast_claimed"]
+
+
+@pytest.mark.parametrize("mutation", ["missing", "unconsumed", "expiry"])
+async def test_reservation_rejects_unavailable_consumed_authority(db, mutation):
+    journal, account, transaction, binding = await seed(db)
+    if mutation == "missing":
+        binding = binding.model_copy(update={"receipt_id": "ab" * 32})
+    elif mutation == "expiry":
+        binding = binding.model_copy(update={"expires_at": 101})
+    else:
+        async with db.connection() as conn:
+            await conn.execute("DELETE FROM pilot_consumptions")
+    raw = bytes(account.sign_transaction(transaction).raw_transaction)
+    with pytest.raises(ValueError, match="existing consumed receipt"):
+        await journal.reserve(binding, raw, now=1)
+    async with db.connection() as conn:
+        assert (await (await conn.execute("SELECT count(*) FROM pilot_publications")).fetchone())[0] == 0
+
+
+@pytest.mark.parametrize("identity", [None, "", "a" * 63, "A" * 64])
+async def test_publication_selector_rejects_noncanonical_identity(db, identity):
+    journal, _, _, _ = await seed(db)
+    with pytest.raises(ValueError, match="canonical publication intent ID"):
+        await journal.inspect(identity)
+
+
+async def test_retry_rejects_different_authenticated_retained_value(db):
+    journal, account, transaction, binding = await seed(db)
+    raw = bytes(account.sign_transaction(transaction).raw_transaction)
+    identity = await journal.reserve(binding, raw, now=1)
+    async with journal.store.transaction() as tx:
+        value = journal._open(identity, await journal._row(tx, identity))
+        value["synthetic_extra"] = "different-retained-value"
+        sealed = journal.cipher.seal(tx.tenant_id, "publication-intent", identity, 1, value)
+        await tx._conn.execute(
+            "UPDATE pilot_publications SET key_id=%s,content_tag=%s,cipher_nonce=%s,ciphertext=%s "
+            "WHERE tenant_id=%s AND intent_id=%s",
+            (sealed["key_id"], sealed["content_tag"], sealed["nonce"], sealed["ciphertext"], tx.tenant_id, identity),
+        )
+    with pytest.raises(RecordConflict, match="intent differs from retained transaction"):
+        await journal.reserve(binding, raw, now=2)
+    assert not (await journal.inspect(identity))["broadcast_claimed"]
+
+
+@pytest.mark.parametrize(
+    "field,value", [("nonce", 5), ("phase", "mirror"), ("chain_id", 1), ("sender", "0x" + "34" * 20)]
+)
+async def test_publication_index_must_match_encrypted_binding(db, field, value):
+    from psycopg import sql
+
+    journal, account, transaction, binding = await seed(db)
+    identity = await journal.reserve(binding, bytes(account.sign_transaction(transaction).raw_transaction), now=1)
+    async with db.connection() as conn:
+        await conn.execute(
+            sql.SQL("UPDATE pilot_publications SET {}=%s WHERE tenant_id=%s AND intent_id=%s").format(
+                sql.Identifier(field)
+            ),
+            (value, journal.store.tenant_id, identity),
+        )
+    with pytest.raises(ValueError, match="Retained publication binding is inconsistent"):
+        await journal.inspect(identity)
+
+
+async def test_unknown_intent_does_not_revalidate_or_broadcast(db):
+    from unittest.mock import AsyncMock
+
+    journal, _, _, _ = await seed(db)
+    revalidate, send_raw = AsyncMock(), AsyncMock()
+    with pytest.raises(ValueError, match="Publication intent is unavailable"):
+        await journal.broadcast_once("ab" * 32, revalidate=revalidate, send_raw=send_raw)
+    revalidate.assert_not_awaited()
+    send_raw.assert_not_awaited()
+
+
+async def test_broadcast_race_rechecks_attempt_after_both_preflight_reads(db):
+    from web3 import Web3
+
+    journal, account, transaction, binding = await seed(db)
+    raw = bytes(account.sign_transaction(transaction).raw_transaction)
+    identity = await journal.reserve(binding, raw, now=1)
+    ready = asyncio.Barrier(2)
+    sent = []
+
+    async def revalidate(value):
+        assert value == binding
+        # Both callers have observed attempt zero before either claims it.
+        await ready.wait()
+
+    async def send_raw(value):
+        sent.append(value)
+        return Web3.keccak(value)
+
+    results = await asyncio.wait_for(
+        asyncio.gather(
+            *(journal.broadcast_once(identity, revalidate=revalidate, send_raw=send_raw) for _ in range(2)),
+            return_exceptions=True,
+        ),
+        10,
+    )
+    assert sum(isinstance(result, RecordConflict) for result in results) == 1
+    assert results.count(bytes(Web3.keccak(raw)).hex()) == 1
+    assert sent == [raw]
+    assert (await journal.inspect(identity))["broadcast_attempts"] == 1

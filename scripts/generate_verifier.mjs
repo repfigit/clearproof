@@ -95,6 +95,8 @@ contract Groth16Verifier {
     /// The order r of the scalar field. Public signals must be < r.
     uint256 constant SNARK_SCALAR_FIELD = 21888242871839275222246405745257275088548364400416034343698204186575808495617;
 
+    error PublicSignalExceedsScalarField();
+
     // Verification key (${nPublic} public signals)
     uint256 constant alphax = ${alpha.x};
     uint256 constant alphay = ${alpha.y};
@@ -123,7 +125,7 @@ ${icConstants}
     ) public view returns (bool) {
         // Every public signal must be a canonical scalar-field element.
         for (uint256 i = 0; i < ${nPublic}; i++) {
-            require(_pubSignals[i] < SNARK_SCALAR_FIELD, "public signal >= scalar field");
+            if (_pubSignals[i] >= SNARK_SCALAR_FIELD) revert PublicSignalExceedsScalarField();
         }
 
         // vk_x = IC[0] + sum(_pubSignals[i] * IC[i+1])

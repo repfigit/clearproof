@@ -251,15 +251,30 @@ async def test_credential_get_not_found(client: AsyncClient, mock_registry):
 
 
 @pytest.mark.asyncio
-async def test_credential_get_existing(client: AsyncClient, mock_registry):
-    """GET /credential/{id} for an existing credential returns its status."""
+@pytest.mark.parametrize(
+    "revoked,expires_at,expected",
+    [
+        (False, 999, "expired"),
+        (False, 1000, "expired"),
+        (False, 1001, "active"),
+        (True, 999, "revoked"),
+        (True, 1001, "revoked"),
+    ],
+)
+async def test_credential_get_existing(client: AsyncClient, mock_registry, monkeypatch, revoked, expires_at, expected):
+    """Revocation takes precedence; equality at expiry is already expired."""
+    from types import SimpleNamespace
+
+    from src.api.routes import credential
+
+    monkeypatch.setattr(credential, "time", SimpleNamespace(time=lambda: 1000))
     mock_cred = MagicMock()
-    mock_cred.revoked = False
-    mock_cred.expires_at = int(time.time()) + 86400
+    mock_cred.revoked = revoked
+    mock_cred.expires_at = expires_at
     mock_cred.issuer_did = "did:web:issuer.example.com"
     mock_cred.jurisdiction = "US"
     mock_cred.kyc_tier = "retail"
-    mock_cred.issued_at = int(time.time()) - 3600
+    mock_cred.issued_at = 900
     mock_cred.credential_id = "cred-123"
 
     mock_registry.get.return_value = mock_cred
@@ -270,7 +285,9 @@ async def test_credential_get_existing(client: AsyncClient, mock_registry):
     assert resp.status_code == 200
     body = resp.json()
     assert body["credential_id"] == "cred-123"
-    assert body["status"] == "active"
+    assert body["status"] == expected
+    mock_registry.revoke.assert_not_called()
+    mock_registry.issue.assert_not_awaited()
 
 
 # -----------------------------------------------------------------------
@@ -336,9 +353,13 @@ async def test_credential_revoke_already_revoked(client: AsyncClient, mock_regis
 
 
 @pytest.mark.asyncio
-async def test_proof_generate_explicit_legacy_mode(client: AsyncClient, mock_registry, monkeypatch):
+@pytest.mark.parametrize("domain,expected_domain", [("", 0), ("abcdef1234567890fedcba", 0xABCDEF1234567890)])
+async def test_proof_generate_explicit_legacy_mode(
+    client: AsyncClient, mock_registry, monkeypatch, domain, expected_domain
+):
     """Legacy encryption is available only through explicit operator selection."""
     monkeypatch.setenv("PII_ENVELOPE_MODE", "legacy-v1")
+    monkeypatch.setenv("DOMAIN_CONTRACT_HASH", domain)
     monkeypatch.delenv("BENEFICIARY_HPKE_PUBLIC_KEY", raising=False)
     mock_credential = MagicMock()
     mock_credential.revoked = False
@@ -406,6 +427,7 @@ async def test_proof_generate_explicit_legacy_mode(client: AsyncClient, mock_reg
         assert "encrypted_pii" in body
         assert body["compliance_proof"]["jurisdiction"] == "US"
         mock_fullprove.assert_called_once()
+        assert mock_fullprove.call_args.args[0]["domain_contract_hash"] == str(expected_domain)
 
 
 @pytest.mark.asyncio
@@ -549,7 +571,7 @@ async def test_discovery_failure_stops_before_proving_or_encryption(
         patch(
             "src.protocol.discovery.resolve_hpke_public_key", new_callable=AsyncMock, side_effect=error("lookup failed")
         ),
-        patch("src.api.routes.proof._get_db_from_app", return_value=None),
+        patch("src.api.routes.proof._get_db", return_value=None),
         patch("src.api.routes.proof._prover.fullprove", new_callable=AsyncMock) as prover,
         patch("src.sar.encryption.encrypt_pii") as legacy,
         patch("src.sar.hpke_envelope.seal_envelope") as hpke,

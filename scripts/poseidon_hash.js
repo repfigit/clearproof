@@ -26,7 +26,7 @@ async function main() {
     }
   } catch (err) {
     process.stderr.write(`Invalid input JSON: ${err.message}\n`);
-    process.exit(1);
+    return process.exit(1);
   }
 
   const poseidon = await buildPoseidon();

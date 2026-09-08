@@ -1,5 +1,5 @@
 import { expect } from "chai";
-import { ethers } from "hardhat";
+import { ethers, network } from "hardhat";
 import fs from "node:fs";
 import path from "node:path";
 import { createHash } from "node:crypto";
@@ -93,10 +93,50 @@ const location = process.env.CLEARPROOF_PILOT_TEST_ARTIFACTS;
       .to.be.revertedWithCustomError(contract, "InvalidKey");
     await expect(factory.deploy({ ...key, alpha: [Q.toString(), "1"] }, "0x" + pin))
       .to.be.revertedWithCustomError(contract, "InvalidCoordinate");
-    await expect(factory.deploy({ ...key, beta: [["1", "1"], ["1", "1"]] }, "0x" + pin)).to.be.reverted;
+    for (const name of ["beta", "gamma", "delta"] as const) {
+      await expect(factory.deploy({ ...key, [name]: [["0", "0"], ["0", "0"]] }, "0x" + pin))
+        .to.be.revertedWithCustomError(contract, "InvalidKey");
+      await expect(factory.deploy({ ...key, [name]: [["1", "1"], ["1", "1"]] }, "0x" + pin))
+        .to.be.revertedWith("Pairing: ecpairing failed");
+    }
+    await expect(factory.deploy({ ...key, alpha: ["1", "1"] }, "0x" + pin))
+      .to.be.revertedWith("Pairing: ecmul failed");
+    expect(await contract.verifyProof(a, b, c, signals)).to.equal(true);
     const changed = { ...key, alpha: g1([key.alpha[0], (Q - BigInt(key.alpha[1])).toString()]) };
     const other = await factory.deploy(changed, "0x" + pin);
     expect(await other.verificationKeyCommitment()).not.to.equal(await contract.verificationKeyCommitment());
     expect(await other.verifyProof(a, b, c, signals)).to.equal(false);
   });
+
+  it("rejects a false pairing-precompile result during key validation", async function () {
+    const { contract, factory, key, pin, a, b, c, signals } = await fixture();
+    type Override = (address: Buffer, data: Buffer) => Promise<
+      { result: Buffer; shouldRevert: boolean; gas: bigint } | undefined>;
+    type Provider = {
+      _wrapped?: Provider;
+      _callOverrideCallback?: Override;
+      _setCallOverrideCallback?: (callback: Override) => Promise<void>;
+    };
+    // Hardhat's EDR test hook: override only the dependency, never contract state.
+    let provider = network.provider as unknown as Provider;
+    while (!provider._setCallOverrideCallback && provider._wrapped) provider = provider._wrapped;
+    if (!provider._setCallOverrideCallback) throw new Error("Hardhat EDR call override hook unavailable");
+    const previous = provider._callOverrideCallback;
+    let intercepted = 0;
+    try {
+      await provider._setCallOverrideCallback(async (address, data) => {
+        if (BigInt("0x" + address.toString("hex")) === 8n) {
+          intercepted++;
+          return { result: Buffer.alloc(32), shouldRevert: false, gas: 0n };
+        }
+        return previous?.(address, data);
+      });
+      await expect(factory.deploy(key, "0x" + pin)).to.be.revertedWithCustomError(contract, "InvalidKey");
+      expect(intercepted).to.be.greaterThan(0);
+    } finally {
+      await provider._setCallOverrideCallback(previous ?? (async () => undefined));
+    }
+    expect(await contract.verifyProof(a, b, c, signals)).to.equal(true);
+  });
+
 });

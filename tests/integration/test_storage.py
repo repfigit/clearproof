@@ -2,12 +2,16 @@
 
 from __future__ import annotations
 
-import asyncio
 import os
 import time
 import uuid
 
 import pytest
+
+from src.storage.models import StoredProof
+from tests.integration.test_pilot_storage import db as database_fixture
+
+db = database_fixture
 
 pytestmark = [
     pytest.mark.integration,
@@ -16,28 +20,6 @@ pytestmark = [
         reason="requires DATABASE_URL pointing at a running PostgreSQL",
     ),
 ]
-
-DB_URL = os.environ.get("DATABASE_URL", "postgresql://postgres:postgres@localhost:5432/clearproof_test")
-
-
-@pytest.fixture(scope="module")
-def event_loop():
-    loop = asyncio.new_event_loop()
-    yield loop
-    loop.close()
-
-
-@pytest.fixture(scope="module")
-async def db():
-    """Exercise the real Database class against a live PostgreSQL."""
-    from src.storage.database import Database
-
-    os.environ["DATABASE_URL"] = DB_URL
-    database = Database(pool_min=1, pool_max=1)
-    await database.connect()
-    yield database
-    await database.close()
-
 
 @pytest.fixture
 def credential_store(db):
@@ -89,6 +71,11 @@ class TestCredentialStore:
         result = await credential_store.get_by_id("cred-001")
         assert result.credential_id == "cred-001"
         assert result.jurisdiction == "US"
+        assert await credential_store.get_by_commitment(cred.commitment) == result
+        assert await credential_store.is_expired(cred.credential_id) is False
+        cred.revoked = True
+        await credential_store.upsert(cred)
+        assert await credential_store.is_revoked(cred.credential_id) is True
 
     async def test_get_by_wallet(self, credential_store):
         cred = type(
@@ -138,43 +125,32 @@ class TestCredentialStore:
     async def test_get_nonexistent(self, credential_store):
         result = await credential_store.get_by_id("nonexistent-" + uuid.uuid4().hex[:8])
         assert result is None
+        assert await credential_store.get_by_commitment("missing") is None
+        assert await credential_store.get_by_wallet("missing") == []
+        assert await credential_store.revoke("missing") is False
+        assert await credential_store.is_revoked("missing") is False
+        assert await credential_store.is_expired("missing") is True
 
 
 class TestProofStore:
-    async def test_store_and_get(self, proof_store):
-        proof = type(
-            "Proof",
-            (),
-            {
-                "proof_id": "proof-001",
-                "transfer_id": "transfer-001",
-                "groth16_proof": "proof_data",
-                "public_signals": ["1", "0", "abc"],
-                "verification_key": "vk_data",
-                "originator_vasp_did": "did:vasp:origin",
-                "beneficiary_vasp_did": "did:vasp:benef",
-                "jurisdiction": "US",
-                "amount_tier": 3,
-                "proof_generated_at": int(time.time()),
-                "proof_expires_at": int(time.time()) + 3600,
-                "is_expired": False,
-            },
-        )()
+    async def test_store_and_get(self, proof_store, sample_compliance_proof):
+        proof = StoredProof.model_validate(sample_compliance_proof.model_dump())
         await proof_store.store(proof)
-        result = await proof_store.get_by_id("proof-001")
-        assert result is not None
-        assert result.transfer_id == "transfer-001"
-        assert result.amount_tier == 3
+        result = await proof_store.get_by_id(proof.proof_id)
+        assert result == proof
+        assert await proof_store.get_by_transfer_id(proof.transfer_id) == proof
 
-    async def test_nullifier_dedup(self, proof_store):
+    async def test_nullifier_dedup(self, proof_store, sample_compliance_proof):
+        proof = StoredProof.model_validate(sample_compliance_proof.model_dump())
+        await proof_store.store(proof)
         nullifier = type(
             "Nullifier",
             (),
             {
                 "nullifier_hash": "null-" + uuid.uuid4().hex[:8],
                 "credential_commitment": "commit-001",
-                "transfer_id": "transfer-002",
-                "proof_id": "proof-002",
+                "transfer_id": proof.transfer_id,
+                "proof_id": proof.proof_id,
             },
         )()
         result1 = await proof_store.add_nullifier(nullifier)
@@ -192,6 +168,20 @@ class TestProofStore:
 
 
 class TestSanctionsStore:
+    async def test_empty(self, sanctions_store):
+        assert await sanctions_store.get_current() is None
+        assert await sanctions_store.get_latest() == []
+
+    async def test_timestamp_and_tied_history(self, sanctions_store, db):
+        first = await sanctions_store.record_root("first", 1, "synthetic")
+        second = await sanctions_store.record_root("second", 2, "synthetic")
+        async with db.connection() as conn:
+            await conn.execute("UPDATE sanctions_roots SET updated_at = to_timestamp(1700000000)")
+        history = await sanctions_store.get_latest()
+        assert [root.root_id for root in history] == [second.root_id, first.root_id]
+        assert [root.updated_at for root in history] == [1700000000, 1700000000]
+        assert [root.is_current for root in history] == [True, False]
+
     async def test_record_root(self, sanctions_store):
         root = await sanctions_store.record_root("root-abc", 1000, "ofac")
         assert root.root_hash == "root-abc"
@@ -234,6 +224,9 @@ class TestPersistentAuditLog:
         entries = await audit_log.get_entries(entry_type="proof_generated")
         assert len(entries) == 1
         assert entries[0].entry_type == "proof_generated"
+        assert (await audit_log.get_entries(transaction_ref="t-2"))[0].entry_type == "proof_verified"
+        assert await audit_log.get_entries(entry_type="proof_generated", transaction_ref="t-2") == []
+        assert len(await audit_log.get_entries(limit=1)) == 1
 
     async def test_chain_integrity_broken(self, db):
         from src.storage.audit import PersistentAuditLog
@@ -245,3 +238,45 @@ class TestPersistentAuditLog:
                 await cur.execute("UPDATE audit_entries SET entry_hash = 'deadbeef' WHERE sequence_number = 1")
         valid = await log.verify_chain(start_seq=0)
         assert valid is False
+
+
+async def test_audit_concurrent_appends_have_unique_contiguous_sequences(audit_log):
+    import asyncio
+
+    entries = await asyncio.gather(*(audit_log.append("synthetic", "actor", f"t-{i}", b"metadata") for i in range(8)))
+    assert sorted(entry.sequence_number for entry in entries) == list(range(1, 9))
+    stored = await audit_log.get_entries()
+    assert len(stored) == 8
+    assert await audit_log.verify_chain()
+    assert await audit_log.verify_chain(start_seq=4)
+
+
+async def test_audit_rejects_a_self_consistent_record_with_the_wrong_predecessor(audit_log, db):
+    from src.storage.models import StoredAuditEntry
+
+    await audit_log.append("first", "actor", "t-1", b"one")
+    entry = await audit_log.append("second", "actor", "t-2", b"two")
+    wrong_previous = "f" * 64
+    replacement_hash = StoredAuditEntry.compute_hash(entry.data_hash, wrong_previous, entry.sequence_number)
+    async with db.connection() as conn:
+        await conn.execute(
+            "UPDATE audit_entries SET prev_entry_hash = %s, entry_hash = %s WHERE sequence_number = 2",
+            (wrong_previous, replacement_hash),
+        )
+    assert await audit_log.verify_chain() is False
+    assert await audit_log.verify_chain(start_seq=1) is False
+
+
+async def test_audit_rejects_a_deleted_record_even_when_next_link_is_rehashed(audit_log, db):
+    from src.storage.models import StoredAuditEntry
+
+    first = await audit_log.append("first", "actor", "t-1", b"one")
+    await audit_log.append("second", "actor", "t-2", b"two")
+    third = await audit_log.append("third", "actor", "t-3", b"three")
+    async with db.connection() as conn:
+        await conn.execute("DELETE FROM audit_entries WHERE sequence_number = 2")
+        await conn.execute(
+            "UPDATE audit_entries SET prev_entry_hash = %s, entry_hash = %s WHERE sequence_number = 3",
+            (first.entry_hash, StoredAuditEntry.compute_hash(third.data_hash, first.entry_hash, 3)),
+        )
+    assert await audit_log.verify_chain() is False

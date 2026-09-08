@@ -161,3 +161,135 @@ def test_source_provenance_is_bound_and_must_cover_policy(case):
     stale = PolicySource.model_validate({**source.model_dump(), "valid_until": policy.effective_until - 1})
     with pytest.raises(ValueError, match="review intervals"):
         PilotPolicy.model_validate({**policy.model_dump(), "sources": (stale,)})
+
+
+@pytest.mark.parametrize(
+    "changes,message",
+    [
+        ({"valid_until": 1, "reviewed_at": 1}, "review interval"),
+        ({"reference": "urn:clearproof:synthetic:café"}, "ASCII"),
+        ({"reference": "https://example.org/source"}, "synthetic reference"),
+        ({"kind": "reviewed-reference", "reference": "http://example.org/source"}, "HTTPS"),
+        ({"kind": "reviewed-reference", "reference": "https:///source"}, "HTTPS"),
+        ({"kind": "reviewed-reference", "reference": "https://user@example.org/source"}, "HTTPS"),
+        ({"kind": "reviewed-reference", "reference": "https://:secret@example.org/source"}, "HTTPS"),
+        ({"kind": "reviewed-reference", "reference": "https://example.org/source#part"}, "HTTPS"),
+    ],
+)
+def test_source_rejects_invalid_provenance(case, changes, message):
+    with pytest.raises(ValueError, match=message):
+        PolicySource.model_validate({**case[0].sources[0].model_dump(), **changes})
+
+
+def test_reviewed_reference_is_preserved_and_bound(case):
+    policy = case[0]
+    source = PolicySource.model_validate(
+        {
+            **policy.sources[0].model_dump(),
+            "kind": "reviewed-reference",
+            "reference": "https://example.org/synthetic-reference?version=1",
+        }
+    )
+    updated = PilotPolicy.model_validate({**policy.model_dump(), "sources": (source,)})
+    assert updated.sources[0].reference == source.reference
+    assert updated.digest != policy.digest
+
+
+@pytest.mark.parametrize(
+    "changes,message",
+    [
+        ({"chain_id": "0"}, "nonzero EVM"),
+        ({"chain_id": str(2**64)}, "nonzero EVM"),
+        ({"registry_address": "0x" + "00" * 20}, "nonzero EVM"),
+        ({"effective_from": 10, "effective_until": 10}, "positive effective interval"),
+        ({"revision": 2}, "predecessor digest"),
+        ({"previous_digest": "cd" * 32}, "predecessor digest"),
+    ],
+)
+def test_policy_rejects_invalid_deployment_interval_and_revision(case, changes, message):
+    with pytest.raises(ValueError, match=message):
+        PilotPolicy.model_validate({**case[0].model_dump(), **changes})
+
+
+@pytest.mark.parametrize("operator", ["is_true", "is_false", "at_least", "below"])
+def test_policy_accepts_coherent_rules(case, operator):
+    from src.policy.model import PolicyRule
+
+    numeric = operator in ("at_least", "below")
+    rule = PolicyRule(
+        rule_id="synthetic-rule",
+        predicate="usd_cents" if numeric else "credential_valid",
+        operator=operator,
+        threshold_usd_cents="1" if numeric else None,
+        effect="REVIEW",
+        source_ids=("fixture",),
+    )
+    policy = PilotPolicy.model_validate({**case[0].model_dump(), "rules": (rule,)})
+    assert policy.rules == (rule,)
+    assert policy.digest != case[0].digest
+
+
+@pytest.mark.parametrize(
+    "changes,message",
+    [
+        ({"threshold_usd_cents": "1"}, "Only amount comparisons"),
+        ({"operator": "below"}, "Only amount comparisons"),
+        ({"operator": "below", "threshold_usd_cents": "1"}, "positive USD cents"),
+        ({"operator": "below", "predicate": "usd_cents", "threshold_usd_cents": "0"}, "positive USD cents"),
+        ({"predicate": "usd_cents"}, "integer comparison"),
+        ({"source_ids": ("fixture", "fixture")}, "distinct"),
+    ],
+)
+def test_rule_rejects_incoherent_predicates_and_sources(changes, message):
+    from src.policy.model import PolicyRule
+
+    values = dict(
+        rule_id="synthetic-rule",
+        predicate="credential_valid",
+        operator="is_true",
+        effect="REVIEW",
+        source_ids=("fixture",),
+    )
+    with pytest.raises(ValueError, match=message):
+        PolicyRule.model_validate({**values, **changes})
+
+
+def test_policy_rejects_duplicate_or_unresolved_references(case):
+    from src.policy.model import PolicyRule
+
+    policy = case[0]
+    rule = PolicyRule(
+        rule_id="synthetic-rule",
+        predicate="credential_valid",
+        operator="is_true",
+        effect="REVIEW",
+        source_ids=("fixture",),
+    )
+    for changes, message in [
+        ({"sources": policy.sources * 2}, "source IDs must be unique"),
+        ({"rules": (rule, rule)}, "rule IDs must be unique"),
+        ({"rules": (rule.model_copy(update={"source_ids": ("missing",)}),)}, "source references"),
+        ({"effective_from": policy.effective_from - 1}, "review intervals"),
+    ]:
+        with pytest.raises(ValueError, match=message):
+            PilotPolicy.model_validate({**policy.model_dump(), **changes})
+
+
+@pytest.mark.parametrize("inventory", [None, (), [], "invalid", [None] * 257])
+def test_policy_inventory_requires_bounded_list(case, inventory):
+    with pytest.raises(ValueError, match="policy records"):
+        PolicyTrustStore(inventory, current_digests=(case[0].digest,))
+
+
+@pytest.mark.parametrize("pins", [None, [], (), "invalid", ("ab" * 32,) * 257])
+def test_current_pins_require_bounded_tuple(case, pins):
+    with pytest.raises(ValueError, match="current policy pins"):
+        PolicyTrustStore([case[0]], current_digests=pins)
+
+
+def test_duplicate_inventory_and_current_pins_reject(case):
+    policy = case[0]
+    with pytest.raises(ValueError, match="Duplicate policy record"):
+        PolicyTrustStore([policy, policy], current_digests=(policy.digest,))
+    with pytest.raises(ValueError, match="distinct known"):
+        PolicyTrustStore([policy], current_digests=(policy.digest, policy.digest))

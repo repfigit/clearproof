@@ -184,7 +184,7 @@ async def get_credential_status(
     now = int(time.time())
     if credential.revoked:
         status = "revoked"
-    elif credential.expires_at < now:
+    elif credential.expires_at <= now:
         status = "expired"
     else:
         status = "active"

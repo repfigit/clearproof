@@ -3,9 +3,10 @@
  * check_eip2537.mjs — probe EIP-2537 (BLS12-381) precompile availability
  * across clearproof target chains (ADR 0002, Open Task 2).
  *
- * Method: eth_call to the PAIRING precompile (0x0f) with one byte of invalid
- * input. On chains with EIP-2537 the precompile reverts on bad input; on
- * chains without it, 0x0f is an empty address and the call returns "0x".
+ * Method: eth_call to PAIRING (0x0f) with one valid pair of infinity points.
+ * EIP-2537 encodes this pair as 384 zero bytes and returns a 32-byte true value.
+ * Empty returns, RPC errors and unexpected results do not confirm support.
+ * Reference: https://eips.ethereum.org/EIPS/eip-2537#abi-for-pairing
  *
  * Usage: node scripts/check_eip2537.mjs
  */
@@ -26,9 +27,9 @@ let absent = 0;
 for (const [name, urls] of nets) {
   let reported = false;
   for (const url of urls) {
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), 12000);
     try {
-      const ctrl = new AbortController();
-      const timer = setTimeout(() => ctrl.abort(), 12000);
       const res = await fetch(url, {
         method: "POST",
         headers: { "content-type": "application/json" },
@@ -36,20 +37,22 @@ for (const [name, urls] of nets) {
           jsonrpc: "2.0",
           id: 1,
           method: "eth_call",
-          params: [{ to: "0x000000000000000000000000000000000000000f", data: "0xff" }, "latest"],
+          params: [{ to: "0x000000000000000000000000000000000000000f", data: "0x" + "00".repeat(384) }, "latest"],
         }),
         signal: ctrl.signal,
       });
-      clearTimeout(timer);
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const j = await res.json();
+      if (j.error) throw new Error(`JSON-RPC error: ${j.error.message}`);
       let status;
-      if (j.error) {
-        status = "PRESENT (precompile reverted on bad input)";
+      if (j.result === "0x" + "00".repeat(31) + "01") {
+        status = "PRESENT (pairing check returned true)";
       } else if (j.result === "0x") {
         status = "ABSENT (empty return, no precompile)";
         absent += 1;
       } else {
         status = `UNEXPECTED result=${j.result}`;
+        absent += 1;
       }
       console.log(`${name.padEnd(18)} ${status}`);
       reported = true;
@@ -58,6 +61,8 @@ for (const [name, urls] of nets) {
       if (url === urls[urls.length - 1]) {
         console.log(`${name.padEnd(18)} RPC-ERROR ${e.message.slice(0, 60)}`);
       }
+    } finally {
+      clearTimeout(timer);
     }
   }
   if (!reported) absent += 1;

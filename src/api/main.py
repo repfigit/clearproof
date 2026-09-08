@@ -59,24 +59,25 @@ async def lifespan(app: FastAPI):
             "or a value that is at least 32 bytes when UTF-8 encoded."
         )
 
-    db_url = os.getenv("DATABASE_URL")
-    if db_url:
-        pool_min = int(os.getenv("DB_POOL_MIN", "2"))
-        pool_max = int(os.getenv("DB_POOL_MAX", "10"))
-        db = Database(pool_min=pool_min, pool_max=pool_max)
-        await db.connect()
-        app.state.db = db
-        logger.info("Database connected")
-    else:
+    db = None
+    app.state.db = None
+    try:
+        db_url = os.getenv("DATABASE_URL")
+        if db_url:
+            pool_min = int(os.getenv("DB_POOL_MIN", "2"))
+            pool_max = int(os.getenv("DB_POOL_MAX", "10"))
+            db = Database(pool_min=pool_min, pool_max=pool_max)
+            await db.connect()
+            app.state.db = db
+            logger.info("Database connected")
+        else:
+            logger.warning("DATABASE_URL not set — running in in-memory mode")
+        yield
+    finally:
         app.state.db = None
-        logger.warning("DATABASE_URL not set — running in in-memory mode")
-
-    yield
-
-    db = getattr(app.state, "db", None)
-    if db is not None:
-        await db.close()
-    logger.info("ZK Travel Rule Compliance Bridge shutting down.")
+        if db is not None:
+            await db.close()
+        logger.info("ZK Travel Rule Compliance Bridge shutting down.")
 
 
 def create_app() -> FastAPI:

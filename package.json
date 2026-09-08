@@ -9,6 +9,8 @@
     "apps/*"
   ],
   "scripts": {
+    "test:scripts": "vitest run --config vitest.scripts.config.mjs",
+    "test:scripts:coverage": "vitest run --config vitest.scripts.config.mjs --coverage",
     "build": "turbo run build",
     "test:ts": "turbo run test",
     "compile": "bash scripts/compile_circuits.sh",
@@ -16,7 +18,8 @@
     "test": "uv run python -m pytest tests/ -v",
     "test:unit": "uv run python -m pytest tests/unit/ -v",
     "test:integration": "uv run python -m pytest tests/integration/ -v",
-    "test:compliance": "uv run python -m pytest tests/compliance/ -v"
+    "test:compliance": "uv run python -m pytest tests/compliance/ -v",
+    "test:contract-scripts:coverage": "vitest run --config vitest.contract-scripts.config.mjs --coverage"
   },
   "dependencies": {
     "circomlib": "^2.0.5",
@@ -33,6 +36,8 @@
     }
   },
   "devDependencies": {
-    "turbo": "^2.0"
+    "@vitest/coverage-v8": "^4.1.11",
+    "turbo": "^2.0",
+    "vitest": "^4.1.11"
   }
 }

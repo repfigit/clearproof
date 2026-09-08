@@ -254,6 +254,41 @@ describe("ComplianceRegistry — threshold binding (AIF-79)", function () {
       expect(resolved.tier4).to.equal(DEFAULT_T.tier4);
     });
 
+    it("preserves a registered fallback across accepted and rejected table updates", async function () {
+      const { registry, other } = await deployAll();
+      const unregistered = 0x4742;
+      async function checkFallback() {
+        const fallback = await registry.jurisdictionThresholds(DEFAULT_KEY);
+        expect(fallback.registered).to.equal(true);
+        for (const code of [0, 1, 0x4141, Number(US.code), Number(EU.code), 0x5a5a, 0xffff]) {
+          expect((await registry.thresholdsFor(code)).registered).to.equal(true);
+        }
+        expect((await registry.jurisdictionThresholds(unregistered)).registered).to.equal(false);
+        expect(await registry.thresholdsFor(unregistered)).to.deep.equal(fallback);
+      }
+      await checkFallback();
+      for (const values of [[1000n, 1000n, 2000n], [1n, 3n, 2n]] as const) {
+        const previous = await registry.jurisdictionThresholds(DEFAULT_KEY);
+        await expect(registry.setJurisdictionThresholds(DEFAULT_KEY, ...values))
+          .to.be.revertedWithCustomError(registry, "ThresholdsNotOrdered");
+        expect(await registry.jurisdictionThresholds(DEFAULT_KEY)).to.deep.equal(previous);
+        await checkFallback();
+      }
+      await expect(registry.connect(other).setJurisdictionThresholds(DEFAULT_KEY, 1, 2, 3))
+        .to.be.revertedWithCustomError(registry, "AccessControlUnauthorizedAccount")
+        .withArgs(other.address, await registry.THRESHOLD_ADMIN_ROLE());
+      await checkFallback();
+      await registry.setJurisdictionThresholds(DEFAULT_KEY, 0, 1, (1n << 64n) - 1n);
+      await checkFallback();
+      await registry.setJurisdictionThresholds(DEFAULT_KEY, DEFAULT_T.tier2, DEFAULT_T.tier3, DEFAULT_T.tier4);
+      await checkFallback();
+      await registry.setJurisdictionThresholds(unregistered, 1, 2, 3);
+      const explicit = await registry.thresholdsFor(unregistered);
+      expect(explicit.registered).to.equal(true);
+      expect(explicit.tier3).to.equal(2);
+      expect((await registry.thresholdsFor(0x4141)).tier3).to.equal(DEFAULT_T.tier3);
+    });
+
     it("rejects an out-of-order default at construction", async function () {
       const [admin] = await ethers.getSigners();
 

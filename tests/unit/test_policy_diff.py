@@ -203,3 +203,52 @@ def test_changed_effect_under_same_rule_id_changes_explanation(comparison):
     result = compare_policies(request).cases[0]
     assert result.before.matched_rule_ids == result.after.matched_rule_ids
     assert result.decision_changed and result.explanation_changed
+
+
+@pytest.mark.parametrize(
+    "field,value",
+    [
+        ("tenant_id", "different-tenant"),
+        ("chain_id", "31338"),
+        ("registry_address", "0x" + "ab" * 20),
+        ("jurisdiction", "GB"),
+        ("asset_registry_digest", "cd" * 32),
+    ],
+)
+def test_comparison_rejects_incompatible_policy_scope(comparison, field, value):
+    after = PilotPolicy.model_validate({**comparison.after.model_dump(), field: value})
+    with pytest.raises(ValueError, match="Comparison requires the same tenant/deployment/jurisdiction/catalog"):
+        PolicyDiffRequest.model_validate({**comparison.model_dump(), "after": after})
+
+
+def test_duplicate_case_labels_reject_even_for_distinct_transfers(comparison):
+    case = comparison.cases[0]
+    transfer = type(case.transfer).model_validate({**case.transfer.model_dump(), "transfer_id": "different-transfer"})
+    context = type(case.context).model_validate({**case.context.model_dump(), "transfer_digest": transfer.digest})
+    facts = type(case.facts).model_validate({**case.facts.model_dump(), "transfer_digest": transfer.digest})
+    other = PolicyCase.model_validate({**case.model_dump(), "transfer": transfer, "context": context, "facts": facts})
+    assert other.transfer.digest != case.transfer.digest
+    with pytest.raises(ValueError, match="Duplicate comparison case ID"):
+        PolicyDiffRequest.model_validate({**comparison.model_dump(), "cases": (case, other)})
+
+
+@pytest.mark.parametrize("failure", [ValueError, TypeError])
+async def test_http_comparison_failure_does_not_expose_internal_details(
+    comparison, authenticated_app, monkeypatch, failure
+):
+    from unittest.mock import Mock
+
+    from src.api.routes import policy as routes
+
+    app, token = authenticated_app
+    compare = Mock(side_effect=failure("synthetic-private-comparison-detail"))
+    monkeypatch.setattr(routes, "compare_policies", compare)
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        response = await client.post(
+            "/pilot/policy/diff",
+            json=comparison.model_dump(mode="json"),
+            headers={"Authorization": "Bearer " + token()},
+        )
+    assert response.status_code == 422
+    assert response.json() == {"detail": "Policy comparison scope or evidence is invalid"}
+    compare.assert_called_once()

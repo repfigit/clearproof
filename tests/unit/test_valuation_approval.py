@@ -206,3 +206,37 @@ def test_authenticated_current_cutoff_matches_age_and_compromise(case):
         trust.current_valid_until(signed, transfer, registry, **{**args, "now": cutoff})
     compromised = authority.model_copy(update={"compromised_at": args["now"] + 1})
     assert ValuationTrustStore([compromised]).current_valid_until(signed, transfer, registry, **args) == args["now"] + 1
+
+
+@pytest.mark.parametrize("boundary", ["before", "expiry"])
+def test_valuation_signature_time_must_be_inside_quote(case, boundary):
+    approval = case[2].approval
+    signed_at = approval.valuation.observed_at - 1 if boundary == "before" else approval.valuation.expires_at
+    with pytest.raises(ValueError, match="Approval must be signed during the quote validity interval"):
+        ValuationApproval.model_validate({**approval.model_dump(), "signed_at": signed_at})
+
+
+@pytest.mark.parametrize("change", ["interval", "assets", "sources"])
+def test_valuation_authority_rejects_invalid_interval_or_duplicate_scope(case, change):
+    authority = case[1]
+    changes = {
+        "interval": {"not_after": authority.not_before},
+        "assets": {"asset_ids": authority.asset_ids * 2},
+        "sources": {"source_ids": authority.source_ids * 2},
+    }
+    with pytest.raises(ValueError, match="positive validity interval|Duplicate authority scope"):
+        ValuationAuthority.model_validate({**authority.model_dump(), **changes[change]})
+
+
+@pytest.mark.parametrize("authorities", [None, (), [], "invalid", [None] * 257])
+def test_valuation_authority_inventory_requires_bounded_list(authorities):
+    with pytest.raises(ValueError, match="Configure 1–256 valuation authorities"):
+        ValuationTrustStore(authorities)
+
+
+def test_valuation_digest_binds_signature_time_without_mutating_quote(case):
+    approval = case[2].approval
+    changed = ValuationApproval.model_validate({**approval.model_dump(), "signed_at": approval.signed_at + 1})
+    assert changed.valuation == approval.valuation
+    assert changed.digest != approval.digest
+    assert ValuationApproval.model_validate_json(approval.model_dump_json()).digest == approval.digest

@@ -13,6 +13,32 @@ npm run build --workspace @clearproof/docs
 npm run dev --workspace @clearproof/docs
 ```
 
+Run `npm run test:coverage --workspace @clearproof/docs` after building the
+content package. These tests invoke the content API handlers with the real
+catalogue and Next.js responses, checking every listed entry and unknown-slug
+errors. Layout unit tests check page-map loading, navigation/footer composition,
+error propagation and MDX component overrides using controlled Nextra dependencies.
+Coverage includes all authored TS/TSX modules and requires 100% of measured
+statements, branches, functions and lines. This report does not measure MDX page
+rendering, browser interactions or deployment tracing.
+
+Run the production browser/server acceptance suite separately:
+
+```bash
+npm exec --workspace @clearproof/docs -- playwright install chromium
+npm run build --workspace @clearproof/content
+npm run build --workspace @clearproof/docs
+npm run test:e2e --workspace @clearproof/docs
+```
+
+Playwright discovers every MDX page and checks desktop/mobile Chromium rendering,
+browser errors, the Mermaid SVG, client navigation/back, the 404 page and the
+built content API against every catalogue entry. It owns a production server on
+127.0.0.1:43135 and refuses to reuse another process. CI installs Chromium's OS
+dependencies, builds the site and retains the HTML report and failure traces.
+These checks exercise the local production build; hosted deployment tracing and
+other browser engines require separate verification.
+
 Use Node.js 24 LTS to match the Vercel project. Run one docs build or development
 server at a time because they share `.next` output.
 

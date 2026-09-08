@@ -39,8 +39,10 @@ describe("Legacy deployment preparation", function () {
     try {
       for (const script of ["deploy.ts", "deploy-multichain.ts"]) {
         const output = path.join(directory, script);
+        // The parent test run already compiled its selected artifacts. Recompiling
+        // here would overwrite instrumented bytecode during coverage runs.
         await execute(process.execPath, [require.resolve("hardhat/internal/cli/cli"), "run",
-          `scripts/${script}`, "--network", "hardhat"], {
+          `scripts/${script}`, "--network", "hardhat", "--no-compile"], {
           cwd: path.resolve(__dirname, ".."), timeout: 60000,
           env: { ...process.env, CLEARPROOF_DEPLOYMENTS_DIR: output },
         });

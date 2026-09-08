@@ -46,7 +46,7 @@ class TestAddressNormalization:
 
 class TestBuildConfig:
     def test_version_exists(self):
-        assert BUILD_SCRIPT_VERSION == "1.1.0"
+        assert BUILD_SCRIPT_VERSION == "1.2.0"
 
     def test_domain_tag(self):
         assert SANCTIONS_DOMAIN_TAG == 1
@@ -95,3 +95,39 @@ class TestSanctionsArtifact:
         assert witness["left_neighbor"] < witness["right_neighbor"]
         assert len(witness["left_path"]["siblings"]) == loaded.depth
         assert len(witness["right_path"]["siblings"]) == loaded.depth
+
+
+async def test_explicit_circuit_depth_matches_native_builder_and_reload(tmp_path):
+    tree_data = await build_merkle_tree([], target_depth=20)
+    native = SanctionsMerkleTree(depth=20)
+    assert tree_data["root"] == await native.build_from_addresses([])
+    assert tree_data["depth"] == 20
+    assert tree_data["padded_size"] == 2**20
+    assert sum(map(len, tree_data["tree_layers"])) < 50
+    path = tmp_path / "synthetic.json"
+    path.write_text(json.dumps(tree_data))
+    loaded = SanctionsMerkleTree.build_from_file(str(path))
+    assert loaded.get_root() == native.get_root()
+    assert loaded.depth == 20
+    for depth in [0, 33, True]:
+        with pytest.raises(ValueError, match="depth"):
+            await build_merkle_tree([], target_depth=depth)
+    with pytest.raises(ValueError, match="exceeds"):
+        await build_merkle_tree(["0x" + "1" * 40], target_depth=1)
+
+
+def test_builder_cli_exposes_depth_and_rejects_invalid_depth_before_building():
+    import subprocess
+    import sys
+    from pathlib import Path
+
+    script = Path(__file__).resolve().parents[2] / "scripts/build_sanctions_tree.py"
+    help_result = subprocess.run([sys.executable, str(script), "--help"], capture_output=True, timeout=10)
+    assert help_result.returncode == 0
+    assert b"--depth" in help_result.stdout
+    invalid = subprocess.run(
+        [sys.executable, str(script), "--offline", "--depth", "0"], capture_output=True, timeout=10
+    )
+    assert invalid.returncode != 0
+    assert b"Merkle depth must" in invalid.stderr
+    assert b"Building Merkle tree" not in invalid.stdout

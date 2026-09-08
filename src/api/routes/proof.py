@@ -36,7 +36,7 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/proof", tags=["proof"])
 
-_issuer_registry = IssuerRegistry()
+_issuer_registry = IssuerRegistry(depth=10)
 _prover = SnarkJSProver()
 _audit_log = AuditLog()
 
@@ -135,11 +135,6 @@ async def _hash_wallet(address: str) -> str:
     return await _poseidon_hash([1, _address_to_int(address)])
 
 
-def _hash_transfer(request: ProofGenerateRequest) -> str:
-    payload = f"{request.wallet_address}:{request.destination_wallet}:{request.amount_usd}:{request.asset}"
-    return hashlib.sha256(payload.encode()).hexdigest()
-
-
 _BN128_R = 21888242871839275222246405745257275088548364400416034343698204186575808495617
 
 
@@ -186,19 +181,13 @@ def _get_db(app) -> Optional[Database]:
     return getattr(getattr(app, "state", None), "db", None)
 
 
-def _get_db_from_app() -> Optional[Database]:
-    from src.api.main import app as _app
-
-    return _get_db(_app)
-
-
-def _check_sanctions_staleness(db: Optional[Database]) -> None:
+async def _check_sanctions_staleness(db: Optional[Database]) -> None:
     if db is None:
         return
     from src.storage.sanctions import SanctionsStore
 
     store = SanctionsStore(db)
-    current = asyncio.get_event_loop().run_until_complete(store.get_current())
+    current = await store.get_current()
     if current is None:
         raise RuntimeError("No sanctions root loaded — cannot generate proof")
     staleness = time.time() - current.updated_at
@@ -210,6 +199,7 @@ def _check_sanctions_staleness(db: Optional[Database]) -> None:
 @router.post("/generate", response_model=dict, summary="Generate ZK compliance proof")
 async def generate_proof(
     request: ProofGenerateRequest,
+    http_request: Request,
     _auth: dict = Depends(JWTAuthDependency),
     _rl: None = Depends(_proof_generate_limiter),
     _cred_registry: CredentialRegistry = Depends(get_credential_registry),
@@ -233,8 +223,8 @@ async def generate_proof(
             ),
         )
 
-    db = _get_db_from_app()
-    _check_sanctions_staleness(db)
+    db = _get_db(http_request.app)
+    await _check_sanctions_staleness(db)
 
     if db is not None:
         from src.storage.proofs import ProofStore
@@ -253,7 +243,7 @@ async def generate_proof(
         raise HTTPException(status_code=403, detail="Credential revoked")
 
     # 4b. Check credential expiry
-    if int(time.time()) > credential.expires_at:
+    if int(time.time()) >= credential.expires_at:
         raise HTTPException(status_code=410, detail="Credential expired")
 
     recipient_pubkey = await _resolve_recipient_key(request)
@@ -266,7 +256,7 @@ async def generate_proof(
     )
 
     # 5. Build circuit inputs
-    issuer_registry = IssuerRegistry()
+    issuer_registry = _issuer_registry
     issuer_did_int = _encode_did(credential.issuer_did)
     commitment = _cred_registry.get_commitment(request.credential_id)
     commitment_int = int(commitment, 16) if commitment.startswith("0x") else int(commitment)
@@ -278,9 +268,9 @@ async def generate_proof(
     if sanctions_root is None:
         raise RuntimeError("Sanctions tree not built — run build_sanctions_tree.py first")
 
-    issuer_root = issuer_registry.root
-    if issuer_root is None:
-        issuer_root = "0" * 64
+    issuer_root = issuer_registry.get_root()
+    issuer_witness = await issuer_registry.generate_membership_witness(credential.issuer_did)
+    sanctions_witness = await sanctions_tree.generate_nonmembership_witness(request.wallet_address)
 
     transfer_id_hash = hashlib.sha256(
         f"{request.wallet_address}:{request.destination_wallet}:{request.amount_usd}".encode()
@@ -295,39 +285,42 @@ async def generate_proof(
     else:
         domain_contract_hash = 0
 
+    generated_at = int(time.time())
+    expires_at = generated_at + 3600
     circuit_inputs = {
-        "issuer_did": [issuer_did_int],
-        "kyc_tier": [_encode_kyc_tier(credential.kyc_tier)],
-        "sanctions_clear": [1 if credential.sanctions_clear else 0],
-        "issued_at": [credential.issued_at],
-        "expires_at": [credential.expires_at],
-        "wallet_address_hash": [int(wallet_hash, 16)],
-        "amount_usd": [int(request.amount_usd)],
-        # Must come from the shared accessor: these are unconstrained public
-        # inputs, so every verifier re-derives them from the same table. The
-        # previous inline .get(..., 10000/100000/1000000) fallbacks diverged
-        # from JURISDICTION_TIERS["DEFAULT"] and skipped case normalization,
-        # so a lowercase or unlisted jurisdiction produced thresholds no
-        # verifier would ever agree with.
-        "tier2_threshold": [_thresholds["tier2"]],
-        "tier3_threshold": [_thresholds["tier3"]],
-        "tier4_threshold": [_thresholds["tier4"]],
-        "transfer_timestamp": [int(time.time())],
-        "jurisdiction_code": [_encode_jurisdiction(request.jurisdiction)],
-        "credential_commitment": [commitment_int],
-        "sanctions_root": [int(sanctions_root, 16) if isinstance(sanctions_root, str) else sanctions_root],
-        "issuer_root": [int(issuer_root, 16) if isinstance(issuer_root, str) else issuer_root],
-        "domain_chain_id": [int(os.getenv("DOMAIN_CHAIN_ID", "11155111"))],
-        "domain_contract_hash": [domain_contract_hash],
-        "transfer_id_hash": [int(transfer_id_hash[:16], 16)],
-        "credential_nullifier": [
-            int(credential_nullifier, 16) if isinstance(credential_nullifier, str) else credential_nullifier
-        ],
-        "proof_expires_at": [int(time.time()) + 3600],
-        "amount_tier": [tier],
-        "sar_review_flag": [1 if sar_result.review_flagged else 0],
-        "is_compliant": [1 if credential.sanctions_clear else 0],
+        "issuer_did": issuer_did_int,
+        "kyc_tier": _encode_kyc_tier(credential.kyc_tier),
+        "sanctions_clear": int(credential.sanctions_clear),
+        "issued_at": credential.issued_at,
+        "expires_at": credential.expires_at,
+        "wallet_address_hash": int(wallet_hash),
+        "actual_amount": int(request.amount_usd),
+        "tier2_threshold": _thresholds["tier2"],
+        "tier3_threshold": _thresholds["tier3"],
+        "tier4_threshold": _thresholds["tier4"],
+        "transfer_timestamp": generated_at,
+        "jurisdiction_code": _encode_jurisdiction(request.jurisdiction),
+        "credential_commitment": commitment_int,
+        "sanctions_tree_root": int(sanctions_root),
+        "issuer_tree_root": int(issuer_root),
+        "domain_chain_id": int(os.getenv("DOMAIN_CHAIN_ID", "11155111")),
+        "domain_contract_hash": domain_contract_hash,
+        "transfer_id_hash": int(transfer_id_hash[:16], 16),
+        "credential_nullifier": int(credential_nullifier),
+        "proof_expires_at": expires_at,
+        "amount_tier": tier,
+        "issuer_path_elements": issuer_witness["siblings"],
+        "issuer_path_indices": issuer_witness["indices"],
+        "left_key": sanctions_witness["left_neighbor"],
+        "right_key": sanctions_witness["right_neighbor"],
+        "left_path_elements": sanctions_witness["left_path"]["siblings"],
+        "left_path_indices": sanctions_witness["left_path"]["indices"],
+        "right_path_elements": sanctions_witness["right_path"]["siblings"],
+        "right_path_indices": sanctions_witness["right_path"]["indices"],
     }
+
+    # Preserve field integers across JSON/JavaScript without Number rounding.
+    circuit_inputs = {name: str(value) if isinstance(value, int) else value for name, value in circuit_inputs.items()}
 
     # 9. Generate proof
     proof_result, public_signals = await _prover.fullprove(circuit_inputs)
@@ -346,8 +339,8 @@ async def generate_proof(
         beneficiary_vasp_did=request.destination_vasp_did,
         jurisdiction=request.jurisdiction,
         amount_tier=tier,
-        proof_generated_at=int(time.time()),
-        proof_expires_at=int(time.time()) + 3600,
+        proof_generated_at=generated_at,
+        proof_expires_at=expires_at,
     )
 
     # 11. Encrypt PII
@@ -393,61 +386,81 @@ async def generate_proof(
         from src.storage.models import StoredCredential, StoredNullifier, StoredProof
         from src.storage.proofs import ProofStore
 
-        cred_store = CredentialStore(db)
-        await cred_store.upsert(
-            StoredCredential(
-                credential_id=request.credential_id,
-                issuer_did=credential.issuer_did,
-                subject_wallet=request.wallet_address,
-                jurisdiction=request.jurisdiction,
-                kyc_tier=credential.kyc_tier,
-                sanctions_clear=credential.sanctions_clear,
-                issued_at=credential.issued_at,
-                expires_at=credential.expires_at,
-                revoked=credential.revoked,
-                commitment=commitment,
+        async with db.transaction() as transaction:
+            async with transaction.connection() as conn:
+                # Serialize retries for this key, including requests that proved concurrently.
+                lock_id = int.from_bytes(
+                    hashlib.sha256(request.idempotency_key.encode()).digest()[:8], "big", signed=True
+                )
+                await conn.execute("SELECT pg_advisory_xact_lock(%s)", (lock_id,))
+            cached = await ProofStore(transaction).check_idempotency(request.idempotency_key)
+            if cached is not None:
+                return {"status": "already_generated", "result_hash": cached}
+            cred_store = CredentialStore(transaction)
+            await cred_store.upsert(
+                StoredCredential(
+                    credential_id=request.credential_id,
+                    issuer_did=credential.issuer_did,
+                    subject_wallet=request.wallet_address,
+                    jurisdiction=request.jurisdiction,
+                    kyc_tier=credential.kyc_tier,
+                    sanctions_clear=credential.sanctions_clear,
+                    issued_at=credential.issued_at,
+                    expires_at=credential.expires_at,
+                    revoked=credential.revoked,
+                    commitment=commitment,
+                )
             )
-        )
 
-        proof_store = ProofStore(db)
-        await proof_store.store(
-            StoredProof(
-                proof_id=proof_id,
+            proof_store = ProofStore(transaction)
+            await proof_store.store(
+                StoredProof(
+                    proof_id=proof_id,
+                    transfer_id=transfer_id,
+                    groth16_proof=json.dumps(proof_result),
+                    public_signals=[str(s) for s in public_signals],
+                    verification_key=json.dumps(_load_vk()),
+                    originator_vasp_did=_get_vasp_did(),
+                    beneficiary_vasp_did=request.destination_vasp_did,
+                    jurisdiction=request.jurisdiction,
+                    amount_tier=tier,
+                    proof_generated_at=generated_at,
+                    proof_expires_at=expires_at,
+                    is_expired=False,
+                )
+            )
+
+            nullifier = StoredNullifier(
+                nullifier_hash=credential_nullifier,
+                credential_commitment=commitment,
                 transfer_id=transfer_id,
-                groth16_proof=json.dumps(proof_result),
-                public_signals=[str(s) for s in public_signals],
-                verification_key=json.dumps(_load_vk()),
-                originator_vasp_did=_get_vasp_did(),
-                beneficiary_vasp_did=request.destination_vasp_did,
-                jurisdiction=request.jurisdiction,
-                amount_tier=tier,
-                proof_generated_at=int(time.time()),
-                proof_expires_at=int(time.time()) + 3600,
-                is_expired=False,
+                proof_id=proof_id,
             )
-        )
+            if not await proof_store.add_nullifier(nullifier):
+                raise HTTPException(status_code=409, detail="Proof nullifier already recorded")
 
-        nullifier = StoredNullifier(
-            nullifier_hash=credential_nullifier,
-            credential_commitment=commitment,
-            transfer_id=transfer_id,
-            proof_id=proof_id,
-        )
-        await proof_store.add_nullifier(nullifier)
+            await proof_store.record_idempotency(
+                request.idempotency_key,
+                request.wallet_address,
+                hashlib.sha256(
+                    json.dumps(
+                        {
+                            **hybrid_payload.model_dump(exclude={"encrypted_pii", "pii_nonce"}),
+                            "encrypted_pii": base64.b64encode(hybrid_payload.encrypted_pii).decode("ascii"),
+                            "pii_nonce": base64.b64encode(hybrid_payload.pii_nonce).decode("ascii"),
+                        },
+                        sort_keys=True,
+                    ).encode()
+                ).hexdigest(),
+            )
 
-        await proof_store.record_idempotency(
-            request.idempotency_key,
-            request.wallet_address,
-            hashlib.sha256(json.dumps(hybrid_payload.model_dump()).encode()).hexdigest(),
-        )
-
-        audit = PersistentAuditLog(db)
-        await audit.append(
-            "proof_generated",
-            _get_vasp_did(),
-            transfer_id,
-            json.dumps({"proof_id": proof_id, "tier": tier}).encode(),
-        )
+            audit = PersistentAuditLog(transaction)
+            await audit.append(
+                "proof_generated",
+                _get_vasp_did(),
+                transfer_id,
+                json.dumps({"proof_id": proof_id, "tier": tier}).encode(),
+            )
 
     # 13. Log to in-memory audit
     _audit_log.append(
@@ -484,7 +497,7 @@ async def verify_proof(
     try:
         valid = await _prover.verify(request.groth16_proof, request.public_signals)
     except Exception:
-        logger.exception("Proof verification failed")
+        logger.error("Proof verification failed")
         raise HTTPException(status_code=503, detail="Proof verification temporarily unavailable")
 
     signals = request.public_signals

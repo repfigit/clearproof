@@ -138,3 +138,59 @@ def test_historical_key_compromise_and_duplicate_scope_cannot_be_bypassed(approv
             RootTrustStore(authorities).verify_historical(signed, evaluated_at=170)
     with pytest.raises(RootTrustError):
         RootTrustStore([approved]).verify_historical(signed, evaluated_at=150, verified_at=149)
+
+
+@pytest.mark.parametrize(
+    "changes,message",
+    [
+        ({"registry_address": "0x" + "00" * 20}, "Root audience must be nonzero"),
+        ({"expires_at": 100}, "validity interval"),
+        ({"expires_at": 86501}, "validity interval"),
+        ({"revision": 2}, "preceding snapshot digest"),
+        ({"previous_digest": "ab" * 32}, "preceding snapshot digest"),
+        ({"kind": "issuance-root"}, "canonical issuer identity"),
+        ({"kind": "issuance-root", "issuer_did": "issuer.example"}, "canonical issuer identity"),
+        ({"issuer_did": "did:web:issuer.example"}, "Only issuance roots"),
+    ],
+)
+def test_root_snapshot_rejects_incoherent_scope_and_validity(approval, changes, message):
+    with pytest.raises(ValueError, match=message):
+        RootSnapshot.model_validate({**approval[2].snapshot.model_dump(), **changes})
+
+
+@pytest.mark.parametrize(
+    "changes,message",
+    [
+        ({"not_before": 500}, "Invalid root authority interval"),
+        ({"kinds": ("issuer-root", "issuer-root")}, "duplicate scope"),
+        ({"issuer_dids": ("did:web:issuer.example", "did:web:issuer.example")}, "Duplicate issuer scope"),
+        ({"issuer_dids": ("issuer.example",)}, "Noncanonical issuer scope"),
+    ],
+)
+def test_root_authority_rejects_ambiguous_configuration(approval, changes, message):
+    with pytest.raises(ValueError, match=message):
+        RootAuthority.model_validate({**approval[1].model_dump(), **changes})
+
+
+@pytest.mark.parametrize("count", [0, 257])
+def test_root_authority_inventory_is_bounded(approval, count):
+    with pytest.raises(ValueError, match="Configure 1–256 root authorities"):
+        RootTrustStore([approval[1]] * count)
+
+
+def test_root_scope_identity_survives_revision_but_separates_deployments(approval):
+    from src.protocol.root_snapshot import root_scope_id
+
+    snapshot = approval[2].snapshot
+    revised = RootSnapshot.model_validate(
+        {
+            **snapshot.model_dump(),
+            "revision": 2,
+            "previous_digest": snapshot.digest,
+            "root": "124",
+        }
+    )
+    assert revised.digest != snapshot.digest
+    assert root_scope_id(revised) == root_scope_id(snapshot)
+    other = RootSnapshot.model_validate({**snapshot.model_dump(), "chain_id": 1})
+    assert root_scope_id(other) != root_scope_id(snapshot)

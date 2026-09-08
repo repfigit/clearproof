@@ -129,3 +129,52 @@ def test_invalid_predicates_fail_even_with_recomputed_commitment(compiled, tmp_p
     changed = TransferProjection(tuple(fields), projection.remainder)
     result = calculate(compiled, tmp_path, changed.witness())
     assert result.returncode != 0 and b"Assert Failed" in result.stderr
+
+
+@pytest.mark.parametrize("size", [0, 31, 33])
+def test_digest_projection_requires_exact_256_bits(size):
+    from src.prover.pilot_projection import hex_limbs
+
+    with pytest.raises(ValueError, match="Expected 32-byte digest"):
+        hex_limbs((b"x" * size).hex())
+
+
+def test_digest_projection_preserves_high_and_low_128_bit_halves():
+    from src.prover.pilot_projection import hex_limbs
+
+    assert hex_limbs("ff" * 16 + "00" * 16) == (2**128 - 1, 0)
+    assert hex_limbs("00" * 16 + "ff" * 16) == (0, 2**128 - 1)
+
+
+@pytest.mark.parametrize("fields", [[], [0] * 48, (0,) * 47, (0,) * 49])
+def test_projection_requires_immutable_exact_field_inventory(fields):
+    with pytest.raises(ValueError, match="Projection requires a 48-field tuple"):
+        TransferProjection(fields, "0")
+
+
+@pytest.mark.parametrize("remainder", [None, True, 0, 1.0])
+def test_projection_remainder_requires_text(remainder):
+    with pytest.raises(ValueError, match="Projection remainder must be a canonical integer string"):
+        TransferProjection((0,) * 48, remainder)
+
+
+@pytest.mark.parametrize("remainder", ["", "-1", "01", "1.0", str(2**128)])
+def test_projection_remainder_rejects_noncanonical_or_out_of_range_integers(remainder):
+    with pytest.raises(ValueError):
+        TransferProjection((0,) * 48, remainder)
+
+
+@pytest.mark.parametrize("value", [True, "1", -1, 2**128])
+def test_projection_rejects_invalid_digest_limb(value):
+    fields = (value,) + (0,) * 47
+    with pytest.raises(ValueError, match="Projection field is outside its integer range"):
+        TransferProjection(fields, "0")
+
+
+def test_projection_values_are_immutable_after_validation():
+    from dataclasses import FrozenInstanceError
+
+    projection = TransferProjection((0,) * 48, "0")
+    with pytest.raises(FrozenInstanceError):
+        projection.fields = ()
+    assert len(projection.fields) == 48

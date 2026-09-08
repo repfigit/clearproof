@@ -190,3 +190,65 @@ def test_real_adversarial_witness(compiled, tmp_path, witness, attack):
     result = calculate(compiled, tmp_path, data)
     assert result.returncode != 0
     assert b"Assert Failed" in result.stderr
+
+
+def test_credential_issuer_requires_canonical_did(credential):
+    with pytest.raises(ValueError, match="Issuer requires canonical did:web identity"):
+        PilotCredential.model_validate({**credential.model_dump(), "issuer_did": "issuer.example"})
+
+
+@pytest.mark.parametrize(
+    "changes,message",
+    [
+        ({"sanctions_clear": False}, "screening or holder binding failed"),
+    ],
+)
+def test_screening_failure_prevents_witness(credential, changes, message):
+    changed = PilotCredential.model_validate({**credential.model_dump(), **changes})
+    with pytest.raises(ValueError, match=message):
+        changed.witness(**witness_args())
+
+
+def witness_args():
+    # Synthetic roots test input validation only, not membership authenticity.
+    return dict(
+        secret="123456",
+        evaluated_at=150,
+        issuance_root="1",
+        authorized_issuer_root="2",
+        issuance_siblings=["0"],
+        issuance_indices=[0],
+        issuer_siblings=["0"],
+        issuer_indices=[0],
+    )
+
+
+@pytest.mark.parametrize("side", ["issuance", "issuer"])
+@pytest.mark.parametrize(
+    "siblings,indices,message",
+    [
+        ((), [0], "Invalid membership path"),
+        (["0"], (), "Invalid membership path"),
+        ([], [], "Invalid membership path"),
+        (["0"] * 33, [0] * 33, "Invalid membership path"),
+        (["0"], [], "Invalid membership direction"),
+        (["0"], [True], "Invalid membership direction"),
+        (["0"], [2], "Invalid membership direction"),
+        (["0"], [0.0], "Invalid membership direction"),
+    ],
+)
+def test_credential_membership_paths_require_bounded_canonical_inputs(credential, side, siblings, indices, message):
+    args = {**witness_args(), f"{side}_siblings": siblings, f"{side}_indices": indices}
+    with pytest.raises(ValueError, match=message):
+        credential.witness(**args)
+
+
+@pytest.mark.parametrize("evaluated_at", [99, 200, True, 150.0])
+def test_credential_witness_requires_current_integer_time(credential, evaluated_at):
+    with pytest.raises(ValueError, match="Credential is outside its validity interval"):
+        credential.witness(**{**witness_args(), "evaluated_at": evaluated_at})
+
+
+def test_wrong_holder_secret_cannot_build_witness(credential):
+    with pytest.raises(ValueError, match="Credential screening or holder binding failed"):
+        credential.witness(**{**witness_args(), "secret": "654321"})

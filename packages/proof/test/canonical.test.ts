@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { canonicalBytes, recordDigest } from '../src/canonical.js';
+import { canonicalBytes, compareCanonicalStrings, recordDigest } from '../src/canonical.js';
 const vectors = JSON.parse(readFileSync(join(__dirname, '../../../specs/fixtures/transfer-v1.json'), 'utf8'));
 describe('canonical private transfer and minimized evidence commitments', () => {
   it.each(vectors.records)('matches Python $domain bytes and digest', (vector: any) => {
@@ -28,4 +28,38 @@ describe('canonical private transfer and minimized evidence commitments', () => 
     for (let i = 0; i < 10; i++) nested = [nested];
     expect(() => canonicalBytes(nested)).toThrow();
   });
+});
+
+it('bounds encoded bytes after JSON escaping expands valid ASCII strings', () => {
+  expect(() => canonicalBytes(Array(16).fill('"'.repeat(4000)))).toThrow('exceeds 64 KiB');
+});
+
+it('rejects invalid domains and object keys before creating a commitment', () => {
+  for (const domain of ['other/transfer/v1', 'clearproof/transfer/v0', 'clearproof/transfer/v1\n']) {
+    expect(() => recordDigest(domain, {})).toThrow('Invalid commitment domain');
+  }
+  for (const key of ['', '\n', 'key\n', 'key\r', 'key\r\n', 'x'.repeat(129)]) {
+    expect(() => canonicalBytes({ [key]: 1 })).toThrow('Invalid canonical record key');
+  }
+});
+
+
+it('uses stable code-unit ordering, including equality, for canonical identifiers', () => {
+  const ordered = ['!', '10', '2', 'A', 'Z', '_', 'a', 'z', '~'];
+  expect([...ordered].reverse().sort(compareCanonicalStrings)).toEqual(ordered);
+  for (let i = 0; i < ordered.length; i++) {
+    for (let j = 0; j < ordered.length; j++) {
+      expect(compareCanonicalStrings(ordered[i], ordered[j])).toBe(Math.sign(i - j));
+    }
+  }
+  expect(['same', 'same'].sort(compareCanonicalStrings)).toEqual(['same', 'same']);
+});
+
+it('bounds object inventory and rejects keys that enumeration would omit', () => {
+  const valid = Object.fromEntries(Array.from({ length: 64 }, (_, i) => [`key${i}`, i]));
+  expect(JSON.parse(canonicalBytes(valid).toString())).toEqual(valid);
+  const hidden = Object.defineProperty({ visible: 1 }, 'hidden', { value: 2, enumerable: false });
+  for (const value of [{ ...valid, extra: 65 }, { visible: 1, [Symbol('hidden')]: 2 }, hidden]) {
+    expect(() => canonicalBytes(value)).toThrow('Invalid canonical object');
+  }
 });

@@ -3,7 +3,10 @@ from __future__ import annotations
 import hashlib
 import logging
 import time
-from typing import Optional
+from collections.abc import Mapping
+from typing import Any, Optional
+
+from psycopg.rows import dict_row
 
 from src.storage.database import Database
 from src.storage.models import StoredAuditEntry
@@ -22,26 +25,31 @@ class PersistentAuditLog:
         transaction_ref: str,
         data: bytes,
     ) -> StoredAuditEntry:
-        prev = await self._get_prev_hash()
-        now = int(time.time())
         data_hash = hashlib.sha256(data).hexdigest()
-        seq = await self._next_sequence()
-
-        entry_hash = StoredAuditEntry.compute_hash(data_hash, prev, seq)
-
-        entry = StoredAuditEntry(
-            sequence_number=seq,
-            timestamp=now,
-            entry_type=entry_type,
-            actor=actor,
-            transaction_ref=transaction_ref,
-            data_hash=data_hash,
-            prev_entry_hash=prev,
-            entry_hash=entry_hash,
-        )
-
         async with self._db.connection() as conn:
             async with conn.cursor() as cur:
+                # Serialize head selection and insertion in the same transaction.
+                # The lock is scoped to this schema's audit table; other schemas
+                # and databases sharing a server remain independent.
+                await cur.execute("LOCK TABLE audit_entries IN SHARE ROW EXCLUSIVE MODE")
+                await cur.execute(
+                    "SELECT sequence_number, entry_hash FROM audit_entries ORDER BY sequence_number DESC LIMIT 1"
+                )
+                head = await cur.fetchone()
+                seq = head[0] + 1 if head else 1
+                prev = head[1] if head else "0" * 64
+                now = int(time.time())
+                entry_hash = StoredAuditEntry.compute_hash(data_hash, prev, seq)
+                entry = StoredAuditEntry(
+                    sequence_number=seq,
+                    timestamp=now,
+                    entry_type=entry_type,
+                    actor=actor,
+                    transaction_ref=transaction_ref,
+                    data_hash=data_hash,
+                    prev_entry_hash=prev,
+                    entry_hash=entry_hash,
+                )
                 await cur.execute(
                     """
                     INSERT INTO audit_entries
@@ -82,7 +90,7 @@ class PersistentAuditLog:
         where = "WHERE " + " AND ".join(conditions) if conditions else ""
 
         async with self._db.connection() as conn:
-            async with conn.cursor() as cur:
+            async with conn.cursor(row_factory=dict_row) as cur:
                 await cur.execute(
                     f"SELECT * FROM audit_entries {where} ORDER BY sequence_number DESC LIMIT %s",
                     [*params, limit],
@@ -99,29 +107,20 @@ class PersistentAuditLog:
                 )
                 rows = await cur.fetchall()
 
+            previous_seq = 0
+            previous_hash = "0" * 64
             for seq, data_hash, stored_prev, stored_hash in rows:
                 if seq > start_seq:
+                    if seq != previous_seq + 1 or stored_prev != previous_hash:
+                        return False
                     expected_hash = StoredAuditEntry.compute_hash(data_hash, stored_prev, seq)
                     if stored_hash != expected_hash:
                         return False
+                previous_seq = seq
+                previous_hash = stored_hash
 
             return True
 
-    async def _get_prev_hash(self) -> str:
-        async with self._db.connection() as conn:
-            async with conn.cursor() as cur:
-                await cur.execute("SELECT entry_hash FROM audit_entries ORDER BY sequence_number DESC LIMIT 1")
-                row = await cur.fetchone()
-                return row[0] if row else "0" * 64
-
-    async def _next_sequence(self) -> int:
-        async with self._db.connection() as conn:
-            async with conn.cursor() as cur:
-                await cur.execute("SELECT COALESCE(MAX(sequence_number), 0) FROM audit_entries")
-                row = await cur.fetchone()
-                return (row[0] or 0) + 1
-
     @staticmethod
-    def _row_to_entry(row) -> StoredAuditEntry:
-        columns = [desc[0] for desc in row.cursor.description]
-        return StoredAuditEntry(**dict(zip(columns, row)))
+    def _row_to_entry(row: Mapping[str, Any]) -> StoredAuditEntry:
+        return StoredAuditEntry.model_validate(row)

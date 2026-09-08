@@ -53,7 +53,7 @@ def main():
         "--prepared-ptau", type=Path, help="Explicit local development input; never production approval"
     )
     args = parser.parse_args()
-    output = args.output.resolve()
+    output = args.output.absolute()
     # Refuse reuse or overwrite, including existing symlinks.
     output.mkdir(parents=True, exist_ok=False)
     node = shutil.which("node")
@@ -185,8 +185,14 @@ def main():
         "-m",
         "pytest",
         "tests/integration/test_pilot_pairing.py",
+        "tests/integration/test_legacy_verifier.py",
+        "tests/integration/test_api_real_circuit.py",
         "-q",
-        env={**os.environ, "CLEARPROOF_PILOT_TEST_ARTIFACTS": str(pilot)},
+        env={
+            **os.environ,
+            "CLEARPROOF_PILOT_TEST_ARTIFACTS": str(pilot),
+            "CLEARPROOF_LEGACY_TEST_ARTIFACTS": str(output / "legacy"),
+        },
     )
     # Exercise the same fresh eight-signal proof on the local EVM. Never deploy to
     # a configured remote network and never copy development keys into source.

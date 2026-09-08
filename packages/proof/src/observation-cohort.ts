@@ -1,6 +1,6 @@
 /** Selected-cohort response consistency; the authenticated API remains the trust boundary. */
 import { requestReport } from './api-client.js';
-import { recordDigest } from './canonical.js';
+import { compareCanonicalStrings, recordDigest } from './canonical.js';
 import type { ObservedPolicy } from './observation.js';
 
 type Outcome = ObservedPolicy['outcome'];
@@ -43,7 +43,7 @@ export function normalizeCohort(v: unknown): ObservationCohortRequest {
     return { case_id: c.case_id as string, observation_id: c.observation_id as string | null,
       baseline_outcome: (c.baseline_outcome ?? null) as Outcome | null };
   });
-  cases.sort((a, b) => a.case_id < b.case_id ? -1 : a.case_id > b.case_id ? 1 : 0);
+  cases.sort((a, b) => compareCanonicalStrings(a.case_id, b.case_id));
   return { cohort_id: v.cohort_id as string, cases };
 }
 export function validateCohortReport(v: unknown, input: unknown): ObservationCohortReport {

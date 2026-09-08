@@ -6,9 +6,15 @@ rather than against itself.
 """
 
 import hashlib
+import json
+import runpy
+import subprocess
+import sys
+from pathlib import Path
 
 import pytest
 
+from scripts import l2_cost_model as model
 from scripts.l2_cost_model import (
     ARBITRUM_TX_OVERHEAD_BYTES,
     CHAINS,
@@ -55,6 +61,13 @@ class TestFastLZ:
 
     def test_empty(self):
         assert flz_compress_len(b"") == 0
+
+    def test_adjacent_run_matches_do_not_require_an_intervening_literal(self):
+        # Three runs force another match immediately after the preceding match.
+        # Renaming the two distinct byte symbols preserves the match structure.
+        for first, second in ((b"a", b"b"), (b"\x00", b"\xff"), (b"x", b"y")):
+            payload = first * 16 + second * 16 + first * 16
+            assert flz_compress_len(payload) == 20
 
     def test_sixteen_extra_proof_words_cost_exactly_528_bytes(self):
         """The Groth16 → fflonk delta is 16 field elements. They are uniform
@@ -167,3 +180,118 @@ class TestCostBreakdown:
         above = FeeRegime("above", self.regime.l1_base_fee_gwei, crossover, 3000)
         assert cost(fflonk, base, below).total_wei < cost(groth16, base, below).total_wei
         assert cost(fflonk, base, above).total_wei >= cost(groth16, base, above).total_wei
+
+
+@pytest.mark.parametrize("gas,expected", [(100, 0), (101, 0), (50, None)])
+def test_identical_payload_crossover_is_zero_or_never(gas, expected):
+    baseline = ProofSystem("baseline", 100, b"same payload")
+    challenger = ProofSystem("challenger", gas, b"same payload")
+    regime = FeeRegime("synthetic", 1, 100, 3000)
+    for chain in CHAINS:
+        assert breakeven_blob_base_fee(baseline, challenger, chain, regime) == expected
+        assert breakeven_l1_base_fee_gwei(baseline, challenger, chain) == expected
+
+
+def test_unknown_chain_rejected_and_zero_cost_has_zero_share():
+    proof = ProofSystem("synthetic", 0, b"")
+    regime = FeeRegime("zero", 0, 0, 3000)
+    result = cost(proof, CHAINS[0], regime)
+    assert result.total_wei == 0
+    assert result.total_usd(3000) == 0
+    assert result.l1_share == 0
+    with pytest.raises(ValueError, match="unknown chain kind 'unsupported'"):
+        cost(proof, Chain("unknown", "unsupported", 1), regime)
+
+
+@pytest.mark.parametrize(
+    "gas,label,ratio", [(50, "never | never | —", "0.50×"), (200, "already inverted | 0.0 gwei | —", "2.00×")]
+)
+def test_markdown_distinguishes_never_and_already_inverted(gas, label, ratio):
+    systems = [ProofSystem("groth16", 100, b"same"), ProofSystem("fflonk", gas, b"same")]
+    chain = Chain("synthetic", "op-stack", 1, base_fee_scalar=0, blob_base_fee_scalar=0)
+    report = model.markdown(systems, [chain], [FeeRegime("synthetic regime", 1, 1, 3000)])
+    assert "#### synthetic regime" in report
+    assert "| baseline |" in report
+    assert f"| {ratio} |" in report
+    assert f"| synthetic | {label} |" in report
+    assert "thresholds are conditional" in report
+
+
+def test_placeholder_transactions_are_deterministic_and_explicitly_warn(capsys):
+    systems = model.load_systems(None)
+    assert "placeholder transactions" in capsys.readouterr().err
+    assert [len(system.signed_tx) for system in systems] == [886, 1398]
+    assert [system.execution_gas for system in systems] == [341504, 232646]
+    assert systems == model.load_systems(None)
+    assert systems[0].signed_tx != systems[1].signed_tx[:886]
+
+
+def test_historical_markdown_contains_finite_sensitivity_thresholds(capsys):
+    report = model.markdown(model.load_systems(None), CHAINS, model.REGIMES)
+    capsys.readouterr()
+    thresholds = report.split("#### Inversion thresholds", 1)[1]
+    assert "never" not in thresholds
+    assert "already inverted" not in thresholds
+    for chain in CHAINS:
+        row = next(line for line in thresholds.splitlines() if line.startswith(f"| {chain.name} |"))
+        cells = [cell.strip() for cell in row.split("|")[2:-1]]
+        assert int(cells[0].removesuffix(" wei").replace(",", "")) > 0
+        assert float(cells[1].removesuffix(" gwei")) > 0
+        assert int(cells[2].removesuffix("×")) > 1
+
+
+@pytest.fixture
+def measured_inputs(tmp_path):
+    path = tmp_path / "synthetic-measured-inputs.json"
+    path.write_text(json.dumps({
+        "groth16": {"execution_gas": 100, "signed_tx": {"hex": "0x010203"}},
+        "fflonk": {"execution_gas": 50, "signed_tx": {"hex": "0x040506"}},
+    }))
+    return path
+
+
+@pytest.mark.parametrize("format_name", ["json", "markdown"])
+def test_main_reports_loaded_measurements_in_each_format(measured_inputs, monkeypatch, capsys, format_name):
+    monkeypatch.setattr(sys, "argv", ["l2_cost_model.py", "--inputs", str(measured_inputs), "--format", format_name])
+    runpy.run_path(model.__file__, run_name="__main__")
+    output = capsys.readouterr()
+    assert output.err == ""
+    if format_name == "json":
+        rows = json.loads(output.out)
+        assert len(rows) == 18
+        assert {(row["chain"], row["regime"], row["system"]) for row in rows} == {
+            (chain.name, regime.name, system)
+            for chain in CHAINS for regime in model.REGIMES for system in ("groth16", "fflonk")
+        }
+        for row in rows:
+            assert row["execution_gas"] == (100 if row["system"] == "groth16" else 50)
+            assert row["total_wei"] == row["execution_wei"] + row["l1_wei"]
+            assert row["total_usd"] == row["total_wei"] / 10**18 * model.ETH_USD
+    else:
+        assert "groth16: 100 gas, 3 B signed tx, 4 B after FastLZ" in output.out
+        assert "fflonk: 50 gas, 3 B signed tx, 4 B after FastLZ" in output.out
+        assert output.out.count("#### Inversion thresholds") == 1
+        for regime in model.REGIMES:
+            assert f"#### {regime.name}" in output.out
+
+
+def test_loaded_measurements_keep_exact_bytes_and_do_not_warn(measured_inputs, capsys):
+    systems = model.load_systems(str(measured_inputs))
+    assert systems == [ProofSystem("groth16", 100, b"\x01\x02\x03"), ProofSystem("fflonk", 50, b"\x04\x05\x06")]
+    assert capsys.readouterr().err == ""
+
+
+def test_cli_from_foreign_directory_emits_json_and_rejects_unknown_format(tmp_path):
+    script = str(Path(model.__file__).resolve())
+    result = subprocess.run(
+        [sys.executable, script, "--format", "json"], cwd=tmp_path, capture_output=True, text=True, timeout=30
+    )
+    assert result.returncode == 0
+    assert len(json.loads(result.stdout)) == 18
+    assert "placeholder transactions" in result.stderr
+    bad = subprocess.run(
+        [sys.executable, script, "--format", "xml"], cwd=tmp_path, capture_output=True, text=True, timeout=30
+    )
+    assert bad.returncode == 2
+    assert bad.stdout == ""
+    assert "invalid choice" in bad.stderr

@@ -74,7 +74,7 @@ describe('shared Python publishing and Node consuming profile', () => {
 describe('real TLS, DNS pinning and caches', () => {
   let directory: string, server: Server, ca: string, authority: string;
   let requests: { host?: string; sni: string; path?: string }[];
-  let status: number, body: Buffer | undefined, encoding: string, contentType: string, delay: number;
+  let status: number, body: Buffer | undefined, encoding: string | undefined, contentType: string, delay: number;
   let doc: typeof document;
   const resolver = vi.fn(async () => ['127.0.0.1']);
   const options = () => ({ resolver, ca, privateDestinations: { [authority]: ['127.0.0.1/32'] }, cacheTtlMs: 0 });
@@ -88,7 +88,7 @@ describe('real TLS, DNS pinning and caches', () => {
       requests.push({ host: request.headers.host, sni: (request.socket as TLSSocket).servername, path: request.url });
       const send = () => {
         if (response.destroyed) return;
-        response.writeHead(status, { 'Content-Type': contentType, 'Content-Encoding': encoding,
+        response.writeHead(status, { 'Content-Type': contentType, ...(encoding === undefined ? {} : { 'Content-Encoding': encoding }),
           Location: 'https://169.254.169.254/credentials' });
         response.end(body ?? JSON.stringify(doc));
       };
@@ -119,6 +119,22 @@ describe('real TLS, DNS pinning and caches', () => {
     expect(requests).toEqual([{ host: authority, sni: 'beneficiary.example', path: '/.well-known/clearproof.json' }]);
     expect(resolver).toHaveBeenCalledTimes(1);
     expect(await supportsChain(authority, 11155111, options())).toBe(true);
+  });
+  it('accepts an uncompressed response without a Content-Encoding header', async () => {
+    encoding = undefined;
+    expect(await new DiscoveryClient(options()).discover(authority)).toEqual(doc);
+    expect(requests).toHaveLength(1);
+  });
+  it('does not connect when DNS completes after the request deadline', async () => {
+    let release!: (addresses: string[]) => void;
+    const pending = new Promise<string[]>(resolve => { release = resolve; });
+    const client = new DiscoveryClient({ ...options(), timeoutMs: 10, resolver: () => pending });
+    await expect(client.discover(authority)).rejects.toMatchObject({ code: 'unavailable' });
+    release(['127.0.0.1']);
+    await new Promise<void>(resolve => setImmediate(resolve));
+    expect(requests).toHaveLength(0);
+    expect(await new DiscoveryClient(options()).discover(authority)).toEqual(doc);
+    expect(requests).toHaveLength(1);
   });
   it('blocks rebinding after a successful fetch', async () => {
     const client = new DiscoveryClient(options());
@@ -174,6 +190,25 @@ describe('real TLS, DNS pinning and caches', () => {
     status = 200; await a.discover(authority);
     expect(requests).toHaveLength(4);
   });
+  it('evicts the least recently used identity after 128 cached documents', async () => {
+    const client = new DiscoveryClient({ ...options(), cacheTtlMs: 300000 });
+    const ids = Array.from({ length: 129 }, (_, i) => `${parseTarget(authority).did}:vasp${i}`);
+    for (const did of ids.slice(0, 128)) {
+      doc.vasp.did = did;
+      expect((await client.discover(did)).vasp.did).toBe(did);
+    }
+    expect(requests).toHaveLength(128);
+    expect((await client.discover(ids[0])).vasp.did).toBe(ids[0]);
+    expect(requests).toHaveLength(128);
+    doc.vasp.did = ids[128];
+    await client.discover(ids[128]);
+    expect(requests).toHaveLength(129);
+    for (const did of [ids[0], ids[2]]) expect((await client.discover(did)).vasp.did).toBe(did);
+    expect(requests).toHaveLength(129);
+    doc.vasp.did = ids[1];
+    expect((await client.discover(ids[1])).vasp.did).toBe(ids[1]);
+    expect(requests).toHaveLength(130);
+  });
   it('fences in-flight writes on rotation; slow replies cannot extend TTL', async () => {
     let release!: (addresses: string[]) => void;
     const deferred = new Promise<string[]>(resolve => { release = resolve; });
@@ -187,4 +222,19 @@ describe('real TLS, DNS pinning and caches', () => {
     await slow.discover(authority); await slow.discover(authority);
     expect(requests).toHaveLength(4);
   });
+});
+
+it('preserves validated DID identity across canonical hosts, ports and paths', () => {
+  for (const host of ['a.example', 'a-b.sub.example', 'xn--bcher-kva.example']) {
+    for (const port of [undefined, 1, 65535]) {
+      for (const path of ['', ':vasps:EU', ':a_b:c.d-e', ':8443']) {
+        const authority = port === undefined ? host : `${host}:${port}`;
+        const did = 'did:web:' + authority.replaceAll(':', '%3A') + path;
+        const target = parseTarget(did);
+        expect(target).toEqual({ did, authority, host, port: port ?? 443,
+          url: `https://${authority}/.well-known/clearproof.json` });
+        expect(parseTarget(target.did)).toEqual(target);
+      }
+    }
+  }
 });

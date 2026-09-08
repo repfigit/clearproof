@@ -1,7 +1,10 @@
 from __future__ import annotations
 
 import logging
-from typing import Optional
+from collections.abc import Mapping
+from typing import Any, Optional
+
+from psycopg.rows import dict_row
 
 from src.storage.database import Database
 from src.storage.models import StoredSanctionsRoot
@@ -15,18 +18,19 @@ class SanctionsStore:
 
     async def get_current(self) -> Optional[StoredSanctionsRoot]:
         async with self._db.connection() as conn:
-            async with conn.cursor() as cur:
+            async with conn.cursor(row_factory=dict_row) as cur:
                 await cur.execute(
-                    "SELECT * FROM sanctions_roots WHERE is_current = TRUE ORDER BY updated_at DESC LIMIT 1"
+                    "SELECT * FROM sanctions_roots WHERE is_current = TRUE "
+                    "ORDER BY updated_at DESC, root_id DESC LIMIT 1"
                 )
                 row = await cur.fetchone()
                 return self._row_to_root(row) if row else None
 
     async def get_latest(self, limit: int = 10) -> list[StoredSanctionsRoot]:
         async with self._db.connection() as conn:
-            async with conn.cursor() as cur:
+            async with conn.cursor(row_factory=dict_row) as cur:
                 await cur.execute(
-                    "SELECT * FROM sanctions_roots ORDER BY updated_at DESC LIMIT %s",
+                    "SELECT * FROM sanctions_roots ORDER BY updated_at DESC, root_id DESC LIMIT %s",
                     (limit,),
                 )
                 rows = await cur.fetchall()
@@ -39,7 +43,7 @@ class SanctionsStore:
         source: str,
     ) -> StoredSanctionsRoot:
         async with self._db.connection() as conn:
-            async with conn.cursor() as cur:
+            async with conn.cursor(row_factory=dict_row) as cur:
                 await cur.execute("UPDATE sanctions_roots SET is_current = FALSE WHERE is_current = TRUE")
                 await cur.execute(
                     """
@@ -53,6 +57,5 @@ class SanctionsStore:
                 return self._row_to_root(row)
 
     @staticmethod
-    def _row_to_root(row) -> StoredSanctionsRoot:
-        columns = [desc[0] for desc in row.cursor.description]
-        return StoredSanctionsRoot(**dict(zip(columns, row)))
+    def _row_to_root(row: Mapping[str, Any]) -> StoredSanctionsRoot:
+        return StoredSanctionsRoot.model_validate({**row, "updated_at": int(row["updated_at"].timestamp())})

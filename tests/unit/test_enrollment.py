@@ -95,3 +95,22 @@ def test_signature_canonicality_and_issuer_role(enrollment):
         with pytest.raises(HTTPException) as err:
             verify(consent, unauthorized, signature)
         assert err.value.status_code == 403
+
+
+@pytest.mark.parametrize("offset", [0, 601])
+def test_consent_must_expire_within_ten_minutes(enrollment, offset):
+    consent = enrollment[0]
+    with pytest.raises(ValueError, match="Enrollment consent must expire within ten minutes"):
+        EnrollmentConsent.model_validate(
+            {**consent.model_dump(), "consent_expires_at": consent.credential.issued_at + offset}
+        )
+
+
+def test_consent_cannot_outlive_credential_or_use_zero_registry(enrollment):
+    consent = enrollment[0]
+    values = consent.model_dump()
+    values["credential"]["expires_at"] = consent.consent_expires_at - 1
+    with pytest.raises(ValueError, match="Invalid enrollment audience or expiry"):
+        EnrollmentConsent.model_validate(values)
+    with pytest.raises(ValueError, match="Invalid enrollment audience or expiry"):
+        EnrollmentConsent.model_validate({**consent.model_dump(), "registry_address": "0x" + "00" * 20})
