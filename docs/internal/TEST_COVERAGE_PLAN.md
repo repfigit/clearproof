@@ -1096,3 +1096,17 @@ still need completion and final merged-main verification.
 - Full repository coverage remains incomplete. Checkpoint 54 is the latest full
   Python measurement; other Python paths, SDK, Solidity, MDX/browser, operational
   scripts and final remote CI/merge verification remain outstanding.
+
+## Fifty-ninth checkpoint
+
+- Added 15 registrar cases for issuer inventories, revision and lifetime bounds,
+  retained source reuse and conflicting-source rollback using real PostgreSQL
+  and encrypted storage. A conflict leaves both root collections empty and the
+  original source unchanged; exact source reuse and idempotent retry succeed.
+- All 16 selected tests pass in 12.88 seconds; registrar measures 69/69
+  statements and 20/20 branches (`registrar-complete.log`/`.data`).
+  The other 132 storage tests were deselected. Ruff/whitespace pass; owned
+  PostgreSQL stopped. No production source changed.
+- Full repository coverage remains incomplete; checkpoint 54 remains the last
+  full Python report. Other Python paths, SDK, Solidity, MDX/browser, scripts
+  and remote CI/merge verification remain outstanding.

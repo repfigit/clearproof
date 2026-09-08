@@ -5657,3 +5657,112 @@ async def test_authorization_capture_pins_record_revision_across_later_update(ca
     assert hashlib.sha256(canonical_bytes(retained.value)).hexdigest() == reference["sha256"]
     assert hashlib.sha256(canonical_bytes(current.value)).hexdigest() != reference["sha256"]
     assert await target.get("authorization-evidence", identity) == manifest
+
+
+@pytest.fixture
+def registrar_case(db):
+    from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
+
+    from src.protocol.root_snapshot import RootAuthority, RootTrustStore
+    from src.services.registrar import PilotRegistrar
+
+    key = Ed25519PrivateKey.generate()
+    issuer = "did:web:synthetic.example"
+    principal = Principal(
+        tenant_id="tenant-a",
+        actor_id="synthetic-registrar",
+        roles=("tenant:admin", "credential:issue", "evidence:decrypt"),
+        issuer_dids=(issuer,),
+    )
+    authority = RootAuthority(
+        public_key=key.public_key().public_bytes_raw().hex(),
+        tenant_id=principal.tenant_id,
+        chain_id=31337,
+        registry_address="0x" + "12" * 20,
+        kinds=("issuance-root", "issuer-root"),
+        issuer_dids=(issuer,),
+        not_before=1,
+        not_after=1000,
+    )
+
+    def construct(issuers=(issuer,)):
+        return PilotRegistrar(
+            db,
+            cipher(),
+            principal,
+            RootTrustStore([authority]),
+            key,
+            issuers=issuers,
+            chain_id=31337,
+            registry_address=authority.registry_address,
+        )
+
+    return construct, authority
+
+
+@pytest.mark.parametrize("inventory", ["empty", "list", "duplicate", "overflow"])
+async def test_registrar_rejects_invalid_issuer_inventory(registrar_case, inventory):
+    construct, authority = registrar_case
+    issuer = authority.issuer_dids[0]
+    values = {
+        "empty": (),
+        "list": [issuer],
+        "duplicate": (issuer, issuer),
+        "overflow": tuple(f"did:web:synthetic-{index}.example" for index in range(17)),
+    }
+    with pytest.raises(ValueError, match="1–16 unique issuer identities"):
+        construct(values[inventory])
+
+
+@pytest.mark.parametrize("revision", [True, "0", -1, 2**53 - 1, 2**53])
+async def test_registrar_rejects_invalid_expected_revision_before_writing(registrar_case, revision):
+    construct, _ = registrar_case
+    service = construct()
+    with pytest.raises(ValueError, match="nonnegative safe integer"):
+        await service.refresh(expected_revision=revision, idempotency_key="synthetic-refresh", now=100)
+    async with service._store.transaction() as tx:
+        assert await tx.record_ids("issuance-root") == []
+        assert await tx.record_ids("issuer-root") == []
+        assert await tx.record_ids("root-source") == []
+
+
+@pytest.mark.parametrize("ttl", [True, "300", 0, 86401])
+async def test_registrar_rejects_invalid_approval_lifetime_before_writing(registrar_case, ttl):
+    construct, _ = registrar_case
+    service = construct()
+    with pytest.raises(ValueError, match="1–86400 seconds"):
+        await service.refresh(expected_revision=0, idempotency_key="synthetic-refresh", now=100, ttl=ttl)
+    async with service._store.transaction() as tx:
+        assert await tx.record_ids("issuance-root") == []
+        assert await tx.record_ids("issuer-root") == []
+        assert await tx.record_ids("root-source") == []
+
+
+@pytest.mark.parametrize("conflict", [False, True])
+async def test_registrar_reuses_exact_source_or_rolls_back_collision(registrar_case, conflict):
+    from src.services.issuance_tree import build_issuance_tree
+
+    construct, authority = registrar_case
+    service = construct()
+    async with service._store.transaction() as tx:
+        candidate = await build_issuance_tree(
+            tx,
+            issuer_did=authority.issuer_dids[0],
+            chain_id=authority.chain_id,
+            registry_address=authority.registry_address,
+            now=100,
+        )
+        retained = {"fixture": "synthetic-conflicting-source"} if conflict else candidate.source
+        await tx.put("root-source", candidate.source_digest, retained)
+    if conflict:
+        with pytest.raises(RecordConflict, match="Root source digest collision or inconsistent record"):
+            await service.refresh(expected_revision=0, idempotency_key="synthetic-refresh", now=100)
+        async with service._store.transaction() as tx:
+            assert await tx.record_ids("issuance-root") == []
+            assert await tx.record_ids("issuer-root") == []
+            assert await tx.record_ids("root-source") == [candidate.source_digest]
+    else:
+        first = await service.refresh(expected_revision=0, idempotency_key="synthetic-refresh", now=100)
+        assert first["revision"] == 1
+        assert await service.refresh(expected_revision=0, idempotency_key="synthetic-refresh", now=101) == first
+    assert await service._store.get("root-source", candidate.source_digest) == retained
