@@ -211,3 +211,66 @@ async def test_unavailable_or_invalid_chain_observation_is_unverified(
     assert "groth16_invalid" in response.rejection_reasons
     assert response.compliance_attestations["jurisdiction_matches_vasp"] is None
     assert response.compliance_attestations["jurisdiction_observation"] == "unverified"
+
+
+async def test_invalid_envelope_mode_fails_before_discovery(route, request_data, monkeypatch):
+    from fastapi import HTTPException
+
+    from src.protocol import discovery
+
+    resolver = AsyncMock()
+    monkeypatch.setattr(discovery, "resolve_hpke_public_key", resolver)
+    monkeypatch.setenv("PII_ENVELOPE_MODE", "unsupported")
+    with pytest.raises(HTTPException) as error:
+        await route._resolve_recipient_key(request_data)
+    assert error.value.status_code == 503
+    resolver.assert_not_awaited()
+
+
+@pytest.mark.parametrize("resolved", [None, b"k" * 32])
+async def test_recipient_discovery_requires_key_and_preserves_success(route, request_data, monkeypatch, resolved):
+    from fastapi import HTTPException
+
+    from src.protocol import discovery
+
+    monkeypatch.setenv("PII_ENVELOPE_MODE", "hpke-v2")
+    monkeypatch.setenv("HPKE_DISCOVERY_ENABLED", "1")
+    monkeypatch.delenv("BENEFICIARY_HPKE_PUBLIC_KEY", raising=False)
+    request_data.destination_vasp_did = "did:web:synthetic.example"
+    resolver = AsyncMock(return_value=resolved)
+    monkeypatch.setattr(discovery, "resolve_hpke_public_key", resolver)
+    if resolved is None:
+        with pytest.raises(HTTPException) as error:
+            await route._resolve_recipient_key(request_data)
+        assert error.value.status_code == 422
+        assert "invalid or unsupported" in error.value.detail
+    else:
+        assert await route._resolve_recipient_key(request_data) == resolved
+    resolver.assert_awaited_once_with(request_data.destination_vasp_did)
+
+
+def test_missing_verification_key_reports_required_artifact(route, monkeypatch, tmp_path):
+    monkeypatch.setenv("CIRCUIT_ARTIFACTS_DIR", str(tmp_path))
+    with pytest.raises(RuntimeError, match="Circuit artifacts must be compiled"):
+        route._load_vk()
+
+
+def test_jurisdiction_encoding_rejects_scalar_overflow(route):
+    assert route._encode_jurisdiction("us") == int.from_bytes(b"US", "big")
+    with pytest.raises(ValueError, match="overflows BN128 scalar field"):
+        route._encode_jurisdiction("Z" * 32)
+
+
+async def test_unbuilt_sanctions_tree_stops_before_proving(route, request_data, monkeypatch):
+    credential = SimpleNamespace(revoked=False, expires_at=2000, issuer_did="did:web:synthetic.example")
+    registry = SimpleNamespace(get=Mock(return_value=credential), get_commitment=Mock(return_value="123"))
+    monkeypatch.setattr(route, "_get_db", lambda _app: None)
+    monkeypatch.setattr(route.time, "time", lambda: 1000)
+    monkeypatch.setattr(route, "_resolve_recipient_key", AsyncMock(return_value=b"k" * 32))
+    monkeypatch.setattr(route.SanctionsMerkleTree, "load", Mock(return_value=SimpleNamespace(root=None)))
+    monkeypatch.setattr(route, "_hash_wallet", AsyncMock(return_value="123"))
+    prover = AsyncMock()
+    monkeypatch.setattr(route._prover, "fullprove", prover)
+    with pytest.raises(RuntimeError, match="Sanctions tree not built"):
+        await route.generate_proof(request_data, SimpleNamespace(app=None), _cred_registry=registry)
+    prover.assert_not_awaited()

@@ -336,9 +336,13 @@ async def test_credential_revoke_already_revoked(client: AsyncClient, mock_regis
 
 
 @pytest.mark.asyncio
-async def test_proof_generate_explicit_legacy_mode(client: AsyncClient, mock_registry, monkeypatch):
+@pytest.mark.parametrize("domain,expected_domain", [("", 0), ("abcdef1234567890fedcba", 0xABCDEF1234567890)])
+async def test_proof_generate_explicit_legacy_mode(
+    client: AsyncClient, mock_registry, monkeypatch, domain, expected_domain
+):
     """Legacy encryption is available only through explicit operator selection."""
     monkeypatch.setenv("PII_ENVELOPE_MODE", "legacy-v1")
+    monkeypatch.setenv("DOMAIN_CONTRACT_HASH", domain)
     monkeypatch.delenv("BENEFICIARY_HPKE_PUBLIC_KEY", raising=False)
     mock_credential = MagicMock()
     mock_credential.revoked = False
@@ -406,6 +410,7 @@ async def test_proof_generate_explicit_legacy_mode(client: AsyncClient, mock_reg
         assert "encrypted_pii" in body
         assert body["compliance_proof"]["jurisdiction"] == "US"
         mock_fullprove.assert_called_once()
+        assert mock_fullprove.call_args.args[0]["domain_contract_hash"] == str(expected_domain)
 
 
 @pytest.mark.asyncio

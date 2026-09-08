@@ -1234,3 +1234,20 @@ still need completion and final merged-main verification.
 - Full repository coverage remains incomplete; checkpoint 54 is the last full
   Python measurement. Proof-route gaps, other Python paths, SDK, Solidity,
   MDX/browser, operational scripts and remote CI/merge verification remain.
+
+## Sixty-eighth checkpoint
+
+- Added six proof-route cases for invalid envelope configuration before discovery,
+  absent/successful discovery keys, missing verification-key artifacts,
+  jurisdiction scalar overflow and an unbuilt sanctions tree before proving.
+  Extended the legacy HTTP generation case to verify empty and explicit domain
+  configuration at the prover's decimal-string input boundary.
+- All 49 selected API/route tests pass in 4.15 seconds
+  (`proof-route-boundaries.log`/`.data`). This narrow report covers 228/256
+  statements and leaves six partial branches; durable database and real-artifact
+  paths covered by broader suites were not run here. No full module coverage
+  claim is made. Ruff/format/whitespace pass; no production source changed.
+- The unused transfer-hash helper remains unexecuted in the last full report.
+  A refreshed complete Python run is needed to consolidate checkpoints 55–68
+  before selecting the remaining gaps. Full repository coverage, other source
+  workspaces, operational coverage and remote CI/merge verification remain open.
