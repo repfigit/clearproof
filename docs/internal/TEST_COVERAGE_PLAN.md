@@ -1922,3 +1922,22 @@ still need completion and final merged-main verification.
   whitespace pass. This source change is local, not a deployed-contract upgrade.
 - Other contract/Python/generated, workspace/operational and remote CI/merge
   requirements remain incomplete; the full repository goal stays open.
+
+## One hundred and sixth checkpoint
+
+- Added current-registry constructor/publisher checks and 13 malformed head-update
+  cases: missing scope/digest, future/expired/oversized validity, scalar bound,
+  wrong expected revision and invalid values for non-root/authorization kinds.
+  Unauthorized calls preserve publisher configuration and rejected publication
+  leaves no new head or event. Accepted scalar limits, monotonic time and disabled
+  replacement state are verified through actual contract calls.
+- All 19 dedicated current-registry tests pass with real development artifacts:
+  normally in 11 seconds, instrumented in 23 seconds and after normal restoration
+  in 12 seconds. Current-registry coverage is 100% lines/statements/functions and
+  68.49% branches (`current-head-boundaries-instrumented.log` and preserved `.json`,
+  `current-head-boundaries-restored-normal.log`). Statement/pin/currentness and
+  other defensive branches still require tests; other contracts are partial in
+  this focused report.
+- TypeScript and whitespace pass; generated bindings match committed normal
+  bytecode. No production source changed. Remaining contract/Python/generated,
+  workspace/operational and remote CI/merge requirements keep the full goal open.

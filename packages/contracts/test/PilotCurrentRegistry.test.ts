@@ -61,6 +61,68 @@ const g2 = (p: string[][]): [G1, G1] => [[p[0][1], p[0][0]], [p[1][1], p[1][0]]]
     return { registry, pairing, tenant, publisher, consumer, outsider, statement, id, pins, bundle, a, b, c, signals, approve, receiptId };
   }
 
+  it("rejects invalid constructor dependencies and unauthorized publisher configuration", async function () {
+    const { registry, pairing, tenant, publisher, outsider } = await loadFixture(fixture);
+    const [admin] = await ethers.getSigners();
+    const Factory = await ethers.getContractFactory("PilotCurrentRegistry");
+    for (const [authority, target] of [
+      [ethers.ZeroAddress, await pairing.getAddress()],
+      [admin.address, ethers.ZeroAddress],
+      [admin.address, outsider.address],
+    ]) {
+      await expect(Factory.deploy(authority, target)).to.be.revertedWithCustomError(Factory, "InvalidScope");
+    }
+    await expect(registry.setPublisher(ethers.ZeroHash, publisher.address))
+      .to.be.revertedWithCustomError(registry, "InvalidScope");
+    await expect(registry.connect(outsider).setPublisher(tenant, outsider.address))
+      .to.be.revertedWithCustomError(registry, "AccessControlUnauthorizedAccount")
+      .withArgs(outsider.address, await registry.DEFAULT_ADMIN_ROLE());
+    expect(await registry.publishers(tenant)).to.equal(publisher.address);
+    expect(await registry.publisherEpochs(tenant)).to.equal(1);
+  });
+
+  it("rejects malformed head updates without altering existing checkpoints", async function () {
+    const { registry, tenant, publisher, outsider } = await loadFixture(fixture);
+    const now = BigInt(await time.latest());
+    const base = {
+      kind: 0, scope: ethers.id("synthetic-boundary-scope"), digest: ethers.id("synthetic-boundary-digest"),
+      value: 123n, expected: 0n, from: now, until: now + 300n,
+    };
+    const field = 21888242871839275222246405745257275088548364400416034343698204186575808495617n;
+    const invalid = [
+      { ...base, scope: ethers.ZeroHash }, { ...base, digest: ethers.ZeroHash },
+      { ...base, from: now + 10000n }, { ...base, until: now },
+      { ...base, until: 9007199254740992n }, { ...base, until: now + 86401n },
+      { ...base, value: field }, { ...base, expected: 1n },
+      ...[3, 4, 5, 6].map(kind => ({ ...base, kind, value: 1n })),
+      { ...base, kind: 7, value: 2n },
+    ];
+    const before = await registry.queryFilter(registry.filters.HeadPublished());
+    for (const candidate of invalid) {
+      await expect(registry.connect(publisher).publishHead(
+        tenant, candidate.kind, candidate.scope, candidate.digest, candidate.value,
+        candidate.expected, candidate.from, candidate.until, true,
+      )).to.be.revertedWithCustomError(registry, "InvalidState");
+      expect((await registry.head(tenant, candidate.kind, candidate.scope)).revision).to.equal(0);
+    }
+    await expect(registry.connect(outsider).publishHead(
+      tenant, 0, base.scope, base.digest, 123, 0, now, now + 300n, true,
+    )).to.be.revertedWithCustomError(registry, "UnauthorizedPublisher");
+    expect(await registry.queryFilter(registry.filters.HeadPublished())).to.have.length(before.length);
+    await registry.connect(publisher).publishHead(tenant, 0, base.scope, base.digest, field - 1n, 0, now, now + 300n, true);
+    const retained = await registry.head(tenant, 0, base.scope);
+    expect(retained.value).to.equal(field - 1n);
+    await expect(registry.connect(publisher).publishHead(
+      tenant, 0, base.scope, ethers.id("backdated"), 0, 1, now - 1n, now + 300n, true,
+    )).to.be.revertedWithCustomError(registry, "InvalidState");
+    expect(await registry.head(tenant, 0, base.scope)).to.deep.equal(retained);
+    await registry.connect(publisher).publishHead(tenant, 0, base.scope, base.digest, 0, 1, now, now + 300n, false);
+    const disabled = await registry.head(tenant, 0, base.scope);
+    expect(disabled.value).to.equal(0);
+    expect(disabled.revision).to.equal(2);
+    expect(disabled.enabled).to.equal(false);
+  });
+
   it("inspects read-only, then mirrors only the approved receipt with its designated caller", async function () {
     const { registry, tenant, consumer, outsider, id, a, b, c, signals, approve, receiptId } = await loadFixture(fixture);
     expect(await registry.inspect(tenant, id, a, b, c, signals)).to.equal(true);
