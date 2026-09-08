@@ -1941,3 +1941,23 @@ still need completion and final merged-main verification.
 - TypeScript and whitespace pass; generated bindings match committed normal
   bytecode. No production source changed. Remaining contract/Python/generated,
   workspace/operational and remote CI/merge requirements keep the full goal open.
+
+## One hundred and seventh checkpoint
+
+- Added ten invalid statement metadata cases and six pin faults for each of the
+  seven required current heads (42 pin cases). Missing/unknown scopes, missing or
+  mismatched digests and invalid revisions reject without retaining an approval,
+  emitting a statement event or changing the original checkpoint.
+- The corrected metadata publishes successfully; corrected pins also pass actual
+  pairing inspection using the existing development proof. These tests exercise
+  authenticated publisher input boundaries, not source JSON/Ed25519 authentication.
+- All 21 current-registry tests pass normally (12 seconds), instrumented (31
+  seconds) and after restoring normal bytecode (12 seconds). Branch coverage
+  increases from 68.49% to 82.88%; line/statement/function coverage remains 100%
+  (`current-statement-boundaries-instrumented.log` and preserved `.json`,
+  `current-statement-boundaries-restored-normal.log`). Other contracts in this
+  focused report remain partial.
+- TypeScript and whitespace pass; normal generated bindings are unchanged.
+  No production source changed. Remaining inspection/currentness/batch branches,
+  other contract/Python/generated, workspace/operational and remote CI/merge
+  requirements keep the full repository goal open.

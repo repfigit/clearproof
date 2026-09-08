@@ -123,6 +123,59 @@ const g2 = (p: string[][]): [G1, G1] => [[p[0][1], p[0][0]], [p[1][1], p[1][0]]]
     expect(disabled.enabled).to.equal(false);
   });
 
+  it("rejects invalid statement metadata without publishing an approval", async function () {
+    const { registry, tenant, publisher, outsider, statement } = await loadFixture(fixture);
+    const base = { ...statement, consumer: outsider.address };
+    const evaluated = BigInt(statement.evaluatedAt.toString());
+    const now = BigInt(await time.latest());
+    const field = 21888242871839275222246405745257275088548364400416034343698204186575808495617n;
+    const invalid = [
+      { ...base, contextDigest: ethers.ZeroHash }, { ...base, transferDigest: ethers.ZeroHash },
+      { ...base, projectionCommitment: 0 }, { ...base, projectionCommitment: field },
+      { ...base, consumer: ethers.ZeroAddress }, { ...base, evaluatedAt: now + 10000n },
+      { ...base, validUntil: now }, { ...base, validUntil: 9007199254740992n },
+      { ...base, validUntil: evaluated + 301n },
+      { ...base, pins: base.pins.map((pin, i) => i === 7 ? { ...pin, scope: ethers.id("wrong-context") } : pin) },
+    ];
+    const events = await registry.queryFilter(registry.filters.StatementPublished());
+    for (const candidate of invalid) {
+      const id = await registry.statementId(tenant, candidate);
+      await expect(registry.connect(publisher).publishStatement(tenant, candidate))
+        .to.be.revertedWithCustomError(registry, "InvalidStatement");
+      expect((await registry.statementPublication(id)).exists).to.equal(false);
+    }
+    expect(await registry.queryFilter(registry.filters.StatementPublished())).to.have.length(events.length);
+    const id = await registry.statementId(tenant, base);
+    await registry.connect(publisher).publishStatement(tenant, base);
+    expect((await registry.statementPublication(id)).exists).to.equal(true);
+  });
+
+  it("rejects malformed or mismatched pins for each current head without retaining approval", async function () {
+    const { registry, tenant, publisher, outsider, statement, a, b, c, signals } = await loadFixture(fixture);
+    const base = { ...statement, consumer: outsider.address };
+    const events = await registry.queryFilter(registry.filters.StatementPublished());
+    for (let index = 0; index < 7; index++) {
+      const original = base.pins[index];
+      const head = await registry.head(tenant, index, original.scope);
+      for (const changed of [
+        { ...original, scope: ethers.ZeroHash }, { ...original, digest: ethers.ZeroHash },
+        { ...original, revision: 0 }, { ...original, scope: ethers.id("absent-scope") },
+        { ...original, digest: ethers.id("wrong-digest") }, { ...original, revision: 2 },
+      ]) {
+        const candidate = { ...base, pins: base.pins.map((pin, i) => i === index ? changed : pin) };
+        const id = await registry.statementId(tenant, candidate);
+        await expect(registry.connect(publisher).publishStatement(tenant, candidate))
+          .to.be.revertedWithCustomError(registry, "InvalidState");
+        expect((await registry.statementPublication(id)).exists).to.equal(false);
+        expect(await registry.head(tenant, index, original.scope)).to.deep.equal(head);
+      }
+    }
+    expect(await registry.queryFilter(registry.filters.StatementPublished())).to.have.length(events.length);
+    const id = await registry.statementId(tenant, base);
+    await registry.connect(publisher).publishStatement(tenant, base);
+    expect(await registry.inspect(tenant, id, a, b, c, signals)).to.equal(true);
+  });
+
   it("inspects read-only, then mirrors only the approved receipt with its designated caller", async function () {
     const { registry, tenant, consumer, outsider, id, a, b, c, signals, approve, receiptId } = await loadFixture(fixture);
     expect(await registry.inspect(tenant, id, a, b, c, signals)).to.equal(true);
