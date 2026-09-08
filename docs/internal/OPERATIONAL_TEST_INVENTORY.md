@@ -20,8 +20,8 @@ removed from the Python denominator.
 | `test_pilot_local.py` | 43/43 statements, 8/8 branches; setup/failure/cleanup tests plus 223 passing tests through real owned-cluster/EVM acceptance | Retain aggregate and real execution evidence |
 | `test_pilot_mirror.py` | 105/105 statements, 38/38 branches; doctor/report checks, process startup/readiness/cleanup failures and actual 223-test acceptance run | Retain aggregate and real execution evidence |
 | `poseidon_hash.js` | 12 actual subprocess tests: large decimal input parity, both JSON forms, malformed shapes/values/arity | JavaScript instrumentation and remaining source audit |
-| `generate_verifier.mjs` | Used for fresh development proofs and real contract tests | Input-validation/output/error inventory and instrumentation |
-| `generate_verifier_bls.mjs` | Outside current focused execution | Input-validation/output/error inventory and instrumentation |
+| `generate_verifier.mjs` | 28/28 statements, 10/10 branches, 26/26 lines, 4/4 functions; exact committed output, real CLI and rejected inputs | Retain coverage and contract parity evidence |
+| `generate_verifier_bls.mjs` | 41/41 statements, 12/12 branches, 35/35 lines, 4/4 functions; exact benchmark output, real CLI and rejected inputs | Retain coverage; benchmark is not a production migration |
 | `check_eip2537.mjs` | 32/32 statements, 16/16 branches, 28/28 lines, 1/1 functions; response/fallback/timeout tests and actual local EVM pairing vector | Retain coverage; tests do not establish current public-chain availability |
 | `compile_circuits.sh` | Development artifacts exercised through isolated runner | Shell entry/options/failure audit in an isolated checkout |
 | `circuit_lint.sh` | Existing CI static-analysis job | Local command/error-path evidence and remote run verification |
@@ -64,8 +64,8 @@ npm run test:scripts:coverage
 ```
 
 The root Vitest configuration inventories all four JavaScript scripts, including
-unimported files. At checkpoint 146 the probe is fully gated; the aggregate is
-32/117 statements, 16/40 branches, 28/105 lines and 1/11 functions. The existing
+unimported files. At checkpoint 147 the probe and both generators are fully gated;
+the aggregate is 101/120 statements, 38/42 branches, 89/108 lines and 9/11 functions. The existing
 Poseidon CLI subprocess tests do not contribute to this V8 report yet. CI retains
 the JSON/LCOV reports. Probe tests replace fetch locally; the successful pairing
 vector was also checked on a local Hardhat EVM. Its 384-byte infinity-pair input

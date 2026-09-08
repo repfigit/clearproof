@@ -2654,6 +2654,32 @@ still need completion and final merged-main verification.
   whitespace pass. Remaining JS generators/helper, shell checks, full aggregate
   refresh, browser/deployment audit and remote CI/review/merge keep the goal open.
 
+## One hundred and forty-seventh checkpoint
+
+- Added verifier generator tests against the committed BN254 and BLS benchmark
+  keys: exact contract text parity, fresh Node CLI processes from foreign working
+  directories, missing arguments, unsupported protocol/curve, inconsistent public
+  input counts and malformed JSON without overwriting an existing output.
+- After correcting two test-harness assumptions, two real regressions remained:
+  the BN254 template emitted an older string-revert interface instead of the
+  committed PublicSignalExceedsScalarField error, and the BLS generator ignored
+  inconsistent nPublic metadata. Updated the template and added the BLS metadata
+  check. Generated valid output now matches both committed contracts exactly;
+  no committed key or contract changed.
+- All 24 JavaScript script tests pass. BN254 generator coverage is 28 statements,
+  10 branches, 26 lines and four functions; BLS is 41 statements, 12 branches,
+  35 lines and four functions, all 100% (`verifier-generators147.log` and preserved
+  summary). Their wildcard gate fails when only output-parity tests run, proving
+  it requires rejection paths (`verifier-negative147.log`).
+- Real fresh legacy/pilot and committed BLS contract checks pass all ten tests
+  without skips in seven seconds (`verifier-real147.log`). Normal bindings and
+  production contracts remain unchanged. This verifies existing benchmark/code
+  behavior, not production approval of development proving artifacts.
+- JS aggregate is now 101/120 statements, 38/42 branches, 89/108 lines and 9/11
+  functions. Only the Poseidon helper remains unmeasured in V8. Whitespace and
+  REUSE pass. Shell tests, complete evidence refresh/CI aggregation, browser and
+  deployment audit, and remote CI/review/merge still keep the full goal active.
+
 ## One hundred and forty-second checkpoint
 
 - Added controlled subprocess/HTTP boundary tests for checkpoint orchestration:
