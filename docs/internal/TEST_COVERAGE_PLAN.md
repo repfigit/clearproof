@@ -60,8 +60,8 @@ execution of the new combined gate remains unverified.
 CLI: source line/branch/function/statement coverage is now 100%, enforced by CI.
 Keep the actual artifact/service acceptance tests alongside mocked boundary tests.
 
-Solidity: checkpoint 132 measures full coverage: 387/387 lines, 275/275
-statements, 402/402 branches and 88/88 functions. All 133 tests pass both
+Solidity: checkpoint 161 refreshes full coverage: 387/387 lines, 275/275
+statements, 402/402 branches and 88/88 functions. All 138 tests pass both
 instrumented and with restored normal bytecode using both real proof bundles.
 Coverage includes test harnesses and the BLS benchmark verifier. CI coverage
 gating/artifact retention are configured; remote verification remains required.
@@ -70,10 +70,9 @@ These figures describe an intermediate worktree, not a released coverage claim.
 The full goal remains open.
 
 Docs: authored TS/TSX source unit coverage is 100% and gated, as is the shared
-content package. Checkpoint 135 adds production-build Chromium acceptance tests
-for all MDX pages on desktop/mobile, Mermaid rendering, navigation and content
-APIs. Broader browser/deployment behavior and operational scripts still require
-an explicit completion audit.
+content package. Checkpoint 161 passes 76 production-build browser tests across
+desktop/mobile Chromium, Firefox and WebKit for all MDX pages, Mermaid rendering,
+navigation and content APIs. The full completion audit and remote CI remain open.
 
 
 ## Second checkpoint
@@ -3097,3 +3096,27 @@ still need completion and final merged-main verification.
 - Real multi-chain relay acceptance is still required; these relay tests use
   controlled chain responses and submit no public transactions. Final Solidity/
   browser refresh, full audit and remote CI/review/merge remain unfinished.
+
+
+### Checkpoint 161 — real two-chain relay and complete contract refresh
+
+- Added an actual relay entrypoint test against two owned Hardhat nodes with
+  distinct chain IDs. Synthetic roots are relayed to both real oracle contracts;
+  independent reads verify root and leaf count on each chain. A second invocation
+  exits cleanly with no update. Unknown-target and wrong-chain invocations exit
+  nonzero without claiming synchronization. Providers and owned nodes are closed
+  and the temporary deployment tree is removed (`relay-real161.log`).
+- The complete Solidity coverage gate passes all 138 tests using both development
+  proof profiles. Raw instrumentation covers 275/275 statements, 402/402 branches,
+  387/387 lines and 88/88 functions (`contracts-coverage161-summary.json`).
+  Normal bytecode was restored; all 138 uninstrumented tests and TypeScript
+  checking pass (`contracts161-result.json`). No generated bindings changed.
+- Browser coverage is being expanded from desktop/mobile Chromium to Firefox
+  and WebKit, with matching CI dependency installation. Chromium and Firefox
+  pass; initial WebKit runs exposed missing local shared libraries rather than
+  page failures. Dependencies were extracted into the external test cache; the
+  WebKit bundle's launcher overrides LD_LIBRARY_PATH, so its cache now links
+  those dependencies explicitly. The final run passes all 76 tests across four
+  browser projects (`docs-multibrowser161-final.log`). No system packages or
+  application code were changed to accommodate the local browser environment.
+- Full completion audit and remote CI/review/merge remain outstanding.

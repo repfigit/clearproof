@@ -107,7 +107,7 @@ The initial aggregate is 16/643 statements, 11/180 branches, 14/632 lines and
 4/49 functions. Existing real deployment acceptance is complementary evidence,
 not a substitute for this missing TypeScript measurement.
 
-| Contract script | V8 coverage at checkpoint 153 | Remaining work |
+| Contract script | V8 coverage through checkpoint 160 | Remaining work |
 | --- | --- | --- |
 | `networks.ts` | 100% all metrics | Retain selection/override tests; no public RPC availability claim |
 | `legacy-verifier.ts` | 100% all metrics | Retain actual deployment/timelock checks |
@@ -116,7 +116,7 @@ not a substitute for this missing TypeScript measurement.
 | `deploy-relay.ts` | 100% all metrics | Retain real local deployment, oracle-role and record checks |
 | `deploy-verifier-bls.ts` | 100% all metrics | Retain real local vector acceptance/rejection and accurate network reporting |
 | `redeploy-verifier.ts` | 100% all metrics | Retain real timelock/resume/rollback-record checks and atomic-publication failure tests |
-| `relay-sanctions-root.ts` | 100% all metrics | Real multi-chain acceptance and final regression refresh remain |
+| `relay-sanctions-root.ts` | 100% all metrics | Retain real two-chain root/count, repeat, wrong-chain and failed-target acceptance |
 | `update-sanctions-root.ts` | 100% all metrics | Retain real synthetic oracle update and clock/state-mismatch checks |
 | `check-transfer.ts` | 100% all metrics | Retain controlled read responses/errors |
 | `verify-onchain.ts` | 100% all metrics | Retain proof formatting/submission and failure tests |
@@ -198,3 +198,10 @@ deduplicated, benchmark-only records are excluded from discovery, and chain IDs
 are checked against target configuration. A failed target cannot produce an
 'all networks up to date' result. Seven targeted tests fail against the preceding
 implementation with the corrected fixture. No live relays were performed.
+
+Checkpoint 161 adds real two-chain relay acceptance: both oracle states match
+a synthetic root/count, repeated execution terminates without updates, and
+unknown or wrong-chain targets fail accurately. Owned processes, providers and
+temporary files are cleaned up. The complete 138-test Solidity suite passes
+both instrumented and after normal compilation; TypeScript checking also passes.
+This closes the local relay acceptance gap; remote CI verification remains open.

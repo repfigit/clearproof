@@ -218,7 +218,7 @@ jobs:
         with:
           node-version: 24
       - run: npm ci
-      - run: npm exec --workspace=@clearproof/docs -- playwright install --with-deps chromium
+      - run: npm exec --workspace=@clearproof/docs -- playwright install --with-deps chromium firefox webkit
       - run: npm run build --workspace=@clearproof/content
       - run: npm run build --workspace=@clearproof/docs
       - name: Production MDX pages, navigation and content APIs
