@@ -2377,3 +2377,23 @@ still need completion and final merged-main verification.
 - Only the expected normal current-registry factory changes. Remaining temporal
   invariants, pilot verifier defensive pairing result, full coverage aggregation,
   Python rerun, operational checks and remote CI/merge keep the full goal open.
+
+## One hundred and thirty-first checkpoint
+
+- Audited every current-registry head/approval write. Head validation already
+  enforces validFrom <= now < validUntil, so the explicit validUntil <= validFrom
+  rejection is redundant and subtraction remains safe. Statement evaluation time
+  is checked before its only immutable approval write; batch publication routes
+  through that same function. Monotonic chain time preserves that invariant during
+  inspection. Removed only these repeated predicates and documented the reasoning.
+- Existing malformed-time, future-evaluation, exact-expiry, publication rollback
+  and real-proof tests remain unchanged. All 27 focused instrumented tests pass in
+  36 seconds with 100% current-registry lines/statements/branches/functions
+  (`current-time-invariants-instrumented.log` and preserved `.json`).
+- Restored normal bytecode and verified the entire 132-test Solidity suite with
+  both real proof bundles, no skips (`current-time-invariants-full-normal.log`).
+  TypeScript and whitespace pass; only the expected normal registry factory is
+  regenerated. No production proving material or deployment changes.
+- The pilot verifier's defensive pairing result remains for audit. Full aggregate
+  reports, Python rerun, operational/browser requirements and remote CI/merge
+  still prevent completion of the full repository coverage goal.

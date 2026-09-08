@@ -95,8 +95,9 @@ contract PilotCurrentRegistry is AccessControl {
     function publishHead(bytes32 tenant, Kind kind, bytes32 scope, bytes32 digest, uint256 value,
         uint64 expectedRevision, uint64 validFrom, uint64 validUntil, bool enabled) public {
         if (msg.sender != publishers[tenant]) revert UnauthorizedPublisher();
+        // These time bounds imply validUntil > validFrom, making subtraction safe.
         if (scope == bytes32(0) || digest == bytes32(0) || validFrom > block.timestamp ||
-            validUntil <= block.timestamp || validUntil > MAX_SAFE || validUntil <= validFrom ||
+            validUntil <= block.timestamp || validUntil > MAX_SAFE ||
             validUntil - validFrom > 1 days || value >= R ||
             (uint8(kind) >= 3 && kind != Kind.Authorization && value != 0) ||
             (kind == Kind.Authorization && value > 1)) revert InvalidState();
@@ -182,7 +183,8 @@ contract PilotCurrentRegistry is AccessControl {
         if (!approved.exists || publishers[tenant] == address(0) || approved.publisherEpoch != publisherEpochs[tenant] ||
             address(verifier).codehash != verifierCodeHash) revert InvalidStatement();
         Statement memory statement = approved.statement;
-        if (keccak256(abi.encode(tenant, statement)) != id || statement.evaluatedAt > block.timestamp ||
+        // Publication checked evaluatedAt; approvals are immutable and chain time is monotonic.
+        if (keccak256(abi.encode(tenant, statement)) != id ||
             signals[0] != statement.projectionCommitment || signals[3] == 0 ||
             signals[4] != statement.evaluatedAt || signals[5] <= block.timestamp ||
             signals[5] > statement.validUntil || signals[6] != block.chainid || signals[7] != uint160(address(this))) {
