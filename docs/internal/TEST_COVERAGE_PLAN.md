@@ -1501,3 +1501,20 @@ still need completion and final merged-main verification.
 - Full repository coverage remains incomplete. Other Python/generated paths,
   workspace and operational coverage, plus final remote CI/merge verification
   remain outstanding.
+
+## Eighty-third checkpoint
+
+- Added two real signed-root/PostgreSQL checks: revision two cannot initialize
+  an empty root history, and the shared persistence helper rejects a valid
+  tenant-a approval inside a tenant-b transaction.
+- Both rejected paths leave no root record. The initial revision then succeeds
+  with the same idempotency key; existing concurrent successor/fork, reconnect,
+  predecessor and expiry checks still pass.
+- The selected integration test passes in 8.52 seconds
+  (`root-publication-boundaries.log`/`.data`). Its focused report covers
+  39/41 statements and 12/14 branches; issuance-specific scope checks exercised
+  elsewhere are not included in this narrow invocation. Both gaps identified
+  by checkpoint 69 are now hit, without claiming a new full aggregate report.
+- Ruff/format/whitespace pass; owned PostgreSQL stopped. No source changed.
+  Full repository coverage remains incomplete, including remaining Python/
+  generated paths, other workspaces, operational and remote CI/merge checks.

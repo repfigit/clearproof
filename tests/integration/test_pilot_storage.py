@@ -357,6 +357,18 @@ async def test_signed_root_publication_revision_chain_rotation_and_tenant_bounda
         key_id=authority.key_id,
     )
     signed = sign_root(root, key)
+    from src.services.root_publication import persist_approved_root
+
+    skipped_revision = RootSnapshot.model_validate({**root.model_dump(), "revision": 2, "previous_digest": root.digest})
+    with pytest.raises(RecordConflict, match="Initial root revision must be one"):
+        await service.publish(sign_root(skipped_revision, key), idempotency_key="root-1", now=150)
+    assert await service._store.get("issuer-root", root_record_id(root)) is None
+    foreign_principal = Principal.model_validate({**principal.model_dump(), "tenant_id": "tenant-b"})
+    foreign_store = PilotStore(db, cipher(), foreign_principal)
+    async with foreign_store.transaction() as tx:
+        with pytest.raises(RootTrustError, match="Root publication tenant mismatch"):
+            await persist_approved_root(tx, signed, trust, now=150)
+        assert await tx.record_ids("issuer-root") == []
     first = await service.publish(signed, idempotency_key="root-1", now=150)
     assert first["snapshot_digest"] == root.digest
     assert await service.publish(signed, idempotency_key="root-1", now=150) == first
