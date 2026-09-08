@@ -2357,3 +2357,23 @@ still need completion and final merged-main verification.
   bytecode. Production source is unchanged. Remaining current-registry/pilot
   verifier branches, full Python and Solidity aggregation, operational coverage
   and remote CI/merge keep the full repository goal open.
+
+## One hundred and thirtieth checkpoint
+
+- Added caller revision boundary cases at MAX_SAFE, MAX_SAFE+1 and uint64 maximum.
+  Rejections preserve the existing head and events; a correct current revision
+  still advances it once. All 27 current-registry tests pass before source change.
+- Reordered the existing revision predicates to validate the caller's bound before
+  comparing stored state. Accepted/rejected inputs and error type are unchanged;
+  the bound is now independently exercised without corrupting registry storage.
+- Instrumentation exposed an existing wall-clock timing flaw: a short-lived head
+  could expire before its publication transaction. Explicitly pinned the two
+  publication block timestamps; the exact expiry assertion remains unchanged.
+- Corrected focused instrumentation passes 27 tests in 34 seconds, reaching 97.26%
+  branches and 100% other current-registry metrics (`current-revision-instrumented-
+  complete.log`/`.json`). Restored normal bytecode, then the full Solidity suite
+  passes 132 tests with both real proof bundles and no skips in 53 seconds
+  (`current-revision-full-normal.log`). TypeScript/whitespace pass.
+- Only the expected normal current-registry factory changes. Remaining temporal
+  invariants, pilot verifier defensive pairing result, full coverage aggregation,
+  Python rerun, operational checks and remote CI/merge keep the full goal open.

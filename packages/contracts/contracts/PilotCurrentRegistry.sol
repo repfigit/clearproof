@@ -102,7 +102,8 @@ contract PilotCurrentRegistry is AccessControl {
             (kind == Kind.Authorization && value > 1)) revert InvalidState();
         bytes32 key = _headKey(tenant, kind, scope);
         Head storage previous = _heads[key];
-        if (previous.revision != expectedRevision || expectedRevision >= MAX_SAFE || validFrom < previous.validFrom) {
+        // Validate caller-supplied revision bounds before comparing the stored head.
+        if (expectedRevision >= MAX_SAFE || previous.revision != expectedRevision || validFrom < previous.validFrom) {
             revert InvalidState();
         }
         _heads[key] = Head(digest, value, expectedRevision + 1, validFrom, validUntil, publisherEpochs[tenant], enabled);

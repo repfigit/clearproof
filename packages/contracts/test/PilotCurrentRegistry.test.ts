@@ -161,6 +161,23 @@ const g2 = (p: string[][]): [G1, G1] => [[p[0][1], p[0][0]], [p[1][1], p[1][0]]]
     expect(disabled.enabled).to.equal(false);
   });
 
+  it("rejects unsafe revision requests without changing the current head", async function () {
+    const { registry, tenant, publisher, pins } = await loadFixture(fixture);
+    const before = await registry.head(tenant, 0, pins[0].scope);
+    const events = await registry.queryFilter(registry.filters.HeadPublished());
+    for (const revision of [9007199254740991n, 9007199254740992n, (1n << 64n) - 1n]) {
+      await expect(registry.connect(publisher).publishHead(
+        tenant, 0, pins[0].scope, before.digest, before.value, revision, before.validFrom, before.validUntil, true,
+      )).to.be.revertedWithCustomError(registry, "InvalidState");
+      expect(await registry.head(tenant, 0, pins[0].scope)).to.deep.equal(before);
+    }
+    expect(await registry.queryFilter(registry.filters.HeadPublished())).to.have.length(events.length);
+    await registry.connect(publisher).publishHead(
+      tenant, 0, pins[0].scope, before.digest, before.value, before.revision, before.validFrom, before.validUntil, true,
+    );
+    expect((await registry.head(tenant, 0, pins[0].scope)).revision).to.equal(before.revision + 1n);
+  });
+
   it("rejects invalid statement metadata without publishing an approval", async function () {
     const { registry, tenant, publisher, outsider, statement } = await loadFixture(fixture);
     const base = { ...statement, consumer: outsider.address };
@@ -274,12 +291,14 @@ const g2 = (p: string[][]): [G1, G1] => [[p[0][1], p[0][0]], [p[1][1], p[1][0]]]
     const scope = ethers.id("synthetic-short-lived-head");
     const deadline = (await time.latest()) + 10;
     expect(BigInt(statement.validUntil.toString())).to.be.greaterThan(BigInt(deadline));
+    await time.setNextBlockTimestamp(deadline - 9);
     await registry.connect(publisher).publishHead(
       tenant, 0, scope, pins[0].digest, bundle.heads[0].value,
       0, statement.evaluatedAt, deadline, true,
     );
     const candidate = { ...statement, pins: statement.pins.map((pin, i) => i === 0 ? { ...pin, scope } : pin) };
     const id = await registry.statementId(tenant, candidate);
+    await time.setNextBlockTimestamp(deadline - 8);
     await registry.connect(publisher).publishStatement(tenant, candidate);
     expect(await registry.inspect(tenant, id, a, b, c, signals)).to.equal(true);
     await time.increaseTo(deadline);
