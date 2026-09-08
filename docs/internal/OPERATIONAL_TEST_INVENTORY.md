@@ -16,8 +16,8 @@ removed from the Python denominator.
 | `pilot_contract_fixture.py` | 48/48 statements, 8/8 branches; actual proof generation, altered-nullifier rejection, prover timeout/exit and temporary cleanup | Retain coverage in final aggregate; separate artifact-backed CI gate |
 | `test_checkpoint_evm.py` | 44/44 statements, 6/6 branches; startup/retry/deadline/child-failure and cleanup tests, separate owned-EVM integration | Retain coverage and real execution in final aggregate |
 | `test_development_circuits.py` | Actual development proof runner plus subprocess lifecycle tests | Remaining setup, validation and cleanup branches |
-| `test_pilot_local.py` | Outside current focused execution | Local orchestration and failure/cleanup paths |
-| `test_pilot_mirror.py` | Actual durable authorization/EVM acceptance runner completed | Instrument runner itself; failure/cleanup/report paths |
+| `test_pilot_local.py` | 43/43 statements, 8/8 branches; setup/failure/cleanup tests plus 223 passing tests through real owned-cluster/EVM acceptance | Retain aggregate and real execution evidence |
+| `test_pilot_mirror.py` | 47/105 statements, 17/38 branches; doctor assurance/report integrity tests plus actual 223-test acceptance run | Remaining runner startup/readiness/cleanup branches |
 | `poseidon_hash.js` | 12 actual subprocess tests: large decimal input parity, both JSON forms, malformed shapes/values/arity | JavaScript instrumentation and remaining source audit |
 | `generate_verifier.mjs` | Used for fresh development proofs and real contract tests | Input-validation/output/error inventory and instrumentation |
 | `generate_verifier_bls.mjs` | Outside current focused execution | Input-validation/output/error inventory and instrumentation |
@@ -37,13 +37,15 @@ uv run python -m pytest \
   tests/unit/test_bls_input_script.py \
   tests/unit/test_sanctions_sources.py \
   tests/unit/test_checkpoint_runner.py \
+  tests/unit/test_pilot_local_runner.py \
+  tests/unit/test_pilot_mirror_reports.py \
   --cov=scripts --cov-branch --cov-report=json:operational-coverage.json \
   --cov-report=term-missing -q
 ```
 
 Node dependencies must be installed. CI retains this report separately from
 `src` coverage. The completed HPKE, L2 model, parameter generator, BLS input
-converter, sanctions builder and checkpoint runner scripts have a 100% regression
+converter, sanctions builder, checkpoint and local-pilot runner scripts have a 100% regression
 gate; the all-script aggregate stays visibly partial until the remaining behavior
 is exercised. Synthetic sanctions fixtures do not update deployed roots;
 development proving material and ephemeral private keys are never committed.

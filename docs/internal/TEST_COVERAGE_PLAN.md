@@ -2652,3 +2652,33 @@ still need completion and final merged-main verification.
 - Ruff, whitespace and workflow parsing pass. The development, local-pilot and
   mirror runners remain partially/unmeasured, alongside JavaScript/shell checks,
   broader browser/deployment audit and remote CI/review/merge. Goal remains open.
+
+## One hundred and forty-third checkpoint
+
+- Added local-pilot orchestration tests for required executable permissions,
+  missing artifacts, PostgreSQL version, existing output refusal, private socket
+  length, TCP rejection, child-only database environment, failed start/create/test
+  commands and stop failures with/without a remaining PID file. All 17 tests pass
+  in 1.46 seconds; runner coverage is 43/43 statements and 8/8 branches
+  (`pilot-local143.log`/`.json`).
+- Ran the actual local-pilot command with PostgreSQL 18 and existing unapproved
+  development artifacts. Its full mirror acceptance passes 223 tests, no skips,
+  six warnings in 149.78 seconds, and the parent exits 0
+  (`pilot-local-real143.log`). Verified the private output directory, all nine
+  retained report hashes and cluster shutdown (`pg_ctl: no server running`).
+  Complete output stays private at the external `pilot-local-real143` directory.
+- While that run executed, added 14 separate mirror doctor/report checks. Doctor
+  results must accept only the pinned development profile and reject production
+  use; incorrect statuses, pins, support flags, exit codes, stderr or assurance
+  are rejected. Retained reports require the exact inventory, valid JSON and
+  separate reviewer key; manifests hash every report, use mode 0600 and refuse
+  overwrite. All 14 pass in 0.38 seconds (`mirror-reports143.log`/`.json`).
+- Mirror script coverage is now 47/105 statements and 17/38 branches; main
+  startup/readiness/cleanup remains uncovered. Incremental all-script coverage is
+  913/1045 statements and 204/238 branches (`scripts-combined143.json`). No
+  operational production source changed.
+- Added both test modules to operational CI and the local runner to its completed
+  script gate, which passes locally at 788 statements and 176 branches. Ruff,
+  REUSE, whitespace and YAML parsing pass. Development/mirror orchestration,
+  JavaScript/shell coverage, browser/deployment audit and remote CI/review/merge
+  still keep the full repository goal open.
