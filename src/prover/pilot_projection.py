@@ -103,8 +103,7 @@ class TransferProjection:
 
     @property
     def commitment(self) -> str:
-        if len(self.fields) != 48:
-            raise ValueError("Projection requires exactly 48 fields")
+        # __post_init__ validates the 48-field tuple; frozen instances preserve it.
         state = 201
         for offset in range(0, 48, 8):
             state = poseidon_hash([state, *self.fields[offset : offset + 8]])

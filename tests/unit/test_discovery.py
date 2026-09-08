@@ -447,3 +447,18 @@ async def test_pinned_backend_rejects_destination_change_before_dns(host, port):
     with pytest.raises(DiscoveryInvalid, match="Unexpected discovery connection destination"):
         await backend.connect_tcp(host, port)
     resolver.assert_not_called()
+
+
+@pytest.mark.parametrize("host", ["a.example", "a-b.sub.example", "xn--bcher-kva.example"])
+@pytest.mark.parametrize("port", [None, 1, 65535])
+@pytest.mark.parametrize("path", ["", ":vasps:EU", ":a_b:c.d-e", ":8443"])
+def test_validated_did_preserves_exact_canonical_identity(host, port, path):
+    authority = host if port is None else f"{host}:{port}"
+    did = "did:web:" + authority.replace(":", "%3A") + path
+    target = parse_target(did)
+    assert target.did == did
+    assert target.authority == authority
+    assert target.host == host
+    assert target.port == (443 if port is None else port)
+    assert target.url == f"https://{authority}/.well-known/clearproof.json"
+    assert parse_target(target.did) == target

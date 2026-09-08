@@ -2221,3 +2221,24 @@ still need completion and final merged-main verification.
   aggregate, not a new full-suite run. Only discovery reconstruction and frozen
   projection length remain uncovered in Python. Other workspace/operational and
   remote CI/merge requirements keep the full goal open.
+
+## One hundred and twenty-second checkpoint
+
+- Audited discovery reconstruction: accepted authority syntax permits only the
+  canonical uppercase %3A port escape, and path validation preserves every path
+  component. Reconstructing an accepted DID cannot differ from its input. Added
+  36 host/port/path identity-preservation cases, including punycode and numeric
+  paths; those and five existing projection inventory/immutability cases pass
+  before cleanup (41 passed, 174 deselected, 0.33 seconds).
+- Simplified discovery to retain the already validated DID directly. Removed the
+  repeated projection length check: construction requires an exact 48-field tuple
+  and frozen instances preserve it. Boundary validation remains unchanged; no
+  corrupted object state or exclusions are used to manufacture coverage.
+- All 234 discovery, local TLS transport and actual projection Circom/WASM tests
+  pass without skips, five warnings, 39.00 seconds (`python-invariants-complete.log`,
+  `.data`, `.json`). Discovery reaches 92/92 statements and 42/42 branches;
+  projection reaches 50/50 statements and 12/12 branches. Ruff/whitespace pass.
+- Source totals are now 8332 statements/2068 branches. Previous aggregates cover
+  an older revision and must not be reused as proof of full coverage of this one.
+  A fresh full Python/EVM run remains required, as do other workspace, operational
+  and remote CI/merge requirements. The full repository goal remains open.

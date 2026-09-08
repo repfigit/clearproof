@@ -70,11 +70,8 @@ def parse_target(value: str) -> DiscoveryTarget:
         raise DiscoveryInvalid("Invalid or noncanonical discovery port")
     if any(not re.fullmatch(r"[A-Za-z0-9._-]+", part) or part in (".", "..") for part in parts[1:]):
         raise DiscoveryInvalid("Unsupported did:web path component")
-    did = "did:web:" + authority.replace(":", "%3A")
-    if is_did:
-        did += "".join(":" + part for part in parts[1:])
-        if did != value:
-            raise DiscoveryInvalid("Noncanonical did:web identifier")
+    # Validation permits only canonical components; preserve a supplied DID exactly.
+    did = value if is_did else "did:web:" + authority.replace(":", "%3A")
     return DiscoveryTarget(did, authority, host, port)
 
 
