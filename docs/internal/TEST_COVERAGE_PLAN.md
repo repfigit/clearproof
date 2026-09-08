@@ -2507,3 +2507,28 @@ still need completion and final merged-main verification.
   100% gate. Ruff, whitespace, workflow parsing and REUSE (734 files) pass.
   Remaining script branches, browser/deployment audit and remote CI/review/merge
   continue to keep the original full-coverage goal open.
+
+## One hundred and thirty-seventh checkpoint
+
+- Expanded the L2 historical cost-model tests with identical-payload crossover
+  boundaries (already inverted/tied/never), zero-cost share, unsupported chain
+  rejection, both Markdown threshold labels and finite historical sensitivity
+  thresholds. Placeholder inputs must be deterministic and visibly warned.
+- Synthetic measured inputs preserve exact transaction bytes without a warning.
+  Both CLI report formats run through the actual entry point. JSON contains all
+  18 chain/regime/system combinations and consistent execution/DA/USD totals;
+  Markdown identifies measured gas, byte sizes and all regimes. A real process
+  from a foreign directory emits parseable JSON and rejects unknown formats.
+- A three-run byte pattern exercises FastLZ's immediate consecutive match path;
+  renaming byte symbols preserves the compressed length. No production source
+  changed, and no estimate is presented as a current network price.
+- All 31 L2 tests pass in 4.18 seconds. Coverage is 229/229 statements and 56/56
+  branches, without exclusions (`l2-coverage137.json`). Combining with checkpoint
+  136's unchanged-source evidence gives 446/1045 operational statements and
+  97/238 branches (`scripts-combined137.json`). This is an incremental aggregate,
+  not a new full-suite execution.
+- Added and locally passed an exact 100% regression gate for the completed HPKE
+  and L2 scripts (244 statements, 58 branches). The all-script report still
+  exposes remaining gaps. Ruff, whitespace and workflow parsing pass. Remaining
+  operational behavior and browser/deployment/remote review requirements keep
+  the full repository goal active.

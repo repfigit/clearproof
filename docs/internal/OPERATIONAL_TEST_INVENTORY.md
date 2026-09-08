@@ -11,7 +11,7 @@ removed from the Python denominator.
 | `build_sanctions_tree.py` | Synthetic normalization/tree unit tests | Offline source parsing, failures, reproducibility and output lifecycle; remaining measured branches |
 | `generate_poseidon_constants.py` | Actual regenerated constants compared to committed constants | Mismatch/write paths and rare generation branches |
 | `hpke_keygen.py` | 15/15 statements, 2/2 branches; actual foreign-directory CLI; X25519 derivation and HPKE round trip | Retain coverage in final aggregate |
-| `l2_cost_model.py` | FastLZ and fee-model unit tests | Missing branches, report/CLI output and argument errors |
+| `l2_cost_model.py` | 229/229 statements, 56/56 branches; FastLZ, fee boundaries, both report formats, measured inputs and actual CLI | Retain coverage in final aggregate |
 | `make_bls_input.py` | Outside current focused execution | Field-specific recomputation, validation failures and isolated output |
 | `pilot_contract_fixture.py` | Invoked by real current-registry contract tests | Instrument script and exercise input/error paths |
 | `test_checkpoint_evm.py` | Owned-EVM acceptance runner previously completed | Instrument runner itself; failure/cleanup paths |
@@ -38,6 +38,7 @@ uv run python -m pytest \
 ```
 
 Node dependencies must be installed. CI retains this report separately from
-`src` coverage. There is deliberately no 100% operational gate until the missing
-behavior is exercised. Synthetic sanctions fixtures do not update deployed roots;
+`src` coverage. The completed HPKE and L2 model scripts have a 100% regression
+gate; the all-script aggregate stays visibly partial until the remaining behavior
+is exercised. Synthetic sanctions fixtures do not update deployed roots;
 development proving material and ephemeral private keys are never committed.
