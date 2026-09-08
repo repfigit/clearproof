@@ -71,6 +71,8 @@ coverage.json
 coverage.xml
 .coverage
 .coverage.*
+playwright-report/
+test-results/
 
 # Repfigit-loop machine-local state (PR review cache, routing decisions).
 # These churn on every pass and would otherwise leave the working tree dirty,

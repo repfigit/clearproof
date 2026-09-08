@@ -69,9 +69,11 @@ gating/artifact retention are configured; remote verification remains required.
 These figures describe an intermediate worktree, not a released coverage claim.
 The full goal remains open.
 
-Docs: authored TS/TSX source unit coverage is now 100% and gated, as is the shared
-content package. MDX rendering, browser/server behavior and operational scripts
-remain part of the unfinished coverage inventory.
+Docs: authored TS/TSX source unit coverage is 100% and gated, as is the shared
+content package. Checkpoint 135 adds production-build Chromium acceptance tests
+for all MDX pages on desktop/mobile, Mermaid rendering, navigation and content
+APIs. Broader browser/deployment behavior and operational scripts still require
+an explicit completion audit.
 
 
 ## Second checkpoint
@@ -2454,3 +2456,26 @@ still need completion and final merged-main verification.
 - This completes local measured Python source coverage. Operational scripts,
   rendered docs/browser behavior and remote CI/review/merge remain required;
   the full repository goal stays open.
+
+## One hundred and thirty-fifth checkpoint
+
+- Added a separate Playwright suite with its locked browser dependency. It
+  discovers all 16 MDX pages, checks their headings/navigation/footer/language,
+  rejects page/console errors and verifies the logo on desktop/mobile Chromium.
+  The Mermaid page must render its actual SVG. A navigation/back test verifies
+  that client navigation preserves a window marker; unknown pages return 404.
+- Production HTTP tests exercise the manifest and every topic, recipe and signal
+  against the real content package, plus bounded missing-entry errors. These
+  verify workspace content assets through the built server, beyond direct route
+  handler unit calls. No remote service or deployed site is mutated.
+- The production build passes; 38 browser/server checks pass in 16.5 seconds
+  (`docs-e2e-checkpoint135.log`). Initial harness setup needed CommonJS-compatible
+  directory resolution and installation of the locked Chromium build. No page
+  source changes were necessary. The owned server terminates with the runner.
+- All 50 docs unit tests still pass, covering 26/26 statements and lines, 6/6
+  branches and 6/6 functions. TypeScript and workflow YAML validation pass.
+  Build/unit reports are `docs-{build,unit}-checkpoint135.log` outside the repo.
+- Added a Node 24 CI browser job with a production build, Chromium installation,
+  and retained HTML reports/failure traces. Documented commands and ignored
+  generated reports. Remote execution, other browser engines, deployment tracing,
+  operational scripts and the final CI/review/merge audit remain unfinished.
