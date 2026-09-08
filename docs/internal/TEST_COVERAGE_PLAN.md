@@ -1155,3 +1155,31 @@ still need completion and final merged-main verification.
   coverage remains incomplete; checkpoint 54 remains the latest full Python
   report. Other Python paths, SDK, Solidity, MDX/browser, scripts and final
   remote CI/merge verification remain outstanding.
+
+## Sixty-third checkpoint
+
+- Added 22 inner historical reconstruction rejection checks inside the real
+  authorization scenario: independent trust, authorization-time boundaries,
+  missing/duplicate enrollment, enrollment schema/commitment/acceptance times,
+  captured credential status, fact inventories, retained schema and fact identity.
+- These directly test inner reconstruction against copies of the authentic
+  bundle, independently of the outer integrity hash. The unchanged bundle
+  still reproduces policy and passes the existing complete history inspection
+  with real signatures, pairing, PostgreSQL and CLI behavior.
+- The selected integration test passes in 116.96 seconds. History policy measures
+  34/34 statements and 12/12 branches; history statement measures 50/50 statements
+  and 14/14 branches (`history-reconstruction-complete.log`/`.data`).
+  Ruff/format/whitespace pass; owned PostgreSQL stopped. No source changed.
+
+## Sixty-fourth checkpoint
+
+- Added 12 event reconciliation tests for nonzero EVM deployment bounds, block
+  identity requirements, projection clock types/ranges and source sequence order
+  disagreeing with event time. The higher sequence remains the stream head
+  regardless of input order, while the timeline remains chronologically sorted.
+- All 32 tests pass in 0.43 seconds; event reconciliation measures 135/135
+  statements and 58/58 branches (`event-reconciliation-complete.log`/`.data`).
+  Ruff/format/whitespace pass. No production source changed.
+- Full repository coverage remains incomplete; checkpoint 54 is the latest full
+  Python report. Other Python paths, SDK, Solidity, MDX/browser, scripts and
+  final remote CI/merge verification remain outstanding.

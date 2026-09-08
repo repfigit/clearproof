@@ -2513,6 +2513,9 @@ async def test_durable_current_inspection_real_pairing_and_revocation(db, monkey
                 root_trust=configuration.root_trust,
                 root_pins=configuration.root_pins,
             )
+            check_history_reconstruction_guards(
+                bundle, verifier, historical_trust, trust, signals, verified_at=history_args["verified_at"]
+            )
             reconstructed = await inspect_history_bundle(
                 bundle, verifier, statement_trust=historical_trust, **history_args
             )
@@ -5799,3 +5802,89 @@ async def test_registrar_reuses_exact_source_or_rolls_back_collision(registrar_c
         assert first["revision"] == 1
         assert await service.refresh(expected_revision=0, idempotency_key="synthetic-refresh", now=101) == first
     assert await service._store.get("root-source", candidate.source_digest) == retained
+
+
+def check_history_reconstruction_guards(bundle, verifier, statement_trust, fact_trust, signals, *, verified_at):
+    """Exercise inner reconstruction guards independently of outer bundle hashing."""
+    from copy import deepcopy
+
+    from src.prover.history_policy import replay_history_policy
+    from src.prover.history_statement import reconstruct_history_statement
+
+    def statement(candidate, trust=statement_trust):
+        return reconstruct_history_statement(candidate, verifier, trust, signals, verified_at=verified_at)
+
+    def policy(candidate):
+        return replay_history_policy(candidate, statement_trust, fact_trust, signals, verified_at=verified_at)
+
+    with pytest.raises(ValueError, match="Independent statement trust required"):
+        statement(bundle, None)
+    for at in (True, "100", bundle["proof"]["context"]["evaluated_at"] - 1, int(signals[5])):
+        candidate = deepcopy(bundle)
+        candidate["receipt"]["authorized_at"] = at
+        with pytest.raises(ValueError, match="Invalid claimed authorization time"):
+            statement(candidate)
+    for duplicate in (False, True):
+        candidate = deepcopy(bundle)
+        enrollment = next(r for r in candidate["records"] if r["kind"] == "credential")
+        if duplicate:
+            candidate["records"].append(deepcopy(enrollment))
+        else:
+            candidate["records"].remove(enrollment)
+        with pytest.raises(ValueError, match="Expected exact captured source record"):
+            statement(candidate)
+    for mutation in ("schema", "commitment", "accepted_type", "accepted_early", "accepted_expired"):
+        candidate = deepcopy(bundle)
+        enrollment = next(r["value"] for r in candidate["records"] if r["kind"] == "credential")
+        if mutation == "schema":
+            enrollment["schema_version"] = "unsupported"
+            expected = "Unsupported enrollment evidence"
+        else:
+            expected = "Enrollment acceptance scope mismatch"
+            if mutation == "commitment":
+                enrollment["credential_commitment"] = str(int(enrollment["credential_commitment"]) + 1)
+            elif mutation == "accepted_type":
+                enrollment["accepted_at"] = True
+            elif mutation == "accepted_early":
+                enrollment["accepted_at"] = enrollment["consent"]["credential"]["issued_at"] - 1
+            else:
+                enrollment["accepted_at"] = enrollment["consent"]["consent_expires_at"]
+        with pytest.raises(ValueError, match=expected):
+            statement(candidate)
+
+    status_changes = (
+        ("credential_id", "00" * 32),
+        ("revocation", "present"),
+        ("observed_at", True),
+        ("observed_at", bundle["receipt"]["authorized_at"] + 1),
+    )
+    for field, value in status_changes:
+        candidate = deepcopy(bundle)
+        candidate["evidence_manifest"]["credential_status"][field] = value
+        with pytest.raises(ValueError, match="Captured local status observation is unavailable"):
+            policy(candidate)
+    references = bundle["proof"]["fact_ids"]
+    assert references
+    for invalid in (tuple(references), [references[0]] * 2, [f"{index:064x}" for index in range(65)]):
+        candidate = deepcopy(bundle)
+        candidate["proof"]["fact_ids"] = invalid
+        with pytest.raises(ValueError, match="Invalid captured fact references"):
+            policy(candidate)
+    candidate = deepcopy(bundle)
+    candidate["proof"]["fact_ids"] = []
+    with pytest.raises(ValueError, match="Captured facts do not match the decision"):
+        policy(candidate)
+    for mutation in ("schema", "identity"):
+        candidate = deepcopy(bundle)
+        fact = next(r for r in candidate["records"] if r["kind"] == "fact-evidence")
+        if mutation == "schema":
+            fact["value"]["schema_version"] = "unsupported"
+            expected = "Unsupported retained fact schema"
+        else:
+            previous = fact["record_id"]
+            fact["record_id"] = "00" * 32
+            candidate["proof"]["fact_ids"] = ["00" * 32 if ref == previous else ref for ref in references]
+            expected = "Captured fact identity mismatch"
+        with pytest.raises(ValueError, match=expected):
+            policy(candidate)
+    assert policy(bundle)

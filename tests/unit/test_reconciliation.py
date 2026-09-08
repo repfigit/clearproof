@@ -182,3 +182,40 @@ def test_repeated_observation_does_not_reset_block_change_age(scope):
     report = reconcile(scope, (repeated, original, replaced), now=200)
     changed = next(f for f in report.findings if f.reason == "canonical-block-observation-changed")
     assert changed.since == 102
+
+
+@pytest.mark.parametrize(
+    "changes", [{"chain_id": "0"}, {"chain_id": str(2**64)}, {"registry_address": "0x" + "00" * 20}]
+)
+def test_scope_requires_supported_nonzero_deployment(scope, changes):
+    with pytest.raises(ValueError, match="nonzero EVM deployment"):
+        TransferScope.model_validate({**scope.model_dump(), **changes})
+
+
+def test_nonchain_event_cannot_claim_block_identity(scope):
+    with pytest.raises(ValueError, match="Only chain observations carry block identities"):
+        event(scope, "custody", "completed", block_number=42, block_hash="ab" * 32)
+
+
+@pytest.mark.parametrize("state", ["confirmed", "finalized", "reorged"])
+def test_nonpending_chain_event_requires_block_identity(scope, state):
+    with pytest.raises(ValueError, match="Chain observation requires its observed block identity"):
+        event(scope, "chain", state, block_number=None, block_hash=None)
+
+
+@pytest.mark.parametrize("now", [True, "200", -1, 2**53])
+def test_projection_clock_rejects_noninteger_and_out_of_range(scope, now):
+    with pytest.raises(ValueError, match="Invalid projection clock"):
+        reconcile(scope, (), now=now)
+
+
+def test_sequence_order_controls_head_even_when_source_timestamps_disagree(scope):
+    # Later provider sequence can carry an earlier event time. Sorting by time
+    # must not allow the older sequence to replace the stream head.
+    older = event(scope, "custody", "submitted", sequence=1, occurred_at=105)
+    newer = event(scope, "custody", "completed", sequence=2, occurred_at=100)
+    expected = reconcile(scope, (older, newer), now=200)
+    assert expected.timeline == (newer, older)
+    assert expected.states["custody"] == "completed"
+    assert reconcile(scope, (newer, older), now=200) == expected
+    assert [f.reason for f in expected.findings] == ["custody-completed-without-finality"]
