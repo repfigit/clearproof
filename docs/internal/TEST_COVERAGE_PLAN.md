@@ -2972,3 +2972,25 @@ still need completion and final merged-main verification.
   newly executed ceremony or remote CI run.
 - Six contract scripts, the broader final audit and remote CI/review/merge remain
   unfinished. Full Python application coverage does not close those wider gaps.
+
+
+### Checkpoint 156 — both main deployment entrypoints fully measured
+
+- Added 29 contract-script tests for deployment configuration, canonical
+  constructor/override thresholds, case-normalized jurisdiction keys, record
+  persistence after transaction confirmation, pending activation metadata, role
+  assignment, empty balance, and failures during deployment/seeding/confirmation/
+  persistence. Explorer tests cover local-network suppression, both API-key
+  selections, successful constructor verification and both error-message forms.
+- Both unchanged deployment entrypoints now pass per-file 100% V8 gates:
+  deploy.ts has 66 statements, nine branches, 65 lines and four functions;
+  deploy-multichain.ts has 84 statements, twelve branches, 83 lines and four
+  functions (`deploy-main-gate156.log`, `contract-scripts156-summary.json`).
+- All 84 contract-script tests pass. The broader report remains partial at
+  313/643 statements, 90/180 branches, 308/632 lines and 26/49 functions.
+  The four remaining scripts are BLS deployment, verifier replacement, root
+  update and root relay. No production source or generated artifacts changed.
+- The existing two real local deployment-preparation tests remain applicable
+  unchanged-source evidence (`deployment-real153.log`); no public deployment or
+  oracle update was performed. Whitespace checks pass. Final Solidity/browser
+  refresh, remaining script coverage and remote CI/review/merge remain open.

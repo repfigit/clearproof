@@ -111,8 +111,8 @@ not a substitute for this missing TypeScript measurement.
 | --- | --- | --- |
 | `networks.ts` | 100% all metrics | Retain selection/override tests; no public RPC availability claim |
 | `legacy-verifier.ts` | 100% all metrics | Retain actual deployment/timelock checks |
-| `deploy.ts` | 0% | Instrument deployment and failure paths |
-| `deploy-multichain.ts` | 0% | Instrument deployment and failure paths |
+| `deploy.ts` | 100% all metrics | Retain threshold/record/failure tests and actual local deployment acceptance |
+| `deploy-multichain.ts` | 100% all metrics | Retain balance, threshold, relay-role and explorer tests plus local acceptance |
 | `deploy-relay.ts` | 100% all metrics | Retain real local deployment, oracle-role and record checks |
 | `deploy-verifier-bls.ts` | 0% | Isolated benchmark deployment/error paths |
 | `redeploy-verifier.ts` | 0% | Isolated replacement/error paths |
@@ -139,3 +139,15 @@ variants, and deployment/role/receipt/write failures. Six contract scripts now
 have full per-file gates; the remaining six stay in the denominator at zero.
 The complete contract-tooling report remains partial at 163/643 statements,
 69/180 branches, 160/632 lines and 18/49 functions.
+
+Checkpoint 156 adds 29 measured tests for the single-network and multi-chain
+deployment entrypoints. They cover lower-case jurisdiction encoding, exact
+constructor/override thresholds, receipt-before-record ordering, pending
+activation metadata, configured/default output paths, empty override tables,
+invalid jurisdiction keys, failed deployment/seeding/confirmation/persistence,
+local-network explorer suppression, both configured explorer-key paths, optional
+error messages and the empty-balance refusal. Both source files reach 100% on
+all metrics and gain per-file gates. Overall: 313/643 statements, 90/180 branches,
+308/632 lines and 26/49 functions across all twelve files. Four scripts remain
+unmeasured. Existing actual local deployment acceptance remains complementary
+evidence; these new tests control network and file operations.
