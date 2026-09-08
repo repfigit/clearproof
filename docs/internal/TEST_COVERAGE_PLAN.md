@@ -2076,3 +2076,21 @@ still need completion and final merged-main verification.
 - TypeScript and whitespace pass; generated normal bindings are unchanged.
   No production source changed. Other Solidity and repository-wide gaps,
   operational verification and remote CI/merge remain required for completion.
+
+## One hundred and fourteenth checkpoint
+
+- Added subprocess checks for both Python and upb protobuf implementations.
+  A synthetic sealed envelope retains identical deterministic bytes, including
+  an unknown wire field, through each backend. Checks also cover error enum
+  aliases, oneof replacement/clearing, nested-message roundtrip and RPC descriptor
+  streaming/type metadata. Runtime selection is verified inside each fresh child.
+- Both new cases and the existing gRPC bridge suite pass: 24 tests, 9 warnings,
+  7.43 seconds (`protobuf-runtime.log`). Subprocess coverage is captured in
+  `protobuf-runtime.data` and `.json`. Generated message modules reach 48/48 and
+  21/21 statements, each with 2/2 branches. No generated source was edited.
+- Importing the generated errors gRPC module covers its supported-runtime path
+  (9/12 statements, 1/2 branches). Generated service handlers and incompatible
+  runtime paths remain incomplete; this focused run does not replace the full
+  Python aggregate. All source remains in the coverage denominator.
+- Ruff and whitespace pass; REUSE covers all 721 files. Full repository coverage,
+  remaining operational checks and remote CI/merge remain open.
