@@ -2255,3 +2255,17 @@ still need completion and final merged-main verification.
 - TypeScript and whitespace pass. No production source changed. Remaining SDK
   canonical/profile/cohort and transport outcomes, the pending full Python rerun,
   Solidity and operational coverage, and remote CI/merge keep the full goal open.
+
+## One hundred and twenty-fourth checkpoint
+
+- Added HTTP dependency fault injection for an absent response status. The actual
+  transport rejects with unavailable/HTTP 0 and destroys the request exactly once;
+  a valid subsequent response resolves parsed JSON and also closes its request.
+  Existing real TLS tests remain in the full SDK run. No production source changed.
+- All 214 SDK tests pass in 2.63 seconds. Transport now has 100% of every coverage
+  metric; aggregate SDK coverage is 514/517 statements, 667/671 branches, 400/400
+  lines and 89/89 functions (`sdk-response-boundary.log`, preserved `-summary.json`
+  and `.lcov`). TypeScript, whitespace and REUSE pass.
+- Remaining serialization/profile/cohort outcomes, the full Python rerun,
+  Solidity/operational verification and remote CI/merge still prevent completion
+  of the full repository goal.
