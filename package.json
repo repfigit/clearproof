@@ -18,7 +18,8 @@
     "test": "uv run python -m pytest tests/ -v",
     "test:unit": "uv run python -m pytest tests/unit/ -v",
     "test:integration": "uv run python -m pytest tests/integration/ -v",
-    "test:compliance": "uv run python -m pytest tests/compliance/ -v"
+    "test:compliance": "uv run python -m pytest tests/compliance/ -v",
+    "test:contract-scripts:coverage": "vitest run --config vitest.contract-scripts.config.mjs --coverage"
   },
   "dependencies": {
     "circomlib": "^2.0.5",

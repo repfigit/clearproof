@@ -2894,3 +2894,29 @@ still need completion and final merged-main verification.
   the dedicated artifact-backed evidence matters. CI YAML and whitespace checks
   pass. Application/development inputs still use their earlier unchanged-source
   runs; full fresh-suite and remote execution/review/merge remain outstanding.
+
+
+### Checkpoint 153 — refresh started; contract TypeScript inventory gap
+
+- Started a fresh full Python suite with a newly owned private PostgreSQL 18
+  cluster, both current development proof bundles and explicit CLI acceptance.
+  The same runner will execute checkpoint and mirror coverage separately and
+  stop its owned cluster in a finally block. At this checkpoint the suite is
+  still running; `python153-run.json` and `python-suite153.log` are live evidence,
+  not a passing result. Keep following this run rather than restarting it.
+- Refreshed content, CLI, SDK, docs and root operational JavaScript coverage;
+  all five existing gates pass (`*-coverage153.log`, preserved summary JSON).
+- The deployment audit identified twelve authored contract-tooling TypeScript
+  files missing from V8 measurement. Added a separate report that includes all
+  twelve files. Eleven tests cover configured network selection/RPC overrides
+  and verifier preparation, including invalid delays and pending activation.
+  Both helper files pass 100% gates; the overall report remains partial at
+  16/643 statements, 11/180 branches, 14/632 lines and 4/49 functions
+  (`contract-scripts153.log`, `contract-scripts153-summary.json`).
+- Both actual Hardhat deployment-preparation tests pass in 11 seconds
+  (`deployment-real153.log`), including both entry points and pending activation
+  records. All activity is local; no live deployments/root updates occur.
+- CI now runs and retains the additional report. The other ten contract scripts
+  explicitly remain unmeasured; these gaps must be closed before full repository
+  coverage can be claimed. Full fresh Python completion, broader final audit and
+  remote CI/review/merge remain pending.

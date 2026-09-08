@@ -199,11 +199,14 @@ jobs:
           node-version: 24
       - run: npm ci
       - run: npm run test:scripts:coverage
+      - run: npm run test:contract-scripts:coverage
       - uses: actions/upload-artifact@v4
         if: always()
         with:
           name: operational-javascript-coverage
-          path: coverage/scripts/
+          path: |
+            coverage/scripts/
+            coverage/contract-scripts/
           if-no-files-found: error
           retention-days: 7
 

@@ -96,3 +96,28 @@ same command covers 9377/9377 statements and 2306/2306 branches across 143
 application files and ten scripts. Omitting contract-fixture evidence fails the
 gate. Application and development inputs are earlier unchanged-source evidence;
 this aggregate is not a fresh full-suite or remote-CI completion claim.
+
+The deployment audit at checkpoint 153 found twelve additional authored
+TypeScript files under `packages/contracts/scripts/`. Solidity instrumentation
+does not measure them. `npm run test:contract-scripts:coverage` now inventories
+all twelve, including unimported files, in a separate V8 report. Network-selection
+and legacy verifier-preparation helpers pass 100% per-file gates; the other ten
+files are included at zero measured coverage until their paths are exercised.
+The initial aggregate is 16/643 statements, 11/180 branches, 14/632 lines and
+4/49 functions. Existing real deployment acceptance is complementary evidence,
+not a substitute for this missing TypeScript measurement.
+
+| Contract script | V8 coverage at checkpoint 153 | Remaining work |
+| --- | --- | --- |
+| `networks.ts` | 100% all metrics | Retain selection/override tests; no public RPC availability claim |
+| `legacy-verifier.ts` | 100% all metrics | Retain actual deployment/timelock checks |
+| `deploy.ts` | 0% | Instrument deployment and failure paths |
+| `deploy-multichain.ts` | 0% | Instrument deployment and failure paths |
+| `deploy-relay.ts` | 0% | Isolated relay deployment/error paths |
+| `deploy-verifier-bls.ts` | 0% | Isolated benchmark deployment/error paths |
+| `redeploy-verifier.ts` | 0% | Isolated replacement/error paths |
+| `relay-sanctions-root.ts` | 0% | Controlled relayer lifecycle and errors |
+| `update-sanctions-root.ts` | 0% | Synthetic update/consistency failures |
+| `check-transfer.ts` | 0% | Controlled read responses/errors |
+| `verify-onchain.ts` | 0% | Controlled proof verification/errors |
+| `gas-bench.ts` | 0% | Local benchmark/report errors |
