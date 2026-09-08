@@ -152,3 +152,15 @@ def test_invalid_policy_order_rejected_in_python_and_circuit(compiled, tmp_path,
         private_tier_witness("100", thresholds)
     result = calculate(compiled, tmp_path, "tier", {"usd_cents": "100", "thresholds": list(thresholds), "tier": "1"})
     assert result.returncode != 0 and b"Assert Failed" in result.stderr
+
+
+@pytest.mark.parametrize("thresholds", [None, [], ["10", "20", "30"], ("10", "20"), ("10", "20", "30", "40")])
+def test_private_tier_requires_exact_three_threshold_tuple(thresholds):
+    with pytest.raises(ValueError, match="Three ordered policy thresholds are required"):
+        private_tier_witness("1", thresholds)
+
+
+@pytest.mark.parametrize("amount", ["0", "-1", "01", str(2**128)])
+def test_private_tier_rejects_invalid_amount(amount):
+    with pytest.raises(ValueError):
+        private_tier_witness(amount, ("10", "20", "30"))

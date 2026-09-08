@@ -1448,3 +1448,20 @@ still need completion and final merged-main verification.
 - Full repository coverage remains incomplete. Checkpoint 69 is the latest full
   Python report. Remaining service/verifier/generated paths, other workspaces,
   operational checks and final remote CI/merge verification remain outstanding.
+
+## Eightieth checkpoint
+
+- Added nine valuation/private-tier tests for absent/list/wrong-length threshold
+  inventories and zero, negative, noncanonical or oversized amount strings.
+  Existing Python-plus-circuit unordered-threshold tests are retained without
+  duplicating them.
+- All 39 valuation tests pass in 5.02 seconds, including real full-width circuit
+  arithmetic, forged-tier and modular-alias rejection. Pilot valuation measures
+  15/16 statements and 5/6 branches (`pilot-valuation-boundaries.log`/`.data`).
+- Line 11's repeated quotient-consistency rejection remains unexecuted because
+  Transfer model validation enforces the same invariant first. It stays visible
+  for final review; no validator bypass or coverage exclusion was added.
+- Ruff/format/whitespace pass. No source changed. Full repository coverage
+  remains incomplete; checkpoint 69 is the latest complete Python baseline.
+  Other Python/generated paths, workspace coverage, operational tests and
+  final remote CI/merge verification remain outstanding.
