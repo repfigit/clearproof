@@ -2018,3 +2018,23 @@ still need completion and final merged-main verification.
   remain in this contract, including defensive dependency and invariant checks.
   Other contracts, Python/generated code, workspace/operational coverage and
   remote CI/merge requirements keep the full goal open.
+
+## One hundred and eleventh checkpoint
+
+- Added explicit verifier-dependency fault injection: a zero-return runtime
+  exercises constructor rejection of an empty artifact manifest; replacing the
+  pinned verifier's runtime exercises code-hash mismatch rejection in inspection
+  and mirroring. No registry storage or proof inputs are modified.
+- Faulted inspection/mirroring retains the statement but creates no receipt or
+  event. Both injected runtimes are restored in finally blocks; the original
+  verifier subsequently inspects the real proof and mirrors exactly once.
+- All 26 current-registry tests pass normally (7 seconds), instrumented (14
+  seconds), and after normal-bytecode restoration. Focused branch coverage is
+  95.89%, with 100% lines/statements/functions for this contract
+  (`current-verifier-dependency-instrumented.log` and preserved `.json`,
+  `current-verifier-dependency-restored-normal.log`). Dependency fault injection
+  tests a defensive boundary; it does not claim deployed immutable code can
+  ordinarily be replaced through the contract's public API.
+- TypeScript and whitespace checks pass. Normal generated bindings are unchanged;
+  no production source changed. Remaining invariant/revision branches and the
+  broader repository coverage, operational and remote requirements remain open.

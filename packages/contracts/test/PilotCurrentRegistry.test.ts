@@ -1,6 +1,6 @@
 import { expect } from "chai";
 import { ethers } from "hardhat";
-import { loadFixture, time } from "@nomicfoundation/hardhat-network-helpers";
+import { loadFixture, setCode, time } from "@nomicfoundation/hardhat-network-helpers";
 import fs from "node:fs";
 import path from "node:path";
 import { execFile } from "node:child_process";
@@ -79,6 +79,44 @@ const g2 = (p: string[][]): [G1, G1] => [[p[0][1], p[0][0]], [p[1][1], p[1][0]]]
       .withArgs(outsider.address, await registry.DEFAULT_ADMIN_ROLE());
     expect(await registry.publishers(tenant)).to.equal(publisher.address);
     expect(await registry.publisherEpochs(tenant)).to.equal(1);
+  });
+
+  it("rejects an empty manifest and fails closed when pinned verifier code changes", async function () {
+    const { registry, pairing, tenant, consumer, outsider, id, a, b, c, signals, approve, receiptId } = await loadFixture(fixture);
+    const [admin] = await ethers.getSigners();
+    const Factory = await ethers.getContractFactory("PilotCurrentRegistry");
+    // Dependency fault injection: this runtime returns a zero word for every call.
+    // No registry storage or proof inputs are altered.
+    const zeroReturn = "0x600060005260206000f3";
+    const outsiderCode = await ethers.provider.getCode(outsider.address);
+    try {
+      await setCode(outsider.address, zeroReturn);
+      await expect(Factory.deploy(admin.address, outsider.address))
+        .to.be.revertedWithCustomError(Factory, "InvalidScope");
+    } finally {
+      await setCode(outsider.address, outsiderCode);
+    }
+    await approve();
+    expect(await registry.inspect(tenant, id, a, b, c, signals)).to.equal(true);
+    const target = await pairing.getAddress();
+    const originalCode = await ethers.provider.getCode(target);
+    expect(await registry.verifierCodeHash()).to.equal(ethers.keccak256(originalCode));
+    try {
+      await setCode(target, zeroReturn);
+      await expect(registry.inspect(tenant, id, a, b, c, signals))
+        .to.be.revertedWithCustomError(registry, "InvalidStatement");
+      await expect(registry.connect(consumer).mirror(tenant, id, receiptId, a, b, c, signals))
+        .to.be.revertedWithCustomError(registry, "InvalidStatement");
+      expect((await registry.statementPublication(id)).exists).to.equal(true);
+      expect(await registry.mirroredReceipts(tenant, signals[3])).to.equal(ethers.ZeroHash);
+      expect(await registry.queryFilter(registry.filters.AuthorizationMirrored())).to.have.length(0);
+    } finally {
+      await setCode(target, originalCode);
+    }
+    expect(await registry.inspect(tenant, id, a, b, c, signals)).to.equal(true);
+    await registry.connect(consumer).mirror(tenant, id, receiptId, a, b, c, signals);
+    expect(await registry.mirroredReceipts(tenant, signals[3])).to.equal(receiptId);
+    expect(await registry.queryFilter(registry.filters.AuthorizationMirrored())).to.have.length(1);
   });
 
   it("rejects malformed head updates without altering existing checkpoints", async function () {
