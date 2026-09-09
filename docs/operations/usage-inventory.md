@@ -43,7 +43,7 @@ operations occur. Old policy/root revisions and content-addressed evidence chunk
 have different units from logical observations. Provider evidence chunks must not
 be charged as separate provider messages.
 
-The pricing experiment uses this inventory to understand operational footprint.
+Use this inventory to understand operational footprint.
 It does not compute charges, grant free tiers, enforce quotas, create invoices or
 integrate a payment processor. Any later variable-price contract needs a separate
 agreed billable event definition, period boundary, durable ledger, correction and

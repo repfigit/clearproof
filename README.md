@@ -112,11 +112,12 @@ contracts and shared content are under `packages/`; the documentation app is
 `apps/docs/`. The [proof-system decision](docs/adr/0003-proof-system.md) records
 the implemented Groth16 choice and its assurance limits.
 
-The [paid-pilot preparation packet](docs/commercial/README.md) contains a buyer
-brief, interview script, measurement worksheet, hypothetical pricing and usage
-counter semantics. Live customer/provider access, broader issuer/wallet support,
-ongoing re-screening, managed distribution and independently reviewed production
-operations remain follow-on gates. See [SECURITY.md](SECURITY.md) for reporting.
+The [adoption roadmap](docs/ADOPTION_ROADMAP.md) describes public priorities and
+ways to contribute. Use the [evaluation guide](docs/operations/evaluating-clearproof.md)
+and [usage inventory](docs/operations/usage-inventory.md) to interpret examples
+and counters. Live customer/provider access, broader issuer/wallet support,
+ongoing re-screening and independently reviewed production operations remain
+follow-on gates. See [SECURITY.md](SECURITY.md) for reporting.
 
 ## License
 

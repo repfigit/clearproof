@@ -81,3 +81,7 @@ test-results/
 # builder-context.md is deliberately NOT ignored — it is durable repo knowledge.
 .repfigit-loop/*.json
 .repfigit-loop/traces/
+
+# Private commercial operations and local bot state belong outside this repository.
+docs/commercial/
+.hermes/

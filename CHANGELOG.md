@@ -11,6 +11,10 @@ maintains its own version line in this file.
 
 ## [Unreleased]
 
+### Documentation
+
+- Add a public adoption roadmap and publication boundaries; retain evaluation and usage semantics in operational docs while removing internal commercial preparation from the current public tree.
+
 ### Added
 
 - **Native Python Poseidon** (`src/registry/poseidon.py`): pure-Python Poseidon over BN254 implementing the standard reference permutation. Round constants and MDS matrices (`src/registry/poseidon_constants.json`) are generated **clean-room** by `scripts/generate_poseidon_constants.py` (Apache-2.0) from the public Grain-LFSR parameter algorithm in the Poseidon paper (eprint 2019/458) — nothing is vendored from circomlibjs, preserving the repo's no-GPL posture (ADR 0001). Replaces the Node.js subprocess bridge (`scripts/poseidon_hash.js`) in `sanctions_list.py`, `issuer_registry.py`, `credential_registry.py`, and `scripts/build_sanctions_tree.py` — the API and tree builder no longer require a Node.js runtime at deploy time. Parity with circomlibjs (and therefore the in-circuit `Poseidon(n)` template) is enforced by `tests/unit/test_poseidon.py` (hardcoded vectors, optional live parity check, and a constants-regeneration consistency test).
