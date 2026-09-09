@@ -57,7 +57,7 @@ Predeclare cohort membership and baseline labels. Keep observed/missing counts,
 comparable labels, agreement/disagreement and measured/unmeasured latency in the
 same scoped report; do not silently remove hard cases from denominators. Report
 actual evaluation duration with its scope. Record onboarding/diagnosis time and
-repeat operator use through the [measurement worksheet](../commercial/measurement-worksheet.md),
+repeat operator use through the [evaluation guide](evaluating-clearproof.md),
 with the method and missing measurements explicit. These are inputs to a pilot
 experiment, not demonstrated willingness to pay or an SLA.
 
