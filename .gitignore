@@ -85,3 +85,5 @@ test-results/
 # Private commercial operations and local bot state belong outside this repository.
 docs/commercial/
 .hermes/
+.vercel
+.env*
