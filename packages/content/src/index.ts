@@ -9,3 +9,6 @@ export type { RecipeMeta, Recipe, RecipeStep } from './recipes.js';
 
 export { listSignals, getSignal } from './signals.js';
 export type { Signal } from './signals.js';
+
+export { listUpdates, getUpdate } from './updates.js';
+export type { UpdateMeta, Update } from './updates.js';
