@@ -1,8 +1,13 @@
 import { NextResponse } from "next/server";
-import { listUpdates } from "@clearproof/content";
+import { getUpdate, listUpdates } from "@clearproof/content";
+import { visibleUpdates } from "../../../../src/feed";
 
 const headers = { "Cache-Control": "public, max-age=300" };
 
 export async function GET() {
-  return NextResponse.json({ updates: listUpdates() }, { headers });
+  const updates = listUpdates()
+    .map(update => getUpdate(update.slug))
+    .filter(update => update !== null);
+
+  return NextResponse.json({ updates: visibleUpdates(updates) }, { headers });
 }

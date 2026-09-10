@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { getUpdate } from "@clearproof/content";
+import { visibleUpdates } from "../../../../../src/feed";
 
 const headers = { "Cache-Control": "public, max-age=300" };
 
@@ -10,7 +11,7 @@ export async function GET(
   const { slug } = await params;
   const update = getUpdate(slug);
 
-  if (!update) {
+  if (!update || visibleUpdates([update]).length === 0) {
     return NextResponse.json({ error: "Not found" }, { status: 404, headers });
   }
 

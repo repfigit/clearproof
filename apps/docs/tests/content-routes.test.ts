@@ -26,15 +26,29 @@ it('returns the real content catalogue as cacheable JSON', async () => {
 });
 
 describe('updates', () => {
-  it('serves the updates catalogue as cacheable JSON', async () => {
+  it('serves the updates catalogue as cacheable JSON with only visible updates', async () => {
     const response = await updatesManifest();
     expectJsonCache(response, 200);
     const data = await response.json();
-    expect(data).toEqual({ updates: listUpdates() });
+    // The JSON surface applies the same publication gate as the feed and sitemap:
+    // only approved/published updates past their publishAfter time, as full records.
+    const visible = listUpdates()
+      .filter(
+        item => (item.status === 'approved' || item.status === 'published')
+          && Date.parse(item.publishAfter) <= Date.now(),
+      )
+      .map(item => getUpdate(item.slug))
+      .filter(item => item !== null);
+    expect(data).toEqual({ updates: visible });
   });
 
-  it('serves a single update as cacheable JSON', async () => {
-    const slugs = listUpdates().map(item => item.slug);
+  it('serves a single visible update as cacheable JSON', async () => {
+    const slugs = listUpdates()
+      .filter(
+        item => (item.status === 'approved' || item.status === 'published')
+          && Date.parse(item.publishAfter) <= Date.now(),
+      )
+      .map(item => item.slug);
     expect(slugs.length).toBeGreaterThan(0);
     for (const slug of slugs) {
       const response = await update(
