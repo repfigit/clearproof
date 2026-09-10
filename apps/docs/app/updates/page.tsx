@@ -12,29 +12,29 @@ export default function UpdatesIndex() {
     listUpdates().map(update => getUpdate(update.slug)).filter(update => update !== null),
   );
   return (
-    <main className="mx-auto w-full max-w-3xl px-6 py-16">
-      <h1 className="text-3xl font-bold tracking-tight">Updates</h1>
-      <p className="mt-2 text-sm text-gray-500">
+    <main className="x:mx-auto x:w-full x:max-w-(--nextra-content-width) x:px-4 x:py-12">
+      <h1 className="x:text-3xl x:font-bold x:tracking-tight">Updates</h1>
+      <p className="x:mt-2 x:text-sm x:text-gray-400">
         Source-backed project updates. Subscribe via{' '}
-        <a className="underline" href="/feed.xml">RSS (/feed.xml)</a>. Each update cites the
+        <a className="x:underline" href="/feed.xml">RSS (/feed.xml)</a>. Each update cites the
         source revision its claims were checked against. Clearproof is pilot-stage software;
         updates describe the repository as it is, without audit, customer or compliance claims.
       </p>
-      <ul className="mt-8 space-y-8">
+      <ul className="x:mt-8 x:flex x:flex-col x:gap-4">
         {updates.map(update => (
           <li key={update.id}>
-            <Link className="text-xl font-semibold underline-offset-4 hover:underline" href={`/updates/${update.slug}`}>
+            <Link className="x:text-xl x:font-semibold x:underline" href={`/updates/${update.slug}`}>
               {update.title}
             </Link>
-            <div className="mt-1 text-sm text-gray-500">
+            <div className="x:mt-1 x:text-sm x:text-gray-400">
               {update.date} · {update.status}
             </div>
-            <p className="mt-2 text-gray-700 dark:text-gray-300">{update.summary}</p>
+            <p className="x:mt-2 x:text-gray-700 x:dark:text-gray-300">{update.summary}</p>
           </li>
         ))}
       </ul>
       {updates.length === 0 && (
-        <p className="mt-8 text-gray-500">No updates published yet.</p>
+        <p className="x:mt-8 x:text-gray-400">No updates published yet.</p>
       )}
     </main>
   );
