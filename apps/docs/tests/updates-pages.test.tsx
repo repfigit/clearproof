@@ -90,6 +90,50 @@ describe('update detail page', () => {
     for (const ref of update.claimRefs) expect(html).toContain(ref);
   });
 
+  it('renders markdown links in update bodies as anchors', async () => {
+    const slug = visibleSlugs()[0];
+    const update = getUpdate(slug)!;
+    const link = update.body.match(/\[([^\]]+)\]\(([^)]+)\)/);
+    expect(link).not.toBeNull();
+    if (!link) return;
+    const html = renderToStaticMarkup(await UpdatePage({ params: Promise.resolve({ slug }) }));
+    expect(html).toContain(`href="${link[2]}"`);
+    expect(html).toContain(`>${link[1]}</a>`);
+    expect(html).not.toContain(`[${link[1]}](${link[2]})`);
+  });
+
+  it('renders markdown links at paragraph boundaries as anchors', async () => {
+    const slug = visibleSlugs()[0];
+    const content = await vi.importActual<typeof import('@clearproof/content')>('@clearproof/content');
+    const body = [
+      '[Leading link](https://example.com/leading)',
+      'Middle [inner link](https://example.com/inner) with trailing text.',
+      'Paragraph ending with [trailing link](https://example.com/trailing)',
+    ].join('\n\n');
+    vi.doMock('@clearproof/content', () => ({
+      ...content,
+      getUpdate: (s: string) => {
+        const real = content.getUpdate(s);
+        return s === slug && real ? { ...real, body } : real;
+      },
+    }));
+    try {
+      vi.resetModules();
+      const { default: BoundaryPage } = await import('../app/updates/[slug]/page');
+      const html = renderToStaticMarkup(await BoundaryPage({ params: Promise.resolve({ slug }) }));
+      expect(html).toContain('href="https://example.com/leading"');
+      expect(html).toContain('href="https://example.com/inner"');
+      expect(html).toContain('href="https://example.com/trailing"');
+      expect(html).not.toContain('[Leading link](https://example.com/leading)');
+      expect(html).not.toContain('[trailing link](https://example.com/trailing)');
+      expect(html).toContain('Paragraph ending with <a');
+      expect(html).toContain('<a');
+    } finally {
+      vi.doUnmock('@clearproof/content');
+      vi.resetModules();
+    }
+  });
+
   it('renders metadata for a visible update', async () => {
     const slug = visibleSlugs()[0];
     const update = getUpdate(slug)!;
