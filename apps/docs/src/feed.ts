@@ -1,6 +1,6 @@
 import { getUpdate, listUpdates, type Update } from "@clearproof/content";
 
-const SITE_URL = (process.env.NEXT_PUBLIC_SITE_URL ?? "https://www.clearproof.world").replace(/\/$/, "");
+const SITE_URL = (process.env.NEXT_PUBLIC_SITE_URL ?? "https://docs.clearproof.world").replace(/\/$/, "");
 const FEED_PATH = "/feed.xml";
 const FEED_LIMIT = Number.parseInt(process.env.FEED_LIMIT ?? "20", 10);
 

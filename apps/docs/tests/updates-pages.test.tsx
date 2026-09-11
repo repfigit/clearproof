@@ -41,7 +41,7 @@ it('exposes a permissive robots policy pointing at the site sitemap', () => {
   const env = process.env;
   expect(robots()).toEqual({
     rules: [{ userAgent: '*', allow: '/' }],
-    sitemap: 'https://www.clearproof.world/sitemap.xml',
+    sitemap: 'https://docs.clearproof.world/sitemap.xml',
   });
   process.env = { ...env, NEXT_PUBLIC_SITE_URL: 'https://clearproof.world/' };
   try {
