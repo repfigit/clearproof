@@ -23,7 +23,11 @@ function paragraphText(markdown: string): string {
     .replace(/^#{1,6}\s+/gm, "")
     .replace(/^>\s?/gm, "")
     .replace(/^\s*[-*+]\s+/gm, "")
-    .replace(/[*_`]/g, "")
+    // emphasis: paired markers only, so file paths like docs/ADOPTION_ROADMAP.md keep their underscores
+    .replace(/(^|\s)_{1,3}(?=\S)([\s\S]*?\S)_{1,3}(?=\s|$|[.,;:!?')\]])/gm, "$1$2")
+    .replace(/\*\*(?=\S)([\s\S]*?\S)\*\*/g, "$1")
+    .replace(/(^|\s)\*(?=\S)([^*]*\S)\*(?=\s|$|[.,;:!?')\]])/gm, "$1$2")
+    .replace(/`([^`]*)`/g, "$1")
     // links become their text
     .replace(/\[([^\]]*)\]\([^)]*\)/g, "$1");
   return withoutMarkup.replace(/\s+/g, " ").trim();
