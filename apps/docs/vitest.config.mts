@@ -3,7 +3,7 @@ import { defineConfig } from 'vitest/config';
 export default defineConfig({
   oxc: { jsx: { runtime: 'automatic' } },
   test: {
-    include: ['tests/**/*.test.ts'],
+    include: ['tests/**/*.test.{ts,tsx}'],
     coverage: {
       // Authored TS/TSX unit coverage; MDX rendering/browser checks are separate.
       include: ['app/**/*.ts', 'app/**/*.tsx', 'mdx-components.tsx'],
