@@ -1,7 +1,7 @@
 import type { MetadataRoute } from 'next';
 
 export default function robots(): MetadataRoute.Robots {
-  const siteUrl = (process.env.NEXT_PUBLIC_SITE_URL ?? 'https://www.clearproof.world').replace(/\/$/, '');
+  const siteUrl = (process.env.NEXT_PUBLIC_SITE_URL ?? 'https://docs.clearproof.world').replace(/\/$/, '');
   return {
     rules: [{ userAgent: '*', allow: '/' }],
     sitemap: `${siteUrl}/sitemap.xml`,

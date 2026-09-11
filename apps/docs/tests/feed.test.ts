@@ -39,13 +39,13 @@ describe('buildFeedXml', () => {
     const xml = buildFeedXml([update({ title: 'Quotes & <angles>' })], NOW);
     expect(xml).toContain('<rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom">');
     expect(xml).toContain('<title>Quotes &amp; &lt;angles&gt;</title>');
-    expect(xml).toContain('<link>https://www.clearproof.world/updates/example-update</link>');
-    expect(xml).toContain('<guid isPermaLink="true">https://www.clearproof.world/updates/example-update</guid>');
+    expect(xml).toContain('<link>https://docs.clearproof.world/updates/example-update</link>');
+    expect(xml).toContain('<guid isPermaLink="true">https://docs.clearproof.world/updates/example-update</guid>');
     expect(xml).toContain('<pubDate>Wed, 09 Sep 2026 00:00:00 GMT</pubDate>');
     // Link text survives; code fences do not leak into the description.
     expect(xml).toContain('First paragraph with a link and code.');
     expect(xml).not.toContain('hidden()');
-    expect(xml).toContain('<atom:link href="https://www.clearproof.world/feed.xml"');
+    expect(xml).toContain('<atom:link href="https://docs.clearproof.world/feed.xml"');
   });
 
   it('respects the feed limit and hides invisible updates entirely', () => {
@@ -71,10 +71,10 @@ describe('buildSitemapXml', () => {
       NOW,
     );
     expect(xml).toContain('http://www.sitemaps.org/schemas/sitemap/0.9');
-    expect(xml).toContain('<loc>https://www.clearproof.world/</loc>');
-    expect(xml).toContain('<loc>https://www.clearproof.world/updates</loc><lastmod>2026-09-09</lastmod>');
-    expect(xml).toContain('<loc>https://www.clearproof.world/updates/a</loc><lastmod>2026-09-09</lastmod>');
-    expect(xml).toContain('<loc>https://www.clearproof.world/updates/b</loc><lastmod>2026-09-08</lastmod>');
+    expect(xml).toContain('<loc>https://docs.clearproof.world/</loc>');
+    expect(xml).toContain('<loc>https://docs.clearproof.world/updates</loc><lastmod>2026-09-09</lastmod>');
+    expect(xml).toContain('<loc>https://docs.clearproof.world/updates/a</loc><lastmod>2026-09-09</lastmod>');
+    expect(xml).toContain('<loc>https://docs.clearproof.world/updates/b</loc><lastmod>2026-09-08</lastmod>');
     expect(xml).not.toContain('/updates/draft');
   });
 });
