@@ -15,7 +15,7 @@ function update(overrides: Partial<Update> = {}): Update {
     claimRefs: ['docs/ADOPTION_ROADMAP.md'],
     status: 'approved',
     summary: 'Example summary',
-    body: 'First paragraph with [a link](https://example.com) and `code`.\n\n```js\nhidden();\n```',
+    body: 'First paragraph with [a link](https://example.com) and `code`, see docs/ADOPTION_ROADMAP.md.\n\n```js\nhidden();\n```',
     ...overrides,
   };
 }
@@ -43,8 +43,11 @@ describe('buildFeedXml', () => {
     expect(xml).toContain('<guid isPermaLink="true">https://docs.clearproof.world/updates/example-update</guid>');
     expect(xml).toContain('<pubDate>Wed, 09 Sep 2026 00:00:00 GMT</pubDate>');
     // Link text survives; code fences do not leak into the description.
-    expect(xml).toContain('First paragraph with a link and code.');
+    expect(xml).toContain('First paragraph with a link and code, see docs/ADOPTION_ROADMAP.md.');
     expect(xml).not.toContain('hidden()');
+    // Underscores in file paths survive emphasis stripping.
+    expect(xml).toContain('docs/ADOPTION_ROADMAP.md');
+    expect(xml).not.toContain('ADOPTIONROADMAP');
     expect(xml).toContain('<atom:link href="https://docs.clearproof.world/feed.xml"');
   });
 
