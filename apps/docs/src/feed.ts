@@ -1,4 +1,5 @@
 import { getUpdate, listUpdates, type Update } from "@clearproof/content";
+import { getExplainer, listExplainers, type Explainer } from "@clearproof/content";
 
 const SITE_URL = (process.env.NEXT_PUBLIC_SITE_URL ?? "https://docs.clearproof.world").replace(/\/$/, "");
 const FEED_PATH = "/feed.xml";
@@ -45,6 +46,12 @@ export function visibleUpdates(updates: Update[], now: Date = new Date()): Updat
     .filter(update => Date.parse(update.publishAfter) <= now.getTime());
 }
 
+export function visibleExplainers(explainers: Explainer[], now: Date = new Date()): Explainer[] {
+  return explainers
+    .filter(explainer => explainer.status === "published" || explainer.status === "approved")
+    .filter(explainer => Date.parse(explainer.publishAfter) <= now.getTime());
+}
+
 export function buildFeedXml(updates: Update[], generatedAt: Date = new Date()): string {
   const items = visibleUpdates(updates, generatedAt).slice(0, FEED_LIMIT);
 
@@ -82,8 +89,16 @@ export function buildFeedXml(updates: Update[], generatedAt: Date = new Date()):
 }
 
 export function buildSitemapXml(updates: Update[], generatedAt: Date = new Date()): string {
+  const explainers = listExplainers()
+    .map(explainer => getExplainer(explainer.slug))
+    .filter((explainer): explainer is Explainer => explainer !== null);
   const entries = [
     { loc: `${SITE_URL}/`, lastmod: undefined as string | undefined },
+    { loc: `${SITE_URL}/explainers`, lastmod: visibleExplainers(explainers, generatedAt)[0]?.date },
+    ...visibleExplainers(explainers, generatedAt).map(explainer => ({
+      loc: `${SITE_URL}${explainer.canonical}`,
+      lastmod: explainer.date,
+    })),
     { loc: `${SITE_URL}/updates`, lastmod: visibleUpdates(updates, generatedAt)[0]?.date },
     ...visibleUpdates(updates, generatedAt).map(update => ({
       loc: `${SITE_URL}/updates/${update.slug}`,
