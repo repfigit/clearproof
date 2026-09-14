@@ -1,5 +1,5 @@
-import { describe, expect, it } from 'vitest';
-import { getRecipe, getSignal, getTopic, getUpdate, listRecipes, listSignals, listTopics, listUpdates } from '@clearproof/content';
+import { afterEach, describe, expect, it } from 'vitest';
+import { getUpdate, getRecipe, getSignal, getTopic, listRecipes, listSignals, listTopics, listUpdates } from '@clearproof/content';
 import { GET as manifest } from '../app/api/content/manifest/route';
 import { GET as topic } from '../app/api/content/topics/[slug]/route';
 import { GET as recipe } from '../app/api/content/recipes/[slug]/route';
@@ -26,6 +26,10 @@ it('returns the real content catalogue as cacheable JSON', async () => {
 });
 
 describe('updates', () => {
+  afterEach(() => {
+    delete process.env.PUBLISHING_ENABLED;
+  });
+
   it('serves the updates catalogue as cacheable JSON with only visible updates', async () => {
     const response = await updatesManifest();
     expectJsonCache(response, 200);
@@ -40,6 +44,24 @@ describe('updates', () => {
       .map(item => getUpdate(item.slug))
       .filter(item => item !== null);
     expect(data).toEqual({ updates: visible });
+  });
+
+  it('reports the pause payload instead of item data while publishing is paused', async () => {
+    process.env.PUBLISHING_ENABLED = 'off';
+    const response = await updatesManifest();
+    expectJsonCache(response, 200);
+    const data = await response.json();
+    expect(data).toEqual({ paused: true, message: expect.stringContaining('temporarily paused') });
+    expect(JSON.stringify(data)).not.toContain(listUpdates()[0].slug);
+  });
+
+  it('returns a paused JSON error for an unknown update slug while paused', async () => {
+    process.env.PUBLISHING_ENABLED = 'false';
+    const response = await update(new Request('http://localhost/'), {
+      params: Promise.resolve({ slug: 'missing-update' }),
+    });
+    expectJsonCache(response, 404);
+    expect(await response.json()).toEqual({ error: 'Not found' });
   });
 
   it('serves a single visible update as cacheable JSON', async () => {
