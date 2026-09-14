@@ -12,3 +12,6 @@ export type { Signal } from './signals.js';
 
 export { listUpdates, getUpdate } from './updates.js';
 export type { UpdateMeta, Update } from './updates.js';
+
+export { listExplainers, getExplainer } from './explainers.js';
+export type { ExplainerMeta, Explainer } from './explainers.js';
