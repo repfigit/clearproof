@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import { getUpdate, listUpdates } from '@clearproof/content';
-import { visibleUpdates } from '../../src/feed';
+import { pauseNotice, publishingEnabled } from '../../src/publish-controls';
+import { gatedVisible, visibleUpdates } from '../../src/feed';
 
 export const metadata = {
   title: 'Updates — clearproof',
@@ -8,9 +9,10 @@ export const metadata = {
 };
 
 export default function UpdatesIndex() {
-  const updates = visibleUpdates(
-    listUpdates().map(update => getUpdate(update.slug)).filter(update => update !== null),
+  const updates = gatedVisible(
+    visibleUpdates(listUpdates().map(update => getUpdate(update.slug)).filter(update => update !== null)),
   );
+  const paused = !publishingEnabled();
   return (
     <main className="x:mx-auto x:w-full x:max-w-(--nextra-content-width) x:px-4 x:py-12">
       <h1 className="x:text-3xl x:font-bold x:tracking-tight">Updates</h1>
@@ -34,7 +36,7 @@ export default function UpdatesIndex() {
         ))}
       </ul>
       {updates.length === 0 && (
-        <p className="x:mt-8 x:text-gray-400">No updates published yet.</p>
+        <p className="x:mt-8 x:text-gray-400">{paused ? pauseNotice() : 'No updates published yet.'}</p>
       )}
     </main>
   );
