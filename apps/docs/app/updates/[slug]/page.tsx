@@ -4,6 +4,9 @@ import type { ReactNode } from 'react';
 import { getUpdate, listUpdates } from '@clearproof/content';
 import { gatedVisible, visibleUpdates } from '../../../src/feed';
 
+// Pause switch must be evaluated per request, not frozen at build time.
+export const dynamic = 'force-dynamic';
+
 export async function generateStaticParams() {
   return gatedVisible(visibleUpdates(listUpdates().map(update => getUpdate(update.slug)).filter(update => update !== null))).map(
     update => ({ slug: update.slug }),

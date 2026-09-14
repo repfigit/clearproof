@@ -3,6 +3,9 @@ import { getUpdate, listUpdates } from '@clearproof/content';
 import { pauseNotice, publishingEnabled } from '../../src/publish-controls';
 import { gatedVisible, visibleUpdates } from '../../src/feed';
 
+// Pause switch must be evaluated per request, not frozen at build time.
+export const dynamic = 'force-dynamic';
+
 export const metadata = {
   title: 'Updates — clearproof',
   description: 'Source-backed project updates from Clearproof, pilot-stage zero-knowledge transfer evidence.',

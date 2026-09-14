@@ -3,6 +3,9 @@ import { getExplainer, listExplainers } from '@clearproof/content';
 import { pauseNotice, publishingEnabled } from '../../src/publish-controls';
 import { gatedVisible, visibleExplainers } from '../../src/feed';
 
+// Pause switch must be evaluated per request, not frozen at build time.
+export const dynamic = 'force-dynamic';
+
 export const metadata = {
   title: 'Explainers — clearproof',
   description: 'Canonical source-backed explainers from Clearproof, pilot-stage zero-knowledge transfer evidence.',

@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { getUpdate, listUpdates, type Update } from '@clearproof/content';
 
@@ -35,6 +35,38 @@ beforeEach(() => {
 
 it('exposes updates metadata', () => {
   expect(indexMetadata).toMatchObject({ title: 'Updates — clearproof' });
+});
+
+describe('pause switch at page render time', () => {
+  const env = process.env;
+
+  afterEach(() => {
+    delete process.env.PUBLISHING_ENABLED;
+  });
+
+  it('renders only the pause notice on the updates index while paused', async () => {
+    process.env.PUBLISHING_ENABLED = 'off';
+    const html = renderToStaticMarkup(await UpdatesIndex());
+    expect(html).toContain('temporarily paused');
+    for (const slug of visibleSlugs()) {
+      expect(html).not.toContain(getUpdate(slug)!.title);
+    }
+  });
+
+  it('returns not-found for an update detail page while paused', async () => {
+    process.env.PUBLISHING_ENABLED = 'false';
+    const slug = visibleSlugs()[0];
+    await expect(UpdatePage({ params: Promise.resolve({ slug }) })).rejects.toThrow('not-found');
+  });
+
+  it('restores normal rendering when the switch is back on', async () => {
+    process.env.PUBLISHING_ENABLED = 'off';
+    expect(renderToStaticMarkup(await UpdatesIndex())).toContain('temporarily paused');
+    delete process.env.PUBLISHING_ENABLED;
+    const html = renderToStaticMarkup(await UpdatesIndex());
+    expect(html).not.toContain('temporarily paused');
+    expect(html).toContain(getUpdate(visibleSlugs()[0])!.title);
+  });
 });
 
 it('exposes a permissive robots policy pointing at the site sitemap', () => {

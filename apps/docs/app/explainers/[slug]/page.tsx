@@ -4,6 +4,9 @@ import type { ReactNode } from 'react';
 import { getExplainer, listExplainers } from '@clearproof/content';
 import { gatedVisible, visibleExplainers } from '../../../src/feed';
 
+// Pause switch must be evaluated per request, not frozen at build time.
+export const dynamic = 'force-dynamic';
+
 export async function generateStaticParams() {
   return gatedVisible(visibleExplainers(listExplainers().map(explainer => getExplainer(explainer.slug)).filter(explainer => explainer !== null))).map(
     explainer => ({ slug: explainer.slug }),
