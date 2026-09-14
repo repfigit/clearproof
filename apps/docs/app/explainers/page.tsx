@@ -1,6 +1,10 @@
 import Link from 'next/link';
 import { getExplainer, listExplainers } from '@clearproof/content';
-import { visibleExplainers } from '../../src/feed';
+import { pauseNotice, publishingEnabled } from '../../src/publish-controls';
+import { gatedVisible, visibleExplainers } from '../../src/feed';
+
+// Pause switch must be evaluated per request, not frozen at build time.
+export const dynamic = 'force-dynamic';
 
 export const metadata = {
   title: 'Explainers — clearproof',
@@ -8,9 +12,10 @@ export const metadata = {
 };
 
 export default function ExplainersIndex() {
-  const explainers = visibleExplainers(
-    listExplainers().map(explainer => getExplainer(explainer.slug)).filter(explainer => explainer !== null),
+  const explainers = gatedVisible(
+    visibleExplainers(listExplainers().map(explainer => getExplainer(explainer.slug)).filter(explainer => explainer !== null)),
   );
+  const paused = !publishingEnabled();
   return (
     <main className="x:mx-auto x:w-full x:max-w-(--nextra-content-width) x:px-4 x:py-12">
       <h1 className="x:text-3xl x:font-bold x:tracking-tight">Explainers</h1>
@@ -36,7 +41,7 @@ export default function ExplainersIndex() {
         ))}
       </ul>
       {explainers.length === 0 && (
-        <p className="x:mt-8 x:text-gray-400">No explainers published yet.</p>
+        <p className="x:mt-8 x:text-gray-400">{paused ? pauseNotice() : 'No explainers published yet.'}</p>
       )}
     </main>
   );

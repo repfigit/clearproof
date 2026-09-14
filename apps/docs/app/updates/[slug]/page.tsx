@@ -2,19 +2,22 @@ import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import type { ReactNode } from 'react';
 import { getUpdate, listUpdates } from '@clearproof/content';
-import { visibleUpdates } from '../../../src/feed';
+import { gatedVisible, visibleUpdates } from '../../../src/feed';
+
+// Pause switch must be evaluated per request, not frozen at build time.
+export const dynamic = 'force-dynamic';
 
 export async function generateStaticParams() {
-  return visibleUpdates(listUpdates().map(update => getUpdate(update.slug)).filter(update => update !== null)).map(
+  return gatedVisible(visibleUpdates(listUpdates().map(update => getUpdate(update.slug)).filter(update => update !== null))).map(
     update => ({ slug: update.slug }),
   );
 }
 
 export async function generateMetadata({ params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params;
-  const update = visibleUpdates(
+  const update = gatedVisible(visibleUpdates(
     listUpdates().map(item => getUpdate(item.slug)).filter(item => item !== null),
-  ).find(item => item.slug === slug);
+  )).find(item => item.slug === slug);
   if (!update) return { title: 'Update not found — clearproof' };
   return { title: `${update.title} — clearproof`, description: update.summary };
 }
@@ -47,8 +50,8 @@ function renderInlineMarkdown(text: string): ReactNode[] {
 
 export default async function UpdatePage({ params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params;
-  const updates = visibleUpdates(
-    listUpdates().map(item => getUpdate(item.slug)).filter(item => item !== null),
+  const updates = gatedVisible(
+    visibleUpdates(listUpdates().map(item => getUpdate(item.slug)).filter(item => item !== null)),
   );
   const update = updates.find(item => item.slug === slug);
   if (!update) notFound();

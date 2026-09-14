@@ -62,6 +62,28 @@ it('renders an empty-state notice when no explainers are visible', async () => {
   }
 });
 
+it('renders the pause notice on an empty explainers index while paused', async () => {
+  const content = await vi.importActual<typeof import('@clearproof/content')>('@clearproof/content');
+  const explainers = content.listExplainers();
+  vi.doMock('@clearproof/content', () => ({
+    ...content,
+    listExplainers: () => explainers.map(explainer => ({ ...explainer, publishAfter: '9999-12-31T00:00:00Z' })),
+    getExplainer: (slug: string) => null,
+  }));
+  process.env.PUBLISHING_ENABLED = 'off';
+  try {
+    vi.resetModules();
+    const { default: PausedEmptyIndex } = await import('../app/explainers/page');
+    const html = renderToStaticMarkup(await PausedEmptyIndex());
+    expect(html).toContain('temporarily paused');
+    expect(html).not.toContain('No explainers published yet.');
+  } finally {
+    delete process.env.PUBLISHING_ENABLED;
+    vi.doUnmock('@clearproof/content');
+    vi.resetModules();
+  }
+});
+
 describe('explainer detail page', () => {
   it.each(visibleSlugs())('renders visible explainer %s with citation footer', async slug => {
     const explainer = getExplainer(slug)!;

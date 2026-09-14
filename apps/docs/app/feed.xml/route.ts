@@ -1,6 +1,10 @@
 import { getUpdate, listUpdates } from "@clearproof/content";
 import { buildFeedXml } from "../../src/feed";
 
+// Pause switch inside buildFeedXml must be evaluated per request, not frozen
+// at build time by route prerendering.
+export const dynamic = "force-dynamic";
+
 export async function GET() {
   const updates = listUpdates()
     .map(update => getUpdate(update.slug))

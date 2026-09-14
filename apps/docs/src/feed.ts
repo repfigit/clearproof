@@ -1,5 +1,6 @@
 import { getUpdate, listUpdates, type Update } from "@clearproof/content";
 import { getExplainer, listExplainers, type Explainer } from "@clearproof/content";
+import { publishingEnabled } from "./publish-controls";
 
 const SITE_URL = (process.env.NEXT_PUBLIC_SITE_URL ?? "https://docs.clearproof.world").replace(/\/$/, "");
 const FEED_PATH = "/feed.xml";
@@ -52,8 +53,17 @@ export function visibleExplainers(explainers: Explainer[], now: Date = new Date(
     .filter(explainer => Date.parse(explainer.publishAfter) <= now.getTime());
 }
 
+/**
+ * Publish-once gate: filters an already-visible list through the repository
+ * pause switch. When PUBLISHING_ENABLED=false nothing renders anywhere, so a
+ * paused site never leaks approved-but-unshipped content through any route.
+ */
+export function gatedVisible<T>(items: T[]): T[] {
+  return publishingEnabled() ? items : [];
+}
+
 export function buildFeedXml(updates: Update[], generatedAt: Date = new Date()): string {
-  const items = visibleUpdates(updates, generatedAt).slice(0, FEED_LIMIT);
+  const items = gatedVisible(visibleUpdates(updates, generatedAt)).slice(0, FEED_LIMIT);
 
   const itemXml = items
     .map(update => {
@@ -94,13 +104,13 @@ export function buildSitemapXml(updates: Update[], generatedAt: Date = new Date(
     .filter((explainer): explainer is Explainer => explainer !== null);
   const entries = [
     { loc: `${SITE_URL}/`, lastmod: undefined as string | undefined },
-    { loc: `${SITE_URL}/explainers`, lastmod: visibleExplainers(explainers, generatedAt)[0]?.date },
-    ...visibleExplainers(explainers, generatedAt).map(explainer => ({
+    { loc: `${SITE_URL}/explainers`, lastmod: gatedVisible(visibleExplainers(explainers, generatedAt))[0]?.date },
+    ...gatedVisible(visibleExplainers(explainers, generatedAt)).map(explainer => ({
       loc: `${SITE_URL}${explainer.canonical}`,
       lastmod: explainer.date,
     })),
-    { loc: `${SITE_URL}/updates`, lastmod: visibleUpdates(updates, generatedAt)[0]?.date },
-    ...visibleUpdates(updates, generatedAt).map(update => ({
+    { loc: `${SITE_URL}/updates`, lastmod: gatedVisible(visibleUpdates(updates, generatedAt))[0]?.date },
+    ...gatedVisible(visibleUpdates(updates, generatedAt)).map(update => ({
       loc: `${SITE_URL}/updates/${update.slug}`,
       lastmod: update.date,
     })),

@@ -2,19 +2,22 @@ import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import type { ReactNode } from 'react';
 import { getExplainer, listExplainers } from '@clearproof/content';
-import { visibleExplainers } from '../../../src/feed';
+import { gatedVisible, visibleExplainers } from '../../../src/feed';
+
+// Pause switch must be evaluated per request, not frozen at build time.
+export const dynamic = 'force-dynamic';
 
 export async function generateStaticParams() {
-  return visibleExplainers(listExplainers().map(explainer => getExplainer(explainer.slug)).filter(explainer => explainer !== null)).map(
+  return gatedVisible(visibleExplainers(listExplainers().map(explainer => getExplainer(explainer.slug)).filter(explainer => explainer !== null))).map(
     explainer => ({ slug: explainer.slug }),
   );
 }
 
 export async function generateMetadata({ params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params;
-  const explainer = visibleExplainers(
+  const explainer = gatedVisible(visibleExplainers(
     listExplainers().map(item => getExplainer(item.slug)).filter(item => item !== null),
-  ).find(item => item.slug === slug);
+  )).find(item => item.slug === slug);
   if (!explainer) return { title: 'Explainer not found — clearproof' };
   return {
     title: `${explainer.title} — clearproof`,
@@ -51,8 +54,8 @@ function renderInlineMarkdown(text: string): ReactNode[] {
 
 export default async function ExplainerPage({ params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params;
-  const explainers = visibleExplainers(
-    listExplainers().map(item => getExplainer(item.slug)).filter(item => item !== null),
+  const explainers = gatedVisible(
+    visibleExplainers(listExplainers().map(item => getExplainer(item.slug)).filter(item => item !== null)),
   );
   const explainer = explainers.find(item => item.slug === slug);
   if (!explainer) notFound();
