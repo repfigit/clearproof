@@ -31,6 +31,14 @@ npm run build --workspace @clearproof/docs
 npm run test:e2e --workspace @clearproof/docs
 ```
 
+For a prebuilt production deployment, regenerate the build output at the commit
+being deployed before deploying it. The `.vercel/output` directory is not rebuilt
+by `vercel deploy --prebuilt`; deploying with a stale output directory republishes
+the old site regardless of the current source. From `apps/docs`, run
+`vercel build --prod` after building both workspaces, then copy
+`.vercel/project.json` and `.vercel/output` to the repository root `.vercel` and
+run `vercel deploy --prebuilt --prod` from the root as described below.
+
 Playwright discovers every MDX page and checks desktop/mobile Chromium rendering,
 browser errors, the Mermaid SVG, client navigation/back, the 404 page and the
 built content API against every catalogue entry. It owns a production server on

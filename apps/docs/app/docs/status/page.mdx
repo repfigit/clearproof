@@ -22,7 +22,7 @@ The implementation below is on an unreleased development branch. Local acceptanc
 | Provider and bilateral work | Bounded Fireblocks signature/event adapter tested with synthetic signatures; local simulated bilateral dispositions. Live provider access, automated signing-key refresh and remote TRP conformance remain open |
 | Deployment and assurance | Historical Sepolia deployments only; no completed independent circuit/contract audit or production trusted setup |
 
-The clean-checkout workflow installs locked dependencies, builds source workspaces, generates explicitly unapproved development artifacts and exercises real PostgreSQL, CLI/API and local EVM paths. Retained encrypted exports can be reviewed after the services stop. These are controlled synthetic tests with configured authorities, not proof of live source truth or legal compliance.
+The clean-checkout workflow installs locked dependencies, builds source workspaces, generates explicitly unapproved development artifacts and exercises real PostgreSQL, CLI/API and local EVM paths. Retained encrypted exports can be reviewed after the services stop. These are controlled synthetic tests with configured authorities, not proof of live source truth or legal compliance. The install-and-build portion of this workflow was re-verified from a clean public clone of `main` on September 15, 2026 at commit `1c8d385` (locked workspace install, workspace build, built-CLI `--help`, Python environment sync, Python unit suite: 1,923 passed, 4 skipped).
 
 ## Adoption and commercial next steps
 

@@ -8,6 +8,8 @@ The published CLI currently depends on `@clearproof/content`, which was unavaila
 
 For CLI evaluation, contributors with repository access can build the local workspaces and run `node packages/cli/dist/index.js --help`. See [quickstart](/docs/quickstart). The proof SDK can be installed independently.
 
+A clean source install from `main` was verified on September 15, 2026 at commit `1c8d385`: locked workspace install, workspace build, `--help` output from the built CLI, Python environment sync and the Python unit suite all succeeded. This validates the source-checkout path; it does not change the published-package limitation above.
+
 ## Proof workflows
 
 With compatible artifacts and a complete input for that proof version:
