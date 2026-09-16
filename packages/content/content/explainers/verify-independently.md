@@ -71,8 +71,8 @@ Beyond the two interpreted outputs — `publicSignals[0]` is `is_compliant`,
 with the verification result, so a reviewer can check:
 
 - **Jurisdiction** (signal 6), decodable from its big-endian ASCII value
-  ("US" → `0x5553`); the verifier rejects values that are not two uppercase
-  ASCII letters.
+  ("US" → `0x5553`); a value that is not two uppercase ASCII letters decodes
+  to `null` rather than a plausible-looking code.
 - **Jurisdiction–VASP consistency**, via the optional
   `expectedJurisdiction` argument. The result distinguishes a real mismatch
   from *unverified*: with no expected jurisdiction supplied,
