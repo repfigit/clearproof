@@ -94,7 +94,7 @@ describe('explainer detail page', () => {
   it.each(visibleSlugs())('renders visible explainer %s with citation footer', async slug => {
     const explainer = getExplainer(slug)!;
     const html = renderToStaticMarkup(await ExplainerPage({ params: Promise.resolve({ slug }) }));
-    expect(htmlContains(html, explainer.title));
+    expect(htmlContains(html, explainer.title)).toBe(true);
     // HTML-escape the summary before matching: React escapes quotes/apostrophes in rendered text.
     expect(html).toContain(explainer.summary.replace(/'/g, '&#x27;'));
     expect(html).toContain(explainer.sourceCommit.slice(0, 12));
