@@ -28,6 +28,12 @@ function visibleSlugs() {
   return visibleExplainers().map(item => item.slug);
 }
 
+// React 19.2.x escapes apostrophes in text nodes as &#x27;; accept either form so
+// assertions don't depend on the installed React patch version.
+function htmlContains(html: string, text: string): boolean {
+  return html.includes(text) || html.includes(text.replace(/'/g, '&#x27;'));
+}
+
 beforeEach(() => {
   notFound.mockClear();
 });
@@ -39,7 +45,7 @@ it('exposes explainers metadata', () => {
 it('renders an index entry for every visible explainer and no hidden ones', async () => {
   const html = renderToStaticMarkup(await ExplainersIndex());
   for (const explainer of listExplainers()) {
-    expect(html.includes(explainer.title)).toBe(visibleSlugs().includes(explainer.slug));
+    expect(htmlContains(html, explainer.title)).toBe(visibleSlugs().includes(explainer.slug));
   }
 });
 
@@ -88,7 +94,7 @@ describe('explainer detail page', () => {
   it.each(visibleSlugs())('renders visible explainer %s with citation footer', async slug => {
     const explainer = getExplainer(slug)!;
     const html = renderToStaticMarkup(await ExplainerPage({ params: Promise.resolve({ slug }) }));
-    expect(html).toContain(explainer.title);
+    expect(htmlContains(html, explainer.title));
     // HTML-escape the summary before matching: React escapes quotes/apostrophes in rendered text.
     expect(html).toContain(explainer.summary.replace(/'/g, '&#x27;'));
     expect(html).toContain(explainer.sourceCommit.slice(0, 12));

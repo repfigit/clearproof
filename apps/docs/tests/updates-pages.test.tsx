@@ -29,6 +29,16 @@ function visibleSlugs() {
   return visibleUpdates().map(item => item.slug);
 }
 
+// React 19.2.x escapes apostrophes in text nodes as &#x27;; accept either form so
+// assertions don't depend on the installed React patch version.
+function htmlContains(html: string, text: string): boolean {
+  return html.includes(text) || html.includes(text.replace(/'/g, '&#x27;'));
+}
+
+function notHtmlContains(html: string, text: string): boolean {
+  return !htmlContains(html, text);
+}
+
 beforeEach(() => {
   notFound.mockClear();
 });
@@ -49,7 +59,7 @@ describe('pause switch at page render time', () => {
     const html = renderToStaticMarkup(await UpdatesIndex());
     expect(html).toContain('temporarily paused');
     for (const slug of visibleSlugs()) {
-      expect(html).not.toContain(getUpdate(slug)!.title);
+      expect(notHtmlContains(html, getUpdate(slug)!.title)).toBe(true);
     }
   });
 
