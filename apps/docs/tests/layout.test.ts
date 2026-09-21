@@ -12,6 +12,7 @@ vi.mock('nextra-theme-docs', () => ({
 vi.mock('nextra/components', () => ({ Head: 'head' }));
 vi.mock('nextra/page-map', () => ({ getPageMap: dependencies.pageMap }));
 vi.mock('nextra-theme-docs/style.css', () => ({}));
+vi.mock('@vercel/analytics/next', () => ({ Analytics: 'span' }));
 
 import RootLayout, { metadata } from '../app/layout';
 import { useMDXComponents } from '../mdx-components';
@@ -25,11 +26,11 @@ it('composes the docs shell around page content and the loaded page map', async 
   const html = await RootLayout({ children: content });
   expect(html.type).toBe('html');
   expect(html.props).toMatchObject({ lang: 'en', dir: 'ltr', suppressHydrationWarning: true });
-  const [head, body] = html.props.children;
-  expect(head.type).toBe('head');
+  const body = html.props.children.find((child: React.ReactNode) => (child as any)?.type === 'body');
   expect(body.type).toBe('body');
-  const layout = body.props.children;
+  const [layout, analytics] = body.props.children;
   expect(layout.props.children).toBe(content);
+  expect(analytics.type).toBe('span');
   expect(layout.props.pageMap).toBe(pageMap);
   expect(layout.props.editLink).toBeNull();
   expect(layout.props.feedback).toEqual({ content: null });
