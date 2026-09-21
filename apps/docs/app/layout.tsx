@@ -58,7 +58,7 @@ export default async function RootLayout({
         >
           {children}
         </Layout>
-        <Analytics />
+        {process.env.VERCEL === '1' ? <Analytics /> : null}
       </body>
     </html>
   );

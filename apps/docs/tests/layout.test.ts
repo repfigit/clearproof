@@ -17,7 +17,10 @@ vi.mock('@vercel/analytics/next', () => ({ Analytics: 'span' }));
 import RootLayout, { metadata } from '../app/layout';
 import { useMDXComponents } from '../mdx-components';
 
-beforeEach(() => vi.resetAllMocks());
+beforeEach(() => {
+  vi.resetAllMocks();
+  vi.stubEnv('VERCEL', '1');
+});
 
 it('composes the docs shell around page content and the loaded page map', async () => {
   const pageMap = [{ name: 'docs', route: '/docs' }];
