@@ -12,6 +12,7 @@
   },
   "dependencies": {
     "@clearproof/content": "*",
+    "@vercel/analytics": "^2.0.1",
     "next": "^15.5.15",
     "nextra": "^4.6.1",
     "nextra-theme-docs": "^4.6.1",

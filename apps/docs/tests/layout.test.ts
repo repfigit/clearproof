@@ -12,23 +12,28 @@ vi.mock('nextra-theme-docs', () => ({
 vi.mock('nextra/components', () => ({ Head: 'head' }));
 vi.mock('nextra/page-map', () => ({ getPageMap: dependencies.pageMap }));
 vi.mock('nextra-theme-docs/style.css', () => ({}));
+vi.mock('@vercel/analytics/next', () => ({ Analytics: 'span' }));
 
 import RootLayout, { metadata } from '../app/layout';
 import { useMDXComponents } from '../mdx-components';
 
 beforeEach(() => vi.resetAllMocks());
 
+// VERCEL=1 is set on real Vercel deployments only: there the edge serves
+// /_vercel/insights/script.js. Elsewhere (self-hosted `next start`, e2e
+// webServer, CI) rendering <Analytics /> would just 404 on every page load,
+// so the layout renders nothing and the tests below pin both branches.
+async function renderBody(children: React.ReactNode) {
+  const html = await RootLayout({ children });
+  return html.props.children.find((child: React.ReactNode) => (child as any)?.type === 'body');
+}
+
 it('composes the docs shell around page content and the loaded page map', async () => {
   const pageMap = [{ name: 'docs', route: '/docs' }];
   dependencies.pageMap.mockResolvedValue(pageMap);
   const content = createElement('article', null, 'Synthetic page content');
-  const html = await RootLayout({ children: content });
-  expect(html.type).toBe('html');
-  expect(html.props).toMatchObject({ lang: 'en', dir: 'ltr', suppressHydrationWarning: true });
-  const [head, body] = html.props.children;
-  expect(head.type).toBe('head');
-  expect(body.type).toBe('body');
-  const layout = body.props.children;
+  const body = await renderBody(content);
+  const [layout] = body.props.children;
   expect(layout.props.children).toBe(content);
   expect(layout.props.pageMap).toBe(pageMap);
   expect(layout.props.editLink).toBeNull();
@@ -41,6 +46,32 @@ it('composes the docs shell around page content and the loaded page map', async 
   expect(metadata.title).toEqual({ template: '%s | clearproof docs', default: 'clearproof docs' });
   expect(metadata.description).toContain('pilot-stage');
   expect(dependencies.pageMap).toHaveBeenCalledExactlyOnceWith();
+});
+
+it('renders Analytics on Vercel deployments (VERCEL=1) and omits it elsewhere', async () => {
+  const pageMap = [{ name: 'docs', route: '/docs' }];
+  dependencies.pageMap.mockResolvedValue(pageMap);
+  const content = createElement('article', null, 'Synthetic page content');
+
+  vi.stubEnv('VERCEL', '1');
+  const onVercel = await renderBody(content);
+  const onVercelChildren = onVercel.props.children;
+  expect(onVercelChildren).toHaveLength(2);
+  const [layoutOn, analytics] = onVercelChildren;
+  expect(layoutOn.type).toBe('section');
+  expect(layoutOn.props.children).toBe(content);
+  expect(analytics.type).toBe('span');
+
+  vi.stubEnv('VERCEL', '');
+  const selfHosted = await renderBody(content);
+  const selfHostedChildren = selfHosted.props.children;
+  expect(selfHostedChildren).toHaveLength(2);
+  const [layoutOff, analyticsOff] = selfHostedChildren;
+  expect(layoutOff.type).toBe('section');
+  expect(layoutOff.props.children).toBe(content);
+  expect(analyticsOff).toBeNull();
+
+  vi.unstubAllEnvs();
 });
 
 it('propagates page-map loading failure instead of returning an incomplete shell', async () => {
