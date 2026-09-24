@@ -1,34 +1,103 @@
 # CIRCUITS/ AGENTS.md
 
-**Scope:** Circom circuits (Groth16) — the cryptographic correctness root of the entire ZK Travel Rule system.
+**Scope:** Circom circuits (Groth16/BN254). They are the cryptographic correctness root of Clearproof's transfer evidence.
 
 ## OVERVIEW
-Four Circom circuits + two lib helpers that together prove: (1) credential valid + not expired, (2) wallet not sanctioned (gap proof), (3) amount tier correctly assigned, (4) domain-bound + single-use + expiring. All without revealing PII or exact amounts.
+
+Two proof profiles live here. **Never select a profile by signal count.**
+
+| Profile | Main circuit | Public signals | Status |
+|---------|--------------|----------------|--------|
+| `pilot-transfer-v2` | `pilot_compliance.circom` | 8 | **Current.** Spec: `specs/pilot-transfer-v2.md` (authoritative), ADR 0009 |
+| Legacy | `compliance.circom` | 16 (14 in + 2 out) | Separate demo and parity path. Never current pilot authorization |
+
+The current profile proves all of the following without revealing any of them publicly:
+- The exact private transfer projection. Only a commitment is public.
+- A valid, holder-bound credential issued under an authorized issuer.
+- Sanctions non-membership for **both** the originator and beneficiary wallets.
+- Exact valuation and a private tier.
+- A single-use authorization nullifier and a bounded expiry.
+
+Amount, tier, wallets, jurisdiction and participants stay private. There is no public amount-tier or SAR signal.
 
 ## STRUCTURE
 ```
 circuits/
-├── compliance.circom                 # Main orchestrator (232 LOC)
-├── sanctions_nonmembership.circom    # Gap proof (sorted Merkle non-membership)
-├── credential_validity.circom        # Credential + issuer + expiry checks
-├── amount_tier.circom                # Tier assignment + SAR flag
+├── pilot_compliance.circom           # CURRENT main: PilotCompliance(8, 8, 8), 8 public signals
+├── pilot_transfer.circom             # PilotTransferProjection: 48 private fields → commitment + authorization scope
+├── pilot_credential.circom           # PilotCredentialValidity: credential, holder, issuance + authorized-issuer membership
+├── pilot_sanctions.circom            # PilotSanctionsGap: raw-address gap non-membership
+├── pilot_valuation.circom            # PilotValuation (exact 128-bit arithmetic), PilotAmountTier (private tier)
+├── wallet_ownership_credential.circom # Staged extension only; no verifier accepts it (docs/internal/WALLET_OWNERSHIP.md)
+├── compliance.circom                 # LEGACY main orchestrator (16 signals)
+├── sanctions_nonmembership.circom    # Legacy gap proof (hashed keys)
+├── credential_validity.circom        # Legacy credential + issuer + expiry checks
+├── amount_tier.circom                # Legacy tier assignment + SAR flag
 ├── lib/
-│   ├── merkle_tree.circom            # Generic Poseidon MerkleProof + gap helper
-│   └── poseidon_hasher.circom        # DomainPoseidon (tags 0x01/0x02)
-└── (compiled artifacts live in artifacts/ at repo root)
+│   ├── merkle_tree.circom            # Poseidon MerkleProof / MerkleTreeVerifier (binary path indices)
+│   └── poseidon_hasher.circom        # DomainPoseidon (legacy tags 0x01/0x02)
+└── (compiled artifacts live outside the repo; see scripts/test_development_circuits.py)
 ```
 
 ## WHERE TO LOOK
 | Task | Location | Notes |
 |------|----------|-------|
-| Add new compliance check | `compliance.circom` + matching Python model | MUST update both or proofs are worthless |
-| Change signal ordering | `compliance.circom` main component + `src/protocol/compliance_proof.py` + `docs/internal/CIRCUIT_SIGNALS.md` | Breaking change — update test vectors too |
-| Modify sanctions gap logic | `sanctions_nonmembership.circom` | Adjacency is derived from path bits (see below) |
-| Add credential field | `credential_validity.circom` + Python `_field_ints()` | Keep commitment layout identical |
-| Change tier thresholds | `amount_tier.circom` (public inputs only) | Verifier supplies — prover cannot manipulate |
-| Debug Poseidon collision | `lib/poseidon_hasher.circom` | Domain tags: 0x01=sanctions, 0x02=issuer |
+| Change the current public ABI | `pilot_compliance.circom` main + `src/prover/pilot_compliance.py` (`PUBLIC_SIGNALS`, `PROFILE`) + `PilotGroth16Verifier.sol` / `PilotCurrentRegistry.sol` + `packages/proof/src/authorization.ts` + `specs/pilot-transfer-v2.md` | Breaking change. It needs a new profile name, new keys and fixtures; never reuse v2 |
+| Change projection fields | `pilot_transfer.circom` + `src/prover/pilot_projection.py` + `packages/proof` canonical code | ADR 0005; field table in `docs/internal/CIRCUIT_SIGNALS.md` |
+| Change credential layout | `pilot_credential.circom` + `src/protocol/credential.py` + `src/prover/pilot_compliance.py` witness | ADR 0003/0009; commitment domain 102 |
+| Change pilot sanctions logic | `pilot_sanctions.circom` + `src/prover/pilot_roots.py` / tree builder | Raw-address tree, leaf domain 301 (ADR 0006) |
+| Change valuation/tier | `pilot_valuation.circom` + `src/prover/pilot_valuation.py` | ADR 0004 (valuation arithmetic) |
+| Legacy changes | `compliance.circom` + `src/protocol/compliance_proof.py` | See LEGACY PROFILE below |
 
-## PUBLIC SIGNAL CONTRACT (Main Circuit)
+## CURRENT PROFILE: pilot-transfer-v2
+
+Public signals, in exact order (on-chain ABI):
+1. `projection_commitment` — `Poseidon(204, transfer_projection_commitment, credential_commitment, issuance_root)`
+2. `authorized_issuer_root`
+3. `sanctions_root`
+4. `authorization_nullifier` — `Poseidon(203, holder_secret, authorization_scope)`
+5. `evaluated_at` — equals projection field 23
+6. `proof_expires_at` — `evaluated_at < exp <= min(transfer expiry, credential expiry, evaluated_at + 300)`
+7. `domain_chain_id` — equals projection field 26; **no link to a real chain in-circuit**
+8. `domain_registry` — equals projection field 27; **no link to a real address in-circuit**
+
+`PilotCurrentRegistry` checks signals 7 and 8 against `block.chainid` and `uint160(address(this))`. PostgreSQL, not the circuit or contract, consumes the nullifier. Per-signal enforcement is tabulated in `docs/internal/CIRCUIT_SIGNALS.md`.
+
+Poseidon domain tags in use by the pilot circuits: 101 holder, 102 credential commitment, 103 issuer leaf, 202 authorization scope, 203 nullifier, 204 outer projection binding, 301 sanctions leaf, 111 wallet-ownership extension.
+
+## SOUNDNESS PROPERTIES THAT MUST NOT REGRESS (pilot)
+
+- **PilotSanctionsGap:**
+  - The wallet is a raw 160-bit address (`Num2Bits(160)`). Keys are checked to 161 bits before `LessThan(161)`, and the right key must be `<= 2^160` (sentinel).
+  - Adjacency is derived from path bits: `right_index === left_index + 1`.
+  - It runs for **both** parties (projection fields 10 and 11).
+- **PilotCredentialValidity:**
+  - Range checks: 128-bit limbs, 160-bit wallet, 53-bit times, 2-bit tier, ASCII A–Z jurisdiction bytes.
+  - Nonzero checks: wallet, nonce (jointly), tier, holder secret, holder commitment.
+  - The issuer screening assertion (`fields[12]`) is constrained to 1.
+  - `issued_at <= evaluated_at < expires_at`.
+  - The commitment is a member of `issuance_root`. The issuer leaf binds `issuance_root` and is a member of `authorized_issuer_root`.
+  - Expected tenant, subject and jurisdiction come from private projection fields, never from free inputs.
+- **PilotValuation / PilotAmountTier:**
+  - Exact limb multiplication with range-checked carries.
+  - `remainder < denominator`.
+  - Amount, numerator, denominator and USD cents are positive.
+  - Thresholds are positive and strictly ordered. The tier is derived.
+  - No SAR output.
+- **PilotTransferProjection:**
+  - All 48 fields are width-checked.
+  - Time ordering: observation ≤ creation ≤ evaluation < transfer expiry ≤ quote expiry.
+  - Age ≤ max age ≤ 86,400 s, and decimals ≤ 18.
+  - Wallets, asset chain and contract, and deployment address are nonzero.
+  - Asset chain == deployment chain.
+  - Non-VASP parties carry no DID limbs.
+- **The outer binding (signal 0) must include the exact credential commitment and issuance root.** This is the v1 → v2 credential-substitution fix (ADR 0009).
+
+## LEGACY PROFILE: compliance.circom
+
+Everything below documents the legacy 16-signal profile. It remains a demo/parity path. Its audit fixes still must not regress, but none of it describes the current pilot ABI.
+
+### PUBLIC SIGNAL CONTRACT (legacy main circuit)
 
 **Instantiation:** `ComplianceProof(20, 10)` — 20-level sanctions tree, 10-level issuer tree.
 
@@ -54,7 +123,7 @@ circuits/
 
 **CRITICAL:** The Python `ComplianceProof.public_signals` list must emit these 16 values in this exact order. Changing the order without coordinated updates on both sides produces unverifiable proofs.
 
-## SUB-CIRCUIT RESPONSIBILITIES
+### SUB-CIRCUIT RESPONSIBILITIES (legacy)
 
 **CredentialValidity(issuer_depth=10)**
 - Verifies `Poseidon(issuer_did, kyc_tier, sanctions_clear, issued_at, expires_at) == credential_commitment`
@@ -76,7 +145,7 @@ circuits/
 - All amounts and tier range-checked before comparators (audit fixes #10, #12)
 - Outputs `sar_review_flag = (tier >= 3)`
 
-## LIBS
+### LIBS
 
 **merkle_tree.circom**
 - `MerkleProof(depth)` — generic Poseidon membership proof (used by both credential and sanctions)
@@ -88,7 +157,7 @@ circuits/
 - `DomainPoseidon(n)` — prepends domain tag
 - Domain tags in use: `0x01` (sanctions leaf), `0x02` (issuer leaf), `0x03` reserved for future credential commitment variant
 
-## CONVENTIONS
+### CONVENTIONS (legacy)
 
 - **"Python model == circuit witness"** is the #1 correctness invariant. The Python `ComplianceProof` class (and its witness builder) must produce exactly the private + public inputs the circuit expects.
 - Signal ordering in the `main {public [...]}` component is part of the external interface. Treat changes like a breaking API change.
@@ -96,7 +165,7 @@ circuits/
 - All range checks required for comparator soundness are already present (post-audit). Do not remove them.
 - Nullifier + domain binding + expiration are the replay / cross-chain protections. The circuit enforces part of it; the contract enforces the rest.
 
-## ANTI-PATTERNS (THIS PROJECT)
+### ANTI-PATTERNS (legacy)
 
 - **NEVER** change Python witness generation without updating the circuit (or vice versa). You will ship unverifiable proofs.
 - **NEVER** reorder public signals without updating `docs/internal/CIRCUIT_SIGNALS.md`, the Python model, all test vectors, and the verifier contract call site.
@@ -106,7 +175,7 @@ circuits/
 - **NEVER** assume adjacency in a gap proof is "just two numbers the prover gives you." It is derived from path bits.
 - **NEVER** forget that `domain_chain_id` and `domain_contract_hash` have **no in-circuit constraint** — their security comes from the verifier contract checking them against `block.chainid` and `address(this)`.
 
-## TEST VECTORS & REGENERATION
+### TEST VECTORS & REGENERATION (legacy)
 
 - Authoritative signal reference: `docs/internal/CIRCUIT_SIGNALS.md`
 - Test vectors live alongside the Python test suite (see `tests/unit/test_circuits.py` and the `test-vectors/` patterns referenced in the proof package).
@@ -117,7 +186,7 @@ circuits/
   4. Regenerate vectors via the Python test helpers
   5. Update `CIRCUIT_SIGNALS.md` if public interface changed
 
-## AUDIT FIXES (PRESERVED)
+### AUDIT FIXES (PRESERVED, legacy)
 
 Post-audit the following soundness issues were fixed and must not regress:
 - #1 Adjacency derived from path bits, not free input
@@ -131,17 +200,24 @@ Post-audit the following soundness issues were fixed and must not regress:
 ## COMMANDS
 
 ```bash
-# Compile (requires circom + ptau in artifacts/)
+# Pilot circuit tests (compile pilot_compliance.circom when circom + node are available; otherwise skip)
+uv run python -m pytest tests/unit/test_pilot_compliance.py tests/unit/test_pilot_credential.py \
+  tests/unit/test_pilot_valuation.py tests/unit/test_pilot_projection.py -v
+
+# Compile and prove BOTH profiles with isolated, unapproved development keys (new output dir)
+.venv/bin/python scripts/test_development_circuits.py /absolute/new-development-artifacts
+
+# Legacy compile (compliance.circom only)
 bash scripts/compile_circuits.sh
 
-# Run circuit-specific tests
-make test-circuits          # or uv run python -m pytest tests/unit/test_circuits.py -v
+# Legacy circuit tests
+uv run python -m pytest tests/unit/test_circuits.py -v
 
-# Full test suite (includes circuit round-trips)
-make test
+# Static analysis (Circomspect; allowlisted findings only)
+bash scripts/circuit_lint.sh
 ```
 
-## NOTES
+## NOTES (legacy)
 
 - Default tree sizes (20 + 10) are sufficient for current sanctions lists (~1M entries) and ~1K trusted issuers. Changing depths is a breaking change for all proofs.
 - The circuit aborts on any unsatisfied constraint. Reaching the final `is_compliant <== 1` line means every sub-circuit passed.

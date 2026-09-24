@@ -1,8 +1,58 @@
 # Circuit Signals Reference
 
-This document provides the complete signal specification for all ZK Travel Rule Compliance Bridge circuits, including exact ordering for public inputs and private inputs.
+This document describes the public and private signals of Clearproof's circuits. There are two proof profiles. **Never select a profile by signal count.**
 
-## Main Compliance Circuit
+| Profile | Circuit | Public signals | Status |
+| --- | --- | --- | --- |
+| `pilot-transfer-v2` | `circuits/pilot_compliance.circom` | 8 | **Current** pilot profile (merged Sept 2026). Authoritative spec: [`specs/pilot-transfer-v2.md`](../../specs/pilot-transfer-v2.md) |
+| Legacy | `circuits/compliance.circom` | 16 (14 inputs + 2 outputs) | Separate demo and parity path. Never valid as current pilot authorization |
+
+## Current profile: pilot-transfer-v2
+
+Instantiation: `PilotCompliance(8, 8, 8)` (issuance, issuer and sanctions tree depths). These are development depths. Signal order is fixed by the `main` component and mirrored by `PUBLIC_SIGNALS` in `src/prover/pilot_compliance.py`. The spec and ADR 0009 are authoritative. The table below records which constraints come from the circuit and which from outside it.
+
+| # | Signal | In-circuit constraint | Enforced outside the circuit by |
+| --- | --- | --- | --- |
+| 0 | `projection_commitment` | `== Poseidon(204, transfer_projection_commitment, credential_commitment, issuance_root)` | Verifier reconstructs it from authenticated records; `PilotCurrentRegistry` statement binding |
+| 1 | `authorized_issuer_root` | Issuer leaf `Poseidon(103, issuer DID limbs, issuance_root)` is a member | Current-root checks; registry pin 1 (issuers) |
+| 2 | `sanctions_root` | Gap non-membership for **both** originator and beneficiary wallets (projection fields 10 and 11) | Current-root checks; registry pin 2 (sanctions) |
+| 3 | `authorization_nullifier` | `== Poseidon(203, holder_secret, authorization_scope)`; scope = `Poseidon(202, tenant, transfer ID, nonce, deployment chain, deployment address)` | PostgreSQL consumes it (single use). The registry only mirrors consumed receipts |
+| 4 | `evaluated_at` | `== transfer_fields[23]`; credential `issued_at <= evaluated_at < expires_at` | Verifier freshness policy |
+| 5 | `proof_expires_at` | 53-bit; `evaluated_at < proof_expires_at <= min(transfer expiry, credential expiry, evaluated_at + 300)` | Registry rejects `> statement.validUntil` |
+| 6 | `domain_chain_id` | `== transfer_fields[26]` only; not tied to any real chain | `PilotCurrentRegistry`: `== block.chainid` |
+| 7 | `domain_registry` | `== transfer_fields[27]` only | `PilotCurrentRegistry`: `== uint160(address(this))` |
+
+Amount, tier, wallets, jurisdiction, participants and credential fields are all **private**. There is no public amount-tier or SAR signal.
+
+### Soundness properties that must not regress (pilot circuits)
+
+- **Sanctions gap proof (`PilotSanctionsGap`):**
+  - The wallet is a raw 160-bit address (`Num2Bits(160)`). Keys are range-checked to 161 bits before `LessThan(161)`.
+  - The right key is bounded by the `2^160` sentinel.
+  - Adjacency is derived from Merkle path bits (`right_index === left_index + 1`), not taken as free input.
+  - Leaves are `Poseidon(301, key)`.
+  - The raw-address tree is incompatible with the legacy hashed-key tree (see ADR 0006).
+- **Credential (`PilotCredentialValidity`):**
+  - Limbs are range-checked (128-bit limbs, 160-bit wallet, 53-bit times, 2-bit KYC tier).
+  - Nonzero checks cover the wallet, nonce, tier, holder secret and holder commitment. Jurisdiction bytes must be ASCII A–Z.
+  - The issuer screening assertion is constrained to 1.
+  - Holder binding is `Poseidon(101, holder_secret)`. The commitment is `Poseidon(102, fields)`, and it must be a member of `issuance_root`.
+  - Expected tenant, subject and jurisdiction are bound to private transfer fields.
+- **Valuation and tier (`PilotValuation`, `PilotAmountTier`):**
+  - Exact 128-bit limb arithmetic with quotient/remainder semantics, and positive operands.
+  - Thresholds are positive and strictly ordered. The tier is derived, not supplied.
+  - No SAR output.
+- **Transfer projection (`PilotTransferProjection`):**
+  - Per-field bit widths are checked on all 48 fields.
+  - Time ordering: observation ≤ creation ≤ evaluation < transfer expiry ≤ quote expiry.
+  - Maximum age is at most 86,400 s, and decimals are at most 18.
+  - Both wallets, the asset chain and contract, and the deployment address must be nonzero.
+  - Asset chain must equal deployment chain.
+  - DID fields may be nonzero only for parties marked as VASPs.
+
+## Legacy profile: compliance.circom (16 signals)
+
+Everything from here through "Legacy signal hashing schemes" describes the legacy profile only.
 
 **File**: `circuits/compliance.circom`
 **Instantiation**: `ComplianceProof(20, 10)` (sanctions_depth=20, issuer_depth=10)
@@ -76,7 +126,7 @@ These signals are kept secret by the prover and never revealed to the verifier.
 | `is_compliant` | bit | 1 if all checks pass (always 1 if circuit executes without failure) |
 | `sar_review_flag` | bit | 1 if amount_tier >= 3 (triggers human review) |
 
-## Sub-Circuit: Sanctions Non-Membership
+## Legacy sub-circuit: Sanctions Non-Membership
 
 **File**: `circuits/sanctions_nonmembership.circom`
 **Template**: `SanctionsNonMembership(tree_depth=20)`
@@ -107,7 +157,7 @@ These signals are kept secret by the prover and never revealed to the verifier.
 
 **Note**: Adjacency of left/right leaves is enforced by deriving leaf indices from path direction bits, preventing false gap claims.
 
-## Sub-Circuit: Credential Validity
+## Legacy sub-circuit: Credential Validity
 
 **File**: `circuits/credential_validity.circom`
 **Template**: `CredentialValidity(issuer_tree_depth=10)`
@@ -134,7 +184,7 @@ These signals are kept secret by the prover and never revealed to the verifier.
 | `issuer_path_elements` | 10 | Issuer membership proof |
 | `issuer_path_indices` | 10 | Issuer membership proof directions |
 
-## Sub-Circuit: Amount Tier
+## Legacy sub-circuit: Amount Tier
 
 **File**: `circuits/amount_tier.circom`
 **Template**: `AmountTier()`
@@ -160,7 +210,7 @@ These signals are kept secret by the prover and never revealed to the verifier.
 |-------------|------|-------------|
 | `sar_review_flag` | bit | 1 if tier >= 3 |
 
-## Signal Ordering for Proof Generation
+## Legacy signal ordering for proof generation
 
 When generating a proof using snarkjs, inputs must be provided in this exact order:
 
@@ -199,7 +249,7 @@ Private Signals (in circuit order):
 [122] actual_amount
 ```
 
-## On-Chain Verification
+## Legacy on-chain verification
 
 The Solidity verifier (`Groth16Verifier.sol`) expects:
 
@@ -261,7 +311,7 @@ Notes:
   (`DEFAULT_JURISDICTION_KEY = 0` on-chain). Whether unregistered jurisdictions
   should instead be rejected outright is an open policy question — see AIF-79.
 
-## Signal Hashing Schemes
+## Legacy signal hashing schemes
 
 ### Credential Commitment
 ```
@@ -287,11 +337,11 @@ Poseidon(0x02, issuer_did)
 ```
 Domain-separated leaf hash for trusted issuer entries.
 
-## Development credential subcircuit (not the active compliance ABI)
+## Pilot credential subcircuit
 
 `circuits/pilot_credential.circom` defines `PilotCredentialValidity(issuance_depth,
-issuer_depth)` for `clearproof-credential-v1`. It does not instantiate `main`,
-change the legacy 16-signal ABI or provide an authorization endpoint. The test
+issuer_depth)` for `clearproof-credential-v1`. It does not instantiate `main` by
+itself; `pilot_compliance.circom` composes it into `pilot-transfer-v2`. Its unit
 harness uses two-level trees solely to exercise membership constraints.
 
 `fields[13]` is the credential Poseidon preimage excluding domain tag 102:
@@ -313,12 +363,12 @@ and path, authorized issuer root and path, expected tenant limbs, expected subje
 expected jurisdiction and evaluation time. Membership paths have boolean indices.
 The evaluation time must satisfy `issued_at <= evaluated_at < expires_at`.
 
-The composed circuit must bind the expected inputs to the actual transfer, hide
-private fields and remove the legacy SAR advisory signal. The current harness
-exposes expected subject/jurisdiction for testing only; it is not a privacy profile
-for published proofs. See ADR 0003 for external enrollment and root authority.
+In `pilot-transfer-v2`, the expected tenant, subject, jurisdiction and evaluation
+time are bound to private transfer fields 4–5, 10, 25 and 23. None is public, and
+the legacy SAR advisory signal is absent. (The standalone harness exposes expected
+subject/jurisdiction for testing only.) See ADR 0003 for external enrollment and root authority.
 
-## Development valuation subcircuits
+## Pilot valuation subcircuits
 
 `pilot_valuation.circom` adds `PilotValuation()` with private inputs
 `amount_base_units`, `numerator`, `denominator`, `usd_cents`, and `remainder`.
@@ -326,16 +376,17 @@ Each is constrained as an unsigned 128-bit value; all but the remainder must be
 positive. Limb arithmetic enforces exact integer quotient/remainder semantics.
 
 `PilotAmountTier()` accepts `usd_cents`, three ordered positive `thresholds` and
-`tier`. It exposes no output. The composed profile must keep the amount and tier
-private and bind policy/valuation provenance; these subcircuits do not change the
-legacy main ABI. See ADR 0004 and `src/prover/pilot_valuation.py` for witness rules.
+`tier`. It exposes no output. `PilotTransferProjection` composes both privately:
+amount and tier never become public signals. Policy/valuation provenance is bound
+through the projection fields and the registry's policy/valuation pins. See ADR 0004 and `src/prover/pilot_valuation.py` for witness rules.
 
 
-## Development private transfer projection
+## Pilot private transfer projection
 
 `PilotTransferProjection` consumes `transfer_fields[48]`, `valuation_remainder`
 and the expected `projection_commitment`. Its `authorization_scope` output is
-for the parent holder-nullifier construction. This is not the final public ABI.
+for the parent holder-nullifier construction. The 48 fields are private inputs to
+`pilot-transfer-v2`; only their commitment is bound publicly, via signal 0.
 
 | Index | Field |
 | --- | --- |
@@ -390,20 +441,10 @@ for the parent holder-nullifier construction. This is not the final public ABI.
 
 See ADR 0005 for canonical-record binding and trust boundaries.
 
-## Unreleased composed development profile: pilot-transfer-v1
+## Composed profile
 
-`circuits/pilot_compliance.circom` has eight public inputs and zero outputs:
-
-1. `projection_commitment`
-2. `authorized_issuer_root`
-3. `sanctions_root`
-4. `authorization_nullifier`
-5. `evaluated_at`
-6. `proof_expires_at`
-7. `domain_chain_id`
-8. `domain_registry`
-
-The Python encoder is `src/prover/pilot_compliance.py`. This is a separate
-profile, not a replacement ABI for the legacy verifier. See
-[ADR 0006](../adr/0006-composed-pilot-transfer.md) for private fields, tree bounds,
-trust requirements and the incompatible raw-address sanctions profile.
+The composed circuit `pilot_compliance.circom` is the current `pilot-transfer-v2`
+profile described at the top of this document. See
+[ADR 0006](../adr/0006-composed-pilot-transfer.md) for private fields, tree bounds and
+trust requirements, and [ADR 0009](../adr/0009-credential-bound-pilot-profile.md) for
+the v1 → v2 change (signal 0 now binds the exact credential and issuance root).
