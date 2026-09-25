@@ -4,7 +4,7 @@ The next bounded delivery is governed by the [adoption pilot implementation plan
 
 ## Current Status (2026-09-24)
 
-- The local adoption pilot (M0–M5, CP-001–CP-018) was merged to `main` on September 7, 2026 (PR #27). The current proof profile is `pilot-transfer-v2`, with eight public signals.
+- The local adoption pilot (M0–M5, CP-001–CP-018) was merged to `main` on September 7, 2026 (PR #27). The current proof profile is `pilot-transfer-v3` (PR #49, September 25, 2026): eight public signals and production tree depths of 32/20/20 (ADR 0011).
 - Public npm packages remain 0.3.0. The 0.4.0 source on `main` is unreleased.
 - Nothing is independently audited. Proving keys are development-only.
 - Follow-on gates F1–F5 (external credentials, re-screening, trusted distribution, live paid pilot, production authorization) are all open. None has met its start condition.

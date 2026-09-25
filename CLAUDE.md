@@ -71,7 +71,7 @@ The system's correctness depends on a few cross-layer invariants. If you change 
 
 ### 1. Two proof profiles; never pick one by signal count
 
-The **current** profile is `pilot-transfer-v2` (`specs/pilot-transfer-v2.md`, ADR 0009): **eight** public signals in a fixed order. There is no public amount tier or SAR flag.
+The **current** profile is `pilot-transfer-v3` (`specs/pilot-transfer-v3.md`, ADRs 0009 and 0011): **eight** public signals in a fixed order and tree depths of 32 (issuance), 20 (authorized issuers) and 20 (sanctions). There is no public amount tier or SAR flag.
 
 `projection_commitment, authorized_issuer_root, sanctions_root, authorization_nullifier, evaluated_at, proof_expires_at, domain_chain_id, domain_registry`
 
@@ -81,9 +81,11 @@ These places must agree on that order:
 - `src/prover/pilot_compliance.py` — `PUBLIC_SIGNALS` / `PROFILE`
 - `packages/contracts/contracts/PilotGroth16Verifier.sol` and `PilotCurrentRegistry.sol` — `uint256[8]` signals, with indices checked against statements and pins
 - `packages/proof/src/authorization.ts` — hardcoded indices (`[3]` nullifier, `[5]` expiry)
-- `specs/pilot-transfer-v2.md` — authoritative reference
+- `specs/pilot-transfer-v3.md` — authoritative reference
 
-V1 has the same signal count but a different meaning for signal 0 and different keys. Manifests name their profile explicitly; current checks reject v1.
+Tree depths are defined once in `src/registry/pilot_tree.py` (`ISSUANCE_TREE_DEPTH`, `ISSUER_TREE_DEPTH`, `SANCTIONS_TREE_DEPTH`) and must match the `main` instantiation `PilotCompliance(32, 20, 20)`. Changing a depth changes the keys and requires a new profile name.
+
+V1 and v2 have the same signal count but different keys (v1 also gives signal 0 a different meaning; v2 used depth-8 trees). Manifests name their profile explicitly; current checks reject v1 and v2.
 
 The **legacy** `circuits/compliance.circom` profile has 16 signals (14 inputs + `is_compliant`/`sar_review_flag` outputs). It remains a separate demo/parity path and is documented in `docs/internal/CIRCUIT_SIGNALS.md`. Never reinterpret legacy proofs as current pilot authorization.
 
@@ -91,7 +93,7 @@ Reordering or renaming a signal in either profile is a breaking change across al
 
 ### 2. Domain binding lives in the contract, not the circuit
 
-The domain signals (v2: `domain_chain_id`, `domain_registry`; legacy: `domain_chain_id`, `domain_contract_hash`) have **no in-circuit constraint**. Their security comes from the registry checking them against `block.chainid` and `address(this)` (`PilotCurrentRegistry`, legacy `ComplianceRegistry`). Removing those checks silently enables cross-chain replay.
+The domain signals (pilot: `domain_chain_id`, `domain_registry`; legacy: `domain_chain_id`, `domain_contract_hash`) have **no in-circuit constraint**. Their security comes from the registry checking them against `block.chainid` and `address(this)` (`PilotCurrentRegistry`, legacy `ComplianceRegistry`). Removing those checks silently enables cross-chain replay.
 
 ### 2a. PostgreSQL is the authorization authority
 
