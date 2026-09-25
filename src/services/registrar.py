@@ -8,7 +8,7 @@ from src.auth.principal import Principal
 from src.protocol.canonical import record_digest
 from src.protocol.credential import digest_limbs
 from src.protocol.root_snapshot import RootSnapshot, RootTrustStore, SignedRootSnapshot, root_key_id, sign_root
-from src.registry.pilot_tree import ISSUANCE_TREE_DEPTH, ISSUER_TREE_DEPTH, PilotTree
+from src.registry.pilot_tree import ISSUANCE_TREE_DEPTH, ISSUER_TREE_DEPTH, MAX_TREE_DEPTH, PilotTree
 from src.registry.poseidon import poseidon_hash
 from src.services.issuance_tree import IssuanceTreeContext, build_issuance_tree
 from src.services.root_publication import persist_approved_root, root_record_id
@@ -41,7 +41,7 @@ class PilotRegistrar:
             IssuanceTreeContext(
                 issuer_did=issuer, chain_id=chain_id, registry_address=registry_address, now=0, depth=issuance_depth
             )
-        if type(issuer_depth) is not int or not 1 <= issuer_depth <= 32 or len(issuers) > 2**issuer_depth:
+        if type(issuer_depth) is not int or not 1 <= issuer_depth <= MAX_TREE_DEPTH or len(issuers) > 2**issuer_depth:
             raise ValueError("Issuer tree depth must be 1–32 and fit the configured issuers")
         self._issuers = tuple(sorted(issuers))
         self._store = PilotStore(db, cipher, self._principal)
