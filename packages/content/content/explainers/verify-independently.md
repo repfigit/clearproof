@@ -15,6 +15,11 @@ canonical: /explainers/verify-independently
 templateVersion: explainer-v1
 ---
 
+*Scope: this explainer walks through the SDK's `verifyProof` path for the
+legacy 16-signal demo profile. Current `pilot-transfer-v3` proofs publish eight
+values with no tier thresholds or review flag, and are checked by the pilot's
+authorization service; see [the eight public signals](/explainers/pilot-proof-public-signals).*
+
 A fair question for any compliance tool: do you have to trust the vendor to
 check its own proofs? In Clearproof's current source, the answer is no —
 verification is caller-supplied and separately runnable. This explainer walks

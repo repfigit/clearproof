@@ -2,9 +2,17 @@
 
 The sanctions components build a Poseidon Merkle representation and publish a root to an oracle. A non-membership proof establishes a relationship to that supplied tree; it is not a guarantee that all sanctions obligations have been satisfied.
 
-## Current construction
+## Current pilot construction
 
-The circuit uses a sorted-tree gap proof with depth 20, domain-separated Poseidon leaves, Merkle paths and range checks. The tree builder and witness generator must agree on leaf encoding, sorting and boundary handling.
+The `pilot-transfer-v3` proof screens **both** the sending and receiving wallet. The tree stores raw 160-bit EVM addresses, sorted, with two boundary leaves (`0` and `2^160`), in a Poseidon Merkle tree of depth 20. That holds up to 1,048,574 addresses. For each wallet, a gap proof shows the address lies strictly between two adjacent leaves; adjacency comes from the Merkle path bits, and every compared value is range-checked.
+
+The pilot's sanctions root is a signed root snapshot with a revision number and the digest of the previous snapshot. The authorization service accepts only the current head. Only raw hex addresses are screened; ENS names are never resolved.
+
+Non-EVM address formats (for example Bitcoin or Solana) are not supported by this profile.
+
+## Legacy construction
+
+The legacy `compliance.circom` circuit uses a separate depth-20 tree of hashed keys and publishes its root through the `SanctionsOracle` contract. The two trees are not interchangeable. The tree builder and witness generator must agree on leaf encoding, sorting and boundary handling.
 
 ## Update workflow
 

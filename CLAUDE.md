@@ -130,7 +130,7 @@ Range checks (252-bit on sanctions keys, 64-bit on amounts, 16-bit on jurisdicti
 - `python-tests`, `python-aggregate-coverage`
 - `typescript-build`, `operational-tests`, `operational-javascript`, `docs-browser`
 - `hardhat-tests` — contract suite
-- `circuits` — circom compile with audited Hermez ptau (SHA256-pinned); `circuit-lint` runs Circomspect
+- `circuits` — circom compile with the SHA-256-pinned PSE perpetual powers of tau (2^17), real proofs for both profiles; `circuit-lint` runs Circomspect
 - Hygiene: `protobuf-freshness`, `license-compliance` (REUSE)
 
 `sanctions-update.yml` rebuilds the sanctions Merkle tree daily from live feeds. `release.yml` publishes packages.

@@ -22,8 +22,9 @@ information, policy decisions and retained evidence for controlled evaluation by
 stablecoin processors and custodians. In the FATF Travel Rule context, the
 recurring problem is sending required transfer information to a counterparty
 without exposing more than required — and retaining evidence you can review
-later. Clearproof's answer is a hybrid payload: a Groth16 proof plus
-AES-256-GCM encrypted personal information in one envelope.
+later. Clearproof's answer is a Groth16 proof plus the required personal
+information encrypted to the receiving institution's key (HPKE), bound to the
+same transfer.
 
 ## What the source checkout implements today
 

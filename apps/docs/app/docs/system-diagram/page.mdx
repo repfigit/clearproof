@@ -1,26 +1,25 @@
 # System diagram
 
-This is a conceptual transfer-evidence workflow. It separates the intended responsibilities; it is not a claim that the current prototypes complete every step.
+This is the transfer-evidence workflow. The pilot implements the originating side, a simulated counterparty and receipt mirroring, tested locally. Remote delivery to a live counterparty is not yet implemented.
 
 ```mermaid
 sequenceDiagram
     participant O as Originating VASP
     participant B as Counterparty VASP
     participant R as Registry
-    O->>O: Authenticate inputs and evaluate policy
-    O->>O: Generate a scoped proof
-    O->>O: Encrypt required information for recipient
-    O->>B: Exchange a compatible hybrid payload
-    B->>B: Verify cryptography, sources and transfer context
-    B->>B: Process required information under access policy
-    opt Configured testnet acceptance
-        O->>R: Submit through an authorized registered wallet
-        R->>R: Check state, domain, expiry, revocation and replay
-        R-->>O: Record accepted proof
+    O->>O: Evaluate the active policy with signed inputs
+    O->>O: Generate a pilot-transfer-v3 proof
+    O->>O: Check current state; on ALLOW consume once and seal information to B's key
+    O->>B: Send proof, signed decision and encrypted information
+    B->>B: Verify signatures, proof and binding; decrypt required information
+    B-->>O: Accept, reject, request information or pending
+    opt Receipt mirror
+        O->>R: Publisher records checkpoints and the consumed receipt
+        R->>R: Check statement, chain, registry address and expiry
     end
 ```
 
-Current bridge implementations are prototypes. Authentic credential/holder/transfer binding and API/SDK/registry acceptance parity require further work. On-chain acceptance does not establish settlement or regulatory compliance.
+The counterparty step runs against a local simulator; TRP and TRISA bridges remain prototypes. A mirrored receipt does not establish settlement or regulatory compliance.
 
 ## Separate state tracks
 
@@ -33,4 +32,4 @@ Current bridge implementations are prototypes. Authentic credential/holder/trans
 | Settlement | Was the custody/chain transfer actually completed? |
 | Evidence | Can a reviewer reconstruct the scoped decision later? |
 
-Joining these tracks into an investigation timeline and durable historical bundle is planned work. See [architecture](/docs/architecture), [contracts](/docs/contracts) and [status](/docs/status).
+The pilot keeps these tracks separate, joins them into investigation timelines, and exports them as encrypted historical bundles for offline review. See [architecture](/docs/architecture), [contracts](/docs/contracts) and [status](/docs/status).

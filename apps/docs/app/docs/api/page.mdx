@@ -1,45 +1,54 @@
 # API reference
 
-The Python API is a development component. These routes reflect the 0.4.0 checkout as reviewed September 5, 2026; the published npm package versions are separate.
+The Python API (FastAPI) is a development component in the source checkout, reviewed September 25, 2026. It is not part of the published npm packages. Use the running application's [local OpenAPI UI](http://localhost:8000/docs) for exact request and response schemas.
 
-Use the running application's [local OpenAPI UI](http://localhost:8000/docs) for exact request and response schemas. The API's displayed internal version may differ from the repository package version.
+Protected routes require the configured authentication. Pilot routes also require an authenticated tenant principal with explicit roles and issuer scope; there is no implicit administrator override. PostgreSQL, storage keys and tenant trust configuration are required for the pilot routes. See [deployment](/docs/deployment).
 
-## Routes
+## Pilot routes
 
 | Route | Purpose |
 | --- | --- |
-| `GET /health` | Process health |
+| `POST /pilot/credential/enroll` | Enroll a credential with the holder wallet's signed consent |
+| `POST /pilot/credential/revoke` | Revoke an enrolled credential permanently |
+| `POST /pilot/policy/approve` | Approve a reviewed policy version (activation is a separate step) |
+| `POST /pilot/policy/diff` | Compare a proposed policy against supplied cases |
+| `POST /pilot/policy/diff/stored` | Compare a proposed policy against retained evidence |
+| `POST /pilot/proof/inspect` | Read-only inspection of a current proof against current state; never consumes |
+| `POST /pilot/proof/evaluate` | Explained policy evaluation of a current proof |
+| `POST /pilot/proof/authorize` | Consume one authorization after an `ALLOW`, sealing information to the recipient |
+| `POST /pilot/proof/observe` | Record a non-authorizing observation |
+| `POST /pilot/proof/observations/read`, `/list`, `/report` | Read observations and cohort reports |
+| `POST /pilot/events/ingest` | Ingest signed custody, counterparty or chain events |
+| `POST /pilot/events/investigate` | Transfer investigation timeline |
+| `POST /pilot/events/queue` | Paginated investigation queue |
+| `POST /pilot/fireblocks/{integration_id}` | Verify and retain a signed Fireblocks notification from a tenant relay |
+| `GET /pilot/usage` | Retained record counters (not billable charges) |
+
+## Wallet ownership extension
+
+| Route | Purpose |
+| --- | --- |
+| `POST /wallet/ownership/challenge` | Five-minute EOA signing challenge for an enrolled credential |
+| `POST /wallet/ownership/verify` | Verify the EIP-191 signature; issue a 24-hour attestation |
+| `GET /wallet/ownership/attestations/{attestation_id}` | Current attestation eligibility |
+| `POST /wallet/ownership/revoke` | Revoke an attestation |
+| `POST /wallet/ownership/credential` | Issue the optional versioned extension credential |
+
+The extension circuit is staged; no deployed verifier accepts it. See the [wallet ownership guide](https://github.com/repfigit/clearproof/blob/main/docs/internal/WALLET_OWNERSHIP.md).
+
+## Shared and legacy routes
+
+| Route | Purpose |
+| --- | --- |
+| `GET /health` | Process liveness, not pilot readiness |
 | `GET /metrics` | Operational counters |
-| `GET /auth/nonce` | SIWE challenge |
-| `POST /auth/verify` | SIWE signature verification |
-| `POST /credential/issue` | Development credential issuance |
-| `POST /credential/revoke` | Credential revocation request |
-| `POST /proof/generate` | Proof generation and payload assembly |
-| `POST /proof/verify` | Current off-chain verification path |
-| `GET /.well-known/clearproof.json` | Self-declared discovery metadata |
+| `GET /.well-known/clearproof.json` | Discovery metadata: exact `did:web` identity and HPKE key |
+| `GET /auth/nonce`, `POST /auth/verify` | SIWE challenge and verification |
+| `POST /credential/issue`, `POST /credential/revoke` | Legacy development credentials |
+| `POST /proof/generate`, `POST /proof/verify` | Legacy 16-signal demo proof generation and verification |
 
-Protected routes require the configured authentication mode. API-key mode uses `X-API-Key`; JWT/SIWE integrations use the corresponding authentication flow. Do not embed keys in published examples.
+The legacy routes serve the demo profile. A legacy proof is never current pilot authorization.
 
-## Generation prerequisites
+## Limits
 
-The current generation request includes credential ID, originator and destination wallets, amount, asset, jurisdiction and an idempotency key. Runtime state must include matching credential/issuer information, sanctions witnesses and compatible proving artifacts. Sensitive optional identity fields belong in authorized encrypted workflows.
-
-The current amount request uses a floating-point USD field and asset symbol. Exact asset/amount identity and authenticated transfer binding are planned improvements; this interface is not a production accounting contract.
-
-## Verification limits
-
-The response includes `valid`, `proof_id`, `compliance_attestations`, `verified_at` and `rejection_reasons`. A successful response does not establish equivalence with every on-chain registry check. Do not infer fund-movement authorization or legal compliance from the response alone.
-
-Durable tenant state, credential authenticity, witness consistency and verifier parity remain active work. See [status](/docs/status) and [security](/docs/security).
-
-
-## Wallet ownership extension (source checkout)
-
-The source API provides a five-minute EOA signing challenge and a 24-hour,
-revocable attestation bound to an enrolled credential and authenticated tenant.
-Use `/wallet/ownership/challenge`, `/wallet/ownership/verify`,
-`/wallet/ownership/attestations/{id}`, `/wallet/ownership/revoke` and
-`/wallet/ownership/credential`. Existing credential/proof formats are unchanged.
-The extension circuit is staged; existing deployed verifiers do not accept it.
-See the [wallet ownership guide](https://github.com/repfigit/clearproof/blob/main/docs/internal/WALLET_OWNERSHIP.md)
-for requests, signing, authorization, expiry and replay behavior.
+A successful response is not legal compliance, settlement or a live counterparty's acceptance. Inspection and observation results never authorize a transfer. Only `/pilot/proof/authorize` consumes an authorization, and only after an `ALLOW`. See [architecture](/docs/architecture) and [security](/docs/security).

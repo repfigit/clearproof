@@ -1,6 +1,6 @@
 # Development deployment
 
-This page covers local and testnet evaluation. A production launch still needs authenticated input/transfer binding, durable tenant state, verifier consistency, tested interoperability, approved artifacts and independent assurance.
+This page covers local and testnet evaluation. A production launch still needs live interoperability testing, an approved proving setup, independent assurance and operations review. The pilot's local acceptance workflow is described in the [local acceptance guide](https://github.com/repfigit/clearproof/blob/main/docs/operations/local-pilot-acceptance.md).
 
 ## Configuration
 
@@ -9,7 +9,7 @@ This page covers local and testnet evaluation. A production launch still needs a
 | `PII_MASTER_KEY` | Required at API startup: 64 valid hex characters or at least 32 UTF-8 bytes; generate a random secret |
 | `AUTH_MODE` | Select the supported API-key, JWT or SIWE authentication mode |
 | `API_KEY` | Required for protected requests in API-key mode |
-| `DATABASE_URL` | PostgreSQL connection; absence selects an in-memory evaluation path |
+| `DATABASE_URL` | PostgreSQL connection. Required by the pilot routes; without it only the legacy in-memory demo path works |
 | `CIRCUIT_ARTIFACTS_DIR` | Compatible local circuit artifacts |
 | `VASP_DID` | Configured VASP identity |
 | `VASP_DOMAIN` | Domain used by the discovery publisher |
@@ -18,7 +18,7 @@ This page covers local and testnet evaluation. A production launch still needs a
 | `CHAIN_RPC_URL` | RPC endpoint for chain readers |
 | `COMPLIANCE_REGISTRY_ADDRESS` | Registry deployment used for the intended verification context |
 
-Startup checks key encoding/length and configures storage. It does not certify key randomness, artifact assurance, complete tenant isolation or end-to-end readiness. Current CORS handling removes wildcard origins when credentials are enabled.
+The pilot routes also need independently configured storage keys and tenant/trust configuration; see the [tenant storage guide](https://github.com/repfigit/clearproof/blob/main/docs/operations/pilot-tenant-storage.md). Startup checks key encoding/length and configures storage. It does not certify key randomness, artifact assurance, complete tenant isolation or end-to-end readiness. Current CORS handling removes wildcard origins when credentials are enabled.
 
 ## Validation
 
@@ -28,10 +28,10 @@ npm run test:ts
 npm run build
 ```
 
-Contract checks run in `packages/contracts` with Hardhat. Real proofs additionally require the Circom/Powers of Tau/artifact setup. Test counts and latency depend on the checkout and environment.
+Contract checks run in `packages/contracts` with Hardhat. Real proofs additionally require Circom 2.2.2 and `2^17` powers-of-tau parameters; see [circuits](/docs/circuits). Test counts and latency depend on the checkout and environment.
 
 ## Sanctions operations
 
-After a sanctions-root change, every intended chain must receive the corresponding relay update. Confirm the actual configured targets and freshness; do not infer successful relay from a local tree rebuild.
+For the pilot, a new sanctions root is published as a signed root snapshot that the authorization service must accept as the current head. For the legacy contracts, every intended chain must receive the corresponding oracle relay update. Confirm the actual configured targets and freshness; do not infer successful relay from a local tree rebuild.
 
 See [recorded Sepolia contracts](/docs/contracts), [sanctions](/docs/sanctions) and [security](/docs/security). These instructions do not authorize or establish production use.

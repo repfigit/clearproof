@@ -1,14 +1,14 @@
 # Contributing
 
-The [main repository](https://github.com/repfigit/clearproof) is **public**, verified September 7, 2026. The local adoption pilot is merged into `main` through PR #27 and remains unreleased on npm. Source access does not imply a published package release or production approval.
+The [main repository](https://github.com/repfigit/clearproof) is **public**, verified September 25, 2026. The local adoption pilot is merged into `main` through PR #27 and remains unreleased on npm. Source access does not imply a published package release or production approval.
 
-## For contributors with access
+## Set up
 
 ```bash
 git clone https://github.com/repfigit/clearproof.git
 cd clearproof
-npm install
-uv sync --extra dev
+npm exec --yes --package=npm@11.9.0 -- npm ci
+uv sync --frozen --extra dev --python 3.12
 ```
 
 Read the applicable `AGENTS.md` instructions before editing. Python uses the deliberate `src.` import prefix. Keep Circom, Python witness builders, TypeScript mappings, contracts and test vectors synchronized for proof-interface changes.
@@ -21,7 +21,7 @@ npm run test:ts
 npm run build
 ```
 
-Run targeted behavior tests and the appropriate integration/contract/circuit checks for the change. Python style is Ruff, line length 120, Python 3.11+. TypeScript is strict.
+Run targeted behavior tests and the appropriate integration/contract/circuit checks for the change. Python style is Ruff, line length 120, Python 3.11+ (the locked setup uses 3.12). TypeScript is strict.
 
 Use conventional commit messages and describe the resulting behavior, validation and remaining limitations. Never commit secrets, raw personal data, or development proving keys as production artifacts.
 

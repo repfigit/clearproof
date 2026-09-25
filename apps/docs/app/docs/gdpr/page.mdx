@@ -12,9 +12,9 @@ Encrypted personal data remains personal data. Keeping it off-chain and limiting
 
 ## What remains visible
 
-Current public proof metadata includes amount tier, jurisdiction, timestamps, roots, credential commitments, transfer references and a review signal. Commitments and hashes are not automatically anonymous: linkage to other records or public transactions can identify or correlate people.
+A current `pilot-transfer-v3` proof publishes eight values: a commitment to the transfer and credential, the authorized-issuer and sanctions roots, a nullifier, the evaluation and expiry times, and the chain and registry it is bound to. The amount, tier, wallets, jurisdiction and participants stay private. See [circuits](/docs/circuits).
 
-A named advisory field may be omitted from a bridge while still appearing in the public-signal array. Confidential advisory handling is part of the planned proof-version work.
+Commitments, nullifiers and timestamps are still not automatically anonymous. Linking them to other records, on-chain transactions or retained evidence can identify or correlate people. The legacy 16-signal demo circuit publishes more, including an amount tier, jurisdiction and a tier-derived review flag; do not use it where that metadata matters.
 
 ## Deployment questions
 

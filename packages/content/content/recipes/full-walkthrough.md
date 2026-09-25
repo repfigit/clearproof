@@ -10,6 +10,8 @@ estimated-time: 10 min
 
 # Full End-to-End Walkthrough
 
+> **Legacy demo path.** This recipe uses the 16-signal legacy profile (`/proof/generate`, `/proof/verify`). It does not exercise the current `pilot-transfer-v3` workflow; for that, follow the [local acceptance guide](https://github.com/repfigit/clearproof/blob/main/docs/operations/local-pilot-acceptance.md).
+
 Complete compliance flow: issue a credential, generate a proof, verify off-chain, and record on-chain.
 
 The local API defaults to API-key auth:
