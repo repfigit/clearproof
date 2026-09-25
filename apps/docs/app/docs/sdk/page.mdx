@@ -1,6 +1,6 @@
 # TypeScript SDK
 
-`@clearproof/proof` provides proof generation, cryptographic verification and counterparty discovery. Published version: **0.3.0**, checked September 5, 2026. The development checkout is **0.4.0**; confirm the installed version before using its types.
+`@clearproof/proof` provides proof generation, cryptographic verification and counterparty discovery. Published version: **0.3.0**, checked September 25, 2026. That release predates the pilot: it covers the legacy 16-signal profile only. The pilot functions described below exist in the source checkout (0.4.0, unpublished). Confirm the installed version before using its types.
 
 ## Installation
 
@@ -8,7 +8,7 @@
 npm install @clearproof/proof@0.3.0
 ```
 
-## Development API shape
+## Legacy proof API (in the published 0.3.0 package)
 
 ```typescript
 import { generateProof, verifyProof, type ComplianceInput } from '@clearproof/proof';
@@ -24,6 +24,19 @@ async function evaluate(input: ComplianceInput, wasm: string, zkey: string, vkey
 The caller supplies compatible artifacts. The SDK maps camelCase fields to Circom signal names; it does not create issuer or sanctions witnesses for you. Field encodings, amount units and public-signal ordering must match the exact proof version.
 
 `verified.valid` describes cryptographic verification. `isCompliant` and `sarReviewFlag` interpret circuit outputs; they do not establish full registry acceptance, current policy authorization or legal compliance. Additional trust, freshness, revocation, domain and replay checks remain necessary.
+
+## Pilot functions (source checkout)
+
+| Function | Purpose |
+| --- | --- |
+| `inspectCurrentProof` | Read-only inspection of a `pilot-transfer-v3` proof through the authenticated API |
+| `authorizeCurrentProof` | Request consumption of one authorization; returns the receipt |
+| `createObservation`, `readObservation`, `listObservations`, `reportObservationCohort` | Non-authorizing observations and cohort reports |
+| `requestReport`, `reportEndpoint` | Authenticated report requests |
+| `canonicalBytes`, `recordDigest` | Canonical encoding and domain-separated digests, matching the Python implementation |
+| `walletOwnershipSigningMessage` | Build the exact EIP-191 message for the wallet ownership challenge |
+
+These use server-selected trust: the API owns current roots, policy and consumption. The client validates response shape and profile (`pilot-transfer-v3`) but does not independently establish current state.
 
 ## Discovery
 

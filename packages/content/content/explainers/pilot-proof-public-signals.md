@@ -54,7 +54,7 @@ without identifying the holder.
 
 ## What is deliberately not public
 
-The v2 profile carries **no public amount tier and no SAR advisory flag**. The
+The v3 profile carries **no public amount tier and no SAR advisory flag**. The
 [README](https://github.com/repfigit/clearproof/blob/main/README.md) is
 explicit about this, and about the contrast: the older 16-signal
 `compliance.circom` demo profile publishes amount-tier and SAR metadata among

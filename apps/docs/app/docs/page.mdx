@@ -4,7 +4,7 @@ clearproof combines Circom/Groth16 proof components, encrypted personal-informat
 
 ## Current scope
 
-A circuit can check a specific mathematical statement about its inputs. Trustworthy transfer evidence additionally requires authenticated inputs, holder and transaction binding, approved policies, fresh sources and correct verifier behavior. Those integration and assurance requirements remain active work.
+A circuit can check a specific mathematical statement about its inputs. Trustworthy transfer evidence also needs authenticated inputs, holder and transaction binding, approved policies, fresh sources and correct verifier behavior. The pilot implements these around the `pilot-transfer-v3` proof and tests them locally with synthetic data. Live interoperability and independent assurance remain open.
 
 Encrypted personal information can accompany a proof for an authorized recipient. Encryption does not eliminate required information exchange, and existing Travel Rule services may already provide encrypted messaging. TRP, TRISA and TAIP-10 bridge components are prototypes; complete bilateral interoperability is not claimed.
 
@@ -12,14 +12,14 @@ Encrypted personal information can accompany a proof for an authorized recipient
 
 | Location | Purpose |
 | --- | --- |
-| `circuits/` | Credential, sanctions non-membership and amount-tier circuit components |
+| `circuits/` | Pilot circuit (transfer projection, credential, sanctions for both wallets, private valuation and tier) and the legacy demo circuit |
 | `packages/proof` | TypeScript proving, cryptographic verification and discovery |
 | `packages/cli` | Local proof tooling and synthetic demonstration |
-| `packages/contracts` | Testnet verification, VASP registration and sanctions-root contracts |
+| `packages/contracts` | Pilot verifier and receipt-mirror registry, plus legacy verification, VASP registration and sanctions-root contracts |
 | `src/` | Python API, protocol, storage, credential, encryption and chain components |
 
 ## Availability
 
-As checked September 7, 2026, the [main repository](https://github.com/repfigit/clearproof) is public. Public npm packages are **0.3.0**; the development checkout is **0.4.0**. The local pilot is merged into `main` through PR #27; source availability does not mean these features have shipped on npm.
+As checked September 25, 2026, the [main repository](https://github.com/repfigit/clearproof) is public. Public npm packages are **0.3.0** and predate the pilot; the source checkout is **0.4.0** (unpublished). The local pilot is merged into `main` through PR #27; source availability does not mean these features have shipped on npm.
 
 Start with [project status](/docs/status), [quickstart requirements](/docs/quickstart) and [security limitations](/docs/security).

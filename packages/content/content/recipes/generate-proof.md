@@ -8,6 +8,8 @@ estimated-time: 2 min
 
 # Generate a Compliance Proof
 
+> **Legacy demo path.** This recipe uses the 16-signal legacy profile (`/proof/generate`, `/proof/verify`). It does not exercise the current `pilot-transfer-v3` workflow; for that, follow the [local acceptance guide](https://github.com/repfigit/clearproof/blob/main/docs/operations/local-pilot-acceptance.md).
+
 Issue a zkKYC credential and then generate a Groth16 compliance proof against it.
 
 The local API defaults to API-key auth:

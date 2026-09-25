@@ -12,8 +12,14 @@ status: approved
 summary: The Groth16 circuit checks sanctions non-membership, credential validity and the amount tier — and it is worth being precise about what stays outside that boundary.
 ---
 
+> **Correction, September 25, 2026:** this post described the legacy 16-signal
+> `compliance.circom` demo circuit as if it were current. The current pilot
+> profile, `pilot-transfer-v3`, publishes eight values with no public amount
+> tier or review flag, and screens both wallets. See the
+> [circuits page](https://docs.clearproof.world/docs/circuits).
+
 [The circuit documentation](https://github.com/repfigit/clearproof/blob/main/packages/content/content/topics/circuits.md)
-describes the three checks the current Groth16 circuit enforces:
+describes the three checks the legacy Groth16 circuit enforces:
 
 1. **Sanctions non-membership** — a sorted-tree gap construction shows the queried value lies between neighboring leaves. This establishes a fact about the supplied tree; authenticity, completeness and freshness of the screening source are separate requirements.
 2. **Credential validity** — checks performed against the credential commitment and issuer tree supplied to the circuit.

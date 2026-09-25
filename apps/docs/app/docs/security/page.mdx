@@ -1,17 +1,17 @@
 # Security and assurance
 
-Last reviewed: September 5, 2026.
+Last reviewed: September 25, 2026.
 
 clearproof is **pre-production, pilot-stage software**. Independent circuit and contract audits have not been completed. Current proving artifacts use a development-only trusted setup. Testnet deployment and passing tests do not establish production safety.
 
 ## Current boundaries
 
-- A cryptographically valid proof is not the same as an accepted transfer. Current off-chain verification does not yet reproduce every registry acceptance check.
-- Credential authenticity, holder authority, jurisdiction and actual transfer binding require coordinated improvements across the proof statement and application.
-- Recipient HPKE and legacy AES-256-GCM components exist. Key trust, discovery, rotation, failure behavior and migration need explicit integration validation.
-- Public signals expose metadata, including an advisory review signal in the current proof version. Omitting a named field from a bridge does not conceal information that remains in its public-signal array.
-- Domain, expiry, root and replay checks depend on the verifier and its configuration. The site does not claim that replay is universally impossible.
-- Persistent storage and authentication components do not yet constitute complete durable tenant isolation.
+- A cryptographically valid proof is not an accepted transfer. In the pilot, the authorization service checks current roots, revocation, policy and signed facts before consuming an authorization in PostgreSQL. Pairing alone checks none of these.
+- Credential, holder, jurisdiction and transfer binding are enforced by the `pilot-transfer-v3` statement and the authorization service, tested locally. They rely on trusted issuers, root publishers and a trusted registry publisher; the contract cannot detect a publisher that lies about private records.
+- Recipient HPKE envelopes are the default; the legacy shared-key AES-256-GCM mode is only used when an operator selects it. Key rotation and altered-envelope rejection are tested locally. Live key discovery between institutions is not yet validated.
+- Current proofs publish eight values (commitments, roots, a nullifier, times and the chain and registry binding) but no amount, tier, jurisdiction or review flag. Those values can still be correlated with other records. The legacy 16-signal demo profile publishes more, including a review flag.
+- Domain, expiry, root and replay checks depend on correct configuration of the authorization service and registry. The site does not claim that replay is universally impossible.
+- Tenant-scoped encrypted storage, restart recovery and retry isolation are tested locally with PostgreSQL. They have not been independently reviewed.
 
 ## Controls to evaluate
 

@@ -6,7 +6,7 @@
 
 The published CLI currently depends on `@clearproof/content`, which was unavailable from the public npm registry when checked September 5, 2026. Consequently, `npx @clearproof/cli@0.3.0 --help` fails during dependency installation. A published version does not imply a working public installation.
 
-For CLI evaluation, contributors with repository access can build the local workspaces and run `node packages/cli/dist/index.js --help`. See [quickstart](/docs/quickstart). The proof SDK can be installed independently.
+For CLI evaluation, build the local workspaces from the public repository and run `node packages/cli/dist/index.js --help`. See [quickstart](/docs/quickstart). The proof SDK can be installed independently.
 
 A clean source install from `main` was verified on September 15, 2026 at commit `1c8d385`: locked workspace install, workspace build, `--help` output from the built CLI, Python environment sync and the Python unit suite all succeeded. This validates the source-checkout path; it does not change the published-package limitation above.
 
@@ -29,8 +29,21 @@ clearproof demo --artifacts ./artifacts
 
 The demo uses synthetic, historical inputs and development artifacts. It demonstrates a local proof workflow; it does not establish fresh sanctions state, live credential authenticity, current policy acceptance or safe transfer execution. Artifact presence and compatibility must be checked first. No fixed completion-time claim is made.
 
-## Planned commands
+## Pilot commands (source checkout only)
 
-Policy comparison, transfer investigation and historical verification are planned pilot features. They are not claimed as available commands in the published package.
+These commands exist in the source checkout, not in the published 0.3.0 package. Most call the authenticated pilot API; `verify-history` and `doctor` run offline.
+
+| Command | Purpose |
+| --- | --- |
+| `doctor` | Inspect pinned local artifacts without downloading, proving or authorizing |
+| `inspect-current` | Inspect a pilot proof against current state; never consumes |
+| `authorize-current` | Consume one local pilot authorization, or recover its receipt; no fund execution |
+| `observation` | Create or read non-enforcing observations and cohort reports |
+| `policy diff` | Compare a proposed policy and write a tenant-private report |
+| `investigation` | Read tenant-private timelines and ageing queues |
+| `counterparty` | Simulate a local bilateral disposition |
+| `verify-history` | Review an encrypted evidence export offline with a separately held reviewer key |
+
+Private inputs (proofs, requests, keys) are read from stdin rather than command-line arguments.
 
 See [quickstart](/docs/quickstart) and [project status](/docs/status).

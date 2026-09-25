@@ -7,39 +7,44 @@ cli-topic: architecture
 
 # Architecture
 
-clearproof combines Python API/protocol/storage components, Circom circuits, TypeScript proof tooling and Solidity contracts. The diagram describes the intended integration; prototype components do not establish a complete production workflow.
+clearproof combines a Python API with PostgreSQL storage, Circom circuits, TypeScript proof tooling and Solidity contracts. The pilot workflow below is implemented in the source checkout and tested locally with synthetic data and real development proofs. It has not been independently audited or deployed to production.
 
-## Component boundaries
+## Pilot workflow
 
 ```mermaid
 flowchart LR
-    Inputs[Credential and screening inputs] --> API[Python API and policy context]
-    API --> Prover[Groth16 proving]
-    API --> Envelope[Encrypted information]
-    Prover --> Payload[Hybrid payload]
-    Envelope --> Payload
-    Payload --> Bridge[Prototype protocol bridge]
-    Bridge --> Peer[Authorized counterparty]
-    Peer --> Verify[Proof and context verification]
-    Verify --> Evidence[Decision evidence]
+    Enroll[Wallet-signed credential enrollment] --> Roots[Signed issuance, issuer and sanctions roots]
+    Roots --> Prove[pilot-transfer-v3 Groth16 proof]
+    Policy[Reviewed, active policy] --> Authorize
+    Prove --> Authorize[Authorization service: current state + policy ALLOW]
+    Authorize --> Seal[Information sealed to recipient's HPKE key]
+    Authorize --> Receipt[Consumed receipt in PostgreSQL]
+    Receipt --> Mirror[Optional on-chain receipt mirror]
+    Seal --> Peer[Counterparty verifies and responds]
+    Receipt --> Evidence[Encrypted evidence export for offline review]
 ```
 
-Authenticated issuance, holder/transaction binding, durable tenant state, trusted recipient discovery and complete verifier parity remain active work. The current protocol bridges need real bilateral interoperability evidence.
+## Responsibilities
 
-## Verification responsibilities
+The **circuit** proves the transfer projection, credential, issuer membership and sanctions non-membership relationships. See [circuits](/docs/circuits).
 
-The circuit constrains particular mathematical relationships. The application establishes trusted input sources and the policy context. The registry additionally checks on-chain state, domain, expiry, revocation and replay. Do not collapse these into a single claim that every security property is proved by the circuit.
+The **authorization service** checks everything the circuit cannot: the current roots and their signatures, credential revocation, the active policy, signed valuation and external facts, and the real proof pairing. Only a policy `ALLOW` can consume an authorization. `DENY`, `REVIEW`, `INDETERMINATE`, invalid pairing and untrusted inputs cannot. On `ALLOW` it seals the approved transfer information to a trusted recipient key and records the evidence, the receipt and the consumed nullifier in one PostgreSQL transaction.
 
-The development registry includes a versioned verifier router. A deployed registry and its selector/artifacts must be checked against the intended proof version.
+The **contract** (`PilotCurrentRegistry`) mirrors receipts that were already consumed, under checkpoints published by a trusted publisher. It checks the chain ID, its own address and the expiry, but it cannot create an authorization or detect a publisher that lies about private records.
 
-## Hybrid payload
+Read-only inspection and observation never consume an authorization.
 
-A payload combines proof material with encrypted personal information and envelope-binding metadata. The authorized recipient still receives required personal information. Key establishment and migration must be tested; the existence of ciphertext does not prove that the intended recipient can decrypt it.
+## Around the proof
 
-Public proof metadata can reveal or correlate information. See [privacy](/docs/gdpr) and [security](/docs/security).
+- **Policy review:** explained outcomes, stored comparisons of a proposed policy against past cases, and separate approval and activation history.
+- **Investigations:** read-only timelines that join policy, counterparty, custody, chain and evidence events, keeping duplicates, ordering and unresolved conflicts visible.
+- **Historical evidence:** recipient-encrypted exports that an independent reviewer can check offline after the proof expires, using separately configured trust.
+- **Observation mode:** runs alongside an existing workflow and records explained outcomes without authorizing anything.
 
-## Planned operational layer
+## Legacy path
 
-Policy-change comparison, event reconciliation, historical evidence verification and observation onboarding are planned pilot workflows. They extend the component architecture and are not yet generally available.
+The original `compliance.circom` profile, `/proof/generate`, `/proof/verify`, the `ComplianceRegistry` contract and the hybrid payload remain as a separate demo and parity path. Their proofs are not current pilot authorization.
 
-See [system diagram](/docs/system-diagram) and [project status](/docs/status).
+## Not yet done
+
+Live provider and counterparty interoperability, remote TRP/TRISA conformance, re-screening from an upstream feed, managed distribution, an independent audit and a production setup are separate follow-on gates. See [project status](/docs/status).

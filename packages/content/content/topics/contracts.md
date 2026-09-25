@@ -7,11 +7,17 @@ cli-topic: contracts
 
 # Smart Contracts
 
-The project includes EVM proof verification, VASP registration, sanctions-root and compliance-recording contracts. Deployments listed here are **Sepolia testnet** records, not audited production infrastructure.
+The project includes two sets of EVM contracts. The **pilot contracts** verify and mirror current `pilot-transfer-v3` proofs; they exist in source and are tested locally, but are **not deployed** to any shared network. The **legacy contracts** serve the 16-signal demo profile; the Sepolia addresses below are historical testnet records of those. None of these contracts has been independently audited.
 
-## Recorded deployments
+## Pilot contracts (source, not deployed)
 
-The July 20, 2026 manifest records these addresses. Bytecode was present at all five on September 5, 2026. This check does not establish equivalence between every current source change and deployed bytecode.
+**PilotGroth16Verifier** checks the eight-signal pilot proof against a verification key and artifact manifest digest fixed at construction. It reports `proofProfile` as `pilot-transfer-v3` and `assurance` as `development-unapproved`. Pairing alone does not reconstruct the transfer statement, check current state or consume a nullifier.
+
+**PilotCurrentRegistry** publishes tenant checkpoints (revisioned heads for issuance, issuers, sanctions, credential, policy, valuation, participants and authorization) and statement bindings from one assigned publisher per tenant. `inspect` is a read-only call that checks a proof against a published statement, including the chain ID, the registry's own address and the expiry. It then mirrors receipts that PostgreSQL has already consumed. It cannot create an authorization, and it cannot detect a publisher that lies about private records. See the [registry trust boundary](https://github.com/repfigit/clearproof/blob/main/docs/internal/PILOT_CURRENT_REGISTRY.md).
+
+## Legacy contracts: recorded Sepolia deployments
+
+The July 20, 2026 manifest records these addresses for the legacy demo profile. Bytecode was present at all five on September 5, 2026. This check does not establish equivalence between every current source change and deployed bytecode.
 
 | Contract | Sepolia address |
 | --- | --- |

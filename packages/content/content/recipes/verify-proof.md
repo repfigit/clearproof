@@ -8,6 +8,8 @@ estimated-time: 1 min
 
 # Verify a Proof Off-Chain
 
+> **Legacy demo path.** This recipe uses the 16-signal legacy profile (`/proof/generate`, `/proof/verify`). It does not exercise the current `pilot-transfer-v3` workflow; for that, follow the [local acceptance guide](https://github.com/repfigit/clearproof/blob/main/docs/operations/local-pilot-acceptance.md).
+
 Take an existing compliance proof and verify it locally using the API server. This does not interact with any blockchain.
 
 The local API defaults to API-key auth:
