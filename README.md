@@ -65,10 +65,10 @@ customer information or decrypted envelopes in logs or source control.
 
 ## Proof and authorization boundaries
 
-The current `pilot-transfer-v2` profile has **eight public signals**, with no
+The current `pilot-transfer-v3` profile has **eight public signals**, with no
 public amount tier or SAR advisory flag. The credential-bound projection and
 approved roots are reconstructed from trusted inputs. See the
-[v2 statement](specs/pilot-transfer-v2.md) and
+[v3 statement](specs/pilot-transfer-v3.md) and
 [signal reference](docs/internal/CIRCUIT_SIGNALS.md).
 
 Python and Solidity check matching real proof statements. API/SDK clients use

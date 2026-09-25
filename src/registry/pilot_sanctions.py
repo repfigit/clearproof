@@ -1,17 +1,23 @@
-"""Versioned raw-address sanctions tree for the bounded development pilot."""
+"""Versioned raw-address sanctions tree for the pilot proof profile."""
 
 import re
 from bisect import bisect_left
 
 from src.protocol.canonical import record_digest
-from src.registry.pilot_tree import PilotTree
+from src.registry.pilot_tree import MAX_TREE_DEPTH, SANCTIONS_TREE_DEPTH, PilotTree
 from src.registry.poseidon import poseidon_hash
 
 
 class PilotSanctionsTree:
-    def __init__(self, addresses: list[str], *, depth: int = 8):
-        if type(addresses) is not list or len(addresses) > 254:
-            raise ValueError("Pilot sanctions input requires at most 254 addresses")
+    def __init__(self, addresses: list[str], *, depth: int = SANCTIONS_TREE_DEPTH):
+        # Two leaves are reserved for the 0 and 2^160 sentinels.
+        if (
+            type(depth) is not int
+            or not 1 <= depth <= MAX_TREE_DEPTH
+            or type(addresses) is not list
+            or len(addresses) > 2**depth - 2
+        ):
+            raise ValueError("Sanctions input exceeds tree capacity")
         keys = [self.address_key(address) for address in addresses]
         if len(set(keys)) != len(keys):
             raise ValueError("Duplicate sanctions address")

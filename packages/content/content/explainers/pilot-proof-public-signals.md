@@ -6,7 +6,7 @@ publishAfter: 2026-09-16T00:00:00Z
 sourceCommit: caa15cb49a3d9da8f0978dcfaebf5bf958161b67
 claimRefs:
   - README.md
-  - specs/pilot-transfer-v2.md
+  - specs/pilot-transfer-v3.md
   - packages/content/content/topics/security.md
   - packages/content/content/topics/circuits.md
 status: approved
@@ -18,9 +18,9 @@ templateVersion: explainer-v1
 Every Groth16 proof publishes a fixed array of public signals. In a Travel Rule
 system those signals are metadata that any verifier — and anyone who sees the
 proof — can read. So before evaluating any privacy claim, it is worth reading
-the actual array. Clearproof's current pilot profile, `pilot-transfer-v2`, has
+the actual array. Clearproof's current pilot profile, `pilot-transfer-v3`, has
 exactly eight. The
-[public statement](https://github.com/repfigit/clearproof/blob/main/specs/pilot-transfer-v2.md)
+[public statement](https://github.com/repfigit/clearproof/blob/main/specs/pilot-transfer-v3.md)
 in the repository lists them in mandatory order:
 
 | Index | Signal |
@@ -77,4 +77,4 @@ If you are evaluating the system, the signal array is where to start: it tells
 you exactly what every observer learns, before any encrypted envelope is even
 opened. The full statement, including the private 48-field projection and the
 subcircuit binding, is in
-[specs/pilot-transfer-v2.md](https://github.com/repfigit/clearproof/blob/main/specs/pilot-transfer-v2.md).
+[specs/pilot-transfer-v3.md](https://github.com/repfigit/clearproof/blob/main/specs/pilot-transfer-v3.md).

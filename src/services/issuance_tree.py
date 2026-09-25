@@ -8,7 +8,7 @@ from src.protocol.canonical import record_digest
 from src.protocol.discovery_profile import parse_target
 from src.protocol.enrollment import EnrollmentConsent
 from src.protocol.transfer import Address, Epoch, Record
-from src.registry.pilot_tree import PilotTree
+from src.registry.pilot_tree import ISSUANCE_TREE_DEPTH, PilotTree
 from src.services.enrollment import EnrollmentIneligible, load_unrevoked_enrollment
 from src.storage.pilot import PilotTransaction
 
@@ -18,7 +18,7 @@ class IssuanceTreeContext(Record):
     chain_id: int = Field(ge=1, le=2**53 - 1)
     registry_address: Address
     now: Epoch
-    depth: int = Field(ge=1, le=20)
+    depth: int = Field(ge=1, le=32)
 
     @model_validator(mode="after")
     def canonical_context(self):
@@ -38,7 +38,13 @@ class IssuanceTree:
 
 
 async def build_issuance_tree(
-    tx: PilotTransaction, *, issuer_did: str, chain_id: int, registry_address: str, now: int, depth: int = 8
+    tx: PilotTransaction,
+    *,
+    issuer_did: str,
+    chain_id: int,
+    registry_address: str,
+    now: int,
+    depth: int = ISSUANCE_TREE_DEPTH,
 ) -> IssuanceTree:
     """Caller holds the tenant lock through candidate construction.
 

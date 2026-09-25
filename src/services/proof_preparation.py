@@ -8,7 +8,7 @@ from src.protocol.root_snapshot import RootTrustError
 from src.prover.pilot_compliance import PUBLIC_SIGNALS, compliance_witness
 from src.prover.pilot_current import expected_current_signals
 from src.registry.pilot_sanctions import PilotSanctionsTree
-from src.registry.pilot_tree import PilotTree
+from src.registry.pilot_tree import ISSUANCE_TREE_DEPTH, ISSUER_TREE_DEPTH, PilotTree
 from src.registry.poseidon import poseidon_hash
 from src.services.proof_inspection import ProofInspectionService
 
@@ -52,7 +52,8 @@ class ProofPreparationService(ProofInspectionService):
             if issuance_source.get("issuer_did") != credential.issuer_did:
                 raise RootTrustError("Retained issuance source issuer differs")
             issuance_tree = PilotTree(
-                [(entry["credential_id"], entry["commitment"]) for entry in issuance_source["entries"]], depth=8
+                [(entry["credential_id"], entry["commitment"]) for entry in issuance_source["entries"]],
+                depth=ISSUANCE_TREE_DEPTH,
             )
             if (credential_id, credential.commitment) not in issuance_tree.entries:
                 raise RootTrustError("Enrollment is absent from retained issuance inventory")
@@ -74,7 +75,7 @@ class ProofPreparationService(ProofInspectionService):
                     )
                     for entry in entries
                 ],
-                depth=8,
+                depth=ISSUER_TREE_DEPTH,
             )
             if (issuance_tree.root, issuer_tree.root, sanctions_tree.root) != tuple(
                 self._inputs[name].snapshot.root for name in ("issuance", "issuers", "sanctions")

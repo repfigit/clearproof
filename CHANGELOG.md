@@ -11,6 +11,15 @@ maintains its own version line in this file.
 
 ## [Unreleased]
 
+### Changed
+
+- **Proof profile `pilot-transfer-v3`: production tree depths** ([ADR 0011](docs/adr/0011-production-tree-depths.md)). The composed pilot circuit changes from `PilotCompliance(8, 8, 8)` to `PilotCompliance(32, 20, 20)`:
+  - Capacity is now 2^32 credentials per issuance root, 2^20 authorized-issuer leaves and 2^20 − 2 sanctioned EVM addresses. Previously each tree held 256 leaves (254 addresses).
+  - Public signals are unchanged. Keys change, so `pilot-transfer-v2` becomes a historical profile: current artifact/context checks reject it, and pinned read-only pairing can still inspect it.
+  - Depths are defined once in `src/registry/pilot_tree.py`. Signed root snapshots must carry the exact depth for their kind. The registrar takes separate `issuance_depth`/`issuer_depth`, and `PilotTree` no longer caps entries at 256.
+  - Circuit size grows from 51,728 to 95,408 constraints, so development setup uses `2^17` powers of tau. CI now uses the SHA-256-pinned PSE `ppot_0080_17.ptau` via `--prepared-ptau` instead of generating a single-party phase 1. Keys remain development-only.
+  - **Regenerate development artifacts after upgrading.**
+
 ### Documentation
 
 - Add a public adoption roadmap and publication boundaries; retain evaluation and usage semantics in operational docs while removing internal commercial preparation from the current public tree.

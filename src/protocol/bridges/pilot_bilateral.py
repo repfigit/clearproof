@@ -105,7 +105,7 @@ class LocalBilateralCounterparty:
             or receipt.get("tenant_id") != self.transfer.tenant_id
             or receipt.get("transfer_digest") != self.transfer.digest
             or receipt.get("context_digest") != self.context.digest
-            or receipt.get("proof_profile") != "pilot-transfer-v2"
+            or receipt.get("proof_profile") != "pilot-transfer-v3"
             or receipt.get("execution") != "not-requested"
             or not receipt["authorized_at"] <= now < receipt["expires_at"]
         ):

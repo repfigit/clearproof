@@ -6,8 +6,20 @@ from functools import lru_cache
 from src.protocol.credential import scalar
 from src.registry.poseidon import poseidon_hash
 
+# pilot-transfer-v3 tree depths. They are fixed by the circuit and its proving key,
+# so changing any of them requires a new proof profile and new keys (ADR 0011).
+ISSUANCE_TREE_DEPTH = 32  # credentials per issuer issuance root: 2^32
+ISSUER_TREE_DEPTH = 20  # authorized issuer leaves: 2^20
+SANCTIONS_TREE_DEPTH = 20  # raw-address sanctions leaves incl. two sentinels: 2^20
+ROOT_TREE_DEPTHS = {
+    "issuance-root": ISSUANCE_TREE_DEPTH,
+    "issuer-root": ISSUER_TREE_DEPTH,
+    "sanctions-root": SANCTIONS_TREE_DEPTH,
+}
+MAX_TREE_DEPTH = 32
 
-@lru_cache(maxsize=21)
+
+@lru_cache(maxsize=MAX_TREE_DEPTH + 1)
 def zero_root(depth: int) -> int:
     if depth == 0:
         return 0
@@ -17,9 +29,9 @@ def zero_root(depth: int) -> int:
 
 class PilotTree:
     def __init__(self, entries: list[tuple[str, str]], *, depth: int):
-        if type(depth) is not int or not 1 <= depth <= 20:
-            raise ValueError("Tree depth must be 1–20")
-        if len(entries) > min(256, 2**depth):
+        if type(depth) is not int or not 1 <= depth <= MAX_TREE_DEPTH:
+            raise ValueError(f"Tree depth must be 1–{MAX_TREE_DEPTH}")
+        if type(entries) is not list or len(entries) > 2**depth:
             raise ValueError("Pilot tree capacity exceeded")
         for record_id, leaf in entries:
             if type(record_id) is not str or not re.fullmatch(r"[a-z0-9][a-z0-9_-]{0,63}", record_id):

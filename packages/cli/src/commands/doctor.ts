@@ -11,7 +11,7 @@ export function doctorReport(stdout: string, code: number): Record<string, unkno
       /^[a-z][a-z0-9_]{0,63}$/.test(value.reason) && !/[^a-z0-9_]/.test(value.reason)) return rejected(value.reason);
   if (code !== 0 || value.status !== 'development_unapproved' ||
       typeof value.manifest_digest !== 'string' || value.manifest_digest.length !== 64 || !/^[a-f0-9]{64}$/.test(value.manifest_digest) ||
-      !['pilot-transfer-v1', 'pilot-transfer-v2'].includes(value.proof_profile) ||
+      !['pilot-transfer-v1', 'pilot-transfer-v2', 'pilot-transfer-v3'].includes(value.proof_profile) ||
       typeof value.policy_schema_supported !== 'boolean' || typeof value.current_profile_supported !== 'boolean' ||
       JSON.stringify(value.checked_artifacts) !== JSON.stringify(['wasm', 'r1cs', 'proving_key', 'verification_key'])) {
     throw new Error('Invalid diagnostic');

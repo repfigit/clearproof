@@ -4,7 +4,7 @@ import { promisify } from 'node:util';
 import { resolve } from 'node:path';
 import { doctorReport } from '../src/commands/doctor.js';
 
-const report = { status: 'development_unapproved', manifest_digest: 'a'.repeat(64), proof_profile: 'pilot-transfer-v2',
+const report = { status: 'development_unapproved', manifest_digest: 'a'.repeat(64), proof_profile: 'pilot-transfer-v3',
   checked_artifacts: ['wasm', 'r1cs', 'proving_key', 'verification_key'], production_eligible: false,
   policy_schema_supported: true, current_profile_supported: true };
 
