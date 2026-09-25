@@ -20,7 +20,7 @@ const location = process.env.CLEARPROOF_PILOT_TEST_ARTIFACTS;
     const directory = path.resolve(location!);
     const manifest = JSON.parse(fs.readFileSync(path.join(directory, "manifest.json"), "utf8"));
     const rawKey = fs.readFileSync(path.join(directory, "verification-key.json"));
-    expect(manifest.proof_profile).to.equal("pilot-transfer-v2");
+    expect(manifest.proof_profile).to.equal("pilot-transfer-v3");
     expect(manifest.verification_key.filename).to.equal("verification-key.json");
     expect(manifest.verification_key.sha256).to.equal(hash(rawKey));
     expect(manifest.verification_key.size).to.equal(rawKey.length);
@@ -46,7 +46,7 @@ const location = process.env.CLEARPROOF_PILOT_TEST_ARTIFACTS;
     const { contract, key, pin, proof, signals, vk, a, b, c } = await fixture();
     const { groth16 } = require("snarkjs");
     expect(await contract.assurance()).to.equal("development-unapproved");
-    expect(await contract.proofProfile()).to.equal("pilot-transfer-v2");
+    expect(await contract.proofProfile()).to.equal("pilot-transfer-v3");
     expect(await contract.artifactManifestDigest()).to.equal("0x" + pin);
     const commitment = ethers.keccak256(ethers.AbiCoder.defaultAbiCoder().encode(
       ["tuple(uint256[2] alpha,uint256[2][2] beta,uint256[2][2] gamma,uint256[2][2] delta,uint256[2][9] ic)"], [key]));

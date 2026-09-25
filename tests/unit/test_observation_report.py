@@ -39,7 +39,7 @@ def observation(outcome):
         context_digest="ef" * 32,
         policy_digest="aa" * 32,
         manifest_digest="fe" * 32,
-        proof_profile="pilot-transfer-v2",
+        proof_profile="pilot-transfer-v3",
         fact_ids=(),
         observed_at=1000,
         cryptographic_valid=outcome is not None,

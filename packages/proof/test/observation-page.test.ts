@@ -8,7 +8,7 @@ function observation(actor: string) {
     authorization_consumed: false, execution: 'not-requested', assurance: 'development-unapproved',
     tenant_id: 'tenant-a', actor_id: actor, request_digest: digest, credential_id: digest,
     proof_digest: digest, signals_digest: digest, transfer_digest: digest, context_digest: digest,
-    policy_digest: digest, manifest_digest: digest, proof_profile: 'pilot-transfer-v2', fact_ids: [],
+    policy_digest: digest, manifest_digest: digest, proof_profile: 'pilot-transfer-v3', fact_ids: [],
     observed_at: 1000, cryptographic_valid: false, policy: null };
   return { observation_id: recordDigest('clearproof/proof-observation/v1', record), ...record };
 }

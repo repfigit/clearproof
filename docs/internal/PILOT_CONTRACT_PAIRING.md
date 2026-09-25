@@ -1,7 +1,7 @@
 # Development pilot contract pairing
 
 `PilotGroth16Verifier` is a separate eight-public-signal verifier for
-`pilot-transfer-v2`. It reuses the repository's MIT-licensed BN254 `Pairing`
+`pilot-transfer-v3`. It reuses the repository's MIT-licensed BN254 `Pairing`
 library and the same Groth16 equation as the Apache-2.0 legacy verifier. The
 sixteen-signal legacy contract and generated key constants are unchanged.
 

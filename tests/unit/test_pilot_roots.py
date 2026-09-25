@@ -9,6 +9,7 @@ from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 from src.protocol.root_snapshot import RootAuthority, RootSnapshot, RootTrustError, RootTrustStore, sign_root
 from src.protocol.transfer import VerificationContext
 from src.prover.pilot_roots import CurrentRootPins, verify_pilot_roots
+from src.registry.pilot_tree import ISSUER_TREE_DEPTH, ROOT_TREE_DEPTHS
 
 
 @pytest.fixture
@@ -33,7 +34,7 @@ def root_case():
                 kind=kind,
                 issuer_did="did:web:issuer.example" if kind == "issuance-root" else None,
                 root=str(100 + i),
-                tree_depth=8,
+                tree_depth=ROOT_TREE_DEPTHS[kind],
                 source_digest="ab" * 32,
                 revision=1,
                 issued_at=100,
@@ -60,7 +61,7 @@ def root_case():
             "tenant_id": pins.tenant_id,
             "deployment_chain_id": "1",
             "deployment_address": pins.registry_address,
-            "proof_profile": "pilot-transfer-v2",
+            "proof_profile": "pilot-transfer-v3",
             "evaluated_at": 150,
             "issuance_snapshot_digest": pins.issuance_digest,
             "issuer_snapshot_digest": pins.issuer_digest,
@@ -114,7 +115,9 @@ def test_current_clock_must_fit_approval(root_case, now):
         verify_pilot_roots(**{**args, "now": now})
 
 
-@pytest.mark.parametrize("changes", [{"tree_depth": 9}, {"issuer_did": "did:web:other.example"}])
+@pytest.mark.parametrize(
+    "changes", [{"tree_depth": 9}, {"tree_depth": ISSUER_TREE_DEPTH}, {"issuer_did": "did:web:other.example"}]
+)
 def test_even_pinned_valid_signature_must_match_expected_issuer_and_profile(root_case, changes):
     key, args = root_case
     replacement = sign_root(RootSnapshot.model_validate({**args["issuance"].snapshot.model_dump(), **changes}), key)

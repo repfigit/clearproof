@@ -76,7 +76,7 @@ class PairingInspection:
     cryptographic_valid: bool
     # Explicitly no ambiguous `valid`/`compliant`/`authorized` property.
     manifest_digest: str
-    proof_profile: Literal["pilot-transfer-v1", "pilot-transfer-v2"]
+    proof_profile: Literal["pilot-transfer-v1", "pilot-transfer-v2", "pilot-transfer-v3"]
 
 
 _RUNNER = r"""

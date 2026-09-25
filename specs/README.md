@@ -36,7 +36,8 @@ Any change to a `candidate` or `stable` spec requires:
 |------|---------|--------|---------|
 | [`well-known-clearproof.md`](well-known-clearproof.md) | 0.4.0 profile | development | Exact-identity discovery, HPKE keys and connection/egress policy |
 | [`transfer-evidence-v1.md`](transfer-evidence-v1.md) | v1 | development | Canonical transfer, verification context, projection and separated evidence results |
-| [`pilot-transfer-v2.md`](pilot-transfer-v2.md) | v2 profile | development | Eight-signal credential-bound current proof statement and v1 separation |
+| [`pilot-transfer-v3.md`](pilot-transfer-v3.md) | v3 profile | development | Current eight-signal credential-bound proof statement with production tree depths (32/20/20) |
+| [`pilot-transfer-v2.md`](pilot-transfer-v2.md) | v2 profile | historical | Same signals with depth-8 trees; superseded by v3 |
 | [`pilot-policy-v1.schema.json`](pilot-policy-v1.schema.json) | v1 schema | development | Bounded policy document structure, not legal approval |
 | [`history-reviewer-v1.schema.json`](history-reviewer-v1.schema.json) | v1 schema | development | Independently configured offline historical reviewer inputs |
 | [`specs.md`](specs.md) | — | internal | Agentic implementation specification (design doc, not an interop spec) |

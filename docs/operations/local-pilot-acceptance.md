@@ -68,10 +68,16 @@ PostgreSQL executables are still explicit host prerequisites. CI installs Circom
 2.2.2 with a pinned binary digest; the local setup requires that compiler too.
 
 Generate fresh unapproved development artifacts outside the checkout, then run
-with a new owned PostgreSQL 18 cluster:
+with a new owned PostgreSQL 18 cluster. The current profile needs `2^17`
+powers-of-tau parameters. Generating them locally can take well over an hour; the
+pinned public file CI uses is much faster:
 
 ```bash
-.venv/bin/python scripts/test_development_circuits.py /absolute/new-development-artifacts
+curl --fail -L -o /absolute/ppot_0080_17.ptau \
+  https://pse-trusted-setup-ppot.s3.eu-central-1.amazonaws.com/pot28_0080/ppot_0080_17.ptau
+echo "f807e065fde53f72f4bf4d57140fab85b26daa6cc95bdfec7cce93622b3a367c  /absolute/ppot_0080_17.ptau" | sha256sum --check
+.venv/bin/python scripts/test_development_circuits.py /absolute/new-development-artifacts \
+  --prepared-ptau /absolute/ppot_0080_17.ptau
 .venv/bin/python scripts/test_pilot_local.py \
   /absolute/new-development-artifacts/pilot \
   /absolute/new-owned-pilot-run \

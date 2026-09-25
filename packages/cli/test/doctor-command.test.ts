@@ -3,7 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 const execute = vi.hoisted(() => vi.fn());
 vi.mock('node:child_process', () => ({ execFile: execute }));
 const valid = {
-  status: 'development_unapproved', manifest_digest: 'a'.repeat(64), proof_profile: 'pilot-transfer-v2',
+  status: 'development_unapproved', manifest_digest: 'a'.repeat(64), proof_profile: 'pilot-transfer-v3',
   checked_artifacts: ['wasm', 'r1cs', 'proving_key', 'verification_key'], production_eligible: false,
   policy_schema_supported: true, current_profile_supported: true,
 };

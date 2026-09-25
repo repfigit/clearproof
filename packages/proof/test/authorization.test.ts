@@ -9,7 +9,7 @@ const signals = ['1', '2', '3', '4', '5', '2000', '7', '8'];
 function receipt() {
   return { schema_version: 'clearproof-local-authorization-v1', tenant_id: 'tenant-a', actor_id: 'operator',
     proof_id: 'a'.repeat(64), transfer_digest: 'b'.repeat(64), context_digest: 'c'.repeat(64),
-    policy_digest: 'd'.repeat(64), manifest_digest: 'e'.repeat(64), proof_profile: 'pilot-transfer-v2',
+    policy_digest: 'd'.repeat(64), manifest_digest: 'e'.repeat(64), proof_profile: 'pilot-transfer-v3',
     nullifier: '4'.padStart(64, '0'), authorized_at: 1000, expires_at: 2000, outcome: 'ALLOW',
     execution: 'not-requested', envelope_digest: 'f'.repeat(64), recipient_key_id: Buffer.alloc(16, 1).toString('base64'),
     information_signature_digest: 'b'.repeat(64), evidence_id: 'c'.repeat(64) };

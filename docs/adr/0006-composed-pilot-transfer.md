@@ -102,6 +102,7 @@ selection independently; the amount tier does not itself encode a business or
 legal ALLOW decision.
 
 The current development profile is superseded by `pilot-transfer-v2` in
-[ADR 0009](0009-credential-bound-pilot-profile.md). V1 remains available only for
+[ADR 0009](0009-credential-bound-pilot-profile.md), which is in turn superseded by
+`pilot-transfer-v3` (tree depths 32/20/20) in [ADR 0011](0011-production-tree-depths.md). V1 remains available only for
 explicitly pinned read-only cryptographic inspection; its transfer commitment
 cannot support exact-credential current revocation acceptance.

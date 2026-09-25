@@ -20,7 +20,7 @@ export interface ObservationReportV1 {
   authorization_consumed: false; execution: 'not-requested'; assurance: 'development-unapproved';
   tenant_id: string; actor_id: string; request_digest: string; credential_id: string;
   proof_digest: string; signals_digest: string; transfer_digest: string; context_digest: string;
-  policy_digest: string; manifest_digest: string; proof_profile: 'pilot-transfer-v2';
+  policy_digest: string; manifest_digest: string; proof_profile: 'pilot-transfer-v3';
   fact_ids: string[]; observed_at: number; cryptographic_valid: boolean; policy: ObservedPolicy | null;
 }
 export type ObservationReportV2 = Omit<ObservationReportV1, 'schema_version'> & {
@@ -51,7 +51,7 @@ export function validateObservationReport(value: unknown): ObservationReport {
       digests.some(k => !hex(value[k])) || ids.some(k => !opaque(value[k])) ||
       value.schema_version !== (timed ? 'clearproof-proof-observation-v2' : 'clearproof-proof-observation-v1') || value.mode !== 'observation' ||
       value.authorization_consumed !== false || value.execution !== 'not-requested' ||
-      value.assurance !== 'development-unapproved' || value.proof_profile !== 'pilot-transfer-v2' ||
+      value.assurance !== 'development-unapproved' || value.proof_profile !== 'pilot-transfer-v3' ||
       !ordered(value.fact_ids, hex) || !epoch(value.observed_at) || typeof value.cryptographic_valid !== 'boolean') {
     throw new Error('Invalid observation report');
   }

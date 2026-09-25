@@ -7,6 +7,8 @@ from pydantic import Field, model_validator
 from src.protocol.discovery_profile import parse_target
 from src.protocol.root_snapshot import RootSnapshot, RootTrustError, RootTrustStore, SignedRootSnapshot
 from src.protocol.transfer import Address, Hex32, OpaqueId, Record, VerificationContext
+from src.prover.pilot_compliance import PROFILE
+from src.registry.pilot_tree import ROOT_TREE_DEPTHS
 
 
 class CurrentRootPins(Record):
@@ -56,7 +58,7 @@ def verify_pilot_roots(
     if (
         type(now) is not int
         or not context.evaluated_at <= now <= 2**53 - 1
-        or context.proof_profile != "pilot-transfer-v2"
+        or context.proof_profile != PROFILE
         or (context.tenant_id, context.deployment_chain_id, context.deployment_address)
         != (pins.tenant_id, str(pins.chain_id), pins.registry_address)
         or (context.issuance_snapshot_digest, context.issuer_snapshot_digest, context.sanctions_snapshot_digest)
@@ -79,7 +81,9 @@ def verify_pilot_roots(
             kind=kind,
         )
         trust.verify_historical(signed, evaluated_at=context.evaluated_at)
-        if snapshot.tree_depth != 8 or (kind == "issuance-root" and snapshot.issuer_did != pins.issuer_did):
+        if snapshot.tree_depth != ROOT_TREE_DEPTHS[kind] or (
+            kind == "issuance-root" and snapshot.issuer_did != pins.issuer_did
+        ):
             raise RootTrustError("Root does not match the pilot tree or credential issuer")
         verified.append(snapshot)
     return VerifiedPilotRoots(*verified, checked_at=now)

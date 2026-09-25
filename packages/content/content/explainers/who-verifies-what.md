@@ -6,7 +6,7 @@ publishAfter: 2026-09-17T00:00:00Z
 sourceCommit: eaab3d020c6d3f2943cb20d56633e919d6c1579e
 claimRefs:
   - packages/content/content/topics/architecture.md
-  - specs/pilot-transfer-v2.md
+  - specs/pilot-transfer-v3.md
   - packages/content/content/topics/security.md
   - README.md
 status: approved
@@ -27,7 +27,7 @@ security property is proved by the circuit."
 
 ## What the circuit constrains
 
-The pilot profile `pilot-transfer-v2` (Circom `pilot_compliance.circom`) proves
+The pilot profile `pilot-transfer-v3` (Circom `pilot_compliance.circom`) proves
 statements over the 48-field canonical transfer projection. Its public signals
 include the projection commitment, issuer and sanctions tree roots, an
 authorization nullifier, and domain binding (`domain_chain_id`,
@@ -37,7 +37,7 @@ used by the credential subcircuit — the spec is explicit that it "is not a
 caller-selected opaque assertion."
 
 But the [public
-statement](https://github.com/repfigit/clearproof/blob/main/specs/pilot-transfer-v2.md)
+statement](https://github.com/repfigit/clearproof/blob/main/specs/pilot-transfer-v3.md)
 also states the boundary plainly: "Proof verification alone neither
 authenticates those records nor establishes current roots, revocation, policy
 compliance or legal compliance. The profile cannot authorize replay through

@@ -30,7 +30,7 @@ and production modes before starting its EVM.
 Place `manifest.json` and four distinct regular artifact files in the directory.
 Manifest schema: `src.prover.pilot_artifacts.PilotArtifactManifest`. It binds:
 
-- Explicit `pilot-transfer-v2` for current inspection, or historical
+- Explicit `pilot-transfer-v3` for current inspection, or historical
   `pilot-transfer-v1`; both use Groth16/BN128 and eight signals, with different
   first-signal semantics and keys. Missing profile retains the historical v1
   default. Transfer/context schema versions and signal order remain mandatory;
