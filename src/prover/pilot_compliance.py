@@ -1,4 +1,4 @@
-"""Witness encoder for pilot-transfer-v2; not an authorization verifier.
+"""Witness encoder for pilot-transfer-v3; not an authorization verifier.
 
 Callers must authenticate records, policy/quote provenance, roots and current
 revocation separately. Returned private inputs must never be logged or stored
@@ -11,6 +11,7 @@ from src.protocol.transfer import AssetRegistry, Transfer, VerificationContext
 from src.protocol.valuation_approval import SignedValuationApproval, ValuationTrustStore
 from src.prover.pilot_projection import project_transfer
 from src.registry.pilot_sanctions import PilotSanctionsTree
+from src.registry.pilot_tree import ISSUANCE_TREE_DEPTH, ISSUER_TREE_DEPTH, SANCTIONS_TREE_DEPTH
 from src.registry.poseidon import poseidon_hash
 
 PUBLIC_SIGNALS = (
@@ -23,7 +24,7 @@ PUBLIC_SIGNALS = (
     "domain_chain_id",
     "domain_registry",
 )
-PROFILE = "pilot-transfer-v2"
+PROFILE = "pilot-transfer-v3"
 
 
 def credential_bound_projection(projection: str, credential_commitment: str, issuance_root: str) -> str:
@@ -63,8 +64,12 @@ def compliance_witness(
         transfer.jurisdiction,
     ):
         raise ValueError("Credential does not bind the transfer originator")
-    if sanctions.depth != 8 or any(len(path["siblings"]) != 8 for path in (issuance_path, issuer_path)):
-        raise ValueError("Composed profile requires depth-eight trees")
+    if (
+        sanctions.depth != SANCTIONS_TREE_DEPTH
+        or len(issuance_path["siblings"]) != ISSUANCE_TREE_DEPTH
+        or len(issuer_path["siblings"]) != ISSUER_TREE_DEPTH
+    ):
+        raise ValueError("Composed profile tree depths differ")
     data = credential.witness(
         secret=secret,
         evaluated_at=context.evaluated_at,

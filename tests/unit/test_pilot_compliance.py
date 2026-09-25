@@ -19,7 +19,13 @@ from src.protocol.valuation_approval import ValuationApproval, ValuationAuthorit
 from src.prover.pilot_compliance import PUBLIC_SIGNALS, compliance_witness
 from src.prover.pilot_roots import CurrentRootPins
 from src.registry.pilot_sanctions import PilotSanctionsTree
-from src.registry.pilot_tree import PilotTree
+from src.registry.pilot_tree import (
+    ISSUANCE_TREE_DEPTH,
+    ISSUER_TREE_DEPTH,
+    ROOT_TREE_DEPTHS,
+    SANCTIONS_TREE_DEPTH,
+    PilotTree,
+)
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -66,7 +72,7 @@ def synthetic_case(
             }
         )
     context = VerificationContext.model_validate(
-        {**fixture["records"][1]["value"], "proof_profile": "pilot-transfer-v2"}
+        {**fixture["records"][1]["value"], "proof_profile": "pilot-transfer-v3"}
     )
     if deployment_address is not None:
         context = VerificationContext.model_validate({**context.model_dump(), "deployment_address": deployment_address})
@@ -140,10 +146,12 @@ def synthetic_case(
         expires_at=transfer.expires_at,
     )
     alternate = PilotCredential.model_validate({**credential.model_dump(), "credential_nonce": "cd" * 32})
-    issuance = PilotTree([("credential", credential.commitment), ("alternate", alternate.commitment)], depth=8)
+    issuance = PilotTree(
+        [("credential", credential.commitment), ("alternate", alternate.commitment)], depth=ISSUANCE_TREE_DEPTH
+    )
     if alternate_credential:
         credential = alternate
-    issuers = PilotTree([("issuer", credential.authorized_issuer_leaf(issuance.root))], depth=8)
+    issuers = PilotTree([("issuer", credential.authorized_issuer_leaf(issuance.root))], depth=ISSUER_TREE_DEPTH)
     quote_key = Ed25519PrivateKey.generate()
     quote_authority = ValuationAuthority(
         public_key=quote_key.public_key().public_bytes_raw().hex(),
@@ -191,7 +199,7 @@ def synthetic_case(
                     kind=kind,
                     issuer_did=credential.issuer_did if kind == "issuance-root" else None,
                     root=root,
-                    tree_depth=8,
+                    tree_depth=ROOT_TREE_DEPTHS[kind],
                     source_digest="ef" * 32,
                     revision=1,
                     issued_at=transfer.created_at,
@@ -391,11 +399,14 @@ def witness_call():
     return recorded.call_args.args, recorded.call_args.kwargs, expected
 
 
-@pytest.mark.parametrize("field,value", [
-    ("tenant_id", "other-tenant"),
-    ("subject_wallet", "0x" + "34" * 20),
-    ("jurisdiction", "EU"),
-])
+@pytest.mark.parametrize(
+    "field,value",
+    [
+        ("tenant_id", "other-tenant"),
+        ("subject_wallet", "0x" + "34" * 20),
+        ("jurisdiction", "EU"),
+    ],
+)
 def test_witness_builder_rejects_credential_originator_mismatch(witness_call, field, value):
     args, kwargs, expected = witness_call
     credential = args[3]
@@ -411,10 +422,10 @@ def test_witness_builder_rejects_wrong_tree_depth(witness_call, tree):
     args, kwargs, expected = witness_call
     changed = dict(kwargs)
     if tree == "sanctions":
-        changed[tree] = PilotSanctionsTree([], depth=7)
+        changed[tree] = PilotSanctionsTree([], depth=SANCTIONS_TREE_DEPTH - 1)
     else:
         changed[tree] = {**kwargs[tree], "siblings": kwargs[tree]["siblings"][:-1]}
-    with pytest.raises(ValueError, match="^Composed profile requires depth-eight trees$"):
+    with pytest.raises(ValueError, match="^Composed profile tree depths differ$"):
         compliance_witness(*args, **changed)
     assert compliance_witness(*args, **kwargs) == expected
 

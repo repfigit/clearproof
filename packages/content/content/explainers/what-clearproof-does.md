@@ -42,7 +42,7 @@ The unreleased 0.4.0 development checkout implements a local adoption pilot:
 - Recipient-encrypted historical exports and offline review under independently
   configured proof, policy, source, decision, status and timing authorities.
 
-The current pilot proof profile, `pilot-transfer-v2`, has eight public signals
+The current pilot proof profile, `pilot-transfer-v3`, has eight public signals
 with no public amount tier or SAR advisory flag. The older 16-signal
 `compliance.circom` profile remains a separate legacy demo path — the README
 warns never to select artifacts by signal count alone.

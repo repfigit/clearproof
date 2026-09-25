@@ -1,5 +1,9 @@
 # pilot-transfer-v2 public statement
 
+> **Historical profile.** Superseded by [`pilot-transfer-v3`](pilot-transfer-v3.md),
+> which keeps these signals and changes the tree depths from 8 to 32/20/20
+> ([ADR 0011](../docs/adr/0011-production-tree-depths.md)). Current checks reject v2.
+
 Development Groth16/BN254 profile, Circom `pilot_compliance.circom`. See
 [ADR 0009](../docs/adr/0009-credential-bound-pilot-profile.md) for the v1 migration
 and the credential-substitution threat. All signals are canonical unsigned scalar

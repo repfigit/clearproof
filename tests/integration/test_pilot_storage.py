@@ -2965,7 +2965,7 @@ async def test_durable_current_inspection_real_pairing_and_revocation(db, monkey
             assert mismatch.integrity_valid and mismatch.statement_valid is False
             assert mismatch.cryptographic_valid is None
             pairing = AsyncMock(
-                return_value=PairingInspection(False, verifier.artifacts.manifest.digest, "pilot-transfer-v2")
+                return_value=PairingInspection(False, verifier.artifacts.manifest.digest, "pilot-transfer-v3")
             )
             with monkeypatch.context() as patch:
                 patch.setattr(PilotPairingVerifier, "inspect", pairing)
@@ -3554,7 +3554,7 @@ async def check_current_inspection_http(
             assurance="development-unapproved",
             cryptographic_valid=True,
             manifest_digest=configuration.context.artifact_manifest_digest,
-            proof_profile="pilot-transfer-v2",
+            proof_profile="pilot-transfer-v3",
         )
         altered_proof = json.loads(proof)
         altered_proof["pi_a"] = altered_proof["pi_c"]

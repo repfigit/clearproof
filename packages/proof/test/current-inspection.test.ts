@@ -17,7 +17,7 @@ async function listen(handler: Parameters<typeof createServer>[0]) {
 }
 const report = { schema_version: 'clearproof-current-inspection-v1', scope: 'current-statement-inspection',
   authorization_consumed: false, assurance: 'development-unapproved', cryptographic_valid: true,
-  manifest_digest: 'a'.repeat(64), proof_profile: 'pilot-transfer-v2' };
+  manifest_digest: 'a'.repeat(64), proof_profile: 'pilot-transfer-v3' };
 
 describe('current inspection SDK boundary', () => {
   it('sends exact private bytes and authenticated request, preserving a false pairing result', async () => {

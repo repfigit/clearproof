@@ -1,6 +1,6 @@
 # @clearproof/circuits
 
-Legacy Circom circuit sources and artifact paths for controlled evaluation. This package exposes the 16-signal legacy profile, not the separate eight-signal pilot-transfer-v2 authorization workflow.
+Legacy Circom circuit sources and artifact paths for controlled evaluation. This package exposes the 16-signal legacy profile, not the separate eight-signal pilot-transfer-v3 authorization workflow.
 
 ## Install
 

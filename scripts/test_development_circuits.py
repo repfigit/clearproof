@@ -73,7 +73,7 @@ def main():
     else:
         initial = output / "UNAPPROVED-initial.ptau"
         contributed = output / "UNAPPROVED-contributed.ptau"
-        run(node, cli, "powersoftau", "new", "bn128", "16", initial)
+        run(node, cli, "powersoftau", "new", "bn128", "17", initial)
         run(
             node,
             cli,

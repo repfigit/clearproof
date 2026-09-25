@@ -34,8 +34,9 @@ def test_sparse_root_and_paths_match_dense_reference():
         ([("a", "0")], 2),
         ([("a", str(BN254_SCALAR_FIELD))], 2),
         ([("a", "1"), ("b", "2"), ("c", "3")], 1),
-        ([], 21),
+        ([], 33),
         ([], True),
+        ((("a", "1"),), 2),
     ],
 )
 def test_invalid_or_overfull_tree_rejected(entries, depth):
@@ -57,14 +58,40 @@ def test_tree_rejects_noncanonical_record_identifiers(identity):
         PilotTree([(identity, "1")], depth=2)
 
 
-@pytest.mark.parametrize("inventory", [None, (), {"0x" + "12" * 20}, ["0x" + f"{i:040x}" for i in range(1, 256)]])
-def test_sanctions_inventory_rejects_invalid_container_or_over_capacity(inventory, monkeypatch):
+@pytest.mark.parametrize(
+    "inventory,depth",
+    [
+        (None, 20),
+        ((), 20),
+        ({"0x" + "12" * 20}, 20),
+        (["0x" + f"{i:040x}" for i in range(1, 4)], 2),
+        ([], 0),
+        ([], 33),
+        ([], True),
+    ],
+)
+def test_sanctions_inventory_rejects_invalid_container_depth_or_over_capacity(inventory, depth, monkeypatch):
     from unittest.mock import Mock
 
     from src.registry import pilot_sanctions
 
     hashing = Mock(side_effect=AssertionError("Rejected inventory must not be hashed"))
     monkeypatch.setattr(pilot_sanctions, "poseidon_hash", hashing)
-    with pytest.raises(ValueError, match="at most 254 addresses"):
-        pilot_sanctions.PilotSanctionsTree(inventory)
+    with pytest.raises(ValueError, match="^Sanctions input exceeds tree capacity$"):
+        pilot_sanctions.PilotSanctionsTree(inventory, depth=depth)
     hashing.assert_not_called()
+
+
+def test_profile_depths_hold_global_inventories_without_dense_allocation():
+    from src.registry.pilot_sanctions import PilotSanctionsTree
+    from src.registry.pilot_tree import ISSUANCE_TREE_DEPTH, ISSUER_TREE_DEPTH, SANCTIONS_TREE_DEPTH
+
+    assert (ISSUANCE_TREE_DEPTH, ISSUER_TREE_DEPTH, SANCTIONS_TREE_DEPTH) == (32, 20, 20)
+    # Two leaves hold the sentinels; the rest is address capacity.
+    full = ["0x" + f"{i:040x}" for i in range(1, 2**2 - 1)]
+    assert PilotSanctionsTree(full, depth=2).depth == 2
+    issuance = PilotTree([("a", "1")], depth=ISSUANCE_TREE_DEPTH)
+    assert len(issuance.membership("a")["siblings"]) == ISSUANCE_TREE_DEPTH
+    sanctions = PilotSanctionsTree(["0x" + "12" * 20])
+    assert sanctions.depth == SANCTIONS_TREE_DEPTH
+    assert len(sanctions.gap("0x" + "13" * 20)["left_siblings"]) == SANCTIONS_TREE_DEPTH

@@ -27,7 +27,7 @@ The bounded JSON request contains exactly:
 - `target_id`: opaque server target selector.
 - `credential_id`: opaque enrolled credential identifier.
 - `proof_json`: JSON string holding the Groth16 proof (at most 8192 bytes after encoding).
-- `public_signals`: eight canonical decimal field strings for pilot-transfer-v2.
+- `public_signals`: eight canonical decimal field strings for pilot-transfer-v3.
 
 The total upload limit is 16 KiB. Duplicate JSON keys, extra fields, legacy signal
 vectors and malformed proofs reject with generic diagnostics. The request cannot

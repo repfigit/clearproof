@@ -8,10 +8,10 @@ describes what the pilot credential proves.
 
 The current adoption pilot uses Circom, snarkjs and Groth16 over BN254. Its
 Python verifier and Solidity `PilotGroth16Verifier` check the same eight-signal
-`pilot-transfer-v2` statement. The current profile binds the exact credential,
+`pilot-transfer-v3` statement. The current profile binds the exact credential,
 transfer projection and approved roots; it does not prove arbitrary legal or
-business-policy compliance. See [ADR 0009](0009-credential-bound-pilot-profile.md)
-and the [current registry trust boundary](../internal/PILOT_CURRENT_REGISTRY.md).
+business-policy compliance. See [ADR 0009](0009-credential-bound-pilot-profile.md),
+[ADR 0011](0011-production-tree-depths.md) (tree depths) and the [current registry trust boundary](../internal/PILOT_CURRENT_REGISTRY.md).
 
 Keeping this proof system allows the pilot to exercise one implemented statement
 through witness generation, real pairing, durable authorization and contract

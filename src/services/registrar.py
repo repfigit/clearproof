@@ -8,7 +8,7 @@ from src.auth.principal import Principal
 from src.protocol.canonical import record_digest
 from src.protocol.credential import digest_limbs
 from src.protocol.root_snapshot import RootSnapshot, RootTrustStore, SignedRootSnapshot, root_key_id, sign_root
-from src.registry.pilot_tree import PilotTree
+from src.registry.pilot_tree import ISSUANCE_TREE_DEPTH, ISSUER_TREE_DEPTH, MAX_TREE_DEPTH, PilotTree
 from src.registry.poseidon import poseidon_hash
 from src.services.issuance_tree import IssuanceTreeContext, build_issuance_tree
 from src.services.root_publication import persist_approved_root, root_record_id
@@ -31,19 +31,23 @@ class PilotRegistrar:
         issuers: tuple[str, ...],
         chain_id: int,
         registry_address: str,
-        depth: int = 8,
+        issuance_depth: int = ISSUANCE_TREE_DEPTH,
+        issuer_depth: int = ISSUER_TREE_DEPTH,
     ):
         self._principal = Principal.model_validate(principal)
         if type(issuers) is not tuple or not 1 <= len(issuers) <= 16 or len(set(issuers)) != len(issuers):
             raise ValueError("Configure 1–16 unique issuer identities")
         for issuer in issuers:
             IssuanceTreeContext(
-                issuer_did=issuer, chain_id=chain_id, registry_address=registry_address, now=0, depth=depth
+                issuer_did=issuer, chain_id=chain_id, registry_address=registry_address, now=0, depth=issuance_depth
             )
+        if type(issuer_depth) is not int or not 1 <= issuer_depth <= MAX_TREE_DEPTH or len(issuers) > 2**issuer_depth:
+            raise ValueError("Issuer tree depth must be 1–32 and fit the configured issuers")
         self._issuers = tuple(sorted(issuers))
         self._store = PilotStore(db, cipher, self._principal)
         self._trust, self._signer = trust, signer
-        self._chain_id, self._registry_address, self._depth = chain_id, registry_address, depth
+        self._chain_id, self._registry_address = chain_id, registry_address
+        self._issuance_depth, self._issuer_depth = issuance_depth, issuer_depth
 
     async def refresh(self, *, expected_revision: int, idempotency_key: str, now: int, ttl: int = 300) -> dict:
         self._principal.require("tenant:admin")
@@ -59,18 +63,20 @@ class PilotRegistrar:
             tenant_id=self._principal.tenant_id,
             chain_id=self._chain_id,
             registry_address=self._registry_address,
-            tree_depth=self._depth,
             issued_at=now,
             expires_at=now + ttl,
             key_id=key_id,
             revision=1,
         )
-        prototype = RootSnapshot(**base, kind="issuer-root", root="0", source_digest="0" * 64)
+        prototype = RootSnapshot(
+            **base, tree_depth=self._issuer_depth, kind="issuer-root", root="0", source_digest="0" * 64
+        )
         request = {
             "issuers": list(self._issuers),
             "chain_id": self._chain_id,
             "registry_address": self._registry_address,
-            "depth": self._depth,
+            "issuance_depth": self._issuance_depth,
+            "issuer_depth": self._issuer_depth,
             "ttl": ttl,
             "key_id": key_id,
             "expected_revision": expected_revision,
@@ -82,9 +88,11 @@ class PilotRegistrar:
             if (aggregate.revision if aggregate else 0) != expected_revision:
                 raise RecordConflict("Registrar expected head revision differs")
 
-            async def approve(kind, issuer, root, source, domain):
+            async def approve(kind, issuer, root, source, domain, depth):
                 source_digest = record_digest(domain, source)
-                snapshot = RootSnapshot(**base, kind=kind, issuer_did=issuer, root=root, source_digest=source_digest)
+                snapshot = RootSnapshot(
+                    **base, tree_depth=depth, kind=kind, issuer_did=issuer, root=root, source_digest=source_digest
+                )
                 previous = await tx.read(kind, root_record_id(snapshot))
                 if previous:
                     prior = SignedRootSnapshot.model_validate(previous.value)
@@ -113,10 +121,15 @@ class PilotRegistrar:
                     chain_id=self._chain_id,
                     registry_address=self._registry_address,
                     now=now,
-                    depth=self._depth,
+                    depth=self._issuance_depth,
                 )
                 signed = await approve(
-                    "issuance-root", issuer, candidate.tree.root, candidate.source, "clearproof/issuance-source/v1"
+                    "issuance-root",
+                    issuer,
+                    candidate.tree.root,
+                    candidate.source,
+                    "clearproof/issuance-source/v1",
+                    self._issuance_depth,
                 )
                 issuer_id = hashlib.sha256(issuer.encode("ascii")).hexdigest()
                 leaf = str(poseidon_hash([103, *digest_limbs(issuer), int(candidate.tree.root)]))
@@ -129,16 +142,18 @@ class PilotRegistrar:
                         "issuance_root": candidate.tree.root,
                     }
                 )
-            issuer_tree = PilotTree(leaves, depth=self._depth)
+            issuer_tree = PilotTree(leaves, depth=self._issuer_depth)
             source = {
                 "tenant_id": tx.tenant_id,
                 "chain_id": self._chain_id,
                 "registry_address": self._registry_address,
                 "evaluated_at": now,
-                "depth": self._depth,
+                "depth": self._issuer_depth,
                 "issuers": issuer_sources,
             }
-            head = await approve("issuer-root", None, issuer_tree.root, source, "clearproof/issuer-source/v1")
+            head = await approve(
+                "issuer-root", None, issuer_tree.root, source, "clearproof/issuer-source/v1", self._issuer_depth
+            )
             return {
                 "status": "published",
                 "snapshot_digest": head.snapshot.digest,
