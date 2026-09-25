@@ -8,7 +8,7 @@ const digests = ['receipt_id', 'proof_id', 'transfer_digest', 'context_digest', 
   'nullifier', 'envelope_digest', 'information_signature_digest', 'evidence_id'] as const;
 export type AuthorizationReceipt = Record<typeof digests[number], string> & {
   schema_version: 'clearproof-local-authorization-v1';
-  tenant_id: string; actor_id: string; proof_profile: 'pilot-transfer-v2';
+  tenant_id: string; actor_id: string; proof_profile: 'pilot-transfer-v3';
   recipient_key_id: string;
   authorized_at: number; expires_at: number; outcome: 'ALLOW'; execution: 'not-requested';
 };
@@ -34,7 +34,7 @@ export function validateAuthorizationReport(value: unknown, signals: string[]): 
   const r = value.receipt;
   if (!exact(r, [...digests, 'schema_version', 'tenant_id', 'actor_id', 'proof_profile', 'authorized_at', 'expires_at',
     'outcome', 'execution', 'recipient_key_id']) || digests.some(k => !hex(r[k])) || !recipientKey(r.recipient_key_id) || !opaque(r.tenant_id) || !opaque(r.actor_id) ||
-    r.schema_version !== 'clearproof-local-authorization-v1' || r.proof_profile !== 'pilot-transfer-v2' ||
+    r.schema_version !== 'clearproof-local-authorization-v1' || r.proof_profile !== 'pilot-transfer-v3' ||
     r.outcome !== 'ALLOW' || r.execution !== 'not-requested' || !epoch(r.authorized_at) || !epoch(r.expires_at) ||
     r.authorized_at >= r.expires_at || BigInt(signals[3]) === 0n ||
     r.nullifier !== BigInt(signals[3]).toString(16).padStart(64, '0') ||

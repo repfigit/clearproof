@@ -3,7 +3,8 @@ include "./pilot_transfer.circom";
 include "./pilot_credential.circom";
 include "./pilot_sanctions.circom";
 
-// Development profile pilot-transfer-v2. Eight public inputs; no SAR/tier output.
+// Development profile pilot-transfer-v3. Eight public inputs; no SAR/tier output.
+// Tree depths (ADR 0011): issuance 32, authorized issuers 20, sanctions 20.
 // State/authority, quote/policy provenance, revocation and consumption are
 // verifier responsibilities. See ADR 0006 before enabling authorization.
 template PilotCompliance(issuance_depth, issuer_depth, sanctions_depth) {
@@ -106,4 +107,4 @@ template PilotCompliance(issuance_depth, issuer_depth, sanctions_depth) {
 }
 
 component main {public [projection_commitment, authorized_issuer_root, sanctions_root,
-    authorization_nullifier, evaluated_at, proof_expires_at, domain_chain_id, domain_registry]} = PilotCompliance(8, 8, 8);
+    authorization_nullifier, evaluated_at, proof_expires_at, domain_chain_id, domain_registry]} = PilotCompliance(32, 20, 20);

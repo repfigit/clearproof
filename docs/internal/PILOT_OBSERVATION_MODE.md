@@ -1,6 +1,6 @@
 # Durable local proof observation
 
-`ProofObservationService.observe` evaluates a current pilot-transfer-v2 proof and
+`ProofObservationService.observe` evaluates a current pilot-transfer-v3 proof and
 selected retained signed facts using the same tenant-transactional service as
 current policy evaluation. It atomically retains an encrypted observation and
 its encrypted idempotency result. The API and source CLI support creation,
@@ -212,7 +212,7 @@ routing reads both v1 and v2; cached v1 results remain v1 when returned by the n
 writer, including after expiry. No migration or rewrite of encrypted records is
 needed. The updated SDK/CLI validates both versions and their respective digest
 domains. Older v1-only clients reject new v2 records, so update clients with writers.
-The observation record version is separate from the unchanged pilot-transfer-v2
+The observation record version is separate from the unchanged pilot-transfer-v3
 circuit profile and proving artifacts.
 
 Cohort report v2 adds a `latency` object with scope, measured count, unmeasured

@@ -23,7 +23,7 @@ contract PilotGroth16Verifier {
     VerificationKey private _key;
     bytes32 public immutable verificationKeyCommitment;
     bytes32 public immutable artifactManifestDigest;
-    string public constant proofProfile = "pilot-transfer-v2";
+    string public constant proofProfile = "pilot-transfer-v3";
     string public constant assurance = "development-unapproved";
 
     error InvalidCoordinate();

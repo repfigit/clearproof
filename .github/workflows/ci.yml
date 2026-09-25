@@ -245,7 +245,7 @@ jobs:
 
   circuits:
     runs-on: ubuntu-latest
-    # Phase-2 preparation alone exceeded 30 minutes on the hosted runner.
+    # Local phase-2 preparation exceeded 30 minutes at 2^16; CI now uses pinned prepared parameters.
     timeout-minutes: 150
     services:
       postgres:
@@ -275,10 +275,17 @@ jobs:
           curl --fail --location --max-time 120 https://github.com/iden3/circom/releases/download/v2.2.2/circom-linux-amd64 -o /tmp/pilot-circom
           echo 'f3d8d1fdbc123779b80e210c909ee941d7a1e130c70365524646b48b8b0fe9d5  /tmp/pilot-circom' | sha256sum --check
           sudo install /tmp/pilot-circom /usr/local/bin/circom
+      - name: Download pinned phase-1 parameters (PSE perpetual powers of tau, 2^17)
+        # Public multi-party phase 1 (80 contributions). The phase-2 keys produced below remain
+        # unapproved development keys; this is not a production ceremony.
+        run: |
+          set -euo pipefail
+          curl --fail --location --max-time 600 https://pse-trusted-setup-ppot.s3.eu-central-1.amazonaws.com/pot28_0080/ppot_0080_17.ptau -o "$RUNNER_TEMP/ppot_0080_17.ptau"
+          echo "f807e065fde53f72f4bf4d57140fab85b26daa6cc95bdfec7cce93622b3a367c  $RUNNER_TEMP/ppot_0080_17.ptau" | sha256sum --check
       - name: Isolated development setup and real proofs for both profiles
         env:
           COVERAGE_FILE: ${{ runner.temp }}/python-coverage-development.data
-        run: uv run python -m coverage run --parallel-mode --branch --source=scripts scripts/test_development_circuits.py "$RUNNER_TEMP/clearproof-development-circuits"
+        run: uv run python -m coverage run --parallel-mode --branch --source=scripts scripts/test_development_circuits.py "$RUNNER_TEMP/clearproof-development-circuits" --prepared-ptau "$RUNNER_TEMP/ppot_0080_17.ptau"
       - name: Development setup failure paths and coverage gate
         run: |
           COVERAGE_FILE="$RUNNER_TEMP/python-coverage-development.data" uv run python -m coverage combine --keep "$RUNNER_TEMP"

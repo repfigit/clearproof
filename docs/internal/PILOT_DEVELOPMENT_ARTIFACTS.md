@@ -3,7 +3,7 @@
 The 0.4.0 source checkout does not bundle compiled circuit WASM or proving keys.
 `@clearproof/circuits` exports legacy artifact locations plus `artifactStatus()`
 to report missing files. Its 16-signal metadata is separate from the current
-pilot-transfer-v2 profile. File presence is not artifact approval or compatibility.
+pilot-transfer-v3 profile. File presence is not artifact approval or compatibility.
 
 Generate both profiles in a new isolated directory:
 
@@ -17,8 +17,10 @@ uv sync --frozen --extra dev
 The script compiles legacy and pilot circuits, creates explicitly unapproved
 local development keys, exports verification keys, builds the CLI and performs
 real proof round trips. It refuses to overwrite an existing output directory.
-The initial setup can take many minutes. `--prepared-ptau /local/development.ptau`
-reuses an explicitly selected local development setup; that is not ceremony or
+Without `--prepared-ptau`, a local single-party `2^17` phase 1 is generated, which
+can take well over an hour. `--prepared-ptau /local/development.ptau` reuses an
+explicitly selected prepared file instead. CI passes the SHA-256-pinned PSE
+`ppot_0080_17.ptau` (see `.github/workflows/ci.yml`). Neither is ceremony or
 production approval. Generated keys stay outside the source package/checkout.
 
 The legacy demo then runs with an explicit directory:

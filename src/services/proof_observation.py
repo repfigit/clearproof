@@ -34,7 +34,7 @@ class ObservationRecord(Record):
     context_digest: Hex32
     policy_digest: Hex32
     manifest_digest: Hex32
-    proof_profile: Literal["pilot-transfer-v2"]
+    proof_profile: Literal["pilot-transfer-v3"]
     fact_ids: tuple[Hex32, ...] = Field(max_length=64)
     observed_at: Epoch
     cryptographic_valid: bool

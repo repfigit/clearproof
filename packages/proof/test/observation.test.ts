@@ -12,7 +12,7 @@ function record() {
     execution: 'not-requested', assurance: 'development-unapproved', tenant_id: 'tenant-a', actor_id: 'observer',
     request_digest: digest, credential_id: digest, proof_digest: digest, signals_digest: digest,
     transfer_digest: digest, context_digest: digest, policy_digest: digest, manifest_digest: digest,
-    proof_profile: 'pilot-transfer-v2', fact_ids: [], observed_at: 1000, cryptographic_valid: true,
+    proof_profile: 'pilot-transfer-v3', fact_ids: [], observed_at: 1000, cryptographic_valid: true,
     policy: { schema_version: 'clearproof-policy-evaluation-v1', policy_digest: digest, transfer_digest: digest,
       evaluated_at: 1000, outcome: 'ALLOW', matched_rule_ids: [], missing_predicates: [], unsupported_predicates: [],
       reasons: [], conflicting_effects: false, zk_coverage: 'not-established' },
