@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Repository
 
-ZK infrastructure for FATF Travel Rule compliance. A polyglot monorepo combining Circom circuits, Solidity contracts, a TypeScript SDK, and a Python FastAPI gateway that together generate and verify Groth16 proofs attesting sanctions / credential / amount-tier checks without revealing PII.
+Privacy-focused evidence for regulated crypto transfers (Travel Rule context). A polyglot monorepo combining Circom circuits, Solidity contracts, a TypeScript SDK and a Python FastAPI gateway with PostgreSQL. Together they produce transfer-bound Groth16 proofs (credential, authorized issuer, sanctions non-membership), policy decisions, recipient-encrypted transfer information and retained evidence that can be verified offline, without revealing PII. Status: the local adoption pilot is merged; nothing is audited; proving keys are development-only. See `README.md` for the current capability boundary.
 
 There is a hierarchy of `AGENTS.md` files that document each layer in depth. **Read the relevant one before making non-trivial changes** in that directory:
 
@@ -18,10 +18,15 @@ There is a hierarchy of `AGENTS.md` files that document each layer in depth. **R
 
 ## Sibling Repos
 
-This repo lives at `/Users/keith/code/clearproof/protocol/`. Two sibling directories live alongside it:
+This repo lives at `~/code/clearproof/`. Related material lives outside it:
 
-- **`../notes/`** — Obsidian vault with internal-only context: `decisions.md`, `roadmap-internal.md`, `business-strategy.md`, `community-strategy.md`, `legal-contacts.md`, `sanctions-oracle-trust.md`, `analysis-layerzero.md`, `tca.md`, and adversarial LLM `debates/`. Useful for the *why* behind protocol decisions when commit history is silent. Not a code repo.
-- **`../web/`** — Separate Next.js 16 / React 19 / Tailwind 4 app (`clearproof-web`). Has its own AGENTS.md warning: this is a newer Next.js than your training data — check `node_modules/next/dist/docs/` before writing code there. Don't conflate it with `apps/docs/` inside this repo (the developer docs site).
+- **`~/obsidian/`** — Obsidian vault (multi-domain; follow its `SCHEMA.md` and `Vault-Naming-Conventions.md`). Clearproof internal context lives in:
+  - `Research Reports/Clearproof/` — product, adoption, and regulatory research (e.g. use cases/monetization, SEC/Treasury ZK-KYC policy signals)
+  - `Software Development/Repo Reviews/Clearproof Review 2026-03-31.md`
+  - `Memory/clearproof.md` — running project memory
+
+  Useful for the *why* behind protocol and positioning decisions when commit history is silent. New Clearproof notes go in `Research Reports/Clearproof/` and get an entry in `Vault Master Index.md`. Not a code repo.
+- **`~/code/clearproof-web/`** — Separate Next.js 16 / React 19 / Tailwind 4 app. Has its own AGENTS.md warning: this is a newer Next.js than your training data — check `node_modules/next/dist/docs/` before writing code there. Don't conflate it with `apps/docs/` inside this repo (the developer docs site).
 
 ## Common Commands
 
@@ -64,21 +69,35 @@ make dev                                                   # uvicorn src.api.mai
 
 The system's correctness depends on a few cross-layer invariants. If you change one side without the other, you ship unverifiable proofs.
 
-### 1. Python witness ↔ Circom circuit ↔ Solidity verifier ABI
+### 1. Two proof profiles; never pick one by signal count
 
-The compliance circuit declares 14 public inputs + 2 public outputs in a fixed order (see `circuits/AGENTS.md` for the full list). Three places must agree on this order:
+The **current** profile is `pilot-transfer-v3` (`specs/pilot-transfer-v3.md`, ADRs 0009 and 0011): **eight** public signals in a fixed order and tree depths of 32 (issuance), 20 (authorized issuers) and 20 (sanctions). There is no public amount tier or SAR flag.
 
-- `circuits/compliance.circom` — `main { public [...] }`
-- `src/protocol/compliance_proof.py` — `ComplianceProof.public_signals` (the 16-element array)
-- `packages/proof/src/prover.ts` — the camelCase→snake_case mapping in `generateProof` (this is the SDK's only knowledge of the circuit ABI)
-- `packages/proof/src/verifier.ts` — hardcoded indices `publicSignals[0]=is_compliant`, `[1]=sar_review_flag`
-- `docs/internal/CIRCUIT_SIGNALS.md` — authoritative reference
+`projection_commitment, authorized_issuer_root, sanctions_root, authorization_nullifier, evaluated_at, proof_expires_at, domain_chain_id, domain_registry`
 
-Reordering or renaming any signal is a breaking change across all of these.
+These places must agree on that order:
+
+- `circuits/pilot_compliance.circom` — `main { public [...] }`
+- `src/prover/pilot_compliance.py` — `PUBLIC_SIGNALS` / `PROFILE`
+- `packages/contracts/contracts/PilotGroth16Verifier.sol` and `PilotCurrentRegistry.sol` — `uint256[8]` signals, with indices checked against statements and pins
+- `packages/proof/src/authorization.ts` — hardcoded indices (`[3]` nullifier, `[5]` expiry)
+- `specs/pilot-transfer-v3.md` — authoritative reference
+
+Tree depths are defined once in `src/registry/pilot_tree.py` (`ISSUANCE_TREE_DEPTH`, `ISSUER_TREE_DEPTH`, `SANCTIONS_TREE_DEPTH`) and must match the `main` instantiation `PilotCompliance(32, 20, 20)`. Changing a depth changes the keys and requires a new profile name.
+
+V1 and v2 have the same signal count but different keys (v1 also gives signal 0 a different meaning; v2 used depth-8 trees). Manifests name their profile explicitly; current checks reject v1 and v2.
+
+The **legacy** `circuits/compliance.circom` profile has 16 signals (14 inputs + `is_compliant`/`sar_review_flag` outputs). It remains a separate demo/parity path and is documented in `docs/internal/CIRCUIT_SIGNALS.md`. Never reinterpret legacy proofs as current pilot authorization.
+
+Reordering or renaming a signal in either profile is a breaking change across all of that profile's files.
 
 ### 2. Domain binding lives in the contract, not the circuit
 
-`domain_chain_id` and `domain_contract_hash` are public inputs to the circuit but have **no in-circuit constraint**. Their security comes from `ComplianceRegistry` checking them against `block.chainid` and `address(this)`. Removing those checks on either side silently enables cross-chain replay.
+The domain signals (pilot: `domain_chain_id`, `domain_registry`; legacy: `domain_chain_id`, `domain_contract_hash`) have **no in-circuit constraint**. Their security comes from the registry checking them against `block.chainid` and `address(this)` (`PilotCurrentRegistry`, legacy `ComplianceRegistry`). Removing those checks silently enables cross-chain replay.
+
+### 2a. PostgreSQL is the authorization authority
+
+In the pilot, PostgreSQL owns authorization consumption and replay. `PilotCurrentRegistry` only mirrors receipts that have already been consumed, under publisher-attested checkpoints. It cannot create an authorization or detect a lying publisher. Read-only inspection and observation must never consume an authorization (spend a nullifier). See `docs/internal/PILOT_CURRENT_REGISTRY.md`.
 
 ### 3. Sanctions tree rebuild **must** be followed by oracle relay
 
@@ -93,11 +112,11 @@ Range checks (252-bit on sanctions keys, 64-bit on amounts, 16-bit on jurisdicti
 - **The Python package installs as `clearproof` but source lives at `src/`**, and internal imports use `from src.api...`, `from src.protocol...` etc. This is unusual and trips up newcomers. Keep using the `src.` prefix.
 - **Generated protobuf files** (`*_pb2.py`, `*_pb2_grpc.py`) in `src/protocol/bridges/` must never be edited by hand; ruff is configured to skip them.
 - **TypeScript packages are an npm workspace** under `packages/*` (plus `apps/*`); turbo orchestrates `build`/`test`/`lint`. `npm test` from root runs the TS+Hardhat suite; `make test` runs Python.
-- **The SDK has no baked-in circuit artifacts** — `wasmPath`, `zkeyPath`, `vkeyPath` are caller-supplied. Locally-built artifacts are dev-only; production artifacts must come from an audited MPC ceremony.
+- **The SDK has no baked-in circuit artifacts** — `wasmPath`, `zkeyPath`, `vkeyPath` are caller-supplied. Locally-built artifacts are dev-only. Production artifacts need an approved setup path: an MPC ceremony, or a universal setup if ADR 0004 (fflonk) is adopted. Production configuration rejects unapproved keys.
 
 ## Hard Rules (project-wide)
 
-- **Never log, store, or transmit raw PII** outside the `HybridPayload` AES-256-GCM envelope.
+- **Never log, store, or transmit raw PII** outside the encrypted envelopes: HPKE v2 recipient envelopes by default; the legacy `HybridPayload` AES-256-GCM v1 path only when an operator selects it. Logs and reports carry minimized references and reason codes only.
 - **Never resolve ENS names for sanctions** — raw hex addresses only. `normalize_address` in `scripts/build_sanctions_tree.py` enforces this.
 - **Never start the API without a valid `PII_MASTER_KEY`** (64 hex chars or ≥32 UTF-8 bytes); the app refuses to boot otherwise.
 - **Never import `src.api.main`** in tests without first setting `PII_MASTER_KEY`, `AUTH_MODE`, and `API_KEY` env vars — module import triggers the key check.
@@ -106,13 +125,15 @@ Range checks (252-bit on sanctions keys, 64-bit on amounts, 16-bit on jurisdicti
 
 ## CI
 
-Four jobs on push/PR to `main` (`.github/workflows/ci.yml`):
-- `python-tests` — full pytest suite
-- `typescript-build` — type-check `@clearproof/proof` and `@clearproof/cli` (builds `content` and `proof` first as deps)
-- `hardhat-tests` — contract suite incl. E2E prove→submit→verify
-- `circuits` — circom compile with audited Hermez ptau18 (SHA256-pinned), generates `Groth16Verifier.sol`
+`.github/workflows/ci.yml` runs on push/PR to `main`. The job list is authoritative in that file. Main groups:
+- Pilot gates: `pilot-root-checkpoint`, `pilot-credential-witness`, `discovery`, `proof-storage`
+- `python-tests`, `python-aggregate-coverage`
+- `typescript-build`, `operational-tests`, `operational-javascript`, `docs-browser`
+- `hardhat-tests` — contract suite
+- `circuits` — circom compile with audited Hermez ptau (SHA256-pinned); `circuit-lint` runs Circomspect
+- Hygiene: `protobuf-freshness`, `license-compliance` (REUSE)
 
-A daily `sanctions-update` cron rebuilds the sanctions Merkle tree from live feeds.
+`sanctions-update.yml` rebuilds the sanctions Merkle tree daily from live feeds. `release.yml` publishes packages.
 
 ## Environment
 

@@ -2,9 +2,23 @@
 
 The next bounded delivery is governed by the [adoption pilot implementation plan](docs/plans/2026-09-05-adoption-pilot-implementation.md), created September 5, 2026. It sequences the current hardening findings, policy simulation, transfer investigations, historical verification and observation onboarding, with separate gates for customer integrations and production assurance. The dated progress snapshots below remain historical context.
 
-clearproof is moving from a research-oriented ZK Travel Rule repo to a production compliance platform for regulated VASPs.
+## Current Status (2026-09-24)
 
-The strategic wedge is narrow by design: **privacy-preserving Travel Rule infrastructure that interoperates with rails VASPs already use**, especially TRP/OpenVASP and TRISA. clearproof should not be positioned as a generic ZK compliance toolkit or as a replacement for Travel Rule networks. It should prove compliance, minimize PII exposure, and exchange required Travel Rule data through existing protocols.
+- The local adoption pilot (M0–M5, CP-001–CP-018) was merged to `main` on September 7, 2026 (PR #27). The current proof profile is `pilot-transfer-v3` (PR #49, September 25, 2026): eight public signals and production tree depths of 32/20/20 (ADR 0011).
+- Public npm packages remain 0.3.0. The 0.4.0 source on `main` is unreleased.
+- Nothing is independently audited. Proving keys are development-only.
+- Follow-on gates F1–F5 (external credentials, re-screening, trusted distribution, live paid pilot, production authorization) are all open. None has met its start condition.
+- The Phase 0–5 checklists below predate the pilot and have not been reconciled item by item. For implemented capability, trust the plan's execution log and the README.
+
+## Positioning
+
+Clearproof is **privacy-focused evidence for regulated crypto transfers**. The same wording leads the README. Regulated firms get transfer-bound proofs, explained policy decisions, recipient-encrypted transfer information, and retained evidence that an independent reviewer can verify offline. PII is collected and spread no further than an obligation requires.
+
+- **The Travel Rule is the regulatory context, not the product.** Transfer-information obligations already exist under FinCEN's funds-transfer rules and FATF R.16. Clearproof helps firms meet them with less PII exposure and better evidence. It does not advocate expanding them. Interoperate with rails firms already use (TRP/OpenVASP, TRISA) rather than replacing them.
+- **Describe outcomes as data minimization and assurance, never "anonymity."** A valid proof establishes its encoded statement. It does not establish legal compliance, source truth, counterparty acceptance or settlement.
+- **Do not position Clearproof as a generic ZK compliance toolkit.** Several vendors now pitch ZK proofs of "not on a sanctions list." Clearproof's differentiator is the combination of transfer binding, counterparty-encrypted information and offline-verifiable evidence.
+
+The public, contributor-facing priorities are in [docs/ADOPTION_ROADMAP.md](docs/ADOPTION_ROADMAP.md).
 
 ## Production Definition
 
@@ -25,6 +39,9 @@ clearproof is production quality when a regulated VASP can run real or shadow-mo
 - **FATF Best Practices on Travel Rule Supervision (2025)** provides guidance on what supervisors expect in examinations: evidence of originator/beneficiary information transmission, sanctions screening, record retrieval, and revocation handling
 - EU Travel Rule guidance for funds and crypto-asset transfers applies from 30 December 2024: https://www.eba.europa.eu/publications-and-media/press-releases/eba-issues-travel-rule-guidance-tackle-money-laundering-and-terrorist-financing-transfers-funds-and
 - U.S. funds travel rule and recordkeeping concepts remain anchored in FinCEN guidance: https://www.fincen.gov/index.php/resources/statutes-regulations/guidance/funds-travel-regulations-questions-answers
+- **Treasury, GENIUS Act §9 report to Congress (March 2026)**: portable credentials using zero-knowledge proofs are named as a way to streamline compliance without over-collection. It notes OFAC does not require any specific screening tool: https://home.treasury.gov/system/files/246/GENIUS-Act-Illicit-Finance-Innovation-Congressional-Report-March-2026.pdf
+- **FinCEN/OCC/FDIC FAQs on verifiable digital credentials under the CIP rule (September 8, 2026)**: government-issued credentials can be documentary; private-issuer credentials remain non-documentary and need comparable assurance. This is relevant to F1: https://www.fincen.gov/resources/statutes-regulations/guidance/frequently-asked-questions-regarding-treatment-verifiable
+- **FATF Seventh Targeted Update on R.15 (July 2026)**: 83% of respondent jurisdictions have Travel Rule laws, but 60% of those have taken no supervisory or enforcement action. Scrutiny of "anonymity-enhancing" services continues: https://www.fatf-gafi.org/en/publications/Fatfrecommendations/targeted-updated-virtualassets-vasps-2026.html
 - TRP is a mature open Travel Rule protocol with VASP implementations: https://www.openvasp.org/trp
 - TRISA provides VASP identity, PKI, GDS, and protocol infrastructure: https://www.trisa.io/
 
