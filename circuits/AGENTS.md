@@ -8,7 +8,8 @@ Two proof profiles live here. **Never select a profile by signal count.**
 
 | Profile | Main circuit | Public signals | Status |
 |---------|--------------|----------------|--------|
-| `pilot-transfer-v2` | `pilot_compliance.circom` | 8 | **Current.** Spec: `specs/pilot-transfer-v2.md` (authoritative), ADR 0009 |
+| `pilot-transfer-v3` | `pilot_compliance.circom` | 8 | **Current.** Spec: `specs/pilot-transfer-v3.md` (authoritative), ADRs 0009 and 0011 |
+| `pilot-transfer-v2` / `v1` | same circuit, earlier depths/binding | 8 | Historical. Current checks reject them |
 | Legacy | `compliance.circom` | 16 (14 in + 2 out) | Separate demo and parity path. Never current pilot authorization |
 
 The current profile proves all of the following without revealing any of them publicly:
@@ -23,7 +24,7 @@ Amount, tier, wallets, jurisdiction and participants stay private. There is no p
 ## STRUCTURE
 ```
 circuits/
-├── pilot_compliance.circom           # CURRENT main: PilotCompliance(8, 8, 8), 8 public signals
+├── pilot_compliance.circom           # CURRENT main: PilotCompliance(32, 20, 20), 8 public signals
 ├── pilot_transfer.circom             # PilotTransferProjection: 48 private fields → commitment + authorization scope
 ├── pilot_credential.circom           # PilotCredentialValidity: credential, holder, issuance + authorized-issuer membership
 ├── pilot_sanctions.circom            # PilotSanctionsGap: raw-address gap non-membership
@@ -42,14 +43,17 @@ circuits/
 ## WHERE TO LOOK
 | Task | Location | Notes |
 |------|----------|-------|
-| Change the current public ABI | `pilot_compliance.circom` main + `src/prover/pilot_compliance.py` (`PUBLIC_SIGNALS`, `PROFILE`) + `PilotGroth16Verifier.sol` / `PilotCurrentRegistry.sol` + `packages/proof/src/authorization.ts` + `specs/pilot-transfer-v2.md` | Breaking change. It needs a new profile name, new keys and fixtures; never reuse v2 |
+| Change the current public ABI | `pilot_compliance.circom` main + `src/prover/pilot_compliance.py` (`PUBLIC_SIGNALS`, `PROFILE`) + `PilotGroth16Verifier.sol` / `PilotCurrentRegistry.sol` + `packages/proof/src/authorization.ts` + `specs/pilot-transfer-v3.md` | Breaking change. It needs a new profile name, new keys and fixtures; never reuse v3 |
+| Change a tree depth | `pilot_compliance.circom` main + `src/registry/pilot_tree.py` constants | Changes the keys, so it needs a new profile name (ADR 0011); check the constraint count against the ptau size (2^17) |
 | Change projection fields | `pilot_transfer.circom` + `src/prover/pilot_projection.py` + `packages/proof` canonical code | ADR 0005; field table in `docs/internal/CIRCUIT_SIGNALS.md` |
 | Change credential layout | `pilot_credential.circom` + `src/protocol/credential.py` + `src/prover/pilot_compliance.py` witness | ADR 0003/0009; commitment domain 102 |
 | Change pilot sanctions logic | `pilot_sanctions.circom` + `src/prover/pilot_roots.py` / tree builder | Raw-address tree, leaf domain 301 (ADR 0006) |
 | Change valuation/tier | `pilot_valuation.circom` + `src/prover/pilot_valuation.py` | ADR 0004 (valuation arithmetic) |
 | Legacy changes | `compliance.circom` + `src/protocol/compliance_proof.py` | See LEGACY PROFILE below |
 
-## CURRENT PROFILE: pilot-transfer-v2
+## CURRENT PROFILE: pilot-transfer-v3
+
+`PilotCompliance(32, 20, 20)`: issuance depth 32, authorized-issuer depth 20, sanctions depth 20 (2^20 − 2 addresses), 95,408 constraints. See ADR 0011.
 
 Public signals, in exact order (on-chain ABI):
 1. `projection_commitment` — `Poseidon(204, transfer_projection_commitment, credential_commitment, issuance_root)`

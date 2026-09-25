@@ -4,12 +4,13 @@ This document describes the public and private signals of Clearproof's circuits.
 
 | Profile | Circuit | Public signals | Status |
 | --- | --- | --- | --- |
-| `pilot-transfer-v2` | `circuits/pilot_compliance.circom` | 8 | **Current** pilot profile (merged Sept 2026). Authoritative spec: [`specs/pilot-transfer-v2.md`](../../specs/pilot-transfer-v2.md) |
+| `pilot-transfer-v3` | `circuits/pilot_compliance.circom` | 8 | **Current** pilot profile. Authoritative spec: [`specs/pilot-transfer-v3.md`](../../specs/pilot-transfer-v3.md) |
+| `pilot-transfer-v2` / `v1` | same circuit, earlier depths/binding | 8 | Historical. Current checks reject them; pinned read-only pairing only |
 | Legacy | `circuits/compliance.circom` | 16 (14 inputs + 2 outputs) | Separate demo and parity path. Never valid as current pilot authorization |
 
-## Current profile: pilot-transfer-v2
+## Current profile: pilot-transfer-v3
 
-Instantiation: `PilotCompliance(8, 8, 8)` (issuance, issuer and sanctions tree depths). These are development depths. Signal order is fixed by the `main` component and mirrored by `PUBLIC_SIGNALS` in `src/prover/pilot_compliance.py`. The spec and ADR 0009 are authoritative. The table below records which constraints come from the circuit and which from outside it.
+Instantiation: `PilotCompliance(32, 20, 20)`, meaning tree depths of 32 (issuance, 2^32 credentials), 20 (authorized issuers) and 20 (sanctions, 2^20 − 2 addresses). The depths are defined in `src/registry/pilot_tree.py` (ADR 0011) and the circuit has 95,408 constraints. Signal order is fixed by the `main` component and mirrored by `PUBLIC_SIGNALS` in `src/prover/pilot_compliance.py`. The spec and ADRs 0009/0011 are authoritative. The table below records which constraints come from the circuit and which from outside it.
 
 | # | Signal | In-circuit constraint | Enforced outside the circuit by |
 | --- | --- | --- | --- |
@@ -341,7 +342,7 @@ Domain-separated leaf hash for trusted issuer entries.
 
 `circuits/pilot_credential.circom` defines `PilotCredentialValidity(issuance_depth,
 issuer_depth)` for `clearproof-credential-v1`. It does not instantiate `main` by
-itself; `pilot_compliance.circom` composes it into `pilot-transfer-v2`. Its unit
+itself; `pilot_compliance.circom` composes it into `pilot-transfer-v3`. Its unit
 harness uses two-level trees solely to exercise membership constraints.
 
 `fields[13]` is the credential Poseidon preimage excluding domain tag 102:
@@ -363,7 +364,7 @@ and path, authorized issuer root and path, expected tenant limbs, expected subje
 expected jurisdiction and evaluation time. Membership paths have boolean indices.
 The evaluation time must satisfy `issued_at <= evaluated_at < expires_at`.
 
-In `pilot-transfer-v2`, the expected tenant, subject, jurisdiction and evaluation
+In `pilot-transfer-v3`, the expected tenant, subject, jurisdiction and evaluation
 time are bound to private transfer fields 4–5, 10, 25 and 23. None is public, and
 the legacy SAR advisory signal is absent. (The standalone harness exposes expected
 subject/jurisdiction for testing only.) See ADR 0003 for external enrollment and root authority.
@@ -386,7 +387,7 @@ through the projection fields and the registry's policy/valuation pins. See ADR 
 `PilotTransferProjection` consumes `transfer_fields[48]`, `valuation_remainder`
 and the expected `projection_commitment`. Its `authorization_scope` output is
 for the parent holder-nullifier construction. The 48 fields are private inputs to
-`pilot-transfer-v2`; only their commitment is bound publicly, via signal 0.
+`pilot-transfer-v3`; only their commitment is bound publicly, via signal 0.
 
 | Index | Field |
 | --- | --- |
@@ -443,8 +444,10 @@ See ADR 0005 for canonical-record binding and trust boundaries.
 
 ## Composed profile
 
-The composed circuit `pilot_compliance.circom` is the current `pilot-transfer-v2`
+The composed circuit `pilot_compliance.circom` is the current `pilot-transfer-v3`
 profile described at the top of this document. See
 [ADR 0006](../adr/0006-composed-pilot-transfer.md) for private fields, tree bounds and
 trust requirements, and [ADR 0009](../adr/0009-credential-bound-pilot-profile.md) for
-the v1 → v2 change (signal 0 now binds the exact credential and issuance root).
+the v1 → v2 change (signal 0 now binds the exact credential and issuance root). See
+[ADR 0011](../adr/0011-production-tree-depths.md) for the v2 → v3 change (tree depths
+from 8/8/8 to 32/20/20; same signals, new keys).
