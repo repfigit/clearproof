@@ -9,9 +9,9 @@ sequenceDiagram
     participant R as Registry
     O->>O: Evaluate the active policy with signed inputs
     O->>O: Generate a pilot-transfer-v3 proof
-    O->>O: Check current state; on ALLOW consume once and seal information to B's key
+    O->>O: Check current state, then on ALLOW consume once and seal information to B's key
     O->>B: Send proof, signed decision and encrypted information
-    B->>B: Verify signatures, proof and binding; decrypt required information
+    B->>B: Verify signatures, proof and binding, then decrypt required information
     B-->>O: Accept, reject, request information or pending
     opt Receipt mirror
         O->>R: Publisher records checkpoints and the consumed receipt
