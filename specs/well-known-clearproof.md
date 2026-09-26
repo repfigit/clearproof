@@ -1,6 +1,6 @@
 # Clearproof discovery profile 0.4.0
 
-Status: development profile implemented on the adoption-pilot branch. This is a breaking update to the 0.3.0 discovery draft; it is not a claim that the deployed API or public npm 0.3.0 already supports it.
+Status: development profile on `main`, consumed by the Python API and by `@clearproof/proof` from npm 0.5.0 on. This is a breaking update to the 0.3.0 discovery draft. Profile `0.4.0` is the discovery document version, not the npm package version. Documents at `0.2.0` or `0.3.0` stay unsupported.
 
 A counterparty publishes `https://<authority>/.well-known/clearproof.json`. The Python API and Node SDK consume the same profile and test vectors in [fixtures/discovery-0.4.0.json](fixtures/discovery-0.4.0.json). No directory enumeration or address-to-VASP lookup is provided.
 

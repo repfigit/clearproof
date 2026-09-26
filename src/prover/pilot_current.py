@@ -1,4 +1,4 @@
-"""Reconstruct the current v2 statement from independent trust and exact records.
+"""Reconstruct the current pilot-transfer-v3 statement from independent trust and exact records.
 
 This is read-only proof inspection, not policy authorization or consumption.
 Durable enrollment/revocation and authenticated business facts remain caller duties.

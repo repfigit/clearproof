@@ -73,9 +73,7 @@ The SDK has **no baked-in artifacts**. Callers must supply:
 - `zkeyPath` — proving key
 - `vkeyPath` — verification key (for `verifyProof`)
 
-**Recommended source:** `@clearproof/circuits` package (when it ships pre-built audited artifacts).
-
-**Current reality (documented in root README):** artifacts are generated locally via `scripts/compile_circuits.sh`. Dev artifacts are **not** safe for production.
+`@clearproof/circuits` publishes Circom sources only. It does not ship WASM, proving keys, or verification keys. In this repository, `scripts/test_development_circuits.py` writes matching development artifacts; `scripts/compile_circuits.sh` still builds the legacy profile on its own. Development artifacts are **not** safe for production. An approved artifact path is still an open decision (ADR 0004).
 
 ## CONVENTIONS
 

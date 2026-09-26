@@ -1,11 +1,15 @@
 # Pilot compatibility matrix
 
-The source manifests identify software version 0.4.0. Software versions, discovery
-versions, proof profiles and envelope versions are separate identifiers. The API
-reports the installed Python distribution version; an uninstalled source import
-reports `unknown`. Neither a version string nor matching signal count establishes
-artifact approval. This matrix describes the source implementation, not an npm
-release, public repository availability or a deployed chain.
+The Python project and the published npm packages are version 0.6.0. Software
+versions, discovery versions, proof profiles and envelope versions are separate
+identifiers: discovery documents remain profile 0.4.0, and artifact manifests
+are `clearproof-artifact-manifest-v1` with proof profile `pilot-transfer-v3`.
+The API reports the installed Python distribution version; an uninstalled source
+import reports `unknown`. Neither a version string nor matching signal count
+establishes artifact approval. This matrix describes the source implementation.
+npm 0.6.0 publishes the TypeScript SDK, CLI, content, contract sources and
+circuit sources. It does not publish proving keys or deploy the pilot registry.
+PyPI publishing of the Python package stays off until `PUBLISH_PYPI` is set.
 
 ## Protocol and data compatibility
 
