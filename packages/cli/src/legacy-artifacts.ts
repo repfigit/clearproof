@@ -20,16 +20,14 @@ export function artifactsAvailable(directory: string): boolean {
   });
 }
 
-export function defaultArtifactsDir(
-  packaged?: string,
-  local = path.resolve(__dirname, '../../../artifacts'),
-): string {
-  if (packaged === undefined) {
-    try {
-      packaged = (require('@clearproof/circuits') as { artifacts?: { dir?: string } }).artifacts?.dir;
-    } catch { /* Source checkout may not have workspace packages installed. */ }
-  }
-  return packaged && artifactsAvailable(packaged) ? packaged : local;
+/**
+ * Default location for the legacy demo's development artifacts: the repository's artifacts/ directory.
+ * No npm package supplies them. The artifacts in @clearproof/circuits 0.3.0 were compiled before the
+ * sanctions-leaf hashing fix and no longer match the demo input, and later versions are source-only.
+ * Generate matching artifacts with scripts/test_development_circuits.py and pass --artifacts.
+ */
+export function defaultArtifactsDir(local = path.resolve(__dirname, '../../../artifacts')): string {
+  return local;
 }
 
 export function requireArtifactPaths(directory: string) {

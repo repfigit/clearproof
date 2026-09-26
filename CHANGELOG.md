@@ -11,6 +11,14 @@ maintains its own version line in this file.
 
 ## [Unreleased]
 
+### Changed
+
+- **`@clearproof/circuits` is now a source-only package (0.6.0).** It publishes the canonical `circuits/` sources for both the current `pilot-transfer-v3` profile and the legacy demo circuit. They are copied at publish time with `circomlib` includes rewritten to `circomlib/...` (compile with `-l node_modules`), plus a `MANIFEST.json` of repository and package SHA-256 hashes. `circomlib` (GPL-3.0) is a peer dependency. **Breaking:** no compiled WASM, proving keys or verification keys, and the API changes to `dir`, `pilot`, `legacy` and `includePath`. The previous package held a stale legacy-only copy of the sources and development artifacts.
+
+### Fixed
+
+- **`clearproof demo` no longer resolves the artifacts in `@clearproof/circuits` 0.3.0.** Those were compiled before the sanctions-leaf hashing fix and fail witness generation with the current demo input (`MerkleTreeVerifier` assertion), so `demo` from the published 0.5.0 CLI fails. The CLI no longer depends on `@clearproof/circuits`: generate matching development artifacts with `scripts/test_development_circuits.py` and pass `--artifacts <output>/legacy`. The existing error message explains this.
+
 ### Added
 
 - **Issue reporting for people and AI agents.** `clearproof report` prints a pre-filled GitHub issue link with the CLI version, Node version and platform (`--json` for scripts and agents, `--doctor <file>` adds a whitelisted summary of a saved `clearproof doctor` result); nothing is sent. New docs page "Report an issue", a footer link, a README section, and an `AGENTS.md` section on what agents should include and never include. Issue forms gain a "Reported by" field.

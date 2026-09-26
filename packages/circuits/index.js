@@ -1,66 +1,62 @@
 const path = require("path");
-const fs = require("fs");
 
 /**
- * @clearproof/circuits — ZK compliance circuit artifacts
+ * @clearproof/circuits: Circom source for the clearproof proof profiles.
  *
- * Usage:
- *   const { artifacts, circuitSrc } = require("@clearproof/circuits");
- *   // artifacts.wasmPath — compiled circuit WASM
- *   // artifacts.zkeyPath — Groth16 proving key
- *   // artifacts.vkeyPath — verification key JSON
- *   // circuitSrc.compliance — path to compliance.circom
+ * Source only. This package contains no compiled WASM, proving keys or verification keys:
+ * all current keys are development-only, and the production setup path is still an open
+ * decision (docs/adr/0004 in the repository). Compile with circom and your own setup.
  *
- * To use circuits in your own Circom project:
- *   circom my-circuit.circom -l node_modules/@clearproof/circuits/src -l node_modules/circomlib/circuits
+ *   circom node_modules/@clearproof/circuits/circuits/pilot_compliance.circom \
+ *     -l node_modules --r1cs --wasm
  */
 
-const artifactsDir = path.join(__dirname, "artifacts");
-const srcDir = path.join(__dirname, "src");
+const dir = path.join(__dirname, "circuits");
 
 module.exports = {
-  artifacts: {
-    wasmPath: path.join(artifactsDir, "compliance.wasm"),
-    zkeyPath: path.join(artifactsDir, "compliance_final.zkey"),
-    vkeyPath: path.join(artifactsDir, "verification_key.json"),
-    dir: artifactsDir,
+  /** Directory containing the .circom sources (and MANIFEST.json with source hashes). */
+  dir,
+  /** Current pilot profile. Public signals are in this exact order. */
+  pilot: {
+    profile: "pilot-transfer-v3",
+    main: path.join(dir, "pilot_compliance.circom"),
+    template: "PilotCompliance(32, 20, 20)",
+    treeDepths: { issuance: 32, authorizedIssuers: 20, sanctions: 20 },
+    publicSignals: [
+      "projection_commitment",
+      "authorized_issuer_root",
+      "sanctions_root",
+      "authorization_nullifier",
+      "evaluated_at",
+      "proof_expires_at",
+      "domain_chain_id",
+      "domain_registry",
+    ],
   },
-  // File availability is not artifact provenance or production approval.
-  artifactStatus() {
-    const missing = ["compliance.wasm", "compliance_final.zkey", "verification_key.json"].filter(name => {
-      try {
-        const info = fs.lstatSync(path.join(artifactsDir, name));
-        return !info.isFile() || info.size === 0;
-      } catch { return true; }
-    });
-    return { available: missing.length === 0, missing, profile: "legacy-compliance-16" };
+  /** Legacy 16-signal demo profile. Never valid as current pilot authorization. */
+  legacy: {
+    profile: "legacy-compliance-16",
+    main: path.join(dir, "compliance.circom"),
+    template: "ComplianceProof(20, 10)",
+    publicSignals: [
+      "is_compliant",
+      "sar_review_flag",
+      "sanctions_tree_root",
+      "issuer_tree_root",
+      "amount_tier",
+      "transfer_timestamp",
+      "jurisdiction_code",
+      "credential_commitment",
+      "tier2_threshold",
+      "tier3_threshold",
+      "tier4_threshold",
+      "domain_chain_id",
+      "domain_contract_hash",
+      "transfer_id_hash",
+      "credential_nullifier",
+      "proof_expires_at",
+    ],
   },
-  circuitSrc: {
-    compliance: path.join(srcDir, "compliance.circom"),
-    sanctionsNonmembership: path.join(srcDir, "sanctions_nonmembership.circom"),
-    credentialValidity: path.join(srcDir, "credential_validity.circom"),
-    amountTier: path.join(srcDir, "amount_tier.circom"),
-    dir: srcDir,
-  },
-  /** Number of public signals in the compliance circuit */
-  PUBLIC_SIGNAL_COUNT: 16,
-  /** Public signal indices */
-  signals: {
-    IS_COMPLIANT: 0,
-    SAR_REVIEW_FLAG: 1,
-    SANCTIONS_TREE_ROOT: 2,
-    ISSUER_TREE_ROOT: 3,
-    AMOUNT_TIER: 4,
-    TRANSFER_TIMESTAMP: 5,
-    JURISDICTION_CODE: 6,
-    CREDENTIAL_COMMITMENT: 7,
-    TIER2_THRESHOLD: 8,
-    TIER3_THRESHOLD: 9,
-    TIER4_THRESHOLD: 10,
-    DOMAIN_CHAIN_ID: 11,
-    DOMAIN_CONTRACT_HASH: 12,
-    TRANSFER_ID_HASH: 13,
-    CREDENTIAL_NULLIFIER: 14,
-    PROOF_EXPIRES_AT: 15,
-  },
+  /** Circom include path to pass with -l, relative to the directory containing node_modules. */
+  includePath: "node_modules",
 };
