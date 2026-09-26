@@ -18,7 +18,7 @@ it('registers the supported command set and dispatches real documentation help',
   const program = parse.mock.contexts[0];
   expect(program.commands.map(command => command.name()).sort()).toEqual([
     'authorize-current', 'counterparty', 'demo', 'doctor', 'explain', 'help',
-    'inspect-current', 'investigation', 'observation', 'policy', 'prove', 'recipes',
+    'inspect-current', 'investigation', 'observation', 'policy', 'prove', 'recipes', 'report',
     'verify', 'verify-history',
   ]);
   expect(output.mock.calls.flat().join('\n')).toContain('/wallet/ownership/verify');

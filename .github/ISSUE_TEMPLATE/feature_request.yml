@@ -33,6 +33,14 @@ body:
     id: alternatives
     attributes:
       label: Alternatives considered
+  - type: dropdown
+    id: reported-by
+    attributes:
+      label: Reported by
+      options:
+        - A person
+        - An AI agent, reviewed by a person
+        - An AI agent, unreviewed
   - type: checkboxes
     id: checks
     attributes:

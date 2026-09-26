@@ -28,6 +28,6 @@ Use synthetic records and testnet funds. Check approved issuer/root/artifact pro
 
 ## Vulnerability reporting
 
-The repository security policy lists **security@clearproof.dev** as its reporting address. Share reproduction steps and impact privately; do not post sensitive exploit details or personal information in a public issue. This documentation does not verify mailbox operation or promise a response-time SLA.
+[Report privately through GitHub](https://github.com/repfigit/clearproof/security/advisories/new) (preferred) or email **security@clearproof.dev**. Share reproduction steps and impact privately; do not post sensitive exploit details or personal information in a public issue. See [report an issue](/docs/report-issues). This documentation does not promise a response-time SLA.
 
 No active paid bug-bounty program is announced here. See [project status](/docs/status) for the implementation and assurance work that remains.
