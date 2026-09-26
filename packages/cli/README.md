@@ -17,10 +17,11 @@ npm run build
 node packages/cli/dist/index.js --help
 ```
 
-Proof demos require a matching WASM, proving key and verification key. Bundled
-artifact availability is not guaranteed in a source checkout. The isolated
-`scripts/test_development_circuits.py` workflow generates unapproved development
-artifacts; those are not production ceremony material.
+Proof demos require a matching WASM, proving key and verification key. No npm
+package supplies them. Generate unapproved development artifacts with the isolated
+`scripts/test_development_circuits.py <new-directory>` workflow from a source
+checkout, then run `clearproof demo --artifacts <new-directory>/legacy`. They are
+not production ceremony material.
 
 ## Artifact doctor
 

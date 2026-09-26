@@ -12,7 +12,7 @@ npm install @clearproof/proof@0.5.0
 
 Proof generation requires compatible circuit WASM and proving-key files. Verification requires the matching verification key. Inspect package contents before relying on exported artifact paths; installing the SDK alone does not create a complete proving environment.
 
-0.5.0 includes the pilot and the current `pilot-transfer-v3` profile. `@clearproof/circuits` remains at 0.3.0 and holds only the legacy demo artifacts.
+0.5.0 includes the pilot and the current `pilot-transfer-v3` profile. `@clearproof/circuits` on npm is still 0.3.0, an outdated legacy-only package; the next release publishes the current circuit sources (source only).
 
 The CLI installs from npm with `npm install -g @clearproof/cli` (verified September 26, 2026). The source setup below builds the same workspaces and adds the Python API, circuits and pilot acceptance tooling.
 
