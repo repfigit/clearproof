@@ -1,14 +1,15 @@
 # CLI
 
-`@clearproof/cli` provides local proof generation, verification and a synthetic demo. Published npm version: **0.3.0**, checked September 5, 2026. Development checkout: **0.4.0**.
+`@clearproof/cli` provides local proof generation, verification, the pilot commands and a synthetic demo. Published npm version: **0.5.0**, checked September 26, 2026.
 
-## Public installation limitation
+## Install
 
-The published CLI currently depends on `@clearproof/content`, which was unavailable from the public npm registry when checked September 5, 2026. Consequently, `npx @clearproof/cli@0.3.0 --help` fails during dependency installation. A published version does not imply a working public installation.
+```bash
+npm install -g @clearproof/cli
+clearproof --help
+```
 
-For CLI evaluation, build the local workspaces from the public repository and run `node packages/cli/dist/index.js --help`. See [quickstart](/docs/quickstart). The proof SDK can be installed independently.
-
-A clean source install from `main` was verified on September 15, 2026 at commit `1c8d385`: locked workspace install, workspace build, `--help` output from the built CLI, Python environment sync and the Python unit suite all succeeded. This validates the source-checkout path; it does not change the published-package limitation above.
+Installation from npm was verified on September 26, 2026. You can also build from a source checkout; see [quickstart](/docs/quickstart).
 
 ## Proof workflows
 
@@ -29,9 +30,9 @@ clearproof demo --artifacts ./artifacts
 
 The demo uses synthetic, historical inputs and development artifacts. It demonstrates a local proof workflow; it does not establish fresh sanctions state, live credential authenticity, current policy acceptance or safe transfer execution. Artifact presence and compatibility must be checked first. No fixed completion-time claim is made.
 
-## Pilot commands (source checkout only)
+## Pilot commands
 
-These commands exist in the source checkout, not in the published 0.3.0 package. Most call the authenticated pilot API; `verify-history` and `doctor` run offline.
+These commands are in 0.5.0 and the source checkout, except `report`, which arrives in the next release. Most call the authenticated pilot API; `verify-history` and `doctor` run offline.
 
 | Command | Purpose |
 | --- | --- |

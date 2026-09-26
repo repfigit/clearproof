@@ -2,14 +2,17 @@
 
 Command-line tool for generating and verifying ZK compliance proofs.
 
-## Development status
-
-The 0.4.0 checkout is unreleased and requires repository access. The public
-0.3.0 CLI has an unavailable `@clearproof/content` dependency; a public install
-is not currently a working quickstart. Use an authorized source checkout:
+## Install
 
 ```bash
-npm install
+npm install -g @clearproof/cli
+clearproof --help
+```
+
+Or build from a source checkout:
+
+```bash
+npm ci
 npm run build
 node packages/cli/dist/index.js --help
 ```
@@ -19,7 +22,7 @@ artifact availability is not guaranteed in a source checkout. The isolated
 `scripts/test_development_circuits.py` workflow generates unapproved development
 artifacts; those are not production ceremony material.
 
-## Artifact doctor (unreleased)
+## Artifact doctor
 
 Inspect local files using an independently reviewed manifest pin:
 
