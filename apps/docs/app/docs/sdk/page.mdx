@@ -1,14 +1,14 @@
 # TypeScript SDK
 
-`@clearproof/proof` provides proof generation, cryptographic verification and counterparty discovery. Published version: **0.3.0**, checked September 25, 2026. That release predates the pilot: it covers the legacy 16-signal profile only. The pilot functions described below exist in the source checkout (0.4.0, unpublished). Confirm the installed version before using its types.
+`@clearproof/proof` provides proof generation, cryptographic verification and counterparty discovery. Published version: **0.5.0**, checked September 26, 2026. It includes the pilot functions and the legacy 16-signal functions described below. Confirm the installed version before using its types.
 
 ## Installation
 
 ```bash
-npm install @clearproof/proof@0.3.0
+npm install @clearproof/proof@0.5.0
 ```
 
-## Legacy proof API (in the published 0.3.0 package)
+## Legacy proof API
 
 ```typescript
 import { generateProof, verifyProof, type ComplianceInput } from '@clearproof/proof';
@@ -25,7 +25,7 @@ The caller supplies compatible artifacts. The SDK maps camelCase fields to Circo
 
 `verified.valid` describes cryptographic verification. `isCompliant` and `sarReviewFlag` interpret circuit outputs; they do not establish full registry acceptance, current policy authorization or legal compliance. Additional trust, freshness, revocation, domain and replay checks remain necessary.
 
-## Pilot functions (source checkout)
+## Pilot functions
 
 | Function | Purpose |
 | --- | --- |

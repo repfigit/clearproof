@@ -1,16 +1,16 @@
 # Project status
 
-Last checked: **September 25, 2026**.
+Last checked: **September 26, 2026**.
 
-**Pilot-stage, pre-production software.** Published npm packages: **0.3.0**. Development checkout: **0.4.0**. Main GitHub repository: **public**.
+**Pilot-stage, pre-production software.** Published npm packages: **0.5.0** (`@clearproof/circuits` 0.3.0). Main GitHub repository: **public**.
 
-The implementation below is merged into `main` (PR #27, September 7, 2026) and has been extended since. It is not in the published 0.3.0 packages, which predate it, or in the historical Sepolia deployments. Local acceptance evidence does not make it production software.
+The implementation below is merged into `main` (PR #27, September 7, 2026) and has been extended since. It is published in the 0.5.0 npm packages. It is not in the historical Sepolia deployments. Local acceptance evidence does not make it production software.
 
 ## Available components and limits
 
 | Area | Current development status |
 | --- | --- |
-| Public installation | Proof SDK 0.3.0 installation verified; CLI 0.3.0 depends on `@clearproof/content`, which remains unavailable from the public npm registry |
+| Public installation | `@clearproof/proof`, `cli`, `content` and `contracts` 0.5.0 install from npm (verified September 26, 2026); `proof`, `cli` and `contracts` carry signed build provenance |
 | Proof components | Credential-bound Groth16 `pilot-transfer-v3` statement (tree depths 32/20/20: about 4.3 billion credentials per issuer, a million issuers, a million sanctioned addresses), holder-secret and issuer membership checks, sanctions screening of both wallets, exact transfer projection and valuation arithmetic, tested with real development proofs in CI |
 | API and storage | Encrypted tenant-scoped records, signed enrollment, revocation, transactional authorization and restart/retry isolation tested with PostgreSQL |
 | Verification | Matching eight-signal statement checked in Python and Solidity; API/SDK trust the configured server, PostgreSQL owns consumption and contracts mirror receipts under publisher-validated checkpoints |

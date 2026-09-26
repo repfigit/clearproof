@@ -11,17 +11,17 @@ This is a development setup guide, checked September 25, 2026. Use synthetic dat
 
 ## Public package access
 
-The [main source repository](https://github.com/repfigit/clearproof) is public. Public npm packages are available at version 0.3.0:
+The [main source repository](https://github.com/repfigit/clearproof) is public. npm packages are at version 0.5.0:
 
 ```bash
-npm install @clearproof/proof@0.3.0
+npm install @clearproof/proof@0.5.0
 ```
 
 Proof generation requires compatible circuit WASM and proving-key files. Verification requires the matching verification key. Inspect package contents before relying on exported artifact paths; installing the SDK alone does not create a complete proving environment.
 
-The 0.3.0 packages predate the pilot and cover the legacy 16-signal profile only. The source checkout (0.4.0, unpublished) contains the pilot. Do not assume they are the same.
+0.5.0 includes the pilot and the current `pilot-transfer-v3` profile. `@clearproof/circuits` remains at 0.3.0 and holds only the legacy demo artifacts.
 
-The published CLI currently cannot be installed from the public registry because its `@clearproof/content` dependency is unavailable. The standalone proof SDK installation was verified. Use a source checkout for CLI evaluation. The source setup below was verified from a clean clone of `main` on September 15, 2026 at commit `1c8d385` (locked workspace install, workspace build, built-CLI `--help`, Python sync and the Python unit suite); it covers the documented commands, not the circuit compilation path shown later, which additionally requires circom and Powers of Tau inputs.
+The CLI installs from npm with `npm install -g @clearproof/cli` (verified September 26, 2026). The source setup below builds the same workspaces and adds the Python API, circuits and pilot acceptance tooling.
 
 ## Source setup for the unreleased pilot
 
