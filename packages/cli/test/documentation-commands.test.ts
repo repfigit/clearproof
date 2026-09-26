@@ -28,6 +28,19 @@ describe('terminal markdown rendering', () => {
     expect(result).not.toContain('```');
     expect(renderMarkdown('')).toBe('');
   });
+
+  it('renders a link after bold text when terminal colors are enabled', async () => {
+    // Bold emits ANSI escapes containing '['; link parsing must not start inside them.
+    const chalk = (await import('chalk')).default;
+    const level = chalk.level;
+    chalk.level = 1;
+    try {
+      const result = stripVTControlCharacters(renderMarkdown('**Bold** [Docs](https://docs.example) and [Spec](https://spec.example)'));
+      expect(result).toBe('Bold Docs (https://docs.example) and Spec (https://spec.example)');
+    } finally {
+      chalk.level = level;
+    }
+  });
 });
 
 describe('packaged documentation commands', () => {
