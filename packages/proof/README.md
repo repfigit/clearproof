@@ -11,7 +11,7 @@ assurance; it does not authorize a transfer or independently verify API claims.
 This is separate from the legacy 16-signal `verifyProof` function below. See
 `docs/internal/PILOT_CURRENT_INSPECTION_API.md` in the monorepo for server setup,
 request format, CLI usage and real-proof integration validation. Available from
-npm 0.5.0.
+npm 0.5.0 and later.
 
 ## Install
 

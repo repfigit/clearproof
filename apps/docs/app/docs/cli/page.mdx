@@ -1,6 +1,6 @@
 # CLI
 
-`@clearproof/cli` provides local proof generation, verification, the pilot commands and a synthetic demo. Published npm version: **0.5.0**, checked September 26, 2026.
+`@clearproof/cli` provides local proof generation, verification, the pilot commands and a synthetic demo. Published npm version: **0.6.0**, checked September 26, 2026.
 
 ## Install
 
@@ -28,13 +28,13 @@ The current verifier reports cryptographic validity and interpreted circuit outp
 clearproof demo --artifacts ./artifacts
 ```
 
-The demo needs legacy development artifacts that match the current circuit. No npm package supplies them: generate them with `scripts/test_development_circuits.py <new-directory>` from a source checkout and pass `--artifacts <new-directory>/legacy`. (`clearproof demo` in the published 0.5.0 CLI tries the artifacts in `@clearproof/circuits` 0.3.0, which predate a circuit fix and fail witness generation.)
+The demo needs legacy development artifacts that match the current circuit. No npm package supplies them: generate them with `scripts/test_development_circuits.py <new-directory>` from a source checkout and pass `--artifacts <new-directory>/legacy`. (`clearproof demo` in CLI 0.5.0 tried the artifacts in `@clearproof/circuits` 0.3.0, which predate a circuit fix and fail witness generation; 0.6.0 fixes this.)
 
 The demo uses synthetic, historical inputs and development artifacts. It demonstrates a local proof workflow; it does not establish fresh sanctions state, live credential authenticity, current policy acceptance or safe transfer execution. Artifact presence and compatibility must be checked first. No fixed completion-time claim is made.
 
 ## Pilot commands
 
-These commands are in 0.5.0 and the source checkout, except `report`, which arrives in the next release. Most call the authenticated pilot API; `verify-history` and `doctor` run offline.
+These commands are in 0.6.0 and the source checkout (`report` from 0.6.0). Most call the authenticated pilot API; `verify-history` and `doctor` run offline.
 
 | Command | Purpose |
 | --- | --- |

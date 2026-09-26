@@ -7,12 +7,12 @@ cli-topic: sdk
 
 # TypeScript SDK
 
-`@clearproof/proof` provides proof generation, cryptographic verification and counterparty discovery. Published version: **0.5.0**, checked September 26, 2026. It includes the pilot functions and the legacy 16-signal functions described below. Confirm the installed version before using its types.
+`@clearproof/proof` provides proof generation, cryptographic verification and counterparty discovery. Published version: **0.6.0**, checked September 26, 2026. It includes the pilot functions and the legacy 16-signal functions described below. Confirm the installed version before using its types.
 
 ## Installation
 
 ```bash
-npm install @clearproof/proof@0.5.0
+npm install @clearproof/proof@0.6.0
 ```
 
 ## Legacy proof API

@@ -11,6 +11,10 @@ maintains its own version line in this file.
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-09-26
+
+All five packages are published at 0.6.0 through npm trusted publishing with signed provenance, including `@clearproof/circuits` for the first time since 0.3.0. Pre-production: nothing is independently audited, and keys remain development-only.
+
 ### Changed
 
 - **`@clearproof/circuits` is now a source-only package (0.6.0).** It publishes the canonical `circuits/` sources for both the current `pilot-transfer-v3` profile and the legacy demo circuit. They are copied at publish time with `circomlib` includes rewritten to `circomlib/...` (compile with `-l node_modules`), plus a `MANIFEST.json` of repository and package SHA-256 hashes. `circomlib` (GPL-3.0) is a peer dependency. **Breaking:** no compiled WASM, proving keys or verification keys, and the API changes to `dir`, `pilot`, `legacy` and `includePath`. The previous package held a stale legacy-only copy of the sources and development artifacts.
@@ -110,7 +114,8 @@ First npm release since 0.3.0. It publishes `@clearproof/proof`, `@clearproof/co
 
 - Storage tests skip cleanly when `DATABASE_URL` is unset.
 
-[Unreleased]: https://github.com/repfigit/clearproof/compare/v0.5.0...HEAD
+[Unreleased]: https://github.com/repfigit/clearproof/compare/v0.6.0...HEAD
+[0.6.0]: https://github.com/repfigit/clearproof/compare/v0.5.0...v0.6.0
 [0.5.0]: https://github.com/repfigit/clearproof/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/repfigit/clearproof/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/repfigit/clearproof/releases/tag/v0.3.0

@@ -58,7 +58,7 @@ Some acceptance properties live outside the circuit. The authorization service c
 
 ## Source package
 
-`@clearproof/circuits` publishes these sources for inspection and compilation, with no compiled artifacts or keys (from 0.6.0, the next release; 0.3.0 on npm is an outdated legacy-only package). Install it with `circomlib` and compile with `-l node_modules`:
+`@clearproof/circuits` publishes these sources for inspection and compilation, with no compiled artifacts or keys (from 0.6.0; 0.3.0 and earlier were an outdated legacy-only package with development artifacts). Install it with `circomlib` and compile with `-l node_modules`:
 
 ```bash
 npm install @clearproof/circuits circomlib

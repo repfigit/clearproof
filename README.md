@@ -7,8 +7,7 @@ A valid proof establishes its encoded statement; it does not establish legal
 compliance, source truth, counterparty acceptance or settlement by itself.
 
 **Status checked September 26, 2026:** the main GitHub repository is **public**.
-npm packages are at **0.5.0** (`@clearproof/circuits` remains 0.3.0) and include the
-local pilot and the current `pilot-transfer-v3` profile. Current circuits and
+npm packages are at **0.6.0** and include the local pilot and the current `pilot-transfer-v3` profile. Current circuits and
 contracts have not completed independent audits, and generated proving keys are
 explicitly unapproved development artifacts.
 
@@ -87,11 +86,11 @@ production configuration rejects unapproved keys.
 
 | Public npm package | Checked version | Availability |
 | --- | --- | --- |
-| [@clearproof/proof](https://www.npmjs.com/package/@clearproof/proof) | 0.5.0 | Pilot and legacy SDK functions; install verified; signed provenance. Proving still requires matching artifacts |
-| [@clearproof/cli](https://www.npmjs.com/package/@clearproof/cli) | 0.5.0 | `npm install @clearproof/cli` verified; signed provenance. `clearproof report` arrives in the next release |
-| [@clearproof/content](https://www.npmjs.com/package/@clearproof/content) | 0.5.0 | Documentation used by the CLI (first published in 0.5.0) |
-| [@clearproof/contracts](https://www.npmjs.com/package/@clearproof/contracts) | 0.5.0 | Solidity sources and ABIs, including the pilot contracts; signed provenance. Not a deployment |
-| [@clearproof/circuits](https://www.npmjs.com/package/@clearproof/circuits) | 0.3.0 | Outdated: legacy-only sources and development artifacts that no longer match the CLI demo. The next release (0.6.0) publishes the current circuit sources, source only |
+| [@clearproof/proof](https://www.npmjs.com/package/@clearproof/proof) | 0.6.0 | Pilot and legacy SDK functions; signed provenance. Proving still requires matching artifacts |
+| [@clearproof/cli](https://www.npmjs.com/package/@clearproof/cli) | 0.6.0 | `npm install @clearproof/cli`; includes `clearproof report`; signed provenance |
+| [@clearproof/content](https://www.npmjs.com/package/@clearproof/content) | 0.6.0 | Documentation used by the CLI |
+| [@clearproof/contracts](https://www.npmjs.com/package/@clearproof/contracts) | 0.6.0 | Solidity sources and ABIs, including the pilot contracts; signed provenance. Not a deployment |
+| [@clearproof/circuits](https://www.npmjs.com/package/@clearproof/circuits) | 0.6.0 | Circom sources for `pilot-transfer-v3` and the legacy circuit; source only, no artifacts or keys; signed provenance |
 
 Recorded Sepolia addresses are in the [deployment manifest](packages/contracts/deployments/sepolia.json)
 and [public contract documentation](apps/docs/app/docs/contracts/page.mdx).
