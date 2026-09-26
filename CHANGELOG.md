@@ -19,7 +19,7 @@ First npm release since 0.3.0. It publishes `@clearproof/proof`, `@clearproof/co
 
 - **npm packages now match the source pilot.** 0.5.0 includes the adoption pilot (merged in PR #27) and the `pilot-transfer-v3` proof profile, which 0.3.0 predates.
 - **`@clearproof/content` is published** for the first time, so `@clearproof/cli` installs from npm. The CLI now depends on `@clearproof/proof` and `@clearproof/content` `^0.5.0` instead of `*`; the `circuits` dependency (legacy demo artifacts) resolves to the published 0.3.0.
-- **Release workflow:** locked install, builds only the published packages, compiles the contracts, publishes content → proof → CLI → contracts with provenance, and skips versions already on npm so a partial release can be re-run. The PyPI job is disabled until a trusted publisher is configured (`PUBLISH_PYPI=true`).
+- **Release workflow:** publishes through npm trusted publishing (OIDC) instead of a stored token, following npm's deprecation of 2FA-bypass publish tokens; provenance attestations are generated automatically. It uses Node 24 with npm 11.9.0 and a locked install, builds only the published packages, compiles the contracts, publishes content → proof → CLI → contracts, and skips versions already on npm so a partial release can be re-run. The PyPI job is disabled until a PyPI trusted publisher is configured (`PUBLISH_PYPI=true`).
 
 ### Changed
 
