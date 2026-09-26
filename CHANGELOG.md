@@ -11,6 +11,16 @@ maintains its own version line in this file.
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-09-26
+
+First npm release since 0.3.0. It publishes `@clearproof/proof`, `@clearproof/content`, `@clearproof/cli` and `@clearproof/contracts` at 0.5.0; `@clearproof/circuits` stays at 0.3.0. Version 0.4.0 was tagged on GitHub in July but never published to npm. All proving keys remain development-only, and nothing in this release has been independently audited.
+
+### Release
+
+- **npm packages now match the source pilot.** 0.5.0 includes the adoption pilot (merged in PR #27) and the `pilot-transfer-v3` proof profile, which 0.3.0 predates.
+- **`@clearproof/content` is published** for the first time, so `@clearproof/cli` installs from npm. The CLI now depends on `@clearproof/proof` and `@clearproof/content` `^0.5.0` instead of `*`; the `circuits` dependency (legacy demo artifacts) resolves to the published 0.3.0.
+- **Release workflow:** locked install, builds only the published packages, compiles the contracts, publishes content → proof → CLI → contracts with provenance, and skips versions already on npm so a partial release can be re-run. The PyPI job is disabled until a trusted publisher is configured (`PUBLISH_PYPI=true`).
+
 ### Changed
 
 - **Proof profile `pilot-transfer-v3`: production tree depths** ([ADR 0011](docs/adr/0011-production-tree-depths.md)). The composed pilot circuit changes from `PilotCompliance(8, 8, 8)` to `PilotCompliance(32, 20, 20)`:
@@ -87,6 +97,7 @@ maintains its own version line in this file.
 
 - Storage tests skip cleanly when `DATABASE_URL` is unset.
 
-[Unreleased]: https://github.com/repfigit/clearproof/compare/v0.4.0...HEAD
+[Unreleased]: https://github.com/repfigit/clearproof/compare/v0.5.0...HEAD
+[0.5.0]: https://github.com/repfigit/clearproof/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/repfigit/clearproof/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/repfigit/clearproof/releases/tag/v0.3.0

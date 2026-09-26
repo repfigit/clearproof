@@ -1,6 +1,6 @@
 {
   "name": "@clearproof/cli",
-  "version": "0.4.0",
+  "version": "0.5.0",
   "description": "CLI for generating and verifying ZK compliance proofs",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -32,9 +32,9 @@
     "test:coverage": "vitest run --coverage --coverage.include=\"src/**/*.ts\" --coverage.reporter=text --coverage.reporter=json-summary --coverage.reporter=lcov --coverage.thresholds.lines=100 --coverage.thresholds.branches=100 --coverage.thresholds.functions=100 --coverage.thresholds.statements=100"
   },
   "dependencies": {
-    "@clearproof/circuits": "*",
-    "@clearproof/content": "*",
-    "@clearproof/proof": "*",
+    "@clearproof/circuits": ">=0.3.0 <0.5.0",
+    "@clearproof/content": "^0.5.0",
+    "@clearproof/proof": "^0.5.0",
     "chalk": "^5.3",
     "commander": "^12.1"
   },
