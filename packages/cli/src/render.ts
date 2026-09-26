@@ -50,15 +50,17 @@ export function renderMarkdown(md: string): string {
     // --- Inline formatting ---
     let rendered = line;
 
-    // Bold: **text** -> chalk.bold(text)
-    rendered = rendered.replace(/\*\*(.+?)\*\*/g, (_m, p1: string) =>
-      chalk.bold(p1),
-    );
-
+    // Links first, while the line is still plain text: once styling is applied,
+    // ANSI escapes (e.g. "\x1b[22m") contain '[' and would confuse the link pattern.
     // Links: [text](url) -> text (url)
     rendered = rendered.replace(
       /\[(.+?)\]\((.+?)\)/g,
       (_m, text: string, url: string) => `${text} ${chalk.dim('(' + url + ')')}`,
+    );
+
+    // Bold: **text** -> chalk.bold(text)
+    rendered = rendered.replace(/\*\*(.+?)\*\*/g, (_m, p1: string) =>
+      chalk.bold(p1),
     );
 
     // Strip HTML tags
