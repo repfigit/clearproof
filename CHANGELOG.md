@@ -11,6 +11,11 @@ maintains its own version line in this file.
 
 ## [Unreleased]
 
+### Added
+
+- **Issue reporting for people and AI agents.** `clearproof report` prints a pre-filled GitHub issue link with the CLI version, Node version and platform (`--json` for scripts and agents, `--doctor <file>` adds a whitelisted summary of a saved `clearproof doctor` result); nothing is sent. New docs page "Report an issue", a footer link, a README section, and an `AGENTS.md` section on what agents should include and never include. Issue forms gain a "Reported by" field.
+- **Private vulnerability reporting** is enabled on GitHub and is now the preferred channel in `SECURITY.md`; email remains an alternative. GitHub Discussions is enabled, so the issue chooser's discussions link works.
+
 ## [0.5.0] - 2026-09-26
 
 First npm release since 0.3.0. It publishes `@clearproof/proof`, `@clearproof/content`, `@clearproof/cli` and `@clearproof/contracts` at 0.5.0; `@clearproof/circuits` stays at 0.3.0. Version 0.4.0 was tagged on GitHub in July but never published to npm. All proving keys remain development-only, and nothing in this release has been independently audited.

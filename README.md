@@ -119,6 +119,14 @@ and counters. Live customer/provider access, broader issuer/wallet support,
 ongoing re-screening and independently reviewed production operations remain
 follow-on gates. See [SECURITY.md](SECURITY.md) for reporting.
 
+## Reporting issues
+
+- **Bugs and feature requests:** [open an issue](https://github.com/repfigit/clearproof/issues/new/choose). `clearproof report` prints a link with your CLI version, Node version and platform already filled in; `clearproof report --json` gives the same for scripts and AI agents. Nothing is sent until you submit.
+- **Security vulnerabilities:** [report privately](https://github.com/repfigit/clearproof/security/advisories/new) or email security@clearproof.dev; never in a public issue. See [SECURITY.md](SECURITY.md).
+- **Questions and design discussion:** [GitHub Discussions](https://github.com/repfigit/clearproof/discussions).
+
+AI agents are welcome to file reports; [AGENTS.md](AGENTS.md#reporting-issues-for-agents-and-people) describes what to include and what never to include.
+
 ## License
 
 [Apache-2.0](LICENSE) for clearproof code except the attributed components below, per [REUSE.toml](REUSE.toml) (SPDX metadata, verified in CI).

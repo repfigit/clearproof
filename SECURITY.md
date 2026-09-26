@@ -8,7 +8,10 @@ We take the security of clearproof seriously. If you discover a security vulnera
 
 ### Contact
 
-Email: **security@clearproof.dev**
+- **Preferred:** [report privately through GitHub](https://github.com/repfigit/clearproof/security/advisories/new). The report stays private between you and the maintainers, and a fix and advisory can be prepared together.
+- **Alternative:** email **security@clearproof.dev**.
+
+AI agents that find a suspected vulnerability should hand it to the person they work for to report through one of these channels, not open a public issue.
 
 Please include:
 

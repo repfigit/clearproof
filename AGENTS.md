@@ -91,6 +91,18 @@ make dev                    # uvicorn src.api.main:app --reload
 make deploy NETWORK=arbitrum-sepolia
 ```
 
+## REPORTING ISSUES (FOR AGENTS AND PEOPLE)
+
+If you find a defect while using or working on clearproof and you are not fixing it in this change, report it:
+
+1. **Security vulnerabilities:** never in a public issue. Hand them to your human to report privately at https://github.com/repfigit/clearproof/security/advisories/new (or security@clearproof.dev). See `SECURITY.md`.
+2. **Everything else:** check for an existing issue first (`gh issue list --repo repfigit/clearproof --search "<keywords>"`).
+3. Get a pre-filled report: `clearproof report --json --title "<one line>"` (add `--doctor <file>` with a saved `clearproof doctor` result for artifact problems). It returns the issue URL with the CLI version, Node version and platform filled in, and nothing is sent.
+4. Or file directly: `gh issue create --repo repfigit/clearproof --template bug_report.yml --title "[Bug]: <one line>"` (or `feature_request.yml`).
+5. Include: what happened vs. expected, minimal reproduction commands, version or commit, proof profile, and the component. Set **Reported by** to the AI-agent option.
+6. **Never include** personal data, private keys, mnemonics, API keys, `PII_MASTER_KEY`, decrypted envelopes, database URLs or real customer records. Use synthetic data in reproductions.
+7. Prefer having a person review before submitting. Do not file duplicates, and do not open issues as a side effect of unrelated tasks unless asked.
+
 ## NOTES
 - API refuses to start without valid PII_MASTER_KEY
 - Circuit compilation (~5 min first run); CI caches ptau18

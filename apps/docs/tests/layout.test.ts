@@ -42,7 +42,9 @@ it('composes the docs shell around page content and the loaded page map', async 
   expect(layout.props.navbar.props.logo.props.children[0].props).toMatchObject({
     src: '/logo.png', alt: '', width: 28, height: 28,
   });
-  expect(layout.props.footer.props.children.join('')).toBe(`Apache-2.0 ${new Date().getFullYear()} © clearproof contributors`);
+  const footerChildren = layout.props.footer.props.children;
+  expect(footerChildren.filter((child: unknown) => typeof child !== 'object').join('')).toBe(`Apache-2.0 ${new Date().getFullYear()} © clearproof contributors · `);
+  expect(footerChildren.at(-1).props).toMatchObject({ href: '/docs/report-issues', children: 'Report an issue' });
   expect(metadata.title).toEqual({ template: '%s | clearproof docs', default: 'clearproof docs' });
   expect(metadata.description).toContain('pilot-stage');
   expect(dependencies.pageMap).toHaveBeenCalledExactlyOnceWith();

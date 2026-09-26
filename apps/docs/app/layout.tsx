@@ -36,7 +36,8 @@ const navbar = (
 
 const footer = (
   <Footer>
-    Apache-2.0 {new Date().getFullYear()} © clearproof contributors
+    Apache-2.0 {new Date().getFullYear()} © clearproof contributors ·{' '}
+    <a href="/docs/report-issues">Report an issue</a>
   </Footer>
 );
 

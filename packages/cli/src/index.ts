@@ -14,6 +14,7 @@ import { verifyCommand } from './commands/verify.js';
 import { helpCommand } from './commands/help.js';
 import { recipesCommand } from './commands/recipes.js';
 import { explainCommand } from './commands/explain.js';
+import { reportCommand } from './commands/report.js';
 
 const pkg = require('../package.json');
 
@@ -38,5 +39,6 @@ program.addCommand(verifyHistoryCommand);
 program.addCommand(helpCommand);
 program.addCommand(recipesCommand);
 program.addCommand(explainCommand);
+program.addCommand(reportCommand);
 
 void program.parseAsync();

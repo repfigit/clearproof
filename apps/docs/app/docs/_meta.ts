@@ -34,4 +34,5 @@ export default {
   },
   security: 'Security',
   contributing: 'Contributing',
+  'report-issues': 'Report an Issue',
 };
