@@ -28,7 +28,7 @@ same transfer.
 
 ## What the source checkout implements today
 
-The unreleased 0.4.0 development checkout implements a local adoption pilot:
+The public source on `main` implements a local adoption pilot:
 
 - Authenticated credential enrollment with holder-bound issuance membership and
   a canonical transfer/context projection using exact asset and valuation
@@ -42,6 +42,10 @@ The unreleased 0.4.0 development checkout implements a local adoption pilot:
   timing.
 - Recipient-encrypted historical exports and offline review under independently
   configured proof, policy, source, decision, status and timing authorities.
+
+The npm packages at 0.6.0 include the TypeScript SDK, CLI, content, contract
+sources and circuit sources. The Python API and acceptance tooling are in the
+same checkout and are not published to PyPI.
 
 The current pilot proof profile, `pilot-transfer-v3`, has eight public signals
 with no public amount tier or SAR advisory flag. The older 16-signal
@@ -64,11 +68,10 @@ documentation:
 
 ## What is available to install
 
-Public npm packages are at **0.3.0** while the development checkout is **0.4.0**;
-they are not the same. `@clearproof/proof` 0.3.0 installs as an SDK, but proof
-generation requires compatible circuit WASM and proving-key files supplied by
-the caller. The public CLI install is currently blocked by an unavailable
-registry dependency. The practical evaluation path is a
+Public npm packages are at **0.6.0** and include the local pilot and
+`pilot-transfer-v3`. `@clearproof/circuits` publishes circuit sources only, so
+proof generation still requires compatible WASM and proving-key files compiled
+locally. Those development keys are unapproved. The full evaluation path is a
 [source checkout](https://github.com/repfigit/clearproof/blob/main/packages/content/content/topics/quickstart.md):
 clone, build from the committed lockfiles, and run the documented local pilot,
 which owns a disposable PostgreSQL cluster and loopback EVM and exercises real

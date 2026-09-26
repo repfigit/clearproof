@@ -81,7 +81,7 @@ A comparison neither activates a policy nor consumes transfer authorization.
 
 Apache-2.0
 
-## Investigation reports (unreleased)
+## Investigation reports
 
 The `investigation timeline` and `investigation queue` commands read JSON from
 stdin and use the same explicit API origin and environment token as policy

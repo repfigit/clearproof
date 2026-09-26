@@ -1,6 +1,6 @@
 # Offline `verify-history` command
 
-The unreleased source CLI reviews an encrypted history export without database,
+The CLI reviews an encrypted history export without database,
 API, TSA or chain access. Install the Python environment with `uv sync --extra dev`
 and build the Node CLI with `npm run build --workspace=@clearproof/cli` after its
 workspace dependencies. Use the independently inspected development artifact

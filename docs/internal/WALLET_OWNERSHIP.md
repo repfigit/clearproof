@@ -32,7 +32,7 @@ administrator override. PostgreSQL, encryption keys, `PILOT_CHAIN_ID` and
 
 ## Signing helper
 
-The unreleased source SDK exports `walletOwnershipSigningMessage`:
+`@clearproof/proof` exports `walletOwnershipSigningMessage`:
 
 ```typescript
 import { walletOwnershipSigningMessage } from '@clearproof/proof';

@@ -84,7 +84,7 @@ snapshot authenticity, activate policies, consume transfer authorization or
 alter original evidence. The service below retains reviewed expected outcomes
 and approvals. [Policy activation](PILOT_POLICY_ACTIVATION.md) retains a separate
 current-selection history. Source references alone do not retain underlying
-documents. The unreleased TypeScript CLI calls these comparison API endpoints.
+documents. The TypeScript CLI calls these comparison API endpoints.
 Tests exercise real stdin subprocesses and signed JWT requests, tenant and role
 rejection, bounded/malformed input, deterministic ordering, business-identity
 deduplication, reverse review counts and same-ID rule edits.
@@ -151,15 +151,15 @@ export and inspection workflow, not a policy-diff result.
 
 ## Packaged CLI source command
 
-The unreleased 0.4.0 CLI implements `clearproof policy diff --api-url ORIGIN`
+The CLI implements `clearproof policy diff --api-url ORIGIN`
 with an optional `--stored` flag. It reads the corresponding JSON request from
 stdin and uses `CLEARPROOF_API_TOKEN` from the environment. It delegates to the
 Python API, preserving one evaluator for supplied and stored comparisons.
 HTTPS is required except loopback HTTP for local evaluation; origin credentials,
 paths, queries/fragments and redirects are rejected. Stdin and network reads
 are bounded, and failures omit input values, tokens and server response bodies.
-See `packages/cli/README.md` for exact usage. The command is implemented in source;
-it has not been published as a working public npm release. Built-command unit tests
+See `packages/cli/README.md` for exact usage. The command ships in
+`@clearproof/cli` from 0.5.0. Built-command unit tests
 use a local HTTP simulator. The PostgreSQL integration test also runs the built
 Node CLI against a real loopback Uvicorn listener with signed JWTs, comparing
 supplied and retained cases after reconnect and rejecting a foreign tenant.

@@ -13,7 +13,7 @@ explicitly unapproved development artifacts.
 
 ## Local adoption pilot
 
-The unreleased source checkout implements:
+The public source on `main` implements:
 
 - Authenticated credential enrollment, holder-bound issuance membership and a
   canonical transfer/context projection with exact asset and valuation arithmetic.

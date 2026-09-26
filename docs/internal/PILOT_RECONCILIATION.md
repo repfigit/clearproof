@@ -162,7 +162,7 @@ reports. Additional queue decision rules are separate operational policy choices
 
 ## CLI reports
 
-The unreleased CLI now provides `investigation timeline` and `investigation
+The CLI provides `investigation timeline` and `investigation
 queue`, taking the corresponding API request JSON from stdin. Both use the
 shared bounded authenticated HTTP client and default to readable output;
 `--json` preserves machine-readable results. Queue collection follows up to
