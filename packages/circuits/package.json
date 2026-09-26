@@ -1,16 +1,13 @@
 {
   "name": "@clearproof/circuits",
-  "version": "0.4.0",
-  "description": "Circom circuits for ZK compliance proofs — sanctions non-membership, credential validity, amount tier encoding",
+  "version": "0.6.0",
+  "description": "Circom source for the clearproof proof profiles (pilot-transfer-v3 and the legacy demo circuit). Source only: no compiled artifacts or proving keys.",
   "license": "Apache-2.0",
   "main": "index.js",
   "files": [
-    "src/",
-    "artifacts/compliance.wasm",
-    "artifacts/compliance_final.zkey",
-    "artifacts/verification_key.json",
-    "test-vectors/",
+    "circuits/",
     "index.js",
+    "index.d.ts",
     "README.md"
   ],
   "repository": {
@@ -34,9 +31,15 @@
     "node": ">=18"
   },
   "scripts": {
-    "test": "vitest run"
+    "build": "node scripts/sync.mjs",
+    "prepack": "node scripts/sync.mjs",
+    "test": "node scripts/sync.mjs && vitest run"
   },
   "devDependencies": {
     "vitest": "^4.1.5"
+  },
+  "types": "index.d.ts",
+  "peerDependencies": {
+    "circomlib": "^2.0.5"
   }
 }

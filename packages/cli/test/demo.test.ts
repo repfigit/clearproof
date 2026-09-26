@@ -19,13 +19,12 @@ function directory(complete = false, compiled = false) {
 afterEach(() => { for (const dir of temporary.splice(0)) fs.rmSync(dir, { recursive: true, force: true }); });
 
 describe('legacy artifact selection', () => {
-  it('prefers a complete packaged set and falls back when package contents are absent', () => {
-    const packaged = directory(true), local = directory(true, true);
-    expect(defaultArtifactsDir(packaged, local)).toBe(packaged);
-    fs.unlinkSync(path.join(packaged, 'compliance_final.zkey'));
-    expect(defaultArtifactsDir(packaged, local)).toBe(local);
-    expect(requireArtifactPaths(local).wasmPath).toBe(path.join(local, 'compliance_js', 'compliance.wasm'));
+  it('defaults to the repository artifacts directory; no package supplies artifacts', () => {
+    const local = directory(true, true);
+    expect(defaultArtifactsDir(local)).toBe(local);
+    expect(defaultArtifactsDir()).toBe(path.resolve(__dirname, '../../../artifacts'));
   });
+
   it('resolves packaged wasm and rejects incomplete, empty or symlinked artifacts before proving', () => {
     const dir = directory(true);
     expect(resolveArtifactPaths(dir).wasmPath).toBe(path.join(dir, 'compliance.wasm'));

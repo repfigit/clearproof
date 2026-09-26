@@ -32,7 +32,8 @@ jobs:
       - name: Publish to npm
         run: |
           set -euo pipefail
-          for dir in content proof cli contracts; do
+          # circuits' prepack copies the canonical circuits/ sources into the package (source only).
+          for dir in circuits content proof cli contracts; do
             name=$(node -p "require('./packages/$dir/package.json').name")
             version=$(node -p "require('./packages/$dir/package.json').version")
             if [ "$(npm view "$name@$version" version 2>/dev/null || true)" = "$version" ]; then

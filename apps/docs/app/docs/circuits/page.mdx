@@ -49,6 +49,17 @@ Some acceptance properties live outside the circuit. The authorization service c
 
 `ComplianceProof(20, 10)` in `compliance.circom` publishes 16 values, including `is_compliant`, a tier-derived `sar_review_flag`, the amount tier, the jurisdiction and the tier thresholds. It remains a demo and parity path with its own verifier, SDK function and tests. Legacy proofs are never current pilot authorization.
 
+## Source package
+
+`@clearproof/circuits` publishes these sources for inspection and compilation, with no compiled artifacts or keys (from 0.6.0, the next release; 0.3.0 on npm is an outdated legacy-only package). Install it with `circomlib` and compile with `-l node_modules`:
+
+```bash
+npm install @clearproof/circuits circomlib
+circom node_modules/@clearproof/circuits/circuits/pilot_compliance.circom -l node_modules --r1cs --wasm
+```
+
+`circuits/MANIFEST.json` in the package lists the SHA-256 of each repository file and each packaged file; the only change is that `circomlib` includes are rewritten to `circomlib/...`. `circomlib` is licensed GPL-3.0 and is a peer dependency, not bundled.
+
 ## Building development artifacts
 
 ```bash

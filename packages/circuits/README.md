@@ -1,88 +1,31 @@
 # @clearproof/circuits
 
-Legacy Circom circuit sources and artifact paths for controlled evaluation. This package exposes the 16-signal legacy profile, not the separate eight-signal pilot-transfer-v3 authorization workflow.
+Circom source for the clearproof proof profiles, published so anyone can inspect and compile the exact circuits:
 
-## Install
+- **`pilot-transfer-v3`** (current): `pilot_compliance.circom`, `PilotCompliance(32, 20, 20)`, with 8 public signals. See [`specs/pilot-transfer-v3.md`](https://github.com/repfigit/clearproof/blob/main/specs/pilot-transfer-v3.md).
+- **Legacy demo** (`compliance.circom`, 16 public signals). It is never valid as current pilot authorization.
 
-```bash
-npm install @clearproof/circuits
-```
+**Source only.** There is no compiled WASM, proving key or verification key. All current keys are development-only, and the production setup path is an open decision. Versions up to 0.3.0 shipped legacy development artifacts; this package no longer does.
 
-## Artifact availability in the 0.4.0 source package
-
-The source checkout does not include compiled WASM or proving keys. Exported paths
-are locations, not a guarantee that files are installed. Check availability first:
-
-```javascript
-const { artifactStatus } = require("@clearproof/circuits");
-console.log(artifactStatus()); // available, missing filenames, legacy profile
-```
-
-Availability checks regular, nonempty files only. It does not validate provenance,
-key/circuit compatibility, an audit or a production trusted setup. Published older
-versions may have different contents; inspect the exact package being used.
-
-For a local source demo, generate isolated development artifacts using
-`scripts/test_development_circuits.py <new-output-directory>` from the monorepo,
-then run `clearproof demo --artifacts <new-output-directory>/legacy`. The builder
-requires Node, Circom and the installed Python/workspace dependencies. Its keys
-are unapproved and must remain separate from production artifacts. See
-`docs/internal/PILOT_DEVELOPMENT_ARTIFACTS.md` in the repository for exact commands.
-
-## Use separately prepared artifacts
-
-```javascript
-const snarkjs = require("snarkjs");
-
-const { proof, publicSignals } = await snarkjs.groth16.fullProve(
-  input,
-  "/approved/legacy/compliance_js/compliance.wasm",
-  "/approved/legacy/compliance_final.zkey"
-);
-```
-
-## Use circuits in your own Circom project
-
-```circom
-include "@clearproof/circuits/src/sanctions_nonmembership.circom";
-include "@clearproof/circuits/src/credential_validity.circom";
-```
+## Install and compile
 
 ```bash
-circom my-circuit.circom \
-  -l node_modules/@clearproof/circuits/src \
-  -l node_modules/circomlib/circuits \
-  --r1cs --wasm
+npm install @clearproof/circuits circomlib
+circom node_modules/@clearproof/circuits/circuits/pilot_compliance.circom -l node_modules --r1cs --wasm
 ```
 
-## Circuits
+Includes of `circomlib` use `circomlib/...` paths, so pass `-l node_modules`. `circomlib` is a peer dependency licensed **GPL-3.0**; this package is Apache-2.0 and does not bundle it. The pilot circuit has 95,408 constraints and needs `2^17` powers-of-tau parameters for a Groth16 setup.
 
-| Circuit | Constraints | Purpose |
-|---------|------------|---------|
-| `compliance.circom` | Build-dependent | Legacy composed circuit |
-| `sanctions_nonmembership.circom` | — | Sorted Merkle gap proof |
-| `credential_validity.circom` | — | Poseidon commitment + expiry + issuer |
-| `amount_tier.circom` | — | Jurisdiction threshold encoding |
+## What's inside
 
-## Public Signals (16)
+The sources are copied from the repository's [`circuits/`](https://github.com/repfigit/clearproof/tree/main/circuits) directory at publish time. The only change is that includes of the repo-root `../node_modules/circomlib/...` are rewritten to `circomlib/...`. `circuits/MANIFEST.json` lists the SHA-256 of each original repository file and each packaged file, so you can check the package against a tagged commit. Releases are published from GitHub Actions with signed npm provenance.
 
-| Index | Signal | Description |
-|-------|--------|-------------|
-| 0 | `is_compliant` | 1 if all checks pass |
-| 1 | `sar_review_flag` | 1 if tier >= 3 |
-| 2 | `sanctions_tree_root` | Current sanctions Merkle root |
-| 3 | `issuer_tree_root` | Trusted issuer Merkle root |
-| 4 | `amount_tier` | 1-4 |
-| 5 | `transfer_timestamp` | Unix epoch |
-| 6 | `jurisdiction_code` | ISO 3166 as uint |
-| 7 | `credential_commitment` | Poseidon hash |
-| 8-10 | `tier2/3/4_threshold` | Jurisdiction boundaries |
-| 11 | `domain_chain_id` | Blockchain chain ID |
-| 12 | `domain_contract_hash` | Verifier contract hash |
-| 13 | `transfer_id_hash` | Transfer binding |
-| 14 | `credential_nullifier` | One-time use |
-| 15 | `proof_expires_at` | Proof TTL enforced on-chain |
+```javascript
+const circuits = require("@clearproof/circuits");
+circuits.pilot.main;          // path to pilot_compliance.circom
+circuits.pilot.publicSignals; // the 8 public signals, in order
+circuits.pilot.treeDepths;    // { issuance: 32, authorizedIssuers: 20, sanctions: 20 }
+circuits.legacy.main;         // path to compliance.circom
+```
 
-## License
-
-Apache-2.0
+These are unaudited development components. See the [security page](https://docs.clearproof.world/docs/security).

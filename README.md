@@ -91,7 +91,7 @@ production configuration rejects unapproved keys.
 | [@clearproof/cli](https://www.npmjs.com/package/@clearproof/cli) | 0.5.0 | `npm install @clearproof/cli` verified; signed provenance. `clearproof report` arrives in the next release |
 | [@clearproof/content](https://www.npmjs.com/package/@clearproof/content) | 0.5.0 | Documentation used by the CLI (first published in 0.5.0) |
 | [@clearproof/contracts](https://www.npmjs.com/package/@clearproof/contracts) | 0.5.0 | Solidity sources and ABIs, including the pilot contracts; signed provenance. Not a deployment |
-| [@clearproof/circuits](https://www.npmjs.com/package/@clearproof/circuits) | 0.3.0 | Legacy circuit package used by the CLI demo; not updated for the pilot |
+| [@clearproof/circuits](https://www.npmjs.com/package/@clearproof/circuits) | 0.3.0 | Outdated: legacy-only sources and development artifacts that no longer match the CLI demo. The next release (0.6.0) publishes the current circuit sources, source only |
 
 Recorded Sepolia addresses are in the [deployment manifest](packages/contracts/deployments/sepolia.json)
 and [public contract documentation](apps/docs/app/docs/contracts/page.mdx).
