@@ -13,8 +13,9 @@ Wire format (SecureEnvelope dict):
         - ``zk_compliance_proof``: full ComplianceProof model dump
         - ``encrypted_pii``:       base64 ciphertext of IVMS101 PII
         - ``encryption_algorithm``: algorithm used for PII encryption
-        - ``pii_nonce``:           base64 nonce for PII decryption
+        - ``pii_nonce``:           base64 nonce for PII decryption (empty for HPKE v2)
         - ``pii_associated_data``: AAD binding the PII to this envelope
+        - ``pii_envelope``:        HPKE v2 envelope (``enc``/``kid``/...), or null for v1
         - ``ivms101_version``:     IVMS101 schema version
         - ``payload_version``:     hybrid payload schema version
   ``encryption_algorithm``
@@ -26,17 +27,21 @@ Wire format (SecureEnvelope dict):
   ``override_header.envelope_type``
       ``"ZK_TRAVEL_RULE_V1"`` so the beneficiary knows to expect a ZK proof
       inside the decrypted payload.
+
+The PII fields come from :meth:`HybridPayload.pii_wire_fields`. ``pii_envelope``
+is an additive key inside the encrypted JSON (``payload_version`` stays
+``"1.0"``); receivers that predate it ignore it, and
+:meth:`TRISABridge.open_secure_envelope` treats its absence as legacy v1.
 """
 
 from __future__ import annotations
 
-import base64
 import json
 import os
 from typing import Any
 
 from cryptography.hazmat.primitives import hashes, serialization
-from cryptography.hazmat.primitives.asymmetric import padding
+from cryptography.hazmat.primitives.asymmetric import padding, rsa
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 
 from src.protocol.compliance_proof import ComplianceProof
@@ -82,10 +87,7 @@ class TRISABridge:
         payload_json: bytes = json.dumps(
             {
                 "zk_compliance_proof": compliance_proof.model_dump(),
-                "encrypted_pii": base64.b64encode(hybrid_payload.encrypted_pii).decode("ascii"),
-                "encryption_algorithm": hybrid_payload.encryption_algorithm,
-                "pii_nonce": base64.b64encode(hybrid_payload.pii_nonce).decode("ascii"),
-                "pii_associated_data": hybrid_payload.pii_associated_data,
+                **hybrid_payload.pii_wire_fields(),
                 "ivms101_version": "101.2023",
                 "payload_version": "1.0",
             },
@@ -119,3 +121,28 @@ class TRISABridge:
                 "envelope_type": "ZK_TRAVEL_RULE_V1",
             },
         }
+
+    @staticmethod
+    def open_secure_envelope(
+        envelope: dict[str, Any],
+        beneficiary_private_key: rsa.RSAPrivateKey,
+    ) -> HybridPayload:
+        """
+        Beneficiary side of :meth:`build_secure_envelope`.
+
+        Unwraps the AES key, decrypts the bundle and rebuilds the
+        :class:`HybridPayload` (including any HPKE v2 envelope) so the
+        beneficiary can decrypt the PII with its own key. PII stays encrypted.
+        """
+        aes_key = beneficiary_private_key.decrypt(
+            bytes.fromhex(envelope["wrapped_key"]),
+            padding.OAEP(
+                mgf=padding.MGF1(algorithm=hashes.SHA256()),
+                algorithm=hashes.SHA256(),
+                label=None,
+            ),
+        )
+        blob = bytes.fromhex(envelope["encrypted_payload"])
+        inner = json.loads(AESGCM(aes_key).decrypt(blob[:12], blob[12:], None))
+        proof = ComplianceProof.model_validate(inner["zk_compliance_proof"])
+        return HybridPayload.from_pii_wire_fields(proof, inner)

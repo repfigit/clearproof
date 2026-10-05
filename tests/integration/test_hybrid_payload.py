@@ -106,3 +106,48 @@ def test_hpke_version_indicator_reads_envelope_version(sample_hybrid_payload, en
     # This property identifies an envelope version; it does not validate HPKE.
     payload = sample_hybrid_payload.model_copy(update={"pii_envelope": envelope})
     assert payload.is_hpke_v2 is expected
+
+
+class TestPIIWireFields:
+    """The single wire serialization shared by every legacy bridge."""
+
+    @pytest.mark.parametrize("fixture", ["sample_hybrid_payload", "sample_hpke_hybrid_payload"])
+    def test_wire_fields_round_trip_and_decrypt(self, request, fixture, open_hybrid_pii):
+        from src.protocol.hybrid_payload import HybridPayload
+
+        payload = request.getfixturevalue(fixture)
+        fields = json.loads(json.dumps(payload.pii_wire_fields()))
+        restored = HybridPayload.from_pii_wire_fields(payload.compliance_proof, fields)
+        assert restored == payload
+        assert open_hybrid_pii(restored)["originator_name"] == "Test User"
+
+    def test_v2_wire_fields_carry_the_hpke_envelope(self, sample_hpke_hybrid_payload):
+        fields = sample_hpke_hybrid_payload.pii_wire_fields()
+        assert fields["pii_nonce"] == ""
+        assert fields["pii_envelope"]["v"] == 2
+        assert {"enc", "kid", "ct", "aad"} <= set(fields["pii_envelope"])
+
+    def test_v1_wire_fields_tolerate_absent_optional_keys(self, sample_hybrid_payload):
+        from src.protocol.hybrid_payload import HybridPayload
+
+        fields = sample_hybrid_payload.pii_wire_fields()
+        del fields["pii_envelope"]
+        del fields["encryption_algorithm"]
+        restored = HybridPayload.from_pii_wire_fields(sample_hybrid_payload.compliance_proof, fields)
+        assert restored == sample_hybrid_payload
+
+    def test_trp_extension_uses_wire_fields(self, sample_hpke_hybrid_payload):
+        extension = sample_hpke_hybrid_payload.to_trp_extension()["zk_travel_rule"]
+        for key, value in sample_hpke_hybrid_payload.pii_wire_fields().items():
+            assert extension[key] == value
+
+    @pytest.mark.parametrize(
+        "change",
+        [{"encrypted_pii": "not base64!"}, {"pii_nonce": "***"}, {"pii_envelope": "not-an-object"}],
+    )
+    def test_malformed_wire_fields_are_rejected(self, sample_hybrid_payload, change):
+        from src.protocol.hybrid_payload import HybridPayload
+
+        fields = {**sample_hybrid_payload.pii_wire_fields(), **change}
+        with pytest.raises(ValueError):
+            HybridPayload.from_pii_wire_fields(sample_hybrid_payload.compliance_proof, fields)

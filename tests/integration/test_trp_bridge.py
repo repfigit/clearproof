@@ -8,6 +8,9 @@ JSON with the zk_travel_rule extension field.
 from __future__ import annotations
 
 import base64
+import json
+
+import pytest
 
 from src.protocol.bridges.trp_bridge import TRPBridge
 from src.protocol.compliance_proof import ComplianceProof
@@ -116,3 +119,40 @@ class TestTRPBridge:
         """Unknown assets default to SLIP-44 60 (Ethereum)."""
         bridge = TRPBridge()
         assert bridge._asset_to_slip44("UNKNOWN_TOKEN") == 60
+
+
+def _trp_request(payload: HybridPayload) -> dict:
+    return TRPBridge().build_trp_request(
+        compliance_proof=payload.compliance_proof,
+        hybrid_payload=payload,
+        beneficiary_travel_address="https://beneficiary.example.com/trp",
+        amount="1500.00",
+        asset="USDC",
+    )
+
+
+@pytest.mark.parametrize("fixture", ["sample_hybrid_payload", "sample_hpke_hybrid_payload"])
+def test_beneficiary_decrypts_after_trp_round_trip(request, fixture, open_hybrid_pii):
+    """Originator payload -> TRP body (JSON) -> beneficiary parse -> PII decrypts (v1 and HPKE v2)."""
+    payload: HybridPayload = request.getfixturevalue(fixture)
+    body = json.loads(json.dumps(_trp_request(payload)))
+
+    restored = TRPBridge.parse_trp_request(body)
+
+    assert restored.model_dump(exclude={"compliance_proof"}) == payload.model_dump(exclude={"compliance_proof"})
+    assert restored.compliance_proof.proof_id == payload.compliance_proof.proof_id
+    assert restored.compliance_proof.transfer_id == payload.compliance_proof.transfer_id
+    assert restored.is_hpke_v2 is payload.is_hpke_v2
+    assert open_hybrid_pii(restored)["originator_name"] == "Test User"
+
+
+def test_trp_v2_body_carries_hpke_envelope(sample_hpke_hybrid_payload):
+    extension = _trp_request(sample_hpke_hybrid_payload)["extensions"]["zk_travel_rule"]
+    assert extension["pii_envelope"] == sample_hpke_hybrid_payload.pii_envelope
+
+
+def test_trp_parse_falls_back_to_account_number_for_older_bodies(sample_hybrid_payload):
+    body = _trp_request(sample_hybrid_payload)
+    del body["extensions"]["zk_travel_rule"]["transfer_id"]
+    restored = TRPBridge.parse_trp_request(body)
+    assert restored.compliance_proof.transfer_id == sample_hybrid_payload.compliance_proof.transfer_id

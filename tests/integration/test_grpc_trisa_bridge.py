@@ -388,17 +388,9 @@ class TestEnvelopeBuilderDirectUsage:
 class TestUnsealedEnvelope:
     """Tests for parse_envelope with sealed=False path (M6)."""
 
-    def test_parse_unsealed_envelope(self, rsa_keypair):
-        """Unsealed envelope payload is parsed as raw JSON without decryption."""
-        private_key, public_key_der = rsa_keypair
-
-        builder = SecureEnvelopeBuilder(
-            beneficiary_public_key=public_key_der,
-            originator_signing_key=b"test-signing-key",
-        )
-
-        raw_payload = {"test_key": "test_value", "number": 42}
-        envelope = pb2.SecureEnvelope(
+    @staticmethod
+    def _unsealed(raw_payload):
+        return pb2.SecureEnvelope(
             id="test-unsealed",
             payload=json.dumps(raw_payload).encode("utf-8"),
             sealed=False,
@@ -406,15 +398,79 @@ class TestUnsealedEnvelope:
             transfer_state=pb2.STARTED,
         )
 
-        parsed = builder.parse_envelope(envelope, private_key)
+    def test_unsealed_envelope_rejected_by_default(self, rsa_keypair):
+        """An unsealed envelope has no confidentiality or HMAC integrity and is refused."""
+        private_key, public_key_der = rsa_keypair
+        builder = SecureEnvelopeBuilder(public_key_der, b"test-signing-key")
+
+        with pytest.raises(TRISAError) as error:
+            builder.parse_envelope(self._unsealed({"test_key": "test_value"}), private_key)
+        assert error.value.code == errors_pb2.Error.UNTRUSTED
+        assert error.value.retry is False
+
+    def test_parse_unsealed_envelope_with_explicit_opt_in(self, rsa_keypair):
+        """With allow_unsealed=True the payload is parsed as raw JSON without decryption."""
+        private_key, public_key_der = rsa_keypair
+        builder = SecureEnvelopeBuilder(public_key_der, b"test-signing-key")
+
+        raw_payload = {"test_key": "test_value", "number": 42}
+        parsed = builder.parse_envelope(self._unsealed(raw_payload), private_key, allow_unsealed=True)
         assert parsed == raw_payload
+
+
+@pytest.mark.parametrize("fixture", ["sample_hybrid_payload", "sample_hpke_hybrid_payload"])
+def test_beneficiary_decrypts_after_grpc_round_trip(request, fixture, rsa_keypair, open_hybrid_pii):
+    """Originator payload -> sealed SecureEnvelope -> beneficiary parse -> PII decrypts (v1 and HPKE v2)."""
+    private_key, public_key_der = rsa_keypair
+    payload: HybridPayload = request.getfixturevalue(fixture)
+    builder = SecureEnvelopeBuilder(public_key_der, b"test-signing-key")
+    envelope = builder.build_envelope(payload.compliance_proof.transfer_id, payload.compliance_proof, payload)
+
+    restored = builder.parse_hybrid_payload(envelope, private_key)
+
+    assert restored == payload
+    assert restored.is_hpke_v2 is payload.is_hpke_v2
+    assert open_hybrid_pii(restored)["originator_name"] == "Test User"
+
+
+async def test_server_rejects_unsealed_envelopes_by_default(rsa_keypair):
+    from src.protocol.bridges.grpc_trisa_bridge import TRISAServer
+
+    private, public = rsa_keypair
+    seen = []
+
+    async def handler(payload, request):  # pragma: no cover - must never be reached
+        seen.append(payload)
+        return pb2.SecureEnvelope(id=request.id, transfer_state=pb2.ACCEPTED)
+
+    server = TRISAServer(private, public, b"synthetic", transfer_handler=handler)
+    response = await server.Transfer(pb2.SecureEnvelope(id="plain", payload=b"{}", sealed=False), None)
+    assert response.id == "plain"
+    assert response.error.code == errors_pb2.Error.UNTRUSTED
+    assert response.transfer_state != pb2.ACCEPTED
+    assert seen == []
+
+
+async def test_server_without_handler_does_not_accept(rsa_keypair, sample_compliance_proof, sample_hybrid_payload):
+    from src.protocol.bridges.grpc_trisa_bridge import TRISAServer
+
+    private, public = rsa_keypair
+    server = TRISAServer(private, public, b"synthetic")
+    request = SecureEnvelopeBuilder(public, b"synthetic").build_envelope(
+        "sealed", sample_compliance_proof, sample_hybrid_payload
+    )
+    response = await server.Transfer(request, None)
+    assert response.id == "sealed"
+    assert response.error.code == errors_pb2.Error.UNIMPLEMENTED
+    assert response.error.retry is False
+    assert response.transfer_state != pb2.ACCEPTED
 
 
 async def test_server_errors_do_not_log_decrypted_data(rsa_keypair, monkeypatch, caplog):
     from src.protocol.bridges.grpc_trisa_bridge import TRISAServer
 
     private, public = rsa_keypair
-    server = TRISAServer(private, public, b"synthetic")
+    server = TRISAServer(private, public, b"synthetic", allow_unsealed=True)
 
     async def handler(payload, request):
         raise ValueError("synthetic-private-marker")
@@ -431,7 +487,11 @@ async def test_server_protocol_errors_and_stream_preserve_request_binding(rsa_ke
     from src.protocol.bridges.grpc_trisa_bridge import TRISAServer
 
     private, public = rsa_keypair
-    server = TRISAServer(private, public, b"synthetic")
+
+    async def accept(payload, request):
+        return pb2.SecureEnvelope(id=request.id, transfer_state=pb2.ACCEPTED, timestamp="2025-01-01T00:00:00Z")
+
+    server = TRISAServer(private, public, b"synthetic", transfer_handler=accept, allow_unsealed=True)
     request = pb2.SecureEnvelope(id="first", payload=b"{}")
     accepted = await server.Transfer(request, None)
     assert accepted.id == request.id
@@ -576,8 +636,18 @@ async def test_factory_serves_real_tls_rpcs(
         return server
 
     monkeypatch.setattr(grpc.aio, "server", factory)
+
+    async def accept(payload, request):
+        assert payload["zk_compliance_proof"]["proof_id"] == sample_compliance_proof.proof_id
+        return pb2.SecureEnvelope(id=request.id, transfer_state=pb2.ACCEPTED)
+
     server = await module.create_trisa_server(
-        str(key_path), str(cert_path), port=0, require_mtls=mtls, trusted_ca_path=str(cert_path) if mtls else None
+        str(key_path),
+        str(cert_path),
+        port=0,
+        require_mtls=mtls,
+        trusted_ca_path=str(cert_path) if mtls else None,
+        transfer_handler=accept,
     )
     await server.start()
     credentials = grpc.ssl_channel_credentials(

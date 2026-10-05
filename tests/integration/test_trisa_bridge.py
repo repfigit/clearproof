@@ -128,3 +128,18 @@ class TestTRISABridge:
         )
 
         assert envelope["override_header"]["not_after"] == sample_compliance_proof.proof_expires_at
+
+
+@pytest.mark.parametrize("fixture", ["sample_hybrid_payload", "sample_hpke_hybrid_payload"])
+def test_beneficiary_decrypts_after_trisa_round_trip(request, fixture, rsa_keypair, open_hybrid_pii):
+    """Originator payload -> SecureEnvelope -> beneficiary open -> PII decrypts (v1 and HPKE v2)."""
+    private_key, public_key_der = rsa_keypair
+    payload: HybridPayload = request.getfixturevalue(fixture)
+    bridge = TRISABridge()
+    envelope = bridge.build_secure_envelope(payload.compliance_proof, payload, public_key_der)
+
+    restored = bridge.open_secure_envelope(envelope, private_key)
+
+    assert restored == payload
+    assert restored.is_hpke_v2 is payload.is_hpke_v2
+    assert open_hybrid_pii(restored)["originator_name"] == "Test User"

@@ -175,6 +175,54 @@ def sample_hybrid_payload(
     )
 
 
+@pytest.fixture
+def hpke_recipient_keypair() -> tuple[bytes, bytes]:
+    """Synthetic X25519 (private, public) keypair for the beneficiary VASP."""
+    from src.sar.hpke_envelope import generate_keypair
+
+    return generate_keypair()
+
+
+@pytest.fixture
+def sample_hpke_hybrid_payload(
+    sample_compliance_proof: ComplianceProof,
+    hpke_recipient_keypair: tuple[bytes, bytes],
+) -> HybridPayload:
+    """A default-mode HPKE v2 HybridPayload, built the way the proof route builds it."""
+    from src.sar.hpke_envelope import seal_envelope
+
+    _, public_key = hpke_recipient_keypair
+    pii_data = json.dumps({"originator_name": "Test User", "originator_address": "123 Main St"}).encode()
+    aad = sample_compliance_proof.proof_id
+    envelope = seal_envelope(pii_data, public_key, aad)
+    return HybridPayload(
+        compliance_proof=sample_compliance_proof,
+        encrypted_pii=base64.urlsafe_b64decode(envelope["ct"]),
+        encryption_algorithm="HPKE-X25519-HKDF-SHA256-AES-256-GCM",
+        pii_nonce=b"",
+        pii_associated_data=aad,
+        pii_envelope=envelope,
+    )
+
+
+@pytest.fixture
+def open_hybrid_pii(sample_derived_key: bytes, hpke_recipient_keypair: tuple[bytes, bytes]):
+    """Beneficiary-side decryption of a received HybridPayload (v2 HPKE or legacy v1 AES-GCM)."""
+    from src.sar.encryption import decrypt_pii
+    from src.sar.hpke_envelope import open_envelope
+
+    def _open(payload: HybridPayload) -> dict:
+        if payload.is_hpke_v2:
+            plaintext = open_envelope(payload.pii_envelope, hpke_recipient_keypair[0])
+        else:
+            plaintext = decrypt_pii(
+                payload.pii_nonce, payload.encrypted_pii, sample_derived_key, payload.pii_associated_data
+            )
+        return json.loads(plaintext)
+
+    return _open
+
+
 # ---------------------------------------------------------------------------
 # Mock prover fixture
 # ---------------------------------------------------------------------------
