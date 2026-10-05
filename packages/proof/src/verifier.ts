@@ -1,7 +1,11 @@
 import * as snarkjs from 'snarkjs';
 import { promises as fs } from 'fs';
 import type { VerifyResult } from './types.js';
+import { isFieldElementArray } from './field.js';
 import { decodeJurisdiction, thresholdsMatchJurisdiction, jurisdictionMatchesVASP as thresholdsJurisdictionMatchesVASP } from './thresholds.js';
+
+/** Public signal count of the legacy `circuits/compliance.circom` profile. */
+export const LEGACY_PUBLIC_SIGNAL_COUNT = 16;
 
 /**
  * Verify a Groth16 ZK proof against the verification key.
@@ -10,6 +14,11 @@ import { decodeJurisdiction, thresholdsMatchJurisdiction, jurisdictionMatchesVAS
  * snarkjs.groth16.verify. Interprets the circuit's public outputs:
  *   - publicSignals[0] = is_compliant (1 = compliant)
  *   - publicSignals[1] = sar_review_flag (1 = needs SAR review)
+ *
+ * Those outputs are only reported for an accepted proof: `isCompliant` is
+ * false and `sarReviewFlag` is null whenever `valid` is false. Signal arrays
+ * that are not exactly 16 canonical field-element strings are rejected before
+ * snarkjs runs (`invalid_signal_count` / `malformed_public_signals`).
  *
  * A cryptographically valid proof is not on its own a compliant one. The
  * circuit takes tier2/3/4_threshold (signals 8-10) as *unconstrained* public
@@ -31,6 +40,24 @@ export async function verifyProof(
   vkeyPath: string,
   expectedJurisdiction?: string
 ): Promise<VerifyResult> {
+  // Reject malformed input before snarkjs or BigInt() can throw on it.
+  const shapeReason = !Array.isArray(publicSignals) || publicSignals.length !== LEGACY_PUBLIC_SIGNAL_COUNT
+    ? 'invalid_signal_count'
+    : !isFieldElementArray(publicSignals) ? 'malformed_public_signals' : null;
+  if (shapeReason !== null) {
+    return {
+      valid: false,
+      proofValid: false,
+      thresholdsBound: false,
+      jurisdictionMatchesVASP: expectedJurisdiction ? false : null,
+      jurisdiction: null,
+      rejectionReasons: [shapeReason],
+      isCompliant: false,
+      sarReviewFlag: null,
+      publicSignals,
+    };
+  }
+
   const vkey = JSON.parse(await fs.readFile(vkeyPath, 'utf-8'));
   const proofValid = await snarkjs.groth16.verify(vkey, publicSignals, proof);
 
@@ -43,15 +70,17 @@ export async function verifyProof(
   if (!proofValid) rejectionReasons.push('groth16_invalid');
   if (!thresholdsBound) rejectionReasons.push('threshold_mismatch');
 
+  const valid = proofValid && thresholdsBound;
   return {
-    valid: proofValid && thresholdsBound,
+    valid,
     proofValid,
     thresholdsBound,
     jurisdictionMatchesVASP,
-    jurisdiction: publicSignals.length >= 16 ? decodeJurisdiction(publicSignals[6]) : null,
+    jurisdiction: decodeJurisdiction(publicSignals[6]),
     rejectionReasons,
-    isCompliant: publicSignals[0] === '1',
-    sarReviewFlag: publicSignals[1] === '1',
+    // Circuit outputs mean nothing unless the proof is accepted.
+    isCompliant: valid && publicSignals[0] === '1',
+    sarReviewFlag: valid ? publicSignals[1] === '1' : null,
     publicSignals,
   };
 }

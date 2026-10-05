@@ -31,8 +31,10 @@ describe.skipIf(!vectorPresent)('verifier parity vector (off-chain)', () => {
     // additionally requires policy binding, which this dev vector does not
     // satisfy — see the test below.
     expect(result.proofValid).toBe(true);
-    expect(result.isCompliant).toBe(true);
-    expect(result.sarReviewFlag).toBe(false);
+    // The vector fails threshold binding, so its circuit outputs are not reported.
+    expect(result.valid).toBe(false);
+    expect(result.isCompliant).toBe(false);
+    expect(result.sarReviewFlag).toBeNull();
   });
 
   it('documents that the committed vector does not satisfy threshold binding', async () => {
@@ -95,5 +97,5 @@ it.skipIf(!vectorPresent)('rejects incomplete signals without reporting a jurisd
   const result = await verifyProof(proof, [], vkeyPath);
   expect(result.valid).toBe(false);
   expect(result.jurisdiction).toBeNull();
-  expect(result.rejectionReasons).toContain('threshold_mismatch');
+  expect(result.rejectionReasons).toEqual(['invalid_signal_count']);
 });

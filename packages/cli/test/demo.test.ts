@@ -35,4 +35,19 @@ describe('legacy artifact selection', () => {
     expect(() => requireArtifactPaths(dir)).toThrow('missing or incomplete');
     expect(() => requireArtifactPaths(directory())).toThrow('--artifacts <output>/legacy');
   });
+
+  it('applies the same symlink rule when selecting the wasm as when validating it', () => {
+    const dir = directory(true, true);
+    const compiled = path.join(dir, 'compliance_js', 'compliance.wasm');
+    fs.symlinkSync(compiled, path.join(dir, 'compliance.wasm'));
+    expect(resolveArtifactPaths(dir).wasmPath).toBe(compiled);
+    expect(requireArtifactPaths(dir).wasmPath).toBe(compiled);
+  });
+
+  it('checks only the artifacts a command needs', () => {
+    const dir = directory();
+    fs.writeFileSync(path.join(dir, 'verification_key.json'), 'fixture');
+    expect(requireArtifactPaths(dir, ['vkeyPath']).vkeyPath).toBe(path.join(dir, 'verification_key.json'));
+    expect(() => requireArtifactPaths(dir)).toThrow('missing or incomplete');
+  });
 });
