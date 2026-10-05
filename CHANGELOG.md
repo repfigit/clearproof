@@ -36,6 +36,7 @@ All five packages move to 0.7.0. Pre-production: nothing is independently audite
 - Pilot sanctions-root pipeline: `scripts/build_pilot_sanctions_tree.py` (with `--verify` for auditors) and human-confirmed `scripts/publish_pilot_sanctions_head.py`, plus `make build-pilot-sanctions-tree` / `verify-pilot-sanctions-tree` / `publish-pilot-sanctions-head`.
 - Static cross-layer signal-contract tests (`tests/unit/test_pilot_signal_contract.py`, `packages/proof/test/signal-order.test.ts`).
 - CI `lint` job (ruff check + format), Dependabot, pre-commit config, Python 3.11 test run.
+- Developer Certificate of Origin enforcement: the required `dco` check (`scripts/check_dco.sh`) rejects pull-request commits without a `Signed-off-by` matching the author (bots exempt).
 
 ### Changed
 
@@ -43,6 +44,13 @@ All five packages move to 0.7.0. Pre-production: nothing is independently audite
 - `DOMAIN_CONTRACT_HASH` / `DOMAIN_CHAIN_ID` are parsed as full field elements (decimal or `0x` hex) instead of being truncated; bare hex without `0x` is rejected.
 - CI: actions pinned by SHA, least-privilege permissions, concurrency, caching and job timeouts; `uv sync --locked`; duplicated test runs removed. The sanctions relay moved to `sanctions-relay.yml` and only relays a root merged to main.
 - `make relay-sanctions` no longer rebuilds the tree (`make refresh-and-relay-sanctions` does both); `make benchmark` removed.
+- Dependencies:
+  - `@clearproof/content` moves to `js-yaml` 5 (named `load` import; it ships its own types, so `@types/js-yaml` is gone).
+  - `@clearproof/cli` moves to `commander` 15 and `chalk` 6.
+  - The docs site moves to React 19.3 and Next 15.5.27.
+  - Development tooling moves to `vitest` / `@vitest/coverage-v8` 5, `turbo` 2.11, `dotenv` 18 and `@types/node` 26.
+  - Python dependencies get patch and minor updates: `fastapi` 0.142 (adds `opentelemetry-api` as a transitive dependency), `cryptography` 50.0.2, `grpcio` 1.84 and `ruff` 0.16.10. `abnf` stays pinned at 2.6.0 for SIWE 4.4.0 compatibility.
+  - GitHub Actions move to current major versions, still pinned by SHA.
 
 ## [0.6.0] - 2026-09-26
 
