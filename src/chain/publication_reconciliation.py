@@ -162,7 +162,8 @@ class PublicationReconciler:
         )
         statement = bytes.fromhex(binding.statement_id)
         if binding.phase == "publish":
-            topic = bytes(Web3.keccak(text="StatementPublished(bytes32,bytes32,bytes32)"))
+            # Non-indexed data: contextDigest, consumer, projectionCommitment (three ABI words).
+            topic = bytes(Web3.keccak(text="StatementPublished(bytes32,bytes32,bytes32,address,uint256)"))
         else:
             topic = bytes(Web3.keccak(text="AuthorizationMirrored(bytes32,bytes32,bytes32,uint256)"))
         logs = [
@@ -177,7 +178,7 @@ class PublicationReconciler:
         if log.get("removed", False) or len(topics) != (3 if binding.phase == "publish" else 4) or topics[1] != tenant:
             raise PublicationObservationError("Registry event scope differs")
         if binding.phase == "publish":
-            if topics[2] != statement or len(log["data"]) != 32:
+            if topics[2] != statement or len(log["data"]) != 96:
                 raise PublicationObservationError("Published statement identity differs")
             exists, epoch = await self.contract.functions.statementPublication(statement).call(block_identifier=number)
             if not exists or epoch < 1:

@@ -5,6 +5,8 @@ import type * as verifierRouterSol from "./VerifierRouter.sol";
 export type { verifierRouterSol };
 import type * as bench from "./bench";
 export type { bench };
+import type * as test from "./test";
+export type { test };
 export type { ComplianceRegistry } from "./ComplianceRegistry";
 export type { Groth16Verifier } from "./Groth16Verifier";
 export type { ISanctionsRootReceiver } from "./ISanctionsRootReceiver";

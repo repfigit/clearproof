@@ -29,10 +29,25 @@ HEAD_ABI = [
                     {"name": "validFrom", "type": "uint64"},
                     {"name": "validUntil", "type": "uint64"},
                     {"name": "publishedAt", "type": "uint64"},
+                    {"name": "publisherEpoch", "type": "uint64"},
                 ],
             }
         ],
-    }
+    },
+    {
+        "type": "function",
+        "name": "publishers",
+        "stateMutability": "view",
+        "inputs": [{"name": "tenantHash", "type": "bytes32"}],
+        "outputs": [{"name": "", "type": "address"}],
+    },
+    {
+        "type": "function",
+        "name": "publisherEpochs",
+        "stateMutability": "view",
+        "inputs": [{"name": "tenantHash", "type": "bytes32"}],
+        "outputs": [{"name": "", "type": "uint64"}],
+    },
 ]
 
 
@@ -148,10 +163,16 @@ class PilotCheckpointReader:
         code = await self._web3.eth.get_code(self._address, block_identifier=number)
         if not code or hashlib.sha256(code).hexdigest() != self._code_hash:
             raise RootTrustError("Checkpoint runtime does not match the approved bytecode")
-        head = await self._contract.functions.head(
-            tenant_checkpoint_hash(tenant_id), bytes.fromhex(root_record_id(snapshot))
-        ).call(block_identifier=number)
-        digest, root, revision, valid_from, valid_until, published_at = head
+        tenant_hash = tenant_checkpoint_hash(tenant_id)
+        functions = self._contract.functions
+        head = await functions.head(tenant_hash, bytes.fromhex(root_record_id(snapshot))).call(block_identifier=number)
+        digest, root, revision, valid_from, valid_until, published_at, head_epoch = head
+        # setPublisher (including disabling with zero) bumps the tenant epoch and supersedes
+        # every head recorded under an earlier epoch, even though its fields still match.
+        publisher = await functions.publishers(tenant_hash).call(block_identifier=number)
+        epoch = await functions.publisherEpochs(tenant_hash).call(block_identifier=number)
+        if int(publisher, 16) == 0 or head_epoch != epoch:
+            raise RootTrustError("Checkpoint head is not under the current tenant publisher")
         if (
             bytes(digest).hex() != snapshot.digest
             or root != int(snapshot.root)

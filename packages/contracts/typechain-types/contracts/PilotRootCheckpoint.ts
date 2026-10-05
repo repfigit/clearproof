@@ -31,6 +31,7 @@ export declare namespace PilotRootCheckpoint {
     validFrom: BigNumberish;
     validUntil: BigNumberish;
     publishedAt: BigNumberish;
+    publisherEpoch: BigNumberish;
   };
 
   export type CheckpointStructOutput = [
@@ -39,7 +40,8 @@ export declare namespace PilotRootCheckpoint {
     revision: bigint,
     validFrom: bigint,
     validUntil: bigint,
-    publishedAt: bigint
+    publishedAt: bigint,
+    publisherEpoch: bigint
   ] & {
     snapshotDigest: string;
     root: bigint;
@@ -47,6 +49,7 @@ export declare namespace PilotRootCheckpoint {
     validFrom: bigint;
     validUntil: bigint;
     publishedAt: bigint;
+    publisherEpoch: bigint;
   };
 }
 
@@ -54,29 +57,89 @@ export interface PilotRootCheckpointInterface extends Interface {
   getFunction(
     nameOrSignature:
       | "DEFAULT_ADMIN_ROLE"
+      | "INITIAL_ADMIN_DELAY"
+      | "PAUSER_ROLE"
+      | "acceptDefaultAdminTransfer"
+      | "beginDefaultAdminTransfer"
+      | "cancelDefaultAdminTransfer"
+      | "changeDefaultAdminDelay"
+      | "defaultAdmin"
+      | "defaultAdminDelay"
+      | "defaultAdminDelayIncreaseWait"
       | "getRoleAdmin"
       | "grantRole"
       | "hasRole"
       | "head"
+      | "isCurrent"
+      | "owner"
+      | "pause"
+      | "paused"
+      | "pendingDefaultAdmin"
+      | "pendingDefaultAdminDelay"
       | "publish"
+      | "publisherEpochs"
       | "publishers"
       | "renounceRole"
       | "revokeRole"
+      | "rollbackDefaultAdminDelay"
       | "setPublisher"
       | "supportsInterface"
+      | "unpause"
   ): FunctionFragment;
 
   getEvent(
     nameOrSignatureOrTopic:
+      | "DefaultAdminDelayChangeCanceled"
+      | "DefaultAdminDelayChangeScheduled"
+      | "DefaultAdminTransferCanceled"
+      | "DefaultAdminTransferScheduled"
+      | "Paused"
       | "PublisherChanged"
       | "RoleAdminChanged"
       | "RoleGranted"
       | "RoleRevoked"
       | "RootCheckpointPublished"
+      | "Unpaused"
   ): EventFragment;
 
   encodeFunctionData(
     functionFragment: "DEFAULT_ADMIN_ROLE",
+    values?: undefined
+  ): string;
+  encodeFunctionData(
+    functionFragment: "INITIAL_ADMIN_DELAY",
+    values?: undefined
+  ): string;
+  encodeFunctionData(
+    functionFragment: "PAUSER_ROLE",
+    values?: undefined
+  ): string;
+  encodeFunctionData(
+    functionFragment: "acceptDefaultAdminTransfer",
+    values?: undefined
+  ): string;
+  encodeFunctionData(
+    functionFragment: "beginDefaultAdminTransfer",
+    values: [AddressLike]
+  ): string;
+  encodeFunctionData(
+    functionFragment: "cancelDefaultAdminTransfer",
+    values?: undefined
+  ): string;
+  encodeFunctionData(
+    functionFragment: "changeDefaultAdminDelay",
+    values: [BigNumberish]
+  ): string;
+  encodeFunctionData(
+    functionFragment: "defaultAdmin",
+    values?: undefined
+  ): string;
+  encodeFunctionData(
+    functionFragment: "defaultAdminDelay",
+    values?: undefined
+  ): string;
+  encodeFunctionData(
+    functionFragment: "defaultAdminDelayIncreaseWait",
     values?: undefined
   ): string;
   encodeFunctionData(
@@ -96,6 +159,21 @@ export interface PilotRootCheckpointInterface extends Interface {
     values: [BytesLike, BytesLike]
   ): string;
   encodeFunctionData(
+    functionFragment: "isCurrent",
+    values: [BytesLike, BytesLike]
+  ): string;
+  encodeFunctionData(functionFragment: "owner", values?: undefined): string;
+  encodeFunctionData(functionFragment: "pause", values?: undefined): string;
+  encodeFunctionData(functionFragment: "paused", values?: undefined): string;
+  encodeFunctionData(
+    functionFragment: "pendingDefaultAdmin",
+    values?: undefined
+  ): string;
+  encodeFunctionData(
+    functionFragment: "pendingDefaultAdminDelay",
+    values?: undefined
+  ): string;
+  encodeFunctionData(
     functionFragment: "publish",
     values: [
       BytesLike,
@@ -107,6 +185,10 @@ export interface PilotRootCheckpointInterface extends Interface {
       BigNumberish,
       BigNumberish
     ]
+  ): string;
+  encodeFunctionData(
+    functionFragment: "publisherEpochs",
+    values: [BytesLike]
   ): string;
   encodeFunctionData(
     functionFragment: "publishers",
@@ -121,6 +203,10 @@ export interface PilotRootCheckpointInterface extends Interface {
     values: [BytesLike, AddressLike]
   ): string;
   encodeFunctionData(
+    functionFragment: "rollbackDefaultAdminDelay",
+    values?: undefined
+  ): string;
+  encodeFunctionData(
     functionFragment: "setPublisher",
     values: [BytesLike, AddressLike]
   ): string;
@@ -128,9 +214,46 @@ export interface PilotRootCheckpointInterface extends Interface {
     functionFragment: "supportsInterface",
     values: [BytesLike]
   ): string;
+  encodeFunctionData(functionFragment: "unpause", values?: undefined): string;
 
   decodeFunctionResult(
     functionFragment: "DEFAULT_ADMIN_ROLE",
+    data: BytesLike
+  ): Result;
+  decodeFunctionResult(
+    functionFragment: "INITIAL_ADMIN_DELAY",
+    data: BytesLike
+  ): Result;
+  decodeFunctionResult(
+    functionFragment: "PAUSER_ROLE",
+    data: BytesLike
+  ): Result;
+  decodeFunctionResult(
+    functionFragment: "acceptDefaultAdminTransfer",
+    data: BytesLike
+  ): Result;
+  decodeFunctionResult(
+    functionFragment: "beginDefaultAdminTransfer",
+    data: BytesLike
+  ): Result;
+  decodeFunctionResult(
+    functionFragment: "cancelDefaultAdminTransfer",
+    data: BytesLike
+  ): Result;
+  decodeFunctionResult(
+    functionFragment: "changeDefaultAdminDelay",
+    data: BytesLike
+  ): Result;
+  decodeFunctionResult(
+    functionFragment: "defaultAdmin",
+    data: BytesLike
+  ): Result;
+  decodeFunctionResult(
+    functionFragment: "defaultAdminDelay",
+    data: BytesLike
+  ): Result;
+  decodeFunctionResult(
+    functionFragment: "defaultAdminDelayIncreaseWait",
     data: BytesLike
   ): Result;
   decodeFunctionResult(
@@ -140,13 +263,33 @@ export interface PilotRootCheckpointInterface extends Interface {
   decodeFunctionResult(functionFragment: "grantRole", data: BytesLike): Result;
   decodeFunctionResult(functionFragment: "hasRole", data: BytesLike): Result;
   decodeFunctionResult(functionFragment: "head", data: BytesLike): Result;
+  decodeFunctionResult(functionFragment: "isCurrent", data: BytesLike): Result;
+  decodeFunctionResult(functionFragment: "owner", data: BytesLike): Result;
+  decodeFunctionResult(functionFragment: "pause", data: BytesLike): Result;
+  decodeFunctionResult(functionFragment: "paused", data: BytesLike): Result;
+  decodeFunctionResult(
+    functionFragment: "pendingDefaultAdmin",
+    data: BytesLike
+  ): Result;
+  decodeFunctionResult(
+    functionFragment: "pendingDefaultAdminDelay",
+    data: BytesLike
+  ): Result;
   decodeFunctionResult(functionFragment: "publish", data: BytesLike): Result;
+  decodeFunctionResult(
+    functionFragment: "publisherEpochs",
+    data: BytesLike
+  ): Result;
   decodeFunctionResult(functionFragment: "publishers", data: BytesLike): Result;
   decodeFunctionResult(
     functionFragment: "renounceRole",
     data: BytesLike
   ): Result;
   decodeFunctionResult(functionFragment: "revokeRole", data: BytesLike): Result;
+  decodeFunctionResult(
+    functionFragment: "rollbackDefaultAdminDelay",
+    data: BytesLike
+  ): Result;
   decodeFunctionResult(
     functionFragment: "setPublisher",
     data: BytesLike
@@ -155,14 +298,88 @@ export interface PilotRootCheckpointInterface extends Interface {
     functionFragment: "supportsInterface",
     data: BytesLike
   ): Result;
+  decodeFunctionResult(functionFragment: "unpause", data: BytesLike): Result;
+}
+
+export namespace DefaultAdminDelayChangeCanceledEvent {
+  export type InputTuple = [];
+  export type OutputTuple = [];
+  export interface OutputObject {}
+  export type Event = TypedContractEvent<InputTuple, OutputTuple, OutputObject>;
+  export type Filter = TypedDeferredTopicFilter<Event>;
+  export type Log = TypedEventLog<Event>;
+  export type LogDescription = TypedLogDescription<Event>;
+}
+
+export namespace DefaultAdminDelayChangeScheduledEvent {
+  export type InputTuple = [
+    newDelay: BigNumberish,
+    effectSchedule: BigNumberish
+  ];
+  export type OutputTuple = [newDelay: bigint, effectSchedule: bigint];
+  export interface OutputObject {
+    newDelay: bigint;
+    effectSchedule: bigint;
+  }
+  export type Event = TypedContractEvent<InputTuple, OutputTuple, OutputObject>;
+  export type Filter = TypedDeferredTopicFilter<Event>;
+  export type Log = TypedEventLog<Event>;
+  export type LogDescription = TypedLogDescription<Event>;
+}
+
+export namespace DefaultAdminTransferCanceledEvent {
+  export type InputTuple = [];
+  export type OutputTuple = [];
+  export interface OutputObject {}
+  export type Event = TypedContractEvent<InputTuple, OutputTuple, OutputObject>;
+  export type Filter = TypedDeferredTopicFilter<Event>;
+  export type Log = TypedEventLog<Event>;
+  export type LogDescription = TypedLogDescription<Event>;
+}
+
+export namespace DefaultAdminTransferScheduledEvent {
+  export type InputTuple = [
+    newAdmin: AddressLike,
+    acceptSchedule: BigNumberish
+  ];
+  export type OutputTuple = [newAdmin: string, acceptSchedule: bigint];
+  export interface OutputObject {
+    newAdmin: string;
+    acceptSchedule: bigint;
+  }
+  export type Event = TypedContractEvent<InputTuple, OutputTuple, OutputObject>;
+  export type Filter = TypedDeferredTopicFilter<Event>;
+  export type Log = TypedEventLog<Event>;
+  export type LogDescription = TypedLogDescription<Event>;
+}
+
+export namespace PausedEvent {
+  export type InputTuple = [account: AddressLike];
+  export type OutputTuple = [account: string];
+  export interface OutputObject {
+    account: string;
+  }
+  export type Event = TypedContractEvent<InputTuple, OutputTuple, OutputObject>;
+  export type Filter = TypedDeferredTopicFilter<Event>;
+  export type Log = TypedEventLog<Event>;
+  export type LogDescription = TypedLogDescription<Event>;
 }
 
 export namespace PublisherChangedEvent {
-  export type InputTuple = [tenantHash: BytesLike, publisher: AddressLike];
-  export type OutputTuple = [tenantHash: string, publisher: string];
+  export type InputTuple = [
+    tenantHash: BytesLike,
+    publisher: AddressLike,
+    epoch: BigNumberish
+  ];
+  export type OutputTuple = [
+    tenantHash: string,
+    publisher: string,
+    epoch: bigint
+  ];
   export interface OutputObject {
     tenantHash: string;
     publisher: string;
+    epoch: bigint;
   }
   export type Event = TypedContractEvent<InputTuple, OutputTuple, OutputObject>;
   export type Filter = TypedDeferredTopicFilter<Event>;
@@ -236,7 +453,8 @@ export namespace RootCheckpointPublishedEvent {
     root: BigNumberish,
     revision: BigNumberish,
     validFrom: BigNumberish,
-    validUntil: BigNumberish
+    validUntil: BigNumberish,
+    publisherEpoch: BigNumberish
   ];
   export type OutputTuple = [
     tenantHash: string,
@@ -245,7 +463,8 @@ export namespace RootCheckpointPublishedEvent {
     root: bigint,
     revision: bigint,
     validFrom: bigint,
-    validUntil: bigint
+    validUntil: bigint,
+    publisherEpoch: bigint
   ];
   export interface OutputObject {
     tenantHash: string;
@@ -255,6 +474,19 @@ export namespace RootCheckpointPublishedEvent {
     revision: bigint;
     validFrom: bigint;
     validUntil: bigint;
+    publisherEpoch: bigint;
+  }
+  export type Event = TypedContractEvent<InputTuple, OutputTuple, OutputObject>;
+  export type Filter = TypedDeferredTopicFilter<Event>;
+  export type Log = TypedEventLog<Event>;
+  export type LogDescription = TypedLogDescription<Event>;
+}
+
+export namespace UnpausedEvent {
+  export type InputTuple = [account: AddressLike];
+  export type OutputTuple = [account: string];
+  export interface OutputObject {
+    account: string;
   }
   export type Event = TypedContractEvent<InputTuple, OutputTuple, OutputObject>;
   export type Filter = TypedDeferredTopicFilter<Event>;
@@ -307,6 +539,32 @@ export interface PilotRootCheckpoint extends BaseContract {
 
   DEFAULT_ADMIN_ROLE: TypedContractMethod<[], [string], "view">;
 
+  INITIAL_ADMIN_DELAY: TypedContractMethod<[], [bigint], "view">;
+
+  PAUSER_ROLE: TypedContractMethod<[], [string], "view">;
+
+  acceptDefaultAdminTransfer: TypedContractMethod<[], [void], "nonpayable">;
+
+  beginDefaultAdminTransfer: TypedContractMethod<
+    [newAdmin: AddressLike],
+    [void],
+    "nonpayable"
+  >;
+
+  cancelDefaultAdminTransfer: TypedContractMethod<[], [void], "nonpayable">;
+
+  changeDefaultAdminDelay: TypedContractMethod<
+    [newDelay: BigNumberish],
+    [void],
+    "nonpayable"
+  >;
+
+  defaultAdmin: TypedContractMethod<[], [string], "view">;
+
+  defaultAdminDelay: TypedContractMethod<[], [bigint], "view">;
+
+  defaultAdminDelayIncreaseWait: TypedContractMethod<[], [bigint], "view">;
+
   getRoleAdmin: TypedContractMethod<[role: BytesLike], [string], "view">;
 
   grantRole: TypedContractMethod<
@@ -327,6 +585,30 @@ export interface PilotRootCheckpoint extends BaseContract {
     "view"
   >;
 
+  isCurrent: TypedContractMethod<
+    [tenantHash: BytesLike, rootScope: BytesLike],
+    [boolean],
+    "view"
+  >;
+
+  owner: TypedContractMethod<[], [string], "view">;
+
+  pause: TypedContractMethod<[], [void], "nonpayable">;
+
+  paused: TypedContractMethod<[], [boolean], "view">;
+
+  pendingDefaultAdmin: TypedContractMethod<
+    [],
+    [[string, bigint] & { newAdmin: string; schedule: bigint }],
+    "view"
+  >;
+
+  pendingDefaultAdminDelay: TypedContractMethod<
+    [],
+    [[bigint, bigint] & { newDelay: bigint; schedule: bigint }],
+    "view"
+  >;
+
   publish: TypedContractMethod<
     [
       tenantHash: BytesLike,
@@ -342,10 +624,16 @@ export interface PilotRootCheckpoint extends BaseContract {
     "nonpayable"
   >;
 
+  publisherEpochs: TypedContractMethod<
+    [tenantHash: BytesLike],
+    [bigint],
+    "view"
+  >;
+
   publishers: TypedContractMethod<[tenantHash: BytesLike], [string], "view">;
 
   renounceRole: TypedContractMethod<
-    [role: BytesLike, callerConfirmation: AddressLike],
+    [role: BytesLike, account: AddressLike],
     [void],
     "nonpayable"
   >;
@@ -355,6 +643,8 @@ export interface PilotRootCheckpoint extends BaseContract {
     [void],
     "nonpayable"
   >;
+
+  rollbackDefaultAdminDelay: TypedContractMethod<[], [void], "nonpayable">;
 
   setPublisher: TypedContractMethod<
     [tenantHash: BytesLike, publisher: AddressLike],
@@ -368,6 +658,8 @@ export interface PilotRootCheckpoint extends BaseContract {
     "view"
   >;
 
+  unpause: TypedContractMethod<[], [void], "nonpayable">;
+
   getFunction<T extends ContractMethod = ContractMethod>(
     key: string | FunctionFragment
   ): T;
@@ -375,6 +667,33 @@ export interface PilotRootCheckpoint extends BaseContract {
   getFunction(
     nameOrSignature: "DEFAULT_ADMIN_ROLE"
   ): TypedContractMethod<[], [string], "view">;
+  getFunction(
+    nameOrSignature: "INITIAL_ADMIN_DELAY"
+  ): TypedContractMethod<[], [bigint], "view">;
+  getFunction(
+    nameOrSignature: "PAUSER_ROLE"
+  ): TypedContractMethod<[], [string], "view">;
+  getFunction(
+    nameOrSignature: "acceptDefaultAdminTransfer"
+  ): TypedContractMethod<[], [void], "nonpayable">;
+  getFunction(
+    nameOrSignature: "beginDefaultAdminTransfer"
+  ): TypedContractMethod<[newAdmin: AddressLike], [void], "nonpayable">;
+  getFunction(
+    nameOrSignature: "cancelDefaultAdminTransfer"
+  ): TypedContractMethod<[], [void], "nonpayable">;
+  getFunction(
+    nameOrSignature: "changeDefaultAdminDelay"
+  ): TypedContractMethod<[newDelay: BigNumberish], [void], "nonpayable">;
+  getFunction(
+    nameOrSignature: "defaultAdmin"
+  ): TypedContractMethod<[], [string], "view">;
+  getFunction(
+    nameOrSignature: "defaultAdminDelay"
+  ): TypedContractMethod<[], [bigint], "view">;
+  getFunction(
+    nameOrSignature: "defaultAdminDelayIncreaseWait"
+  ): TypedContractMethod<[], [bigint], "view">;
   getFunction(
     nameOrSignature: "getRoleAdmin"
   ): TypedContractMethod<[role: BytesLike], [string], "view">;
@@ -400,6 +719,36 @@ export interface PilotRootCheckpoint extends BaseContract {
     "view"
   >;
   getFunction(
+    nameOrSignature: "isCurrent"
+  ): TypedContractMethod<
+    [tenantHash: BytesLike, rootScope: BytesLike],
+    [boolean],
+    "view"
+  >;
+  getFunction(
+    nameOrSignature: "owner"
+  ): TypedContractMethod<[], [string], "view">;
+  getFunction(
+    nameOrSignature: "pause"
+  ): TypedContractMethod<[], [void], "nonpayable">;
+  getFunction(
+    nameOrSignature: "paused"
+  ): TypedContractMethod<[], [boolean], "view">;
+  getFunction(
+    nameOrSignature: "pendingDefaultAdmin"
+  ): TypedContractMethod<
+    [],
+    [[string, bigint] & { newAdmin: string; schedule: bigint }],
+    "view"
+  >;
+  getFunction(
+    nameOrSignature: "pendingDefaultAdminDelay"
+  ): TypedContractMethod<
+    [],
+    [[bigint, bigint] & { newDelay: bigint; schedule: bigint }],
+    "view"
+  >;
+  getFunction(
     nameOrSignature: "publish"
   ): TypedContractMethod<
     [
@@ -416,12 +765,15 @@ export interface PilotRootCheckpoint extends BaseContract {
     "nonpayable"
   >;
   getFunction(
+    nameOrSignature: "publisherEpochs"
+  ): TypedContractMethod<[tenantHash: BytesLike], [bigint], "view">;
+  getFunction(
     nameOrSignature: "publishers"
   ): TypedContractMethod<[tenantHash: BytesLike], [string], "view">;
   getFunction(
     nameOrSignature: "renounceRole"
   ): TypedContractMethod<
-    [role: BytesLike, callerConfirmation: AddressLike],
+    [role: BytesLike, account: AddressLike],
     [void],
     "nonpayable"
   >;
@@ -433,6 +785,9 @@ export interface PilotRootCheckpoint extends BaseContract {
     "nonpayable"
   >;
   getFunction(
+    nameOrSignature: "rollbackDefaultAdminDelay"
+  ): TypedContractMethod<[], [void], "nonpayable">;
+  getFunction(
     nameOrSignature: "setPublisher"
   ): TypedContractMethod<
     [tenantHash: BytesLike, publisher: AddressLike],
@@ -442,7 +797,45 @@ export interface PilotRootCheckpoint extends BaseContract {
   getFunction(
     nameOrSignature: "supportsInterface"
   ): TypedContractMethod<[interfaceId: BytesLike], [boolean], "view">;
+  getFunction(
+    nameOrSignature: "unpause"
+  ): TypedContractMethod<[], [void], "nonpayable">;
 
+  getEvent(
+    key: "DefaultAdminDelayChangeCanceled"
+  ): TypedContractEvent<
+    DefaultAdminDelayChangeCanceledEvent.InputTuple,
+    DefaultAdminDelayChangeCanceledEvent.OutputTuple,
+    DefaultAdminDelayChangeCanceledEvent.OutputObject
+  >;
+  getEvent(
+    key: "DefaultAdminDelayChangeScheduled"
+  ): TypedContractEvent<
+    DefaultAdminDelayChangeScheduledEvent.InputTuple,
+    DefaultAdminDelayChangeScheduledEvent.OutputTuple,
+    DefaultAdminDelayChangeScheduledEvent.OutputObject
+  >;
+  getEvent(
+    key: "DefaultAdminTransferCanceled"
+  ): TypedContractEvent<
+    DefaultAdminTransferCanceledEvent.InputTuple,
+    DefaultAdminTransferCanceledEvent.OutputTuple,
+    DefaultAdminTransferCanceledEvent.OutputObject
+  >;
+  getEvent(
+    key: "DefaultAdminTransferScheduled"
+  ): TypedContractEvent<
+    DefaultAdminTransferScheduledEvent.InputTuple,
+    DefaultAdminTransferScheduledEvent.OutputTuple,
+    DefaultAdminTransferScheduledEvent.OutputObject
+  >;
+  getEvent(
+    key: "Paused"
+  ): TypedContractEvent<
+    PausedEvent.InputTuple,
+    PausedEvent.OutputTuple,
+    PausedEvent.OutputObject
+  >;
   getEvent(
     key: "PublisherChanged"
   ): TypedContractEvent<
@@ -478,9 +871,71 @@ export interface PilotRootCheckpoint extends BaseContract {
     RootCheckpointPublishedEvent.OutputTuple,
     RootCheckpointPublishedEvent.OutputObject
   >;
+  getEvent(
+    key: "Unpaused"
+  ): TypedContractEvent<
+    UnpausedEvent.InputTuple,
+    UnpausedEvent.OutputTuple,
+    UnpausedEvent.OutputObject
+  >;
 
   filters: {
-    "PublisherChanged(bytes32,address)": TypedContractEvent<
+    "DefaultAdminDelayChangeCanceled()": TypedContractEvent<
+      DefaultAdminDelayChangeCanceledEvent.InputTuple,
+      DefaultAdminDelayChangeCanceledEvent.OutputTuple,
+      DefaultAdminDelayChangeCanceledEvent.OutputObject
+    >;
+    DefaultAdminDelayChangeCanceled: TypedContractEvent<
+      DefaultAdminDelayChangeCanceledEvent.InputTuple,
+      DefaultAdminDelayChangeCanceledEvent.OutputTuple,
+      DefaultAdminDelayChangeCanceledEvent.OutputObject
+    >;
+
+    "DefaultAdminDelayChangeScheduled(uint48,uint48)": TypedContractEvent<
+      DefaultAdminDelayChangeScheduledEvent.InputTuple,
+      DefaultAdminDelayChangeScheduledEvent.OutputTuple,
+      DefaultAdminDelayChangeScheduledEvent.OutputObject
+    >;
+    DefaultAdminDelayChangeScheduled: TypedContractEvent<
+      DefaultAdminDelayChangeScheduledEvent.InputTuple,
+      DefaultAdminDelayChangeScheduledEvent.OutputTuple,
+      DefaultAdminDelayChangeScheduledEvent.OutputObject
+    >;
+
+    "DefaultAdminTransferCanceled()": TypedContractEvent<
+      DefaultAdminTransferCanceledEvent.InputTuple,
+      DefaultAdminTransferCanceledEvent.OutputTuple,
+      DefaultAdminTransferCanceledEvent.OutputObject
+    >;
+    DefaultAdminTransferCanceled: TypedContractEvent<
+      DefaultAdminTransferCanceledEvent.InputTuple,
+      DefaultAdminTransferCanceledEvent.OutputTuple,
+      DefaultAdminTransferCanceledEvent.OutputObject
+    >;
+
+    "DefaultAdminTransferScheduled(address,uint48)": TypedContractEvent<
+      DefaultAdminTransferScheduledEvent.InputTuple,
+      DefaultAdminTransferScheduledEvent.OutputTuple,
+      DefaultAdminTransferScheduledEvent.OutputObject
+    >;
+    DefaultAdminTransferScheduled: TypedContractEvent<
+      DefaultAdminTransferScheduledEvent.InputTuple,
+      DefaultAdminTransferScheduledEvent.OutputTuple,
+      DefaultAdminTransferScheduledEvent.OutputObject
+    >;
+
+    "Paused(address)": TypedContractEvent<
+      PausedEvent.InputTuple,
+      PausedEvent.OutputTuple,
+      PausedEvent.OutputObject
+    >;
+    Paused: TypedContractEvent<
+      PausedEvent.InputTuple,
+      PausedEvent.OutputTuple,
+      PausedEvent.OutputObject
+    >;
+
+    "PublisherChanged(bytes32,address,uint64)": TypedContractEvent<
       PublisherChangedEvent.InputTuple,
       PublisherChangedEvent.OutputTuple,
       PublisherChangedEvent.OutputObject
@@ -524,7 +979,7 @@ export interface PilotRootCheckpoint extends BaseContract {
       RoleRevokedEvent.OutputObject
     >;
 
-    "RootCheckpointPublished(bytes32,bytes32,bytes32,uint256,uint64,uint64,uint64)": TypedContractEvent<
+    "RootCheckpointPublished(bytes32,bytes32,bytes32,uint256,uint64,uint64,uint64,uint64)": TypedContractEvent<
       RootCheckpointPublishedEvent.InputTuple,
       RootCheckpointPublishedEvent.OutputTuple,
       RootCheckpointPublishedEvent.OutputObject
@@ -533,6 +988,17 @@ export interface PilotRootCheckpoint extends BaseContract {
       RootCheckpointPublishedEvent.InputTuple,
       RootCheckpointPublishedEvent.OutputTuple,
       RootCheckpointPublishedEvent.OutputObject
+    >;
+
+    "Unpaused(address)": TypedContractEvent<
+      UnpausedEvent.InputTuple,
+      UnpausedEvent.OutputTuple,
+      UnpausedEvent.OutputObject
+    >;
+    Unpaused: TypedContractEvent<
+      UnpausedEvent.InputTuple,
+      UnpausedEvent.OutputTuple,
+      UnpausedEvent.OutputObject
     >;
   };
 }

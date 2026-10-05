@@ -128,8 +128,17 @@ export interface PilotCurrentRegistryInterface extends Interface {
   getFunction(
     nameOrSignature:
       | "DEFAULT_ADMIN_ROLE"
+      | "INITIAL_ADMIN_DELAY"
+      | "PAUSER_ROLE"
+      | "acceptDefaultAdminTransfer"
       | "artifactManifestDigest"
+      | "beginDefaultAdminTransfer"
+      | "cancelDefaultAdminTransfer"
+      | "changeDefaultAdminDelay"
       | "consumptionOwner"
+      | "defaultAdmin"
+      | "defaultAdminDelay"
+      | "defaultAdminDelayIncreaseWait"
       | "getRoleAdmin"
       | "grantRole"
       | "hasRole"
@@ -137,6 +146,11 @@ export interface PilotCurrentRegistryInterface extends Interface {
       | "inspect"
       | "mirror"
       | "mirroredReceipts"
+      | "owner"
+      | "pause"
+      | "paused"
+      | "pendingDefaultAdmin"
+      | "pendingDefaultAdminDelay"
       | "publishBatch"
       | "publishHead"
       | "publishStatement"
@@ -144,10 +158,12 @@ export interface PilotCurrentRegistryInterface extends Interface {
       | "publishers"
       | "renounceRole"
       | "revokeRole"
+      | "rollbackDefaultAdminDelay"
       | "setPublisher"
       | "statementId"
       | "statementPublication"
       | "supportsInterface"
+      | "unpause"
       | "verifier"
       | "verifierCodeHash"
   ): FunctionFragment;
@@ -155,12 +171,18 @@ export interface PilotCurrentRegistryInterface extends Interface {
   getEvent(
     nameOrSignatureOrTopic:
       | "AuthorizationMirrored"
+      | "DefaultAdminDelayChangeCanceled"
+      | "DefaultAdminDelayChangeScheduled"
+      | "DefaultAdminTransferCanceled"
+      | "DefaultAdminTransferScheduled"
       | "HeadPublished"
+      | "Paused"
       | "PublisherChanged"
       | "RoleAdminChanged"
       | "RoleGranted"
       | "RoleRevoked"
       | "StatementPublished"
+      | "Unpaused"
   ): EventFragment;
 
   encodeFunctionData(
@@ -168,11 +190,47 @@ export interface PilotCurrentRegistryInterface extends Interface {
     values?: undefined
   ): string;
   encodeFunctionData(
+    functionFragment: "INITIAL_ADMIN_DELAY",
+    values?: undefined
+  ): string;
+  encodeFunctionData(
+    functionFragment: "PAUSER_ROLE",
+    values?: undefined
+  ): string;
+  encodeFunctionData(
+    functionFragment: "acceptDefaultAdminTransfer",
+    values?: undefined
+  ): string;
+  encodeFunctionData(
     functionFragment: "artifactManifestDigest",
     values?: undefined
   ): string;
   encodeFunctionData(
+    functionFragment: "beginDefaultAdminTransfer",
+    values: [AddressLike]
+  ): string;
+  encodeFunctionData(
+    functionFragment: "cancelDefaultAdminTransfer",
+    values?: undefined
+  ): string;
+  encodeFunctionData(
+    functionFragment: "changeDefaultAdminDelay",
+    values: [BigNumberish]
+  ): string;
+  encodeFunctionData(
     functionFragment: "consumptionOwner",
+    values?: undefined
+  ): string;
+  encodeFunctionData(
+    functionFragment: "defaultAdmin",
+    values?: undefined
+  ): string;
+  encodeFunctionData(
+    functionFragment: "defaultAdminDelay",
+    values?: undefined
+  ): string;
+  encodeFunctionData(
+    functionFragment: "defaultAdminDelayIncreaseWait",
     values?: undefined
   ): string;
   encodeFunctionData(
@@ -218,6 +276,17 @@ export interface PilotCurrentRegistryInterface extends Interface {
     functionFragment: "mirroredReceipts",
     values: [BytesLike, BigNumberish]
   ): string;
+  encodeFunctionData(functionFragment: "owner", values?: undefined): string;
+  encodeFunctionData(functionFragment: "pause", values?: undefined): string;
+  encodeFunctionData(functionFragment: "paused", values?: undefined): string;
+  encodeFunctionData(
+    functionFragment: "pendingDefaultAdmin",
+    values?: undefined
+  ): string;
+  encodeFunctionData(
+    functionFragment: "pendingDefaultAdminDelay",
+    values?: undefined
+  ): string;
   encodeFunctionData(
     functionFragment: "publishBatch",
     values: [
@@ -262,6 +331,10 @@ export interface PilotCurrentRegistryInterface extends Interface {
     values: [BytesLike, AddressLike]
   ): string;
   encodeFunctionData(
+    functionFragment: "rollbackDefaultAdminDelay",
+    values?: undefined
+  ): string;
+  encodeFunctionData(
     functionFragment: "setPublisher",
     values: [BytesLike, AddressLike]
   ): string;
@@ -277,6 +350,7 @@ export interface PilotCurrentRegistryInterface extends Interface {
     functionFragment: "supportsInterface",
     values: [BytesLike]
   ): string;
+  encodeFunctionData(functionFragment: "unpause", values?: undefined): string;
   encodeFunctionData(functionFragment: "verifier", values?: undefined): string;
   encodeFunctionData(
     functionFragment: "verifierCodeHash",
@@ -288,11 +362,47 @@ export interface PilotCurrentRegistryInterface extends Interface {
     data: BytesLike
   ): Result;
   decodeFunctionResult(
+    functionFragment: "INITIAL_ADMIN_DELAY",
+    data: BytesLike
+  ): Result;
+  decodeFunctionResult(
+    functionFragment: "PAUSER_ROLE",
+    data: BytesLike
+  ): Result;
+  decodeFunctionResult(
+    functionFragment: "acceptDefaultAdminTransfer",
+    data: BytesLike
+  ): Result;
+  decodeFunctionResult(
     functionFragment: "artifactManifestDigest",
     data: BytesLike
   ): Result;
   decodeFunctionResult(
+    functionFragment: "beginDefaultAdminTransfer",
+    data: BytesLike
+  ): Result;
+  decodeFunctionResult(
+    functionFragment: "cancelDefaultAdminTransfer",
+    data: BytesLike
+  ): Result;
+  decodeFunctionResult(
+    functionFragment: "changeDefaultAdminDelay",
+    data: BytesLike
+  ): Result;
+  decodeFunctionResult(
     functionFragment: "consumptionOwner",
+    data: BytesLike
+  ): Result;
+  decodeFunctionResult(
+    functionFragment: "defaultAdmin",
+    data: BytesLike
+  ): Result;
+  decodeFunctionResult(
+    functionFragment: "defaultAdminDelay",
+    data: BytesLike
+  ): Result;
+  decodeFunctionResult(
+    functionFragment: "defaultAdminDelayIncreaseWait",
     data: BytesLike
   ): Result;
   decodeFunctionResult(
@@ -306,6 +416,17 @@ export interface PilotCurrentRegistryInterface extends Interface {
   decodeFunctionResult(functionFragment: "mirror", data: BytesLike): Result;
   decodeFunctionResult(
     functionFragment: "mirroredReceipts",
+    data: BytesLike
+  ): Result;
+  decodeFunctionResult(functionFragment: "owner", data: BytesLike): Result;
+  decodeFunctionResult(functionFragment: "pause", data: BytesLike): Result;
+  decodeFunctionResult(functionFragment: "paused", data: BytesLike): Result;
+  decodeFunctionResult(
+    functionFragment: "pendingDefaultAdmin",
+    data: BytesLike
+  ): Result;
+  decodeFunctionResult(
+    functionFragment: "pendingDefaultAdminDelay",
     data: BytesLike
   ): Result;
   decodeFunctionResult(
@@ -331,6 +452,10 @@ export interface PilotCurrentRegistryInterface extends Interface {
   ): Result;
   decodeFunctionResult(functionFragment: "revokeRole", data: BytesLike): Result;
   decodeFunctionResult(
+    functionFragment: "rollbackDefaultAdminDelay",
+    data: BytesLike
+  ): Result;
+  decodeFunctionResult(
     functionFragment: "setPublisher",
     data: BytesLike
   ): Result;
@@ -346,6 +471,7 @@ export interface PilotCurrentRegistryInterface extends Interface {
     functionFragment: "supportsInterface",
     data: BytesLike
   ): Result;
+  decodeFunctionResult(functionFragment: "unpause", data: BytesLike): Result;
   decodeFunctionResult(functionFragment: "verifier", data: BytesLike): Result;
   decodeFunctionResult(
     functionFragment: "verifierCodeHash",
@@ -378,20 +504,82 @@ export namespace AuthorizationMirroredEvent {
   export type LogDescription = TypedLogDescription<Event>;
 }
 
+export namespace DefaultAdminDelayChangeCanceledEvent {
+  export type InputTuple = [];
+  export type OutputTuple = [];
+  export interface OutputObject {}
+  export type Event = TypedContractEvent<InputTuple, OutputTuple, OutputObject>;
+  export type Filter = TypedDeferredTopicFilter<Event>;
+  export type Log = TypedEventLog<Event>;
+  export type LogDescription = TypedLogDescription<Event>;
+}
+
+export namespace DefaultAdminDelayChangeScheduledEvent {
+  export type InputTuple = [
+    newDelay: BigNumberish,
+    effectSchedule: BigNumberish
+  ];
+  export type OutputTuple = [newDelay: bigint, effectSchedule: bigint];
+  export interface OutputObject {
+    newDelay: bigint;
+    effectSchedule: bigint;
+  }
+  export type Event = TypedContractEvent<InputTuple, OutputTuple, OutputObject>;
+  export type Filter = TypedDeferredTopicFilter<Event>;
+  export type Log = TypedEventLog<Event>;
+  export type LogDescription = TypedLogDescription<Event>;
+}
+
+export namespace DefaultAdminTransferCanceledEvent {
+  export type InputTuple = [];
+  export type OutputTuple = [];
+  export interface OutputObject {}
+  export type Event = TypedContractEvent<InputTuple, OutputTuple, OutputObject>;
+  export type Filter = TypedDeferredTopicFilter<Event>;
+  export type Log = TypedEventLog<Event>;
+  export type LogDescription = TypedLogDescription<Event>;
+}
+
+export namespace DefaultAdminTransferScheduledEvent {
+  export type InputTuple = [
+    newAdmin: AddressLike,
+    acceptSchedule: BigNumberish
+  ];
+  export type OutputTuple = [newAdmin: string, acceptSchedule: bigint];
+  export interface OutputObject {
+    newAdmin: string;
+    acceptSchedule: bigint;
+  }
+  export type Event = TypedContractEvent<InputTuple, OutputTuple, OutputObject>;
+  export type Filter = TypedDeferredTopicFilter<Event>;
+  export type Log = TypedEventLog<Event>;
+  export type LogDescription = TypedLogDescription<Event>;
+}
+
 export namespace HeadPublishedEvent {
   export type InputTuple = [
     tenant: BytesLike,
     kind: BigNumberish,
     scope: BytesLike,
     revision: BigNumberish,
-    digest: BytesLike
+    digest: BytesLike,
+    value: BigNumberish,
+    validFrom: BigNumberish,
+    validUntil: BigNumberish,
+    enabled: boolean,
+    publisherEpoch: BigNumberish
   ];
   export type OutputTuple = [
     tenant: string,
     kind: bigint,
     scope: string,
     revision: bigint,
-    digest: string
+    digest: string,
+    value: bigint,
+    validFrom: bigint,
+    validUntil: bigint,
+    enabled: boolean,
+    publisherEpoch: bigint
   ];
   export interface OutputObject {
     tenant: string;
@@ -399,6 +587,23 @@ export namespace HeadPublishedEvent {
     scope: string;
     revision: bigint;
     digest: string;
+    value: bigint;
+    validFrom: bigint;
+    validUntil: bigint;
+    enabled: boolean;
+    publisherEpoch: bigint;
+  }
+  export type Event = TypedContractEvent<InputTuple, OutputTuple, OutputObject>;
+  export type Filter = TypedDeferredTopicFilter<Event>;
+  export type Log = TypedEventLog<Event>;
+  export type LogDescription = TypedLogDescription<Event>;
+}
+
+export namespace PausedEvent {
+  export type InputTuple = [account: AddressLike];
+  export type OutputTuple = [account: string];
+  export interface OutputObject {
+    account: string;
   }
   export type Event = TypedContractEvent<InputTuple, OutputTuple, OutputObject>;
   export type Filter = TypedDeferredTopicFilter<Event>;
@@ -486,17 +691,35 @@ export namespace StatementPublishedEvent {
   export type InputTuple = [
     tenant: BytesLike,
     statementId: BytesLike,
-    contextDigest: BytesLike
+    contextDigest: BytesLike,
+    consumer: AddressLike,
+    projectionCommitment: BigNumberish
   ];
   export type OutputTuple = [
     tenant: string,
     statementId: string,
-    contextDigest: string
+    contextDigest: string,
+    consumer: string,
+    projectionCommitment: bigint
   ];
   export interface OutputObject {
     tenant: string;
     statementId: string;
     contextDigest: string;
+    consumer: string;
+    projectionCommitment: bigint;
+  }
+  export type Event = TypedContractEvent<InputTuple, OutputTuple, OutputObject>;
+  export type Filter = TypedDeferredTopicFilter<Event>;
+  export type Log = TypedEventLog<Event>;
+  export type LogDescription = TypedLogDescription<Event>;
+}
+
+export namespace UnpausedEvent {
+  export type InputTuple = [account: AddressLike];
+  export type OutputTuple = [account: string];
+  export interface OutputObject {
+    account: string;
   }
   export type Event = TypedContractEvent<InputTuple, OutputTuple, OutputObject>;
   export type Filter = TypedDeferredTopicFilter<Event>;
@@ -549,9 +772,35 @@ export interface PilotCurrentRegistry extends BaseContract {
 
   DEFAULT_ADMIN_ROLE: TypedContractMethod<[], [string], "view">;
 
+  INITIAL_ADMIN_DELAY: TypedContractMethod<[], [bigint], "view">;
+
+  PAUSER_ROLE: TypedContractMethod<[], [string], "view">;
+
+  acceptDefaultAdminTransfer: TypedContractMethod<[], [void], "nonpayable">;
+
   artifactManifestDigest: TypedContractMethod<[], [string], "view">;
 
+  beginDefaultAdminTransfer: TypedContractMethod<
+    [newAdmin: AddressLike],
+    [void],
+    "nonpayable"
+  >;
+
+  cancelDefaultAdminTransfer: TypedContractMethod<[], [void], "nonpayable">;
+
+  changeDefaultAdminDelay: TypedContractMethod<
+    [newDelay: BigNumberish],
+    [void],
+    "nonpayable"
+  >;
+
   consumptionOwner: TypedContractMethod<[], [string], "view">;
+
+  defaultAdmin: TypedContractMethod<[], [string], "view">;
+
+  defaultAdminDelay: TypedContractMethod<[], [bigint], "view">;
+
+  defaultAdminDelayIncreaseWait: TypedContractMethod<[], [bigint], "view">;
 
   getRoleAdmin: TypedContractMethod<[role: BytesLike], [string], "view">;
 
@@ -606,6 +855,24 @@ export interface PilotCurrentRegistry extends BaseContract {
     "view"
   >;
 
+  owner: TypedContractMethod<[], [string], "view">;
+
+  pause: TypedContractMethod<[], [void], "nonpayable">;
+
+  paused: TypedContractMethod<[], [boolean], "view">;
+
+  pendingDefaultAdmin: TypedContractMethod<
+    [],
+    [[string, bigint] & { newAdmin: string; schedule: bigint }],
+    "view"
+  >;
+
+  pendingDefaultAdminDelay: TypedContractMethod<
+    [],
+    [[bigint, bigint] & { newDelay: bigint; schedule: bigint }],
+    "view"
+  >;
+
   publishBatch: TypedContractMethod<
     [
       tenant: BytesLike,
@@ -644,7 +911,7 @@ export interface PilotCurrentRegistry extends BaseContract {
   publishers: TypedContractMethod<[arg0: BytesLike], [string], "view">;
 
   renounceRole: TypedContractMethod<
-    [role: BytesLike, callerConfirmation: AddressLike],
+    [role: BytesLike, account: AddressLike],
     [void],
     "nonpayable"
   >;
@@ -654,6 +921,8 @@ export interface PilotCurrentRegistry extends BaseContract {
     [void],
     "nonpayable"
   >;
+
+  rollbackDefaultAdminDelay: TypedContractMethod<[], [void], "nonpayable">;
 
   setPublisher: TypedContractMethod<
     [tenant: BytesLike, publisher: AddressLike],
@@ -679,6 +948,8 @@ export interface PilotCurrentRegistry extends BaseContract {
     "view"
   >;
 
+  unpause: TypedContractMethod<[], [void], "nonpayable">;
+
   verifier: TypedContractMethod<[], [string], "view">;
 
   verifierCodeHash: TypedContractMethod<[], [string], "view">;
@@ -691,11 +962,38 @@ export interface PilotCurrentRegistry extends BaseContract {
     nameOrSignature: "DEFAULT_ADMIN_ROLE"
   ): TypedContractMethod<[], [string], "view">;
   getFunction(
+    nameOrSignature: "INITIAL_ADMIN_DELAY"
+  ): TypedContractMethod<[], [bigint], "view">;
+  getFunction(
+    nameOrSignature: "PAUSER_ROLE"
+  ): TypedContractMethod<[], [string], "view">;
+  getFunction(
+    nameOrSignature: "acceptDefaultAdminTransfer"
+  ): TypedContractMethod<[], [void], "nonpayable">;
+  getFunction(
     nameOrSignature: "artifactManifestDigest"
   ): TypedContractMethod<[], [string], "view">;
   getFunction(
+    nameOrSignature: "beginDefaultAdminTransfer"
+  ): TypedContractMethod<[newAdmin: AddressLike], [void], "nonpayable">;
+  getFunction(
+    nameOrSignature: "cancelDefaultAdminTransfer"
+  ): TypedContractMethod<[], [void], "nonpayable">;
+  getFunction(
+    nameOrSignature: "changeDefaultAdminDelay"
+  ): TypedContractMethod<[newDelay: BigNumberish], [void], "nonpayable">;
+  getFunction(
     nameOrSignature: "consumptionOwner"
   ): TypedContractMethod<[], [string], "view">;
+  getFunction(
+    nameOrSignature: "defaultAdmin"
+  ): TypedContractMethod<[], [string], "view">;
+  getFunction(
+    nameOrSignature: "defaultAdminDelay"
+  ): TypedContractMethod<[], [bigint], "view">;
+  getFunction(
+    nameOrSignature: "defaultAdminDelayIncreaseWait"
+  ): TypedContractMethod<[], [bigint], "view">;
   getFunction(
     nameOrSignature: "getRoleAdmin"
   ): TypedContractMethod<[role: BytesLike], [string], "view">;
@@ -757,6 +1055,29 @@ export interface PilotCurrentRegistry extends BaseContract {
     "view"
   >;
   getFunction(
+    nameOrSignature: "owner"
+  ): TypedContractMethod<[], [string], "view">;
+  getFunction(
+    nameOrSignature: "pause"
+  ): TypedContractMethod<[], [void], "nonpayable">;
+  getFunction(
+    nameOrSignature: "paused"
+  ): TypedContractMethod<[], [boolean], "view">;
+  getFunction(
+    nameOrSignature: "pendingDefaultAdmin"
+  ): TypedContractMethod<
+    [],
+    [[string, bigint] & { newAdmin: string; schedule: bigint }],
+    "view"
+  >;
+  getFunction(
+    nameOrSignature: "pendingDefaultAdminDelay"
+  ): TypedContractMethod<
+    [],
+    [[bigint, bigint] & { newDelay: bigint; schedule: bigint }],
+    "view"
+  >;
+  getFunction(
     nameOrSignature: "publishBatch"
   ): TypedContractMethod<
     [
@@ -801,7 +1122,7 @@ export interface PilotCurrentRegistry extends BaseContract {
   getFunction(
     nameOrSignature: "renounceRole"
   ): TypedContractMethod<
-    [role: BytesLike, callerConfirmation: AddressLike],
+    [role: BytesLike, account: AddressLike],
     [void],
     "nonpayable"
   >;
@@ -812,6 +1133,9 @@ export interface PilotCurrentRegistry extends BaseContract {
     [void],
     "nonpayable"
   >;
+  getFunction(
+    nameOrSignature: "rollbackDefaultAdminDelay"
+  ): TypedContractMethod<[], [void], "nonpayable">;
   getFunction(
     nameOrSignature: "setPublisher"
   ): TypedContractMethod<
@@ -837,6 +1161,9 @@ export interface PilotCurrentRegistry extends BaseContract {
     nameOrSignature: "supportsInterface"
   ): TypedContractMethod<[interfaceId: BytesLike], [boolean], "view">;
   getFunction(
+    nameOrSignature: "unpause"
+  ): TypedContractMethod<[], [void], "nonpayable">;
+  getFunction(
     nameOrSignature: "verifier"
   ): TypedContractMethod<[], [string], "view">;
   getFunction(
@@ -851,11 +1178,46 @@ export interface PilotCurrentRegistry extends BaseContract {
     AuthorizationMirroredEvent.OutputObject
   >;
   getEvent(
+    key: "DefaultAdminDelayChangeCanceled"
+  ): TypedContractEvent<
+    DefaultAdminDelayChangeCanceledEvent.InputTuple,
+    DefaultAdminDelayChangeCanceledEvent.OutputTuple,
+    DefaultAdminDelayChangeCanceledEvent.OutputObject
+  >;
+  getEvent(
+    key: "DefaultAdminDelayChangeScheduled"
+  ): TypedContractEvent<
+    DefaultAdminDelayChangeScheduledEvent.InputTuple,
+    DefaultAdminDelayChangeScheduledEvent.OutputTuple,
+    DefaultAdminDelayChangeScheduledEvent.OutputObject
+  >;
+  getEvent(
+    key: "DefaultAdminTransferCanceled"
+  ): TypedContractEvent<
+    DefaultAdminTransferCanceledEvent.InputTuple,
+    DefaultAdminTransferCanceledEvent.OutputTuple,
+    DefaultAdminTransferCanceledEvent.OutputObject
+  >;
+  getEvent(
+    key: "DefaultAdminTransferScheduled"
+  ): TypedContractEvent<
+    DefaultAdminTransferScheduledEvent.InputTuple,
+    DefaultAdminTransferScheduledEvent.OutputTuple,
+    DefaultAdminTransferScheduledEvent.OutputObject
+  >;
+  getEvent(
     key: "HeadPublished"
   ): TypedContractEvent<
     HeadPublishedEvent.InputTuple,
     HeadPublishedEvent.OutputTuple,
     HeadPublishedEvent.OutputObject
+  >;
+  getEvent(
+    key: "Paused"
+  ): TypedContractEvent<
+    PausedEvent.InputTuple,
+    PausedEvent.OutputTuple,
+    PausedEvent.OutputObject
   >;
   getEvent(
     key: "PublisherChanged"
@@ -892,6 +1254,13 @@ export interface PilotCurrentRegistry extends BaseContract {
     StatementPublishedEvent.OutputTuple,
     StatementPublishedEvent.OutputObject
   >;
+  getEvent(
+    key: "Unpaused"
+  ): TypedContractEvent<
+    UnpausedEvent.InputTuple,
+    UnpausedEvent.OutputTuple,
+    UnpausedEvent.OutputObject
+  >;
 
   filters: {
     "AuthorizationMirrored(bytes32,bytes32,bytes32,uint256)": TypedContractEvent<
@@ -905,7 +1274,51 @@ export interface PilotCurrentRegistry extends BaseContract {
       AuthorizationMirroredEvent.OutputObject
     >;
 
-    "HeadPublished(bytes32,uint8,bytes32,uint64,bytes32)": TypedContractEvent<
+    "DefaultAdminDelayChangeCanceled()": TypedContractEvent<
+      DefaultAdminDelayChangeCanceledEvent.InputTuple,
+      DefaultAdminDelayChangeCanceledEvent.OutputTuple,
+      DefaultAdminDelayChangeCanceledEvent.OutputObject
+    >;
+    DefaultAdminDelayChangeCanceled: TypedContractEvent<
+      DefaultAdminDelayChangeCanceledEvent.InputTuple,
+      DefaultAdminDelayChangeCanceledEvent.OutputTuple,
+      DefaultAdminDelayChangeCanceledEvent.OutputObject
+    >;
+
+    "DefaultAdminDelayChangeScheduled(uint48,uint48)": TypedContractEvent<
+      DefaultAdminDelayChangeScheduledEvent.InputTuple,
+      DefaultAdminDelayChangeScheduledEvent.OutputTuple,
+      DefaultAdminDelayChangeScheduledEvent.OutputObject
+    >;
+    DefaultAdminDelayChangeScheduled: TypedContractEvent<
+      DefaultAdminDelayChangeScheduledEvent.InputTuple,
+      DefaultAdminDelayChangeScheduledEvent.OutputTuple,
+      DefaultAdminDelayChangeScheduledEvent.OutputObject
+    >;
+
+    "DefaultAdminTransferCanceled()": TypedContractEvent<
+      DefaultAdminTransferCanceledEvent.InputTuple,
+      DefaultAdminTransferCanceledEvent.OutputTuple,
+      DefaultAdminTransferCanceledEvent.OutputObject
+    >;
+    DefaultAdminTransferCanceled: TypedContractEvent<
+      DefaultAdminTransferCanceledEvent.InputTuple,
+      DefaultAdminTransferCanceledEvent.OutputTuple,
+      DefaultAdminTransferCanceledEvent.OutputObject
+    >;
+
+    "DefaultAdminTransferScheduled(address,uint48)": TypedContractEvent<
+      DefaultAdminTransferScheduledEvent.InputTuple,
+      DefaultAdminTransferScheduledEvent.OutputTuple,
+      DefaultAdminTransferScheduledEvent.OutputObject
+    >;
+    DefaultAdminTransferScheduled: TypedContractEvent<
+      DefaultAdminTransferScheduledEvent.InputTuple,
+      DefaultAdminTransferScheduledEvent.OutputTuple,
+      DefaultAdminTransferScheduledEvent.OutputObject
+    >;
+
+    "HeadPublished(bytes32,uint8,bytes32,uint64,bytes32,uint256,uint64,uint64,bool,uint64)": TypedContractEvent<
       HeadPublishedEvent.InputTuple,
       HeadPublishedEvent.OutputTuple,
       HeadPublishedEvent.OutputObject
@@ -914,6 +1327,17 @@ export interface PilotCurrentRegistry extends BaseContract {
       HeadPublishedEvent.InputTuple,
       HeadPublishedEvent.OutputTuple,
       HeadPublishedEvent.OutputObject
+    >;
+
+    "Paused(address)": TypedContractEvent<
+      PausedEvent.InputTuple,
+      PausedEvent.OutputTuple,
+      PausedEvent.OutputObject
+    >;
+    Paused: TypedContractEvent<
+      PausedEvent.InputTuple,
+      PausedEvent.OutputTuple,
+      PausedEvent.OutputObject
     >;
 
     "PublisherChanged(bytes32,address,uint64)": TypedContractEvent<
@@ -960,7 +1384,7 @@ export interface PilotCurrentRegistry extends BaseContract {
       RoleRevokedEvent.OutputObject
     >;
 
-    "StatementPublished(bytes32,bytes32,bytes32)": TypedContractEvent<
+    "StatementPublished(bytes32,bytes32,bytes32,address,uint256)": TypedContractEvent<
       StatementPublishedEvent.InputTuple,
       StatementPublishedEvent.OutputTuple,
       StatementPublishedEvent.OutputObject
@@ -969,6 +1393,17 @@ export interface PilotCurrentRegistry extends BaseContract {
       StatementPublishedEvent.InputTuple,
       StatementPublishedEvent.OutputTuple,
       StatementPublishedEvent.OutputObject
+    >;
+
+    "Unpaused(address)": TypedContractEvent<
+      UnpausedEvent.InputTuple,
+      UnpausedEvent.OutputTuple,
+      UnpausedEvent.OutputObject
+    >;
+    Unpaused: TypedContractEvent<
+      UnpausedEvent.InputTuple,
+      UnpausedEvent.OutputTuple,
+      UnpausedEvent.OutputObject
     >;
   };
 }
