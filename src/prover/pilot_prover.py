@@ -43,12 +43,12 @@ class ProvingResult:
 _PARENT_GUARD = r"""
 import ctypes, os, resource, sys
 resource.setrlimit(resource.RLIMIT_CORE, (0, 0))
-parent = os.getppid()
-if parent == 1 or ctypes.CDLL(None, use_errno=True).prctl(1, 9, 0, 0, 0) != 0:
+parent = int(sys.argv[1])
+if os.getppid() != parent or ctypes.CDLL(None, use_errno=True).prctl(1, 9, 0, 0, 0) != 0:
     sys.exit(2)
 if os.getppid() != parent:
     sys.exit(2)
-os.execv(sys.argv[1], sys.argv[1:])
+os.execv(sys.argv[2], sys.argv[2:])
 """
 
 _RUNNER = r"""
@@ -179,6 +179,7 @@ class PilotProver:
                                 "-I",
                                 "-c",
                                 _PARENT_GUARD,
+                                str(os.getpid()),
                                 str(self.verifier.node),
                                 f"--max-old-space-size={self.heap_mb}",
                                 str(script),

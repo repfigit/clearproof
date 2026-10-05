@@ -31,6 +31,12 @@ context are operator inputs. Request bodies cannot replace them. Factory loading
 rejects tenant mismatches, artifact-context mismatches and a sanctions root that
 differs from its configured approval.
 
+Targets bind a particular transfer and verification context; they are not
+long-lived templates. The factory loads at service startup. The operator's
+integration must provision fresh targets and approvals as transfers arrive or
+state changes. Updating a target invalidates jobs bound to its previous digest;
+use distinct opaque target IDs when both statements need to remain identifiable.
+
 Start the API normally, then run a separately supervised worker:
 
 ```bash

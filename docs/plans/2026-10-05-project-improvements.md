@@ -145,3 +145,9 @@ actual external evidence; local tests cannot establish those prerequisites.
   production build pass. Ruff/format, diff checks and REUSE pass. Full local
   PostgreSQL/artifact Python regression, remote CI, review and merge remain
   required; GitHub #87 is still open and no development keys are committed.
+
+- October 5: review identified that a proving worker can legitimately run as PID
+  1 in a container. The launcher now receives its expected parent PID explicitly,
+  accepting that case while rejecting reparenting races and failed parent-death
+  setup. Backend checks now total 42 passing tests at 100% branch coverage;
+  a fresh real-proof check covers the updated launcher.

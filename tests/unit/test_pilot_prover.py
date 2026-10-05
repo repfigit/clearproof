@@ -22,6 +22,32 @@ SIGNALS = ["1"] * 8
 PRIVATE = {"holder_secret": "SYNTHETIC_PRIVATE_INPUT_987654321"}
 
 
+@pytest.mark.parametrize("case", ["pid-one", "orphan-before", "orphan-after", "guard-failed"])
+def test_parent_guard_accepts_container_pid_one_and_rejects_parent_races(monkeypatch, case):
+    import ctypes
+    import resource
+    from types import SimpleNamespace
+    from unittest.mock import Mock
+
+    parents = iter([2 if case == "orphan-before" else 1, 2 if case == "orphan-after" else 1])
+    execute = Mock()
+    monkeypatch.setattr(os, "getppid", lambda: next(parents))
+    monkeypatch.setattr(os, "execv", execute)
+    monkeypatch.setattr(resource, "setrlimit", Mock())
+    monkeypatch.setattr(
+        ctypes, "CDLL", lambda *args, **kwargs: SimpleNamespace(prctl=lambda *args: 1 if case == "guard-failed" else 0)
+    )
+    monkeypatch.setattr(sys, "argv", ["launcher", "1", "/public-node", "public-argument"])
+    if case == "pid-one":
+        exec(module._PARENT_GUARD)
+        execute.assert_called_once_with("/public-node", ["/public-node", "public-argument"])
+    else:
+        with pytest.raises(SystemExit) as error:
+            exec(module._PARENT_GUARD)
+        assert error.value.code == 2
+        execute.assert_not_called()
+
+
 def prover(bundle, source):
     root, _, digest = bundle
     node = shutil.which("node")
