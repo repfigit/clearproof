@@ -29,7 +29,11 @@ def proto_tree(tmp_path):
     def run(check=False):
         result = subprocess.run(
             ["bash", str(root / "scripts/regen_protobufs.sh"), *(["--check"] if check else [])],
-            cwd=tmp_path, env=env, capture_output=True, text=True, timeout=90,
+            cwd=tmp_path,
+            env=env,
+            capture_output=True,
+            text=True,
+            timeout=90,
         )
         assert list(temporary.iterdir()) == [], "generation must clean temporary output even on failure"
         return result
@@ -76,7 +80,8 @@ def test_real_protobuf_check_detects_each_stale_or_missing_file_without_writing(
 def install_compiler_fixture(root, env, *, warnings=True, remove=None, code=0):
     """Model compiler-format changes without touching repository-generated files."""
     stub = (
-        "import grpc\n" + ("import warnings\n" if warnings else "")
+        "import grpc\n"
+        + ("import warnings\n" if warnings else "")
         + "import trisa_api_pb2 as trisa__api__pb2\n"
         + "if True:\n    raise RuntimeError(\n"
         + "        'version mismatch'\n"
@@ -123,11 +128,16 @@ def test_postprocessing_handles_compilers_with_or_without_warnings_import(proto_
     assert "stacklevel=2," in grpc
 
 
-@pytest.mark.parametrize("pattern", [
-    "import trisa_errors_pb2 as", "import trisa_api_pb2 as", "import grpc\n",
-    "    raise RuntimeError(\n",
-    "        + f' or downgrade your generated code using grpcio-tools<={GRPC_VERSION}.'\n    )\n",
-])
+@pytest.mark.parametrize(
+    "pattern",
+    [
+        "import trisa_errors_pb2 as",
+        "import trisa_api_pb2 as",
+        "import grpc\n",
+        "    raise RuntimeError(\n",
+        "        + f' or downgrade your generated code using grpcio-tools<={GRPC_VERSION}.'\n    )\n",
+    ],
+)
 def test_postprocessing_rejects_changed_compiler_format_without_publishing(proto_tree, pattern):
     root, output, env, run = proto_tree
     install_compiler_fixture(root, env, warnings=False, remove=pattern)

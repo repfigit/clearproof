@@ -22,8 +22,11 @@ def doctor_report(mode):
     if mode == "production":
         return {"production_eligible": False, "reason": "development_artifacts_forbidden"}
     return {
-        "production_eligible": False, "status": "development_unapproved", "manifest_digest": "synthetic-pin",
-        "current_profile_supported": True, "policy_schema_supported": True,
+        "production_eligible": False,
+        "status": "development_unapproved",
+        "manifest_digest": "synthetic-pin",
+        "current_profile_supported": True,
+        "policy_schema_supported": True,
     }
 
 
@@ -52,8 +55,10 @@ def test_doctor_rejects_incorrect_assurance_or_process_results(artifacts, monkey
         report = doctor_report(mode)
         if mode == "development":
             mutations = {
-                "eligible": ("production_eligible", True), "status": ("status", "production"),
-                "pin": ("manifest_digest", "wrong"), "profile": ("current_profile_supported", False),
+                "eligible": ("production_eligible", True),
+                "status": ("status", "production"),
+                "pin": ("manifest_digest", "wrong"),
+                "profile": ("current_profile_supported", False),
                 "policy": ("policy_schema_supported", False),
             }
             if failure in mutations:
@@ -63,7 +68,8 @@ def test_doctor_rejects_incorrect_assurance_or_process_results(artifacts, monkey
             report["reason"] = "unknown"
         return SimpleNamespace(
             returncode=9 if failure == "exit" else (1 if mode == "production" else 0),
-            stderr="synthetic warning" if failure == "stderr" else "", stdout=json.dumps(report),
+            stderr="synthetic warning" if failure == "stderr" else "",
+            stdout=json.dumps(report),
         )
 
     monkeypatch.setattr(runner.subprocess, "run", respond)
@@ -72,8 +78,14 @@ def test_doctor_rejects_incorrect_assurance_or_process_results(artifacts, monkey
 
 
 REPORTS = (
-    "policy-comparison.json", "history.encrypted.json", "reviewer-trust.json", "history-report.json",
-    "history-clock.json", "observation-cohort.json", "observations.json", "investigation.json",
+    "policy-comparison.json",
+    "history.encrypted.json",
+    "reviewer-trust.json",
+    "history-report.json",
+    "history-clock.json",
+    "observation-cohort.json",
+    "observations.json",
+    "investigation.json",
     "counterparty-scenarios.json",
 )
 

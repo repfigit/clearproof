@@ -108,11 +108,23 @@ def test_timing_root_size_rejects_and_cli_reports_minimized_failure(tmp_path, mo
     source = tmp_path / "invalid-root-trust.json"
     source.write_text(json.dumps(invalid))
     monkeypatch.setattr("sys.stdin", io.TextIOWrapper(io.BytesIO(b"ee" * 32)))
-    assert main([
-        "--trust", str(source), "--bundle", str(tmp_path / "absent-bundle"),
-        "--artifacts", str(tmp_path / "absent-artifacts"), "--runtime", str(tmp_path / "absent-runtime"),
-        "--node", str(tmp_path / "absent-node"),
-    ]) == 2
+    assert (
+        main(
+            [
+                "--trust",
+                str(source),
+                "--bundle",
+                str(tmp_path / "absent-bundle"),
+                "--artifacts",
+                str(tmp_path / "absent-artifacts"),
+                "--runtime",
+                str(tmp_path / "absent-runtime"),
+                "--node",
+                str(tmp_path / "absent-node"),
+            ]
+        )
+        == 2
+    )
     output = capsys.readouterr()
     assert not output.err
     assert json.loads(output.out) == {

@@ -8,9 +8,7 @@ def validate_depth(depth: int | None) -> None:
         raise ValueError("Merkle depth must be an integer between 1 and 32")
 
 
-async def extend_depth(
-    layers: list[list[str]], depth: int, hash_pair: Callable[[list[int]], Awaitable[str]]
-) -> str:
+async def extend_depth(layers: list[list[str]], depth: int, hash_pair: Callable[[list[int]], Awaitable[str]]) -> str:
     current_depth = len(layers) - 1
     if current_depth > depth:
         raise ValueError("Merkle tree exceeds configured depth")

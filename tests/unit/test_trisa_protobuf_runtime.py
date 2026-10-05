@@ -23,7 +23,7 @@ def test_generated_trisa_wire_compatibility(backend):
     )
     # Unknown field 100 (varint 7) must survive a relay using either runtime.
     wire = envelope.SerializeToString(deterministic=True) + bytes.fromhex("a00607")
-    script = r'''
+    script = r"""
 import json
 import sys
 from google.protobuf.internal import api_implementation
@@ -51,7 +51,7 @@ assert methods["TransferStream"].client_streaming and methods["TransferStream"].
 assert methods["Transfer"].input_type.full_name == "trisa.api.v1beta1.SecureEnvelope"
 assert not trisa_errors_pb2_grpc._version_not_supported
 print(json.dumps({"wire": envelope.SerializeToString(deterministic=True).hex()}))
-'''
+"""
     result = subprocess.run(
         [sys.executable, "-c", script, backend, wire.hex()],
         cwd=Path(__file__).resolve().parents[2],
@@ -67,7 +67,7 @@ print(json.dumps({"wire": envelope.SerializeToString(deterministic=True).hex()})
 @pytest.mark.parametrize("module", ["trisa_api_pb2_grpc", "trisa_errors_pb2_grpc"])
 @pytest.mark.parametrize("fault", ["old-version", "missing-version-helper"])
 def test_generated_grpc_runtime_compatibility_diagnostics(module, fault):
-    script = r'''
+    script = r"""
 import builtins
 import importlib
 import sys
@@ -103,7 +103,7 @@ with warnings.catch_warnings(record=True) as caught:
     assert "grpcio>=1.80.0" in diagnostic
     assert "Please upgrade" in diagnostic
 print("compatibility diagnostic verified")
-'''
+"""
     result = subprocess.run(
         [sys.executable, "-c", script, module, fault],
         cwd=Path(__file__).resolve().parents[2],

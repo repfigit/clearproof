@@ -5,6 +5,7 @@ Poseidon is field-specific, so every hash-derived value in the committed
 BN254 vector must be recomputed for BLS12-381. Structural values (amounts,
 timestamps, thresholds, leaf ordering for the gap proof) carry over.
 """
+
 import json
 import os
 import sys
@@ -87,18 +88,12 @@ def main() -> None:
 
     bn_poseidon = make_poseidon(BN254_R)
     # Sanity: reproduce the committed BN254 roots/commitment with our path logic.
-    bn_root_left = merkle_root(
-        bn_poseidon, int(inp["leftKey"]), inp["leftPathElements"], inp["leftPathIndices"]
-    )
+    bn_root_left = merkle_root(bn_poseidon, int(inp["leftKey"]), inp["leftPathElements"], inp["leftPathIndices"])
     assert str(bn_root_left) == inp["sanctionsTreeRoot"], f"BN254 left path root mismatch: {bn_root_left}"
-    bn_root_right = merkle_root(
-        bn_poseidon, int(inp["rightKey"]), inp["rightPathElements"], inp["rightPathIndices"]
-    )
+    bn_root_right = merkle_root(bn_poseidon, int(inp["rightKey"]), inp["rightPathElements"], inp["rightPathIndices"])
     assert str(bn_root_right) == inp["sanctionsTreeRoot"], "BN254 right path root mismatch"
     issuer_leaf_bn = bn_poseidon([2, int(inp["issuerDid"])])
-    bn_issuer_root = merkle_root(
-        bn_poseidon, issuer_leaf_bn, inp["issuerPathElements"], inp["issuerPathIndices"]
-    )
+    bn_issuer_root = merkle_root(bn_poseidon, issuer_leaf_bn, inp["issuerPathElements"], inp["issuerPathIndices"])
     assert str(bn_issuer_root) == inp["issuerTreeRoot"], "BN254 issuer root mismatch"
     bn_commit = bn_poseidon(
         [int(inp["issuerDid"]), inp["kycTier"], inp["sanctionsClear"], inp["issuedAt"], inp["expiresAt"]]
@@ -116,31 +111,42 @@ def main() -> None:
     right_root = merkle_root(poseidon, int(inp["rightKey"]), inp["rightPathElements"], inp["rightPathIndices"])
     assert str(right_root) == out["sanctionsTreeRoot"], "BLS tree root inconsistency between paths"
     issuer_leaf = poseidon([2, int(inp["issuerDid"])])
-    out["issuerTreeRoot"] = str(
-        merkle_root(poseidon, issuer_leaf, inp["issuerPathElements"], inp["issuerPathIndices"])
-    )
+    out["issuerTreeRoot"] = str(merkle_root(poseidon, issuer_leaf, inp["issuerPathElements"], inp["issuerPathIndices"]))
     out["credentialCommitment"] = str(
-        poseidon(
-            [int(inp["issuerDid"]), inp["kycTier"], inp["sanctionsClear"], inp["issuedAt"], inp["expiresAt"]]
-        )
+        poseidon([int(inp["issuerDid"]), inp["kycTier"], inp["sanctionsClear"], inp["issuedAt"], inp["expiresAt"]])
     )
     out["credentialNullifier"] = str(poseidon([int(out["credentialCommitment"]), int(inp["transferIdHash"])]))
 
     # snake_case for the circuit
     mapping = {
-        "sanctionsTreeRoot": "sanctions_tree_root", "issuerTreeRoot": "issuer_tree_root",
-        "amountTier": "amount_tier", "transferTimestamp": "transfer_timestamp",
-        "jurisdictionCode": "jurisdiction_code", "credentialCommitment": "credential_commitment",
-        "tier2Threshold": "tier2_threshold", "tier3Threshold": "tier3_threshold",
-        "tier4Threshold": "tier4_threshold", "domainChainId": "domain_chain_id",
-        "domainContractHash": "domain_contract_hash", "transferIdHash": "transfer_id_hash",
-        "credentialNullifier": "credential_nullifier", "proofExpiresAt": "proof_expires_at",
-        "issuerDid": "issuer_did", "kycTier": "kyc_tier", "sanctionsClear": "sanctions_clear",
-        "issuedAt": "issued_at", "expiresAt": "expires_at",
-        "issuerPathElements": "issuer_path_elements", "issuerPathIndices": "issuer_path_indices",
-        "walletAddressHash": "wallet_address_hash", "leftKey": "left_key", "rightKey": "right_key",
-        "leftPathElements": "left_path_elements", "leftPathIndices": "left_path_indices",
-        "rightPathElements": "right_path_elements", "rightPathIndices": "right_path_indices",
+        "sanctionsTreeRoot": "sanctions_tree_root",
+        "issuerTreeRoot": "issuer_tree_root",
+        "amountTier": "amount_tier",
+        "transferTimestamp": "transfer_timestamp",
+        "jurisdictionCode": "jurisdiction_code",
+        "credentialCommitment": "credential_commitment",
+        "tier2Threshold": "tier2_threshold",
+        "tier3Threshold": "tier3_threshold",
+        "tier4Threshold": "tier4_threshold",
+        "domainChainId": "domain_chain_id",
+        "domainContractHash": "domain_contract_hash",
+        "transferIdHash": "transfer_id_hash",
+        "credentialNullifier": "credential_nullifier",
+        "proofExpiresAt": "proof_expires_at",
+        "issuerDid": "issuer_did",
+        "kycTier": "kyc_tier",
+        "sanctionsClear": "sanctions_clear",
+        "issuedAt": "issued_at",
+        "expiresAt": "expires_at",
+        "issuerPathElements": "issuer_path_elements",
+        "issuerPathIndices": "issuer_path_indices",
+        "walletAddressHash": "wallet_address_hash",
+        "leftKey": "left_key",
+        "rightKey": "right_key",
+        "leftPathElements": "left_path_elements",
+        "leftPathIndices": "left_path_indices",
+        "rightPathElements": "right_path_elements",
+        "rightPathIndices": "right_path_indices",
         "actualAmount": "actual_amount",
     }
     circuit_input = {mapping.get(k, k): (v if isinstance(v, list) else str(v)) for k, v in out.items()}

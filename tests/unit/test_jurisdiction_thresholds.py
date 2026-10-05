@@ -94,9 +94,9 @@ class TestThresholdBinding:
 
     def test_unregistered_jurisdiction_uses_the_default_table(self):
         default = JURISDICTION_TIERS["DEFAULT"]
-        assert thresholds_match_jurisdiction(
-            _signals("GB", default["tier2"], default["tier3"], default["tier4"])
-        ) is True
+        assert (
+            thresholds_match_jurisdiction(_signals("GB", default["tier2"], default["tier3"], default["tier4"])) is True
+        )
         # US thresholds must not be accepted under a code that resolves to DEFAULT.
         assert thresholds_match_jurisdiction(_signals("GB", 250, 3000, 10000)) is False
 
@@ -127,10 +127,7 @@ class TestCrossLanguageParity:
         cfg = _config()
 
         for code, expected in cfg["jurisdictions"].items():
-            needle = (
-                f"{code}: {{ tier2: {expected['tier2']}, "
-                f"tier3: {expected['tier3']}, tier4: {expected['tier4']} }}"
-            )
+            needle = f"{code}: {{ tier2: {expected['tier2']}, tier3: {expected['tier3']}, tier4: {expected['tier4']} }}"
             assert needle in source, f"TypeScript table missing or wrong for {code}: expected {needle!r}"
 
         default = cfg["default"]

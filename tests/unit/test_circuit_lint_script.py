@@ -11,8 +11,13 @@ import pytest
 
 SCRIPT = Path(__file__).resolve().parents[2] / "scripts/circuit_lint.sh"
 CIRCUITS = [
-    "wallet_ownership_credential", "compliance", "sanctions_nonmembership",
-    "credential_validity", "amount_tier", "merkle_tree", "poseidon_hasher",
+    "wallet_ownership_credential",
+    "compliance",
+    "sanctions_nonmembership",
+    "credential_validity",
+    "amount_tier",
+    "merkle_tree",
+    "poseidon_hasher",
 ]
 ALLOWED = [
     "signal `domain_chain_id` is not used by the template",
@@ -44,14 +49,18 @@ def lint_tree(tmp_path):
                 "import json, pathlib, sys\n"
                 "with open('calls.jsonl', 'a') as log: log.write(json.dumps(sys.argv[1:]) + '\\n')\n"
                 "if '--sarif-file' in sys.argv:\n"
-                "    pathlib.Path(sys.argv[-1]).write_text('{\"version\":\"2.1.0\"}')\n"
+                '    pathlib.Path(sys.argv[-1]).write_text(\'{"version":"2.1.0"}\')\n'
                 f"print({output!r})\n"
                 f"sys.exit({code})\n"
             )
             analyzer.chmod(0o755)
         result = subprocess.run(
             ["/bin/bash", str(root / "scripts/circuit_lint.sh"), *(["--sarif"] if sarif else [])],
-            cwd=tmp_path, env=env, capture_output=True, text=True, timeout=20,
+            cwd=tmp_path,
+            env=env,
+            capture_output=True,
+            text=True,
+            timeout=20,
         )
         assert list(temporary.iterdir()) == [], "lint must remove its temporary files on every exit"
         return result

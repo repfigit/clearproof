@@ -78,7 +78,7 @@ HTTP_TIMEOUT = 60  # seconds
 
 # Domain tag for sanctions tree leaves (must match circuits)
 SANCTIONS_DOMAIN_TAG = 1
-MAX_SENTINEL = (2 ** 252) - 1
+MAX_SENTINEL = (2**252) - 1
 
 # ---------------------------------------------------------------------------
 # Known OFAC-sanctioned crypto addresses (hardcoded fallback)
@@ -107,20 +107,23 @@ KNOWN_OFAC_ADDRESSES: list[str] = [
 _ETH_ADDRESS_PREFIX = "0x"
 
 # Digital-currency program names OFAC uses
-_CRYPTO_PROGRAM_KEYWORDS = frozenset({
-    "digital currency address",
-    "digital currency",
-    "virtual currency",
-    "xbt",
-    "eth",
-    "usdt",
-    "cryptocurrency",
-})
+_CRYPTO_PROGRAM_KEYWORDS = frozenset(
+    {
+        "digital currency address",
+        "digital currency",
+        "virtual currency",
+        "xbt",
+        "eth",
+        "usdt",
+        "cryptocurrency",
+    }
+)
 
 
 # ---------------------------------------------------------------------------
 # Canonical address normalization (deterministic)
 # ---------------------------------------------------------------------------
+
 
 def normalize_address(addr: str) -> str:
     """
@@ -147,6 +150,7 @@ def normalize_address(addr: str) -> str:
 # Poseidon hash via subprocess (safe argument-list form)
 # ---------------------------------------------------------------------------
 
+
 async def poseidon_hash(inputs: list[int | str]) -> str:
     """Circuit-compatible Poseidon hash (native Python, decimal string out)."""
     return str(_native_poseidon_hash(inputs))
@@ -160,6 +164,7 @@ def address_to_int(address: str) -> int:
 # ---------------------------------------------------------------------------
 # Source content hashing (for reproducibility verification)
 # ---------------------------------------------------------------------------
+
 
 def sha256_bytes(data: bytes) -> str:
     """Return hex SHA-256 of raw bytes."""
@@ -175,6 +180,7 @@ def sha256_file(path: str) -> str:
 # ---------------------------------------------------------------------------
 # Fetchers
 # ---------------------------------------------------------------------------
+
 
 def _looks_like_eth_address(text: str) -> bool:
     text = text.strip()
@@ -311,6 +317,7 @@ async def fetch_eu_sanctions_xml(client: httpx.AsyncClient) -> tuple[list[str], 
 # Merkle tree builder (deterministic)
 # ---------------------------------------------------------------------------
 
+
 async def build_merkle_tree(addresses: list[str], *, target_depth: int | None = None) -> dict[str, Any]:
     """
     Build a sorted Poseidon Merkle tree from a deduplicated, normalized address list.
@@ -351,7 +358,7 @@ async def build_merkle_tree(addresses: list[str], *, target_depth: int | None = 
     depth = max(1, math.ceil(math.log2(n))) if n > 1 else 1
     if target_depth is not None and depth > target_depth:
         raise ValueError("Merkle tree exceeds configured depth")
-    padded_size = 2 ** depth
+    padded_size = 2**depth
 
     leaf_strs = [str(h) for h in sorted_hashes] + ["0"] * (padded_size - n)
 
@@ -370,7 +377,7 @@ async def build_merkle_tree(addresses: list[str], *, target_depth: int | None = 
     if target_depth is not None:
         root = await extend_depth(tree_layers, target_depth, poseidon_hash)
         depth = target_depth
-        padded_size = 2 ** depth
+        padded_size = 2**depth
     print(f"  Root hash: {root}")
 
     return {
@@ -389,6 +396,7 @@ async def build_merkle_tree(addresses: list[str], *, target_depth: int | None = 
 # Test vector generation
 # ---------------------------------------------------------------------------
 
+
 async def generate_test_vectors(addresses: list[str]) -> list[dict[str, Any]]:
     """Generate test vectors for independent verification."""
     vectors: list[dict[str, Any]] = []
@@ -396,19 +404,22 @@ async def generate_test_vectors(addresses: list[str]) -> list[dict[str, Any]]:
         normalized = normalize_address(addr)
         addr_int = address_to_int(normalized)
         leaf_hash = await poseidon_hash([SANCTIONS_DOMAIN_TAG, addr_int])
-        vectors.append({
-            "original": addr,
-            "normalized": normalized,
-            "address_int": str(addr_int),
-            "domain_tag": SANCTIONS_DOMAIN_TAG,
-            "expected_leaf_hash": leaf_hash,
-        })
+        vectors.append(
+            {
+                "original": addr,
+                "normalized": normalized,
+                "address_int": str(addr_int),
+                "domain_tag": SANCTIONS_DOMAIN_TAG,
+                "expected_leaf_hash": leaf_hash,
+            }
+        )
     return vectors
 
 
 # ---------------------------------------------------------------------------
 # Verify mode
 # ---------------------------------------------------------------------------
+
 
 async def verify_tree() -> bool:
     """Verify existing tree against stored test vectors."""
@@ -441,6 +452,7 @@ async def verify_tree() -> bool:
 # ---------------------------------------------------------------------------
 # Main
 # ---------------------------------------------------------------------------
+
 
 async def main(offline: bool = False, verify: bool = False, target_depth: int | None = None) -> None:
     validate_depth(target_depth)

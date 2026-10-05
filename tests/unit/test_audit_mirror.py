@@ -52,7 +52,7 @@ def test_unreadable_tail_cannot_silently_restart_a_chain(tmp_path):
             AuditMirror(str(path))
 
 
-@pytest.mark.parametrize("contents", ['not-json\n', '[]\n', '{"prev_hash":"SYNTHETIC-PRIVATE-MARKER"}\n'])
+@pytest.mark.parametrize("contents", ["not-json\n", "[]\n", '{"prev_hash":"SYNTHETIC-PRIVATE-MARKER"}\n'])
 def test_corruption_rejected_without_logging_untrusted_values(tmp_path, contents, caplog):
     path = tmp_path / "mirror.jsonl"
     mirror = AuditMirror(str(path))

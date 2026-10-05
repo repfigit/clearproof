@@ -25,8 +25,10 @@ def check_key_output(output):
     private = base64.b64decode(settings["VASP_HPKE_PRIVATE_KEY"], altchars=b"-_", validate=True)
     public = base64.b64decode(settings["VASP_HPKE_PUBLIC_KEY"], altchars=b"-_", validate=True)
     assert len(private) == len(public) == 32
-    derived = X25519PrivateKey.from_private_bytes(private).public_key().public_bytes(
-        serialization.Encoding.Raw, serialization.PublicFormat.Raw
+    derived = (
+        X25519PrivateKey.from_private_bytes(private)
+        .public_key()
+        .public_bytes(serialization.Encoding.Raw, serialization.PublicFormat.Raw)
     )
     assert derived == public
     fingerprint = base64.urlsafe_b64encode(hashlib.sha256(public).digest()[:16]).decode("ascii")
@@ -56,9 +58,7 @@ def test_script_entry_point_generates_usable_keys(capsys):
 def test_actual_cli_works_outside_repository_without_writing_files(tmp_path):
     external = tmp_path / "external-working-directory"
     external.mkdir()
-    process = subprocess.run(
-        [sys.executable, str(SCRIPT)], cwd=external, capture_output=True, text=True, timeout=15
-    )
+    process = subprocess.run([sys.executable, str(SCRIPT)], cwd=external, capture_output=True, text=True, timeout=15)
     assert process.returncode == 0
     assert process.stderr == ""
     check_key_output(process.stdout)
