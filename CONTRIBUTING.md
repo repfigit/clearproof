@@ -92,7 +92,16 @@ Sign off every commit:
 git commit -s -m "feat: your change"
 ```
 
-This adds a `Signed-off-by: Your Name <you@example.com>` trailer. Use your real name and a reachable email. PRs without sign-offs on all commits will be asked to amend (`git rebase --signoff` + force-push).
+This adds a `Signed-off-by: Your Name <you@example.com>` trailer. Use your real name and a reachable email, and sign off with the same email as the commit author.
+
+The required `dco` check (`.github/workflows/dco.yml`, `scripts/check_dco.sh`) enforces this on every non-merge commit in a pull request. Bot authors (`dependabot[bot]`, `github-actions[bot]`) are exempt. To fix a failing check:
+
+```bash
+git rebase --signoff origin/main
+git push --force-with-lease
+```
+
+When squash-merging, keep the commit messages in the squash body (the repository default) so the sign-offs reach `main`.
 
 ## Pull Request Process
 
