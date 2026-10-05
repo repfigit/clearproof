@@ -40,7 +40,7 @@
     "@xmldom/xmldom": "^0.9.12"
   },
   "devDependencies": {
-    "@vitest/coverage-v8": "^4.1.11",
+    "@vitest/coverage-v8": "^5.0.3",
     "turbo": "^2.5.0",
     "vitest": "^4.1.11"
   }
