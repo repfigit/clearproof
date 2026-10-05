@@ -62,6 +62,11 @@ configuration. Start with [.env.example](.env.example) and the
 `/health` response is process liveness, not pilot readiness. Do not put keys,
 customer information or decrypted envelopes in logs or source control.
 
+Current-profile [proving jobs](docs/operations/pilot-proving-jobs.md) use an
+encrypted PostgreSQL queue and a separate Linux worker. The API admits work with
+`POST /pilot/proof/jobs`; it rechecks current state before returning completed
+proofs. Queue completion does not authorize a transfer.
+
 ## Proof and authorization boundaries
 
 The current `pilot-transfer-v3` profile has **eight public signals**, with no

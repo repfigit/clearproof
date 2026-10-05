@@ -1,6 +1,7 @@
 """Prepare private pilot witnesses from the registrar's durable tenant inventories."""
 
 import hashlib
+from contextlib import asynccontextmanager
 
 from src.protocol.canonical import record_digest
 from src.protocol.credential import digest_limbs
@@ -15,6 +16,24 @@ from src.services.proof_inspection import ProofInspectionService
 
 
 class ProofPreparationService(ProofInspectionService):
+    @asynccontextmanager
+    async def current_result(self, credential_id: str, signals: list[str], *, now: int):
+        """Keep supported current-state writers serialized through result handoff.
+
+        This validates the statement of an already paired backend result; it
+        does not independently pair arbitrary proofs or consume authorization.
+        """
+        for role in ("proof:generate", "policy:read", "evidence:decrypt"):
+            self._principal.require(role)
+        async with self._store.transaction() as tx:
+            credential = await self._load_current_credential(tx, credential_id, now=now)
+            expected = expected_current_signals(
+                artifacts=self._verifier.artifacts, credential=credential, signals=signals, now=now, **self._inputs
+            )
+            if tuple(signals) != expected:
+                raise RootTrustError("Generated result differs from current statement")
+            yield
+
     async def prepare_witness(
         self, credential_id: str, *, secret: str, sanctions_tree: PilotSanctionsTree, now: int
     ) -> dict:

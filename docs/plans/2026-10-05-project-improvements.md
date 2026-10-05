@@ -5,24 +5,33 @@ documentation, all seven open Clearproof Linear issues and all five open GitHub
 issues reviewed on October 5. Completion requires verified behavior and tracker
 reconciliation, not merely a change of issue status.
 
+The preexisting issue inventory is GitHub #85, #86, #87, #88 and #89, plus
+Linear AIF-158, AIF-119, AIF-100, AIF-99, AIF-89, AIF-67 and AIF-65.
+These twelve items remain part of the task list alongside the website and
+documentation recommendations. GitHub #89 and Linear AIF-89 are separate work.
+
 | Work | Completion evidence | State |
 | --- | --- | --- |
 | Website dependencies and maintenance | Patched framework, dependency audit disposition, lint/build/browser/link CI, deployed verification | Done; web #12 merged, production Ready and live checks passed |
 | Shared release and publication catalogue | Homepage and docs consume one status/catalogue; future/paused articles not promoted; live links work | Done; production docs/site share 0.7.0 and published catalogue |
 | Documentation accuracy and presentation | Reconciled roadmap/agent guidance, proper Markdown, technical sitemap/metadata, maintained web README | Done; #91/web #12 merged and deployed with browser acceptance |
 | Two onboarding paths | Small synthetic evidence inspection with tamper case; reproducible complete pilot with preflight/recovery; current SDK example first | Pending |
-| Backlog reconciliation | Source/test evidence for every open Linear/GitHub item; delivered work closed and remaining criteria retained | In progress; AIF-119 verified and closed |
+| Backlog reconciliation | Source/test evidence for every open Linear/GitHub item; delivered work closed and remaining criteria retained | In progress; five of the original twelve issues closed with evidence |
 | Artifact isolation (GitHub #85) | Explicit test bundles required; incomplete supplied bundles fail; local ambient artifacts ignored | Done; #91 merged and fresh-bundle CI passed; GitHub issue closed |
 | Dependency cleanup (GitHub #86) | Unused drivers removed; locked install and relevant Python tests pass; storage guidance accurate | Done; #91 merged, locked install and full remote CI passed; GitHub issue closed |
-| Proving execution (GitHub #87) | Correct service scope; durable bounded jobs, privacy-safe input/output, retries/cancellation/concurrency/freshness tests | Pending |
+| Proving execution (GitHub #87) | Correct service scope; durable bounded jobs, privacy-safe input/output, retries/cancellation/concurrency/freshness tests | In progress; worker/API and real-proof freshness acceptance pass locally; full CI, review and merge remain |
 | Native proving benchmark (GitHub #88) | Equivalent current-profile benchmark; measured backend decision; pinned optional backend if justified | Pending |
-| Canonical constants (GitHub #89) | Structured profile source, generated runtime constants, drift gate and cross-runtime compatibility tests | In progress; generated code and identical compiled R1CS verified locally |
+| Canonical constants (GitHub #89) | Structured profile source, generated runtime constants, drift gate and cross-runtime compatibility tests | Done; #93 merged after full current-head CI and approval; GitHub issue closed |
 | Operational preflight and software scale | Scoped authenticated readiness checks, bounded cryptographic execution, paginated persisted inventories and measured limits | Pending |
 | Legacy configuration/parity and migration issues | AIF-158/89 hardened with compatibility; AIF-119/100 reconciled; AIF-67/99/65 remaining acceptance explicitly verified | In progress; AIF-158 merged and closed; AIF-119 closed |
 | External evaluation and adoption | Evaluation/feedback entry point and sample report; permitted real operator/counterparty evaluation with retained measurements | Pending; external access not yet established |
 | Production assurance | Existing F1–F5 start conditions preserved; independently reviewed artifacts, audits and live interoperability cannot be inferred from local tests | External gates remain open |
 
 ## Verified tracker reconciliation
+
+- Original issue inventory: GitHub #85, #86 and #89, and Linear AIF-119 and
+  AIF-158 are closed. GitHub #87/#88 and Linear AIF-100/99/89/67/65 remain open;
+  their original acceptance criteria still apply.
 
 - **AIF-119: Done.** Seven-argument router fixtures are already on public main
   at `33be493`. Local complete normal-bytecode Hardhat run: 121 passed, 32
@@ -116,3 +125,23 @@ actual external evidence; local tests cannot establish those prerequisites.
   The renderer now emits repository-formatted Python and a literal valid SPDX
   header. Full Ruff lint/format, REUSE and 95 focused tests at 100% generator
   coverage pass locally; updated full remote CI remains required.
+
+- October 5: #93 merged as `61271b7` after all current-head checks, including
+  real circuit/proof and PostgreSQL acceptance, succeeded and an approving
+  review was recorded. GitHub #89 is verified closed. GitHub #87 remains open:
+  local encrypted PostgreSQL queue and memory-only prover foundations are
+  implemented and tested, but the complete worker/API and freshness workflow
+  remains to be delivered.
+
+- October 5: #87 now includes the separate supervised Linux worker, authenticated
+  admission/read/cancel/retry routes, an operator-owned shared target factory,
+  current-state checks at witness preparation, fenced completion and result
+  retrieval, plus repository/public operations documentation. Queue tests:
+  35 passed at 100% branch coverage; backend tests: 38 passed at 100%; API,
+  factory and worker lifecycle checks: 62 passed at 100% across those modules.
+  Actual development-artifact acceptance: five passed, including revocation,
+  approved-root advancement and target replacement during real proving; stale
+  results are withheld after completion. Documentation: 115 tests and a
+  production build pass. Ruff/format, diff checks and REUSE pass. Full local
+  PostgreSQL/artifact Python regression, remote CI, review and merge remain
+  required; GitHub #87 is still open and no development keys are committed.
