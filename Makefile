@@ -1,4 +1,4 @@
-.PHONY: install dev lint format test test-unit test-integration test-compliance coverage build-sanctions-tree update-sanctions-oracle deploy relay-sanctions refresh-and-relay-sanctions regen-protobufs check-protobufs
+.PHONY: install dev lint format test test-unit test-integration test-compliance coverage build-sanctions-tree build-pilot-sanctions-tree verify-pilot-sanctions-tree publish-pilot-sanctions-head update-sanctions-oracle deploy relay-sanctions refresh-and-relay-sanctions regen-protobufs check-protobufs
 
 RUFF_PATHS := src tests scripts
 
@@ -37,6 +37,20 @@ coverage:
 
 build-sanctions-tree:
 	uv run python scripts/build_sanctions_tree.py
+
+# Pilot (pilot-transfer-v3) raw-address sanctions tree, derived from artifacts/sanctions_tree.json
+build-pilot-sanctions-tree:
+	uv run python scripts/build_pilot_sanctions_tree.py
+
+verify-pilot-sanctions-tree:
+	uv run python scripts/build_pilot_sanctions_tree.py --verify
+
+# Human-confirmed Kind.Sanctions head publication, once per pilot deployment.
+# Usage: make publish-pilot-sanctions-head APPROVAL=<snapshot.json> TRUST=<trust.json> CONTRACT=0x.. \
+#          CHAIN_ID=<id> RUNTIME_SHA256=<reviewed pin> [TARGET=registry|checkpoint]  (needs PILOT_RPC_URL)
+publish-pilot-sanctions-head:
+	uv run python scripts/publish_pilot_sanctions_head.py --approval $(APPROVAL) --trust $(TRUST) \
+	  --contract $(CONTRACT) --chain-id $(CHAIN_ID) --runtime-sha256 $(RUNTIME_SHA256) --target $(or $(TARGET),registry)
 
 # Regenerate gRPC stubs from protos/ (pinned grpcio-tools, documented post-processing)
 regen-protobufs:

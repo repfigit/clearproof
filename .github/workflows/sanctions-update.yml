@@ -52,6 +52,23 @@ jobs:
       - name: Build sanctions Merkle tree
         run: uv run python scripts/build_sanctions_tree.py
 
+      # Pilot tree is derived from the same normalized feed output and independently re-verified.
+      # Publishing the Kind.Sanctions head needs a registrar signature and human confirmation,
+      # so it is never automated here (see make publish-pilot-sanctions-head).
+      - name: Build and verify pilot sanctions tree
+        run: |
+          uv run python scripts/build_pilot_sanctions_tree.py
+          uv run python scripts/build_pilot_sanctions_tree.py --verify
+
+      - name: Upload sanctions tree artifacts for review
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: sanctions-trees
+          path: |
+            artifacts/sanctions_tree.json
+            artifacts/pilot_sanctions_tree.json
+          retention-days: 30
+
       - name: Check for changes
         id: diff
         run: |
@@ -99,7 +116,9 @@ jobs:
           **New leaf count:** $NEW_LEAF_COUNT
 
           Merging this PR triggers the **Relay Sanctions Root** workflow (sanctions-relay.yml), which relays
-          the merged root to the configured chains. To relay manually from a checkout of merged main instead:
+          the merged root to the configured chains. The pilot tree (artifacts/pilot_sanctions_tree.json) is attached to
+          the workflow run: a registrar signs a sanctions-root snapshot for its root/source digest, then run
+          \`make publish-pilot-sanctions-head\` per pilot deployment. To relay the legacy root manually instead:
           \`\`\`
           RELAY_NETWORKS=sepolia,base-sepolia,arbitrum-sepolia make relay-sanctions
           \`\`\`"

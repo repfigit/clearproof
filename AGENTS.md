@@ -11,7 +11,7 @@ ZK infrastructure for FATF Travel Rule compliance. Generates Groth16 proofs (Cir
 ```
 clearproof/
 ├── src/                    # Python SDK (FastAPI, protocol, storage, chain, sar, registry)
-├── packages/contracts/     # Solidity (Hardhat) — Groth16Verifier, ComplianceRegistry, VASPRegistry, SanctionsOracle
+├── packages/contracts/     # Solidity (Hardhat) — pilot: PilotGroth16Verifier, PilotCurrentRegistry, PilotRootCheckpoint; legacy: ComplianceRegistry, SanctionsOracle, …
 ├── packages/proof/         # TypeScript SDK (snarkjs) — generateProof/verifyProof
 ├── packages/cli/           # CLI (demo, proof generation)
 ├── packages/content/       # Marketing/content package
