@@ -9,7 +9,8 @@ import { developmentVerifier } from "./helpers/development-verifier";
  *   3. Submit the proof to ComplianceRegistry.verifyAndRecord()
  *   4. Verify the proof was recorded on-chain
  *
- * Requires circuit artifacts in artifacts/ (run `bash scripts/compile_circuits.sh`).
+ * Requires an explicit, complete CLEARPROOF_LEGACY_TEST_ARTIFACTS bundle from
+ * scripts/test_development_circuits.py. Ambient artifacts/ are never test inputs.
  */
 import { expect } from "chai";
 import { ethers } from "hardhat";
@@ -18,10 +19,8 @@ import * as snarkjs from "snarkjs";
 import * as fs from "fs";
 import * as path from "path";
 
-// Resolve paths relative to monorepo root
-const ARTIFACTS_DIR = process.env.CLEARPROOF_LEGACY_TEST_ARTIFACTS
-  ? path.resolve(process.env.CLEARPROOF_LEGACY_TEST_ARTIFACTS)
-  : path.resolve(__dirname, "../../../artifacts");
+const configuredBundle = process.env.CLEARPROOF_LEGACY_TEST_ARTIFACTS;
+const ARTIFACTS_DIR = configuredBundle === undefined ? "" : path.resolve(configuredBundle);
 const WASM_PATH = path.join(ARTIFACTS_DIR, "compliance_js", "compliance.wasm");
 const ZKEY_PATH = path.join(ARTIFACTS_DIR, "compliance_final.zkey");
 const VKEY_PATH = path.join(ARTIFACTS_DIR, "verification_key.json");
@@ -31,10 +30,14 @@ describe("E2E: Prove -> Submit On-Chain -> Verify", function () {
   this.timeout(30000);
 
   before(function () {
-    // Skip if circuit artifacts are not built
-    if (![WASM_PATH, ZKEY_PATH, VKEY_PATH].every(file => fs.existsSync(file))) {
-      if (process.env.CLEARPROOF_LEGACY_TEST_ARTIFACTS) throw new Error("Explicit legacy test bundle is incomplete");
+    // Missing opt-in skips; supplied-but-invalid inputs fail loudly in CI.
+    if (configuredBundle === undefined) {
       this.skip();
+      return;
+    }
+    if (!configuredBundle.trim()) throw new Error("Explicit legacy test bundle is empty");
+    if (![WASM_PATH, ZKEY_PATH, VKEY_PATH].every(file => fs.existsSync(file))) {
+      throw new Error("Explicit legacy test bundle is incomplete");
     }
   });
 

@@ -32,7 +32,7 @@ clearproof/
 | Sanctions update | `scripts/build_sanctions_tree.py` | Merkle root → oracle relay |
 | Proof generation | `packages/proof/src/` or `src/prover/` | TS (snarkjs) vs Python paths |
 | API route | `src/api/routes/` | JWT + SIWE auth required |
-| Storage layer | `src/storage/` | asyncpg + psycopg, sanctions Merkle |
+| Storage layer | `src/storage/` | psycopg 3 async pools, sanctions Merkle |
 | Chain interaction | `src/chain/` | web3.py reader/writer + audit mirror |
 
 ## CODE MAP
@@ -73,7 +73,8 @@ npm run build
 bash scripts/compile_circuits.sh
 
 # Test layers
-npm test                    # turbo (ts + hardhat)
+npm run test:ts             # turbo (TypeScript + Hardhat workspace tests)
+npm test                    # all Python (same scope as make test)
 make test                   # all Python
 make test-unit
 make test-integration

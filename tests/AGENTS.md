@@ -3,7 +3,7 @@
 **Scope:** The complete test suite — unit, integration, and regulatory compliance layers.
 
 ## OVERVIEW
-Three-layer pytest suite (2614+ LOC) that validates the ZK Travel Rule engine without requiring real circuit artifacts or Node.js in most paths. Heavy ZK operations are mocked; the `compliance/` layer exercises real regulatory scenarios.
+Three-layer pytest suite for the development pilot and legacy compliance path. Most tests run without artifacts; dedicated real-proof, PostgreSQL and local-EVM acceptance paths run in CI. Policy scenarios and synthetic evidence are implementation checks, not legal-compliance assurance.
 
 ## STRUCTURE
 ```
@@ -21,14 +21,14 @@ tests/
 | Change tier thresholds or jurisdiction logic | `tests/unit/test_circuits.py` + `tests/compliance/test_threshold_tiers.py` | Tier logic lives in `src/prover/tier_mapping.py` |
 | Test a new API endpoint | `tests/integration/test_api_endpoints.py` | Must set `PII_MASTER_KEY`, `AUTH_MODE`, `API_KEY` before importing app |
 | Add fixture used across layers | `tests/conftest.py` | Prefer autouse or explicit over duplication |
-| Mock Poseidon for sanctions tree tests | `tests/compliance/test_sanctions_match.py` or `test_real_sanctions.py` | Two different deterministic mocks exist — pick the polynomial one for injectivity |
+| Poseidon parity and tree hashing | `tests/unit/test_poseidon.py`, `src/registry/poseidon.py` | Native Python BN254 Poseidon; dedicated parity checks compare circomlibjs |
 | Test bridge serialization | `tests/integration/test_trisa_bridge.py`, `test_trp_bridge.py`, `test_grpc_trisa_bridge.py` | Bridges have their own integration tests |
 
 ## TESTING MODEL
 
 **Unit** — fast, no external services, pure functions and data models.
-**Integration** — spin up real components (FastAPI via ASGI, asyncpg test DB, storage) but mock ZK and external chains.
-**Compliance** — regulatory intent tests. These are the canary for "does this still satisfy the law?" even if the cryptographic implementation changes.
+**Integration** — exercise FastAPI, psycopg 3/PostgreSQL storage, encrypted evidence and protocol boundaries. Ordinary tests isolate external chains; explicit acceptance runs use real development proofs and an owned local EVM.
+**Compliance** — synthetic policy intent tests: sanctions inclusion, credential status and configured threshold boundaries. Passing them does not establish legal compliance.
 
 `compliance/` is deliberately thin on crypto and thick on policy: sanctions list inclusion, real OFAC addresses (Tornado Cash, etc.), revocation, tier boundaries per jurisdiction.
 
@@ -46,9 +46,9 @@ tests/
 
 ## MOCKING RULES (CRITICAL)
 
-1. **ZK is almost always mocked.** Real `snarkjs` + circuit artifacts are only exercised in `tests/unit/test_circuits.py` (and even there mostly tier logic) and the dedicated circuit round-trip helper.
-2. **Poseidon hash for sanctions tree** must be mocked because it shells out to Node.js. Two factories exist:
-   - Polynomial (injective) mock in `test_sanctions_match.py` — preferred for collision resistance
+1. **Real proofs require explicit bundles.** CI uses `scripts/test_development_circuits.py` to generate unapproved development artifacts, then supplies `CLEARPROOF_PILOT_TEST_ARTIFACTS` and `CLEARPROOF_LEGACY_TEST_ARTIFACTS` to real-proof acceptance suites. Ordinary tests use synthetic/mocked proof records; inspect each suite’s artifact guard.
+2. **Poseidon is native Python** (`src/registry/poseidon.py`); it does not shell out to Node. Existing isolated legacy policy scenarios may use deterministic test hashes for speed. Those mocks do not demonstrate cryptographic behavior:
+   - Polynomial mock in `test_sanctions_match.py` — preserves distinctions in bounded synthetic examples; not a collision-resistant cryptographic hash
    - Simple sum mock in `test_real_sanctions.py` — acceptable for OFAC list inclusion tests
 3. **Never import the FastAPI app** until required env vars are set (`PII_MASTER_KEY=64hex`, `AUTH_MODE`, `API_KEY`).
 4. **Do not** let tests accidentally hit real RPCs or the live sanctions API — all chain and sanctions-oracle calls are mocked in integration tests.
@@ -64,9 +64,9 @@ tests/
 ## ANTI-PATTERNS
 
 - **NEVER** write a compliance test that requires real circuit compilation. Use the mock prover.
-- **NEVER** duplicate the 16-element `public_signals` array across tests — pull from `sample_compliance_proof`.
+- **NEVER** confuse the legacy 16-signal profile with the current pilot eight-signal profile. Use profile-specific fixtures; `sample_compliance_proof` is legacy.
 - **NEVER** import `src.api.main` at module level in integration tests without the env-var guard.
-- **NEVER** use the simple sum Poseidon mock when testing for hash collisions or adversarial inputs (use the polynomial version).
+- **NEVER** use a synthetic hash mock to claim cryptographic collision resistance or circuit parity; use real Poseidon for those properties.
 - **NEVER** put real PII (even test data) in test files outside the encrypted envelope pattern.
 - **NEVER** skip the revocation or expiry credential fixtures when testing those paths — they exist for a reason.
 

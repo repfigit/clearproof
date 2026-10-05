@@ -3,14 +3,14 @@
 **Scope:** Python SDK core — FastAPI gateway, protocol models, storage, chain, SAR, registry.
 
 ## OVERVIEW
-Monorepo Python package (`clearproof`) implementing the ZK Travel Rule compliance engine. FastAPI + asyncpg + web3.py + cryptography.
+Monorepo Python package (`clearproof`) implementing the ZK Travel Rule compliance engine. FastAPI + psycopg 3 + web3.py + cryptography.
 
 ## STRUCTURE
 ```
 src/
 ├── api/              # FastAPI routes + middleware (auth, proof, credential, health)
 ├── protocol/         # Core models: ComplianceProof, HybridPayload, IVMS101, bridges/
-├── storage/          # asyncpg + psycopg: database, sanctions Merkle, credentials, audit, keyring
+├── storage/          # psycopg 3 async pools: database, sanctions Merkle, credentials, audit, keyring
 ├── chain/            # web3.py readers/writers + audit mirror
 ├── sar/              # AES-256-GCM encryption, SAR flags, review workflow
 ├── registry/         # Credential/sanctions/issuer registries (in-memory + DB)
@@ -26,13 +26,13 @@ src/
 | Compliance logic | `src/protocol/compliance_proof.py` | Model + witness builder |
 | Hybrid payload | `src/protocol/hybrid_payload.py` | Encryption envelope |
 | New bridge | `src/protocol/bridges/` | TRISA (gRPC), TRP (REST), TAIP-10 |
-| Storage schema | `src/storage/models.py` + migrations | asyncpg + psycopg |
+| Storage schema | `src/storage/models.py` + migrations | psycopg 3 async pools |
 | Chain write | `src/chain/writer.py` | web3.py + audit mirror |
 | Encryption | `src/sar/encryption.py` | AES-256-GCM + keyring |
 
 ## CONVENTIONS
 - **Python 3.11+**, ruff (E,F,I,W only), line-length 120
-- **Async-first**: All DB/chain I/O via asyncpg/web3 async patterns
+- **Async-first**: Database I/O uses psycopg 3 async connections/pools; chain I/O uses web3 async patterns
 - **No raw PII**: All PII flows through `HybridPayload` encryption
 - **Bridge protobufs**: Generated files (`*_pb2.py`, `*_pb2_grpc.py`) — NEVER edit manually
 - **Registry pattern**: In-memory cache + DB fallback for sanctions/credentials/issuers

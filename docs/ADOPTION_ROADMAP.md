@@ -23,12 +23,13 @@ completion or production readiness. See [security guidance](../SECURITY.md).
 | Reproducible onboarding | Run a supported example from documented prerequisites | Test a clean checkout; report failing commands and environment details |
 | Reliable distribution | Install compatible packages and identify matching artifact provenance | Review packaging, dependency compatibility and release instructions |
 | Portable evidence review | Independently inspect supported exports and recognize incomplete evidence | Exercise synthetic examples, tamper cases and review documentation |
-| Project updates | Follow meaningful changes through the website/docs and a planned RSS feed | Build accessible content pages, stable feed entries and accurate source links |
+| Project updates | Follow meaningful changes through the website/docs and the published RSS feed | Maintain accessible content pages, stable feed entries and accurate source links |
 | Useful feedback | Identify repeatable developer and operator needs | Share reproducible issues, example improvements and workflow questions |
 
 The website, documentation and GitHub are the project's public destinations.
-An updates/RSS pipeline is planned; a feed is not available merely because it is
-listed here. Automation should publish useful, reviewed, source-backed material
+Source-backed [updates](https://docs.clearproof.world/updates) and the
+[RSS feed](https://docs.clearproof.world/feed.xml) are available. Article publication
+respects approval, scheduled dates and the publishing pause switch. Automation should publish useful, reviewed, source-backed material
 and keep links and examples current. Empty schedules are preferable to invented
 announcements or duplicate pages.
 

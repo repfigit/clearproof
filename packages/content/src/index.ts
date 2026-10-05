@@ -15,3 +15,5 @@ export type { UpdateMeta, Update } from './updates.js';
 
 export { listExplainers, getExplainer } from './explainers.js';
 export type { ExplainerMeta, Explainer } from './explainers.js';
+
+export { PROJECT_STATUS } from './project.js';
