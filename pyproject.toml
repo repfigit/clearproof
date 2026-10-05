@@ -12,7 +12,7 @@ dependencies = [
     "cryptography>=42.0",
     "grpcio>=1.62",
     # Runtime for the committed protoc 6.31.1-generated TRISA messages.
-    "protobuf>=6.31.1,<7",
+    "protobuf>=6.31.1,<8",
     "PyJWT[crypto]>=2.8",
     "web3>=7.0",
     "siwe>=4.0",
