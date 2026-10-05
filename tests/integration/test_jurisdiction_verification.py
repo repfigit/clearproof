@@ -25,7 +25,11 @@ from src.prover.tier_mapping import get_thresholds
         ("US", True, False, False, None),
     ],
 )
-async def test_jurisdiction_observation(monkeypatch, registry_code, active, lookup_error, configured, expected):
+async def test_jurisdiction_observation(
+    monkeypatch, tmp_path, registry_code, active, lookup_error, configured, expected
+):
+    # Hermetic: a local artifacts/sanctions_tree.json would otherwise mark the zero root stale.
+    monkeypatch.setenv("CIRCUIT_ARTIFACTS_DIR", str(tmp_path))
     reader = SimpleNamespace(
         get_vasp_info=AsyncMock(
             return_value=("0x" + "11" * 20, registry_code, "", active, 1),

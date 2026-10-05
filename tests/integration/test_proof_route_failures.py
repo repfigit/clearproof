@@ -7,12 +7,15 @@ import pytest
 
 
 @pytest.fixture
-def route(monkeypatch):
+def route(monkeypatch, tmp_path):
     monkeypatch.setenv("PII_MASTER_KEY", "a" * 64)
     monkeypatch.setenv("AUTH_MODE", "api-key")
     monkeypatch.setenv("API_KEY", "synthetic-api-key")
+    # Hermetic: never read (or reuse a cached copy of) a local, gitignored artifacts/ tree.
+    monkeypatch.setenv("CIRCUIT_ARTIFACTS_DIR", str(tmp_path))
     from src.api.routes import proof
 
+    monkeypatch.setattr(proof, "_artifact_cache", {})
     return proof
 
 
