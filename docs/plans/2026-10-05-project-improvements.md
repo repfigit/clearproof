@@ -39,9 +39,8 @@ reconciliation, not merely a change of issue status.
   Registry confirms stable Next.js 16.3.8 and React 19.3.0. Implementation started
   with website dependency remediation and a shared public project catalogue.
 
-No customer outreach, customer data access, production proving-key approval or
-fund movement is authorized by this plan. Customer/provider permission and
-independent assurance require actual external evidence.
+Customer/provider access, independent assurance and production approvals require
+actual external evidence; local tests cannot establish those prerequisites.
 
 - October 5: website [PR #12](https://github.com/repfigit/clearproof-web/pull/12)
   contains dependency remediation, a request-time shared catalogue client,
@@ -110,3 +109,10 @@ independent assurance require actual external evidence.
   pending; source package six passed, including packed include resolution.
   Remote actual-proof/coverage CI, review and merge remain required before
   GitHub #89 closes. No compiled keys or artifacts are committed.
+
+- October 5: [PR #93](https://github.com/repfigit/clearproof/pull/93) contains the
+  canonical profile implementation. Initial CI exposed generator formatting and
+  an escaped SPDX header being interpreted as an invalid license expression.
+  The renderer now emits repository-formatted Python and a literal valid SPDX
+  header. Full Ruff lint/format, REUSE and 95 focused tests at 100% generator
+  coverage pass locally; updated full remote CI remains required.

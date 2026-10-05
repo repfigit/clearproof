@@ -104,17 +104,21 @@ def render(root: Path) -> dict[Path, str]:
     constants.update({name.upper() + "_TREE_DEPTH": v for name, v in data["tree_depths"].items()})
     constants.update({name.upper() + "_DOMAIN_TAG": v for name, v in data["domain_tags"].items()})
     constants.update({name.upper(): v for name, v in data["limits"].items()})
-    python = f'"""{banner}"""\n\nPROFILE = {data["profile"]!r}\nPUBLIC_SIGNALS = (\n'
-    python += "".join(f"    {name!r},\n" for name in signals) + ")\n"
+    python = f'"""{banner}"""\n\nPROFILE = {json.dumps(data["profile"])}\nPUBLIC_SIGNALS = (\n'
+    python += "".join(f"    {json.dumps(name)},\n" for name in signals) + ")\n"
     python += "".join(f"{key} = {value}\n" for key, value in constants.items())
-    python += "FIELD_NAMES = (\n" + "".join(f"    {name!r},\n" for name in fields) + ")\n"
+    python += "FIELD_NAMES = (\n" + "".join(f"    {json.dumps(name)},\n" for name in fields) + ")\n"
     python += "PROJECTION_FIELD_WIDTHS = (\n" + "".join(f"    {v},\n" for v in widths) + ")\n"
     ts = f"// {banner}\nexport const PROFILE = '{data['profile']}' as const;\n"
     ts += "export const PUBLIC_SIGNALS = [\n" + "".join(f"  '{n}',\n" for n in signals) + "] as const;\n"
     ts += "export const PILOT_SIGNAL_INDICES = {\n"
     ts += "".join(f"  {name}: {i},\n" for i, name in enumerate(signals)) + "} as const;\n"
     ts += "".join(f"export const {key} = {value};\n" for key, value in constants.items())
-    sol = f"// SPDX-License-Identifier: Apache-2.0\n// {banner}\npragma solidity ^0.8.24;\n\n"
+    sol = f"""// SPDX-License-Identifier: Apache-2.0
+// {banner}
+pragma solidity ^0.8.24;
+
+"""
     sol += f"uint256 constant PILOT_SIGNAL_COUNT = {len(signals)};\n\n"
     sol += "library PilotSignalConstants {\n" + f'    string internal constant PROFILE = "{data["profile"]}";\n'
     sol += "".join(f"    uint256 internal constant {key} = {v};\n" for key, v in constants.items()) + "}\n"
