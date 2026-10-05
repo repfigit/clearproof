@@ -36,6 +36,7 @@ async def test_jurisdiction_observation(monkeypatch, registry_code, active, look
     monkeypatch.setattr(proof_routes._prover, "verify", AsyncMock(return_value=True))
     signals = ["0"] * 16
     signals[0], signals[4], signals[6] = "1", "1", str(0x5553)
+    signals[15] = str(int(time.time()) + 300)
     thresholds = get_thresholds("US")
     signals[8:11] = [str(thresholds[k]) for k in ("tier2", "tier3", "tier4")]
     previous = app.dependency_overrides.copy()

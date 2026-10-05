@@ -28,14 +28,14 @@ def generation(db, monkeypatch, sample_compliance_proof):
         kyc_tier="retail",
         issued_at=int(time.time()) - 10,
         expires_at=int(time.time()) + 3600,
+        subject_wallet="0x" + "1" * 40,
+        jurisdiction="US",
     )
     registry = SimpleNamespace(get=Mock(return_value=credential), get_commitment=Mock(return_value="123"))
     monkeypatch.setattr(proof, "_check_sanctions_staleness", AsyncMock())
     path = {"siblings": ["0"] * 20, "indices": [0] * 20}
-    monkeypatch.setattr(
-        proof,
-        "_issuer_registry",
-        SimpleNamespace(get_root=Mock(return_value="123"), generate_membership_witness=AsyncMock(return_value=path)),
+    issuer_registry = SimpleNamespace(
+        get_root=Mock(return_value="123"), generate_membership_witness=AsyncMock(return_value=path)
     )
     monkeypatch.setattr(
         proof.SanctionsMerkleTree,
@@ -64,9 +64,12 @@ def generation(db, monkeypatch, sample_compliance_proof):
         idempotency_key="retry",
     )
 
-    async def generate():
+    async def generate(principal="synthetic-principal"):
         return await proof.generate_proof(
-            request, SimpleNamespace(app=SimpleNamespace(state=SimpleNamespace(db=db))), _cred_registry=registry
+            generate.request,
+            SimpleNamespace(app=SimpleNamespace(state=SimpleNamespace(db=db, issuer_registry=issuer_registry))),
+            _auth={"sub": principal},
+            _cred_registry=registry,
         )
 
     generate.request = request
@@ -127,9 +130,34 @@ async def test_concurrent_retries_commit_once(db, generation, monkeypatch):
 async def test_duplicate_nullifier_rolls_back_new_proof(db, generation):
     from fastapi import HTTPException
 
+    from src.api.routes import proof
+
     await generation()
     generation.request.idempotency_key = "different-key"
     with pytest.raises(HTTPException) as error:
         await generation()
     assert error.value.status_code == 409
+    # The spent nullifier is detected before the prover runs again.
+    proof._prover.fullprove.assert_awaited_once()
     assert all(count == 1 for count in (await counts(db)).values())
+
+
+async def test_idempotency_key_is_bound_to_request_and_principal(db, generation, monkeypatch):
+    from fastapi import HTTPException
+
+    from src.api.routes import proof
+
+    # Input-dependent stand-in for Poseidon so a distinct transfer nonce yields a distinct nullifier.
+    monkeypatch.setattr(proof, "_poseidon_hash", AsyncMock(side_effect=lambda values: str(sum(values))))
+    await generation()
+    original = generation.request
+    generation.request = original.model_copy(update={"amount_usd": 11})
+    with pytest.raises(HTTPException) as error:
+        await generation()
+    assert error.value.status_code == 409
+    assert "different request" in error.value.detail
+
+    # Another principal reusing the key never receives the first principal's result.
+    generation.request = original.model_copy(update={"transfer_nonce": "other-principal"})
+    assert (await generation(principal="another-principal"))["status"] == "generated"
+    assert (await counts(db))["idempotency_keys"] == 2

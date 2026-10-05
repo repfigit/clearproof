@@ -353,7 +353,10 @@ async def test_credential_revoke_already_revoked(client: AsyncClient, mock_regis
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("domain,expected_domain", [("", 0), ("abcdef1234567890fedcba", 0xABCDEF1234567890)])
+@pytest.mark.parametrize(
+    "domain,expected_domain",
+    [("", 0), ("0xabcdef1234567890fedcba", 0xABCDEF1234567890FEDCBA), ("123456789", 123456789)],
+)
 async def test_proof_generate_explicit_legacy_mode(
     client: AsyncClient, mock_registry, monkeypatch, domain, expected_domain
 ):
@@ -368,6 +371,8 @@ async def test_proof_generate_explicit_legacy_mode(
     mock_credential.kyc_tier = "retail"
     mock_credential.issued_at = int(time.time()) - 3600
     mock_credential.expires_at = int(time.time()) + 86400
+    mock_credential.subject_wallet = "0x1234567890abcdef1234567890abcdef12345678"
+    mock_credential.jurisdiction = "US"
 
     mock_proof_json = {"pi_a": ["1", "2"], "pi_b": [["3", "4"], ["5", "6"]], "pi_c": ["7", "8"]}
     mock_public_signals = ["1", "0"] + ["0"] * 14
@@ -383,14 +388,13 @@ async def test_proof_generate_explicit_legacy_mode(
 
     mock_registry.get.return_value = mock_credential
     mock_registry.get_commitment.return_value = "12345"
+    # Operators inject the trusted issuer set on app.state.
+    issuer_registry = MagicMock()
+    issuer_registry.generate_membership_witness = AsyncMock(return_value=mock_issuer_witness)
+    issuer_registry.get_root.return_value = "99999"
+    monkeypatch.setattr(app.state, "issuer_registry", issuer_registry, raising=False)
 
     with (
-        patch(
-            "src.api.routes.proof._issuer_registry.generate_membership_witness",
-            new_callable=AsyncMock,
-            return_value=mock_issuer_witness,
-        ),
-        patch("src.api.routes.proof._issuer_registry.get_root", return_value="99999"),
         patch("src.api.routes.proof.SanctionsMerkleTree.load") as mock_tree_load,
         patch(
             "src.api.routes.proof._prover.fullprove",
@@ -431,7 +435,7 @@ async def test_proof_generate_explicit_legacy_mode(
 
 
 @pytest.mark.asyncio
-async def test_proof_generate_hpke_v2_envelope(client: AsyncClient, mock_registry):
+async def test_proof_generate_hpke_v2_envelope(client: AsyncClient, mock_registry, monkeypatch):
     """POST /proof/generate with beneficiary_hpke_public_key emits an HPKE v2 envelope.
 
     The envelope must be openable by the beneficiary's private key and must
@@ -450,6 +454,8 @@ async def test_proof_generate_hpke_v2_envelope(client: AsyncClient, mock_registr
     mock_credential.kyc_tier = "retail"
     mock_credential.issued_at = int(time.time()) - 3600
     mock_credential.expires_at = int(time.time()) + 86400
+    mock_credential.subject_wallet = "0x1234567890abcdef1234567890abcdef12345678"
+    mock_credential.jurisdiction = "US"
 
     mock_proof_json = {"pi_a": ["1", "2"], "pi_b": [["3", "4"], ["5", "6"]], "pi_c": ["7", "8"]}
     mock_public_signals = ["1", "0"] + ["0"] * 14
@@ -464,14 +470,13 @@ async def test_proof_generate_hpke_v2_envelope(client: AsyncClient, mock_registr
 
     mock_registry.get.return_value = mock_credential
     mock_registry.get_commitment.return_value = "12345"
+    # Operators inject the trusted issuer set on app.state.
+    issuer_registry = MagicMock()
+    issuer_registry.generate_membership_witness = AsyncMock(return_value=mock_issuer_witness)
+    issuer_registry.get_root.return_value = "99999"
+    monkeypatch.setattr(app.state, "issuer_registry", issuer_registry, raising=False)
 
     with (
-        patch(
-            "src.api.routes.proof._issuer_registry.generate_membership_witness",
-            new_callable=AsyncMock,
-            return_value=mock_issuer_witness,
-        ),
-        patch("src.api.routes.proof._issuer_registry.get_root", return_value="99999"),
         patch("src.api.routes.proof.SanctionsMerkleTree.load") as mock_tree_load,
         patch(
             "src.api.routes.proof._prover.fullprove",
@@ -562,7 +567,9 @@ async def test_discovery_failure_stops_before_proving_or_encryption(
     monkeypatch.setenv("PII_ENVELOPE_MODE", "hpke-v2")
     monkeypatch.setenv("HPKE_DISCOVERY_ENABLED", "1")
     monkeypatch.delenv("BENEFICIARY_HPKE_PUBLIC_KEY", raising=False)
-    credential = MagicMock(revoked=False, expires_at=int(time.time()) + 3600)
+    credential = MagicMock(
+        revoked=False, expires_at=int(time.time()) + 3600, subject_wallet="0x" + "1" * 40, jurisdiction="US"
+    )
     mock_registry.get.return_value = credential
     error = {"invalid": DiscoveryInvalid, "unsupported": DiscoveryUnsupported, "unavailable": DiscoveryUnavailable}[
         failure
