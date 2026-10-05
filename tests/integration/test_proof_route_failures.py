@@ -100,15 +100,18 @@ async def test_idempotent_result_is_returned_without_regenerating(route, monkeyp
             )
         ),
     )
-    store = SimpleNamespace(check_idempotency=AsyncMock(return_value="cached-digest"))
+    fingerprint = route._request_fingerprint(request_data)
+    store = SimpleNamespace(check_idempotency=AsyncMock(return_value=f"{fingerprint}:cached-digest"))
     monkeypatch.setattr(proofs, "ProofStore", Mock(return_value=store))
     registry = SimpleNamespace(get=Mock())
-    assert await route.generate_proof(request_data, SimpleNamespace(app=None), _cred_registry=registry) == {
-        "status": "already_generated",
-        "result_hash": "cached-digest",
-    }
+    result = await route.generate_proof(
+        request_data, SimpleNamespace(app=None), _auth={"sub": "synthetic"}, _cred_registry=registry
+    )
+    assert result == {"status": "already_generated", "result_hash": "cached-digest"}
     registry.get.assert_not_called()
-    store.check_idempotency.assert_awaited_once_with(request_data.idempotency_key)
+    store.check_idempotency.assert_awaited_once_with(
+        route._scoped_idempotency_key("synthetic", request_data.idempotency_key)
+    )
 
 
 async def test_verification_failure_does_not_log_untrusted_data(route, monkeypatch, caplog, sample_compliance_proof):
@@ -142,10 +145,11 @@ async def test_generation_uses_request_application_database(route, monkeypatch, 
         return_value=SimpleNamespace(get_current=AsyncMock(return_value=SimpleNamespace(updated_at=route.time.time())))
     )
     monkeypatch.setattr(sanctions, "SanctionsStore", roots)
+    stored = f"{route._request_fingerprint(request_data)}:request-app-result"
     monkeypatch.setattr(
         proofs,
         "ProofStore",
-        Mock(return_value=SimpleNamespace(check_idempotency=AsyncMock(return_value="request-app-result"))),
+        Mock(return_value=SimpleNamespace(check_idempotency=AsyncMock(return_value=stored))),
     )
     # The independently constructed app must not read the module-global app's state.
     application.dependency_overrides[route.JWTAuthDependency] = lambda: {"sub": "synthetic"}
@@ -262,7 +266,13 @@ def test_jurisdiction_encoding_rejects_scalar_overflow(route):
 
 
 async def test_unbuilt_sanctions_tree_stops_before_proving(route, request_data, monkeypatch):
-    credential = SimpleNamespace(revoked=False, expires_at=2000, issuer_did="did:web:synthetic.example")
+    credential = SimpleNamespace(
+        revoked=False,
+        expires_at=2000,
+        issuer_did="did:web:synthetic.example",
+        subject_wallet=request_data.wallet_address,
+        jurisdiction="US",
+    )
     registry = SimpleNamespace(get=Mock(return_value=credential), get_commitment=Mock(return_value="123"))
     monkeypatch.setattr(route, "_get_db", lambda _app: None)
     monkeypatch.setattr(route.time, "time", lambda: 1000)
