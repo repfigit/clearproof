@@ -1,0 +1,19 @@
+{
+  "profile": "pilot-transfer-v3",
+  "template": "PilotCompliance(32, 20, 20)",
+  "treeDepths": {
+    "issuance": 32,
+    "authorizedIssuers": 20,
+    "sanctions": 20
+  },
+  "publicSignals": [
+    "projection_commitment",
+    "authorized_issuer_root",
+    "sanctions_root",
+    "authorization_nullifier",
+    "evaluated_at",
+    "proof_expires_at",
+    "domain_chain_id",
+    "domain_registry"
+  ]
+}

@@ -4,13 +4,9 @@ import re
 from functools import lru_cache
 
 from src.protocol.credential import scalar
+from src.prover.generated_signals import ISSUANCE_TREE_DEPTH, ISSUER_TREE_DEPTH, SANCTIONS_TREE_DEPTH
 from src.registry.poseidon import poseidon_hash
 
-# pilot-transfer-v3 tree depths. They are fixed by the circuit and its proving key,
-# so changing any of them requires a new proof profile and new keys (ADR 0011).
-ISSUANCE_TREE_DEPTH = 32  # credentials per issuer issuance root: 2^32
-ISSUER_TREE_DEPTH = 20  # authorized issuer leaves: 2^20
-SANCTIONS_TREE_DEPTH = 20  # raw-address sanctions leaves incl. two sentinels: 2^20
 ROOT_TREE_DEPTHS = {
     "issuance-root": ISSUANCE_TREE_DEPTH,
     "issuer-root": ISSUER_TREE_DEPTH,

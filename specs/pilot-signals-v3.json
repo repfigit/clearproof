@@ -1,0 +1,252 @@
+{
+  "schema_version": 1,
+  "profile": "pilot-transfer-v3",
+  "public_signals": [
+    {
+      "name": "projection_commitment",
+      "meaning": "Poseidon(204, transfer projection, exact credential commitment, issuance root)"
+    },
+    {
+      "name": "authorized_issuer_root",
+      "meaning": "Aggregate authorized-issuer tree root"
+    },
+    {
+      "name": "sanctions_root",
+      "meaning": "Address non-membership tree root"
+    },
+    {
+      "name": "authorization_nullifier",
+      "meaning": "Poseidon(203, holder secret, authorization scope), unchanged from v1"
+    },
+    {
+      "name": "evaluated_at",
+      "meaning": "Proof evaluation time, bounded unsigned 53-bit integer"
+    },
+    {
+      "name": "proof_expires_at",
+      "meaning": "Exclusive expiry, bounded by transfer/credential expiry and evaluation + 300 seconds"
+    },
+    {
+      "name": "domain_chain_id",
+      "meaning": "Exact EVM deployment chain"
+    },
+    {
+      "name": "domain_registry",
+      "meaning": "Exact nonzero EVM registry address encoded as an integer"
+    }
+  ],
+  "tree_depths": {
+    "issuance": 32,
+    "issuer": 20,
+    "sanctions": 20
+  },
+  "domain_tags": {
+    "holder": 101,
+    "credential": 102,
+    "issuer_leaf": 103,
+    "projection": 201,
+    "authorization_scope": 202,
+    "authorization_nullifier": 203,
+    "bound_projection": 204,
+    "sanctions_leaf": 301
+  },
+  "limits": {
+    "proof_lifetime_seconds": 300,
+    "max_transfer_age_seconds": 86400,
+    "max_asset_decimals": 18
+  },
+  "projection_fields": [
+    {
+      "name": "transfer_digest_hi",
+      "bits": 128
+    },
+    {
+      "name": "transfer_digest_lo",
+      "bits": 128
+    },
+    {
+      "name": "context_digest_hi",
+      "bits": 128
+    },
+    {
+      "name": "context_digest_lo",
+      "bits": 128
+    },
+    {
+      "name": "tenant_hi",
+      "bits": 128
+    },
+    {
+      "name": "tenant_lo",
+      "bits": 128
+    },
+    {
+      "name": "transfer_id_hi",
+      "bits": 128
+    },
+    {
+      "name": "transfer_id_lo",
+      "bits": 128
+    },
+    {
+      "name": "nonce_hi",
+      "bits": 128
+    },
+    {
+      "name": "nonce_lo",
+      "bits": 128
+    },
+    {
+      "name": "originator_wallet",
+      "bits": 160
+    },
+    {
+      "name": "beneficiary_wallet",
+      "bits": 160
+    },
+    {
+      "name": "asset_chain",
+      "bits": 64
+    },
+    {
+      "name": "asset_contract",
+      "bits": 160
+    },
+    {
+      "name": "asset_decimals",
+      "bits": 5
+    },
+    {
+      "name": "amount_base_units",
+      "bits": 128
+    },
+    {
+      "name": "valuation_numerator",
+      "bits": 128
+    },
+    {
+      "name": "valuation_denominator",
+      "bits": 128
+    },
+    {
+      "name": "usd_cents",
+      "bits": 128
+    },
+    {
+      "name": "valuation_observed_at",
+      "bits": 53
+    },
+    {
+      "name": "valuation_expires_at",
+      "bits": 53
+    },
+    {
+      "name": "transfer_created_at",
+      "bits": 53
+    },
+    {
+      "name": "transfer_expires_at",
+      "bits": 53
+    },
+    {
+      "name": "evaluated_at",
+      "bits": 53
+    },
+    {
+      "name": "max_transfer_age",
+      "bits": 17
+    },
+    {
+      "name": "jurisdiction",
+      "bits": 16
+    },
+    {
+      "name": "deployment_chain",
+      "bits": 64
+    },
+    {
+      "name": "deployment_address",
+      "bits": 160
+    },
+    {
+      "name": "policy_digest_hi",
+      "bits": 128
+    },
+    {
+      "name": "policy_digest_lo",
+      "bits": 128
+    },
+    {
+      "name": "catalog_digest_hi",
+      "bits": 128
+    },
+    {
+      "name": "catalog_digest_lo",
+      "bits": 128
+    },
+    {
+      "name": "threshold_2",
+      "bits": 128
+    },
+    {
+      "name": "threshold_3",
+      "bits": 128
+    },
+    {
+      "name": "threshold_4",
+      "bits": 128
+    },
+    {
+      "name": "private_tier",
+      "bits": 3
+    },
+    {
+      "name": "originator_did_hi",
+      "bits": 128
+    },
+    {
+      "name": "originator_did_lo",
+      "bits": 128
+    },
+    {
+      "name": "originator_is_vasp",
+      "bits": 1
+    },
+    {
+      "name": "beneficiary_did_hi",
+      "bits": 128
+    },
+    {
+      "name": "beneficiary_did_lo",
+      "bits": 128
+    },
+    {
+      "name": "beneficiary_is_vasp",
+      "bits": 1
+    },
+    {
+      "name": "valuation_source_hi",
+      "bits": 128
+    },
+    {
+      "name": "valuation_source_lo",
+      "bits": 128
+    },
+    {
+      "name": "valuation_evidence_hi",
+      "bits": 128
+    },
+    {
+      "name": "valuation_evidence_lo",
+      "bits": 128
+    },
+    {
+      "name": "valuation_digest_hi",
+      "bits": 128
+    },
+    {
+      "name": "valuation_digest_lo",
+      "bits": 128
+    }
+  ]
+}

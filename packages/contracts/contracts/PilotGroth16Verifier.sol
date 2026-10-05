@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: Apache-2.0
 pragma solidity ^0.8.24;
 
+import {PilotSignalConstants as P, PILOT_SIGNAL_COUNT} from "./generated/PilotSignalConstants.sol";
+
 import {Pairing} from "./Pairing.sol";
 
 /// @notice Fixed eight-signal Groth16 pairing for the development pilot profile.
@@ -17,13 +19,13 @@ contract PilotGroth16Verifier {
         uint256[2][2] beta;
         uint256[2][2] gamma;
         uint256[2][2] delta;
-        uint256[2][9] ic;
+        uint256[2][PILOT_SIGNAL_COUNT + 1] ic;
     }
 
     VerificationKey private _key;
     bytes32 public immutable verificationKeyCommitment;
     bytes32 public immutable artifactManifestDigest;
-    string public constant proofProfile = "pilot-transfer-v3";
+    string public constant proofProfile = P.PROFILE;
     string public constant assurance = "development-unapproved";
 
     error InvalidCoordinate();
@@ -33,7 +35,7 @@ contract PilotGroth16Verifier {
     constructor(VerificationKey memory key, bytes32 manifestDigest) {
         if (manifestDigest == bytes32(0)) revert InvalidKey();
         _validateG1(key.alpha);
-        for (uint256 i; i < 9; ++i) _validateG1(key.ic[i]);
+        for (uint256 i; i < P.PILOT_PUBLIC_SIGNAL_COUNT + 1; ++i) _validateG1(key.ic[i]);
         _validateG2(key.beta);
         _validateG2(key.gamma);
         _validateG2(key.delta);
@@ -74,14 +76,14 @@ contract PilotGroth16Verifier {
     /// Invalid encodings may revert; false means a well-encoded failed pairing.
     function verifyProof(
         uint256[2] calldata a, uint256[2][2] calldata b, uint256[2] calldata c,
-        uint256[8] calldata signals
+        uint256[PILOT_SIGNAL_COUNT] calldata signals
     ) external view returns (bool) {
         // Check before negation so noncanonical y + Q cannot be silently reduced.
         Pairing.G1Point memory pointA = _g1(a);
         Pairing.G2Point memory pointB = _g2(b);
         Pairing.G1Point memory pointC = _g1(c);
         Pairing.G1Point memory accumulator = _g1(_key.ic[0]);
-        for (uint256 i; i < 8; ++i) {
+        for (uint256 i; i < P.PILOT_PUBLIC_SIGNAL_COUNT; ++i) {
             if (signals[i] >= R) revert NoncanonicalSignal();
             accumulator = Pairing.add(accumulator, Pairing.scalar_mul(_g1(_key.ic[i + 1]), signals[i]));
         }

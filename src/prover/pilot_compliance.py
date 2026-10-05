@@ -9,27 +9,27 @@ from src.policy.model import PolicyTrustStore
 from src.protocol.credential import PilotCredential, scalar
 from src.protocol.transfer import AssetRegistry, Transfer, VerificationContext
 from src.protocol.valuation_approval import SignedValuationApproval, ValuationTrustStore
+from src.prover.generated_signals import (
+    BOUND_PROJECTION_DOMAIN_TAG,
+    PROFILE,
+    PROOF_LIFETIME_SECONDS,
+)
+from src.prover.generated_signals import (
+    PUBLIC_SIGNALS as PUBLIC_SIGNALS,
+)
 from src.prover.pilot_projection import project_transfer
 from src.registry.pilot_sanctions import PilotSanctionsTree
 from src.registry.pilot_tree import ISSUANCE_TREE_DEPTH, ISSUER_TREE_DEPTH, SANCTIONS_TREE_DEPTH
 from src.registry.poseidon import poseidon_hash
 
-PUBLIC_SIGNALS = (
-    "projection_commitment",
-    "authorized_issuer_root",
-    "sanctions_root",
-    "authorization_nullifier",
-    "evaluated_at",
-    "proof_expires_at",
-    "domain_chain_id",
-    "domain_registry",
-)
-PROFILE = "pilot-transfer-v3"
-
 
 def credential_bound_projection(projection: str, credential_commitment: str, issuance_root: str) -> str:
     """v2 public commitment to the transfer and exact privately proved credential."""
-    return str(poseidon_hash([204, scalar(projection), scalar(credential_commitment), scalar(issuance_root)]))
+    return str(
+        poseidon_hash(
+            [BOUND_PROJECTION_DOMAIN_TAG, scalar(projection), scalar(credential_commitment), scalar(issuance_root)]
+        )
+    )
 
 
 def compliance_witness(
@@ -91,7 +91,9 @@ def compliance_witness(
     data.update(
         sanctions_root=sanctions.root,
         authorization_nullifier=projection.nullifier(secret),
-        proof_expires_at=str(min(transfer.expires_at, credential.expires_at, context.evaluated_at + 300)),
+        proof_expires_at=str(
+            min(transfer.expires_at, credential.expires_at, context.evaluated_at + PROOF_LIFETIME_SECONDS)
+        ),
         domain_chain_id=context.deployment_chain_id,
         domain_registry=str(int(context.deployment_address, 16)),
     )

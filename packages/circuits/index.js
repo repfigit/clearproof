@@ -18,20 +18,8 @@ module.exports = {
   dir,
   /** Current pilot profile. Public signals are in this exact order. */
   pilot: {
-    profile: "pilot-transfer-v3",
+    ...require("./pilot-profile.json"),
     main: path.join(dir, "pilot_compliance.circom"),
-    template: "PilotCompliance(32, 20, 20)",
-    treeDepths: { issuance: 32, authorizedIssuers: 20, sanctions: 20 },
-    publicSignals: [
-      "projection_commitment",
-      "authorized_issuer_root",
-      "sanctions_root",
-      "authorization_nullifier",
-      "evaluated_at",
-      "proof_expires_at",
-      "domain_chain_id",
-      "domain_registry",
-    ],
   },
   /** Legacy 16-signal demo profile. Never valid as current pilot authorization. */
   legacy: {

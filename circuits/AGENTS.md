@@ -6,6 +6,13 @@
 
 Two proof profiles live here. **Never select a profile by signal count.**
 
+Current pilot constants and public `main` declaration are generated from
+`specs/pilot-signals-v3.json` by `scripts/generate_signal_constants.py`.
+Run it with `--check` to check drift; edit the structured source before regenerating.
+This does not approve artifacts: parameter or signal-meaning changes still need a
+new profile, matching keys and a reviewed migration. The generator leaves legacy
+and staged wallet-ownership definitions separate.
+
 | Profile | Main circuit | Public signals | Status |
 |---------|--------------|----------------|--------|
 | `pilot-transfer-v3` | `pilot_compliance.circom` | 8 | **Current.** Spec: `specs/pilot-transfer-v3.md` (authoritative), ADRs 0009 and 0011 |

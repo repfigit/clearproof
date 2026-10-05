@@ -14,9 +14,16 @@ describe('@clearproof/circuits source package', () => {
   it('describes the current pilot profile consistently with the circuit source', () => {
     expect(circuits.pilot.profile).toBe('pilot-transfer-v3');
     const main = readFileSync(circuits.pilot.main, 'utf8');
-    expect(main).toContain(`= ${circuits.pilot.template};`);
-    const declared = main.match(/component main \{public \[([^\]]+)\]\}/)[1].split(',').map((s) => s.trim());
+    expect(main).toContain('include "./generated/pilot_main.circom";');
+    const generated = readFileSync(join(circuits.dir, 'generated/pilot_main.circom'), 'utf8');
+    const constants = readFileSync(join(circuits.dir, 'generated/pilot_constants.circom'), 'utf8');
+    const declared = generated.match(/component main \{public \[([^\]]+)\]\}/)[1].split(',').map((s) => s.trim());
     expect(declared).toEqual(circuits.pilot.publicSignals);
+    for (const [name, depth] of [['Issuance', circuits.pilot.treeDepths.issuance],
+      ['Issuer', circuits.pilot.treeDepths.authorizedIssuers], ['Sanctions', circuits.pilot.treeDepths.sanctions]]) {
+      expect(generated).toContain(`Pilot${name}TreeDepth()`);
+      expect(constants).toContain(`function Pilot${name}TreeDepth() { return ${depth}; }`);
+    }
     expect(circuits.pilot.template).toBe(
       `PilotCompliance(${circuits.pilot.treeDepths.issuance}, ${circuits.pilot.treeDepths.authorizedIssuers}, ${circuits.pilot.treeDepths.sanctions})`,
     );
@@ -66,7 +73,10 @@ describe('@clearproof/circuits source package', () => {
     const data = JSON.parse(out);
     const entry = Array.isArray(data) ? data[0] : Object.values(data)[0];
     const paths = entry.files.map((f) => f.path).sort();
-    expect(paths.every((p) => /^(circuits\/.*\.circom|circuits\/MANIFEST\.json|index\.js|index\.d\.ts|README\.md|package\.json)$/.test(p))).toBe(true);
+    expect(paths.every((p) => /^(circuits\/.*\.circom|circuits\/MANIFEST\.json|index\.js|index\.d\.ts|pilot-profile\.json|README\.md|package\.json)$/.test(p))).toBe(true);
     expect(paths).toContain('circuits/pilot_compliance.circom');
+    expect(paths).toContain('circuits/generated/pilot_constants.circom');
+    expect(paths).toContain('circuits/generated/pilot_main.circom');
+    expect(paths).toContain('pilot-profile.json');
   });
 });

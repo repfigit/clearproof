@@ -8,6 +8,7 @@ from src.auth.principal import Principal
 from src.protocol.canonical import record_digest
 from src.protocol.credential import digest_limbs
 from src.protocol.root_snapshot import RootSnapshot, RootTrustStore, SignedRootSnapshot, root_key_id, sign_root
+from src.prover.generated_signals import ISSUER_LEAF_DOMAIN_TAG
 from src.registry.pilot_tree import ISSUANCE_TREE_DEPTH, ISSUER_TREE_DEPTH, MAX_TREE_DEPTH, PilotTree
 from src.registry.poseidon import poseidon_hash
 from src.services.issuance_tree import IssuanceTreeContext, build_issuance_tree
@@ -132,7 +133,7 @@ class PilotRegistrar:
                     self._issuance_depth,
                 )
                 issuer_id = hashlib.sha256(issuer.encode("ascii")).hexdigest()
-                leaf = str(poseidon_hash([103, *digest_limbs(issuer), int(candidate.tree.root)]))
+                leaf = str(poseidon_hash([ISSUER_LEAF_DOMAIN_TAG, *digest_limbs(issuer), int(candidate.tree.root)]))
                 leaves.append((issuer_id, leaf))
                 issuer_sources.append(
                     {

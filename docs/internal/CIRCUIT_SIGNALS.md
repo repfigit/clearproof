@@ -10,7 +10,24 @@ This document describes the public and private signals of Clearproof's circuits.
 
 ## Current profile: pilot-transfer-v3
 
-Instantiation: `PilotCompliance(32, 20, 20)`, meaning tree depths of 32 (issuance, 2^32 credentials), 20 (authorized issuers) and 20 (sanctions, 2^20 − 2 addresses). The depths are defined in `src/registry/pilot_tree.py` (ADR 0011) and the circuit has 95,408 constraints. Signal order is fixed by the `main` component and mirrored by `PUBLIC_SIGNALS` in `src/prover/pilot_compliance.py`. The spec and ADRs 0009/0011 are authoritative. The table below records which constraints come from the circuit and which from outside it.
+Instantiation: `PilotCompliance(32, 20, 20)`, meaning tree depths of 32 (issuance, 2^32 credentials), 20 (authorized issuers) and 20 (sanctions, 2^20 − 2 addresses). The depths and generated runtime constants come from `specs/pilot-signals-v3.json` (ADR 0011) and the circuit has 95,408 constraints. Signal order is fixed by the `main` component and mirrored by `PUBLIC_SIGNALS` in `src/prover/pilot_compliance.py`. The spec and ADRs 0009/0011 are authoritative. The table below records which constraints come from the circuit and which from outside it.
+
+<!-- BEGIN GENERATED PILOT SIGNALS -->
+
+| Index | Signal | Meaning |
+| --- | --- | --- |
+| 0 | projection_commitment | Poseidon(204, transfer projection, exact credential commitment, issuance root) |
+| 1 | authorized_issuer_root | Aggregate authorized-issuer tree root |
+| 2 | sanctions_root | Address non-membership tree root |
+| 3 | authorization_nullifier | Poseidon(203, holder secret, authorization scope), unchanged from v1 |
+| 4 | evaluated_at | Proof evaluation time, bounded unsigned 53-bit integer |
+| 5 | proof_expires_at | Exclusive expiry, bounded by transfer/credential expiry and evaluation + 300 seconds |
+| 6 | domain_chain_id | Exact EVM deployment chain |
+| 7 | domain_registry | Exact nonzero EVM registry address encoded as an integer |
+
+<!-- END GENERATED PILOT SIGNALS -->
+
+The following table explains the independent enforcement duties for those signals.
 
 | # | Signal | In-circuit constraint | Enforced outside the circuit by |
 | --- | --- | --- | --- |

@@ -7,6 +7,22 @@ change and [ADR 0009](../docs/adr/0009-credential-bound-pilot-profile.md) for th
 v1 migration and the credential-substitution threat. All signals are canonical unsigned scalar
 field decimal strings; order is mandatory.
 
+The machine-readable definitions are in [pilot-signals-v3.json](pilot-signals-v3.json):
+signal order, tree depths, Poseidon domain tags, proof limits and the 48 projection
+field names/widths. Run `uv run python scripts/generate_signal_constants.py` from
+the repository root to regenerate Python, SDK, Solidity, Circom, source-package
+metadata and marked documentation tables. CI runs the same command with `--check`
+to reject drift without writing files. Edit the structured source first; generated
+code carries its digest. Markdown explanations outside the markers are maintained
+by reviewers.
+
+This is a source-maintenance operation. Changing a cryptographic parameter or
+signal meaning requires a new versioned profile and matching reviewed artifacts;
+regeneration does not approve keys or relabel old manifests. The legacy profile
+and the separately staged wallet-ownership extension retain their own definitions.
+
+<!-- BEGIN GENERATED PILOT SIGNALS -->
+
 | Index | Signal | Meaning |
 | --- | --- | --- |
 | 0 | projection_commitment | Poseidon(204, transfer projection, exact credential commitment, issuance root) |
@@ -17,6 +33,8 @@ field decimal strings; order is mandatory.
 | 5 | proof_expires_at | Exclusive expiry, bounded by transfer/credential expiry and evaluation + 300 seconds |
 | 6 | domain_chain_id | Exact EVM deployment chain |
 | 7 | domain_registry | Exact nonzero EVM registry address encoded as an integer |
+
+<!-- END GENERATED PILOT SIGNALS -->
 
 The private transfer projection uses the existing 48-field canonical projection
 and includes the verification context's exact artifact-manifest digest. It is
@@ -100,4 +118,3 @@ Public signal order, meaning and hash compositions are identical to
 depth 8 for all three trees). v2 is now historical, like v1: current artifact and
 context checks reject it, and read-only pairing can inspect independently pinned
 v2 material. Never promote a v2 manifest by editing its profile label.
-

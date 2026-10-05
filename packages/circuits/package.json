@@ -17,6 +17,7 @@
     "circuits/",
     "index.js",
     "index.d.ts",
+    "pilot-profile.json",
     "README.md"
   ],
   "repository": {
