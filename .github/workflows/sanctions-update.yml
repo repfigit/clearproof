@@ -1,5 +1,8 @@
 name: Update Sanctions Tree
 
+# Builds the tree from live feeds and opens a PR for review. It never relays a root on-chain:
+# relaying happens only from merged main, in sanctions-relay.yml.
+
 on:
   schedule:
     # Daily at 06:00 UTC — after OFAC SDN list typically updates
@@ -10,21 +13,31 @@ permissions:
   contents: write
   pull-requests: write
 
+# Never cancel a run that may be mid-push; let a second trigger wait.
+concurrency:
+  group: ${{ github.workflow }}
+  cancel-in-progress: false
+
 jobs:
   update-sanctions-tree:
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
-          node-version: 20
+          node-version: 24
+          cache: npm
 
-      - uses: astral-sh/setup-uv@v4
+      - uses: astral-sh/setup-uv@38f3f104447c67c051c4a08e39b64a148898af3a # v4.2.0
+        with:
+          enable-cache: true
 
-      - run: npm install
+      - run: npm ci
 
-      - run: uv sync --all-extras
+      # The tree builder needs only the runtime dependencies (no zk/dev extras).
+      - run: uv sync --locked
 
       - name: Save previous leaf count
         id: prev
@@ -85,33 +98,8 @@ jobs:
           **Previous leaf count:** $PREV_LEAF_COUNT
           **New leaf count:** $NEW_LEAF_COUNT
 
-          After merging, run the multi-chain relayer to update on-chain roots:
+          Merging this PR triggers the **Relay Sanctions Root** workflow (sanctions-relay.yml), which relays
+          the merged root to the configured chains. To relay manually from a checkout of merged main instead:
           \`\`\`
           RELAY_NETWORKS=sepolia,base-sepolia,arbitrum-sepolia make relay-sanctions
           \`\`\`"
-
-  # Relay root to all deployed chains after PR merge
-  relay-sanctions-root:
-    runs-on: ubuntu-latest
-    if: github.event_name == 'workflow_dispatch'
-    needs: update-sanctions-tree
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 20
-
-      - run: cd packages/contracts && npm install
-
-      - name: Relay sanctions root to all chains
-        env:
-          DEPLOYER_PRIVATE_KEY: ${{ secrets.DEPLOYER_PRIVATE_KEY }}
-          RELAY_NETWORKS: ${{ vars.RELAY_NETWORKS || 'sepolia' }}
-          SKIP_CONFIRM: "1"
-          SEPOLIA_RPC_URL: ${{ secrets.SEPOLIA_RPC_URL }}
-          BASE_SEPOLIA_RPC_URL: ${{ secrets.BASE_SEPOLIA_RPC_URL }}
-          ARBITRUM_SEPOLIA_RPC_URL: ${{ secrets.ARBITRUM_SEPOLIA_RPC_URL }}
-          POLYGON_AMOY_RPC_URL: ${{ secrets.POLYGON_AMOY_RPC_URL }}
-          OPTIMISM_SEPOLIA_RPC_URL: ${{ secrets.OPTIMISM_SEPOLIA_RPC_URL }}
-        run: cd packages/contracts && npx ts-node scripts/relay-sanctions-root.ts
