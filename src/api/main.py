@@ -25,6 +25,7 @@ from src.api.routes.policy import router as policy_router
 from src.api.routes.proof import router as proof_router
 from src.api.routes.usage import router as usage_router
 from src.api.routes.wallet_ownership import router as wallet_ownership_router
+from src.sar.encryption import hkdf_salt
 from src.storage.database import Database
 from src.version import VERSION
 
@@ -58,6 +59,10 @@ async def lifespan(app: FastAPI):
             "Provide either exactly 64 hex characters (32 bytes decoded) "
             "or a value that is at least 32 bytes when UTF-8 encoded."
         )
+
+    # Validate before connecting storage or entering serving state, even when
+    # the preferred envelope path is HPKE: legacy derivation remains available.
+    hkdf_salt()
 
     db = None
     app.state.db = None

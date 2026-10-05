@@ -12,13 +12,13 @@ reconciliation, not merely a change of issue status.
 | Documentation accuracy and presentation | Reconciled roadmap/agent guidance, proper Markdown, technical sitemap/metadata, maintained web README | Pending |
 | Two onboarding paths | Small synthetic evidence inspection with tamper case; reproducible complete pilot with preflight/recovery; current SDK example first | Pending |
 | Backlog reconciliation | Source/test evidence for every open Linear/GitHub item; delivered work closed and remaining criteria retained | In progress; AIF-119 verified and closed |
-| Artifact isolation (GitHub #85) | Explicit test bundles required; incomplete supplied bundles fail; local ambient artifacts ignored | Implemented; explicit absent/empty/incomplete checks pass; fresh-bundle CI pending |
-| Dependency cleanup (GitHub #86) | Unused drivers removed; locked install and relevant Python tests pass; storage guidance accurate | Implemented; locked all-extras install and 2,040 Python unit tests pass; PR pending |
+| Artifact isolation (GitHub #85) | Explicit test bundles required; incomplete supplied bundles fail; local ambient artifacts ignored | Done; #91 merged and fresh-bundle CI passed; GitHub issue closed |
+| Dependency cleanup (GitHub #86) | Unused drivers removed; locked install and relevant Python tests pass; storage guidance accurate | Done; #91 merged, locked install and full remote CI passed; GitHub issue closed |
 | Proving execution (GitHub #87) | Correct service scope; durable bounded jobs, privacy-safe input/output, retries/cancellation/concurrency/freshness tests | Pending |
 | Native proving benchmark (GitHub #88) | Equivalent current-profile benchmark; measured backend decision; pinned optional backend if justified | Pending |
 | Canonical constants (GitHub #89) | Structured profile source, generated runtime constants, drift gate and cross-runtime compatibility tests | Pending |
 | Operational preflight and software scale | Scoped authenticated readiness checks, bounded cryptographic execution, paginated persisted inventories and measured limits | Pending |
-| Legacy configuration/parity and migration issues | AIF-158/89 hardened with compatibility; AIF-119/100 reconciled; AIF-67/99/65 remaining acceptance explicitly verified | Pending |
+| Legacy configuration/parity and migration issues | AIF-158/89 hardened with compatibility; AIF-119/100 reconciled; AIF-67/99/65 remaining acceptance explicitly verified | In progress; AIF-158 implemented and tested; AIF-119 closed |
 | External evaluation and adoption | Evaluation/feedback entry point and sample report; permitted real operator/counterparty evaluation with retained measurements | Pending; external access not yet established |
 | Production assurance | Existing F1–F5 start conditions preserved; independently reviewed artifacts, audits and live interoperability cannot be inferred from local tests | External gates remain open |
 
@@ -60,3 +60,29 @@ independent assurance require actual external evidence.
   root-page canonical assertions were corrected and passed on a focused rerun.
   Hosted deployment and full remote CI verification remain required before
   closing this work.
+
+- October 5: core maintenance [PR #91](https://github.com/repfigit/clearproof/pull/91)
+  links GitHub #85/#86 and the shared documentation catalogue consumed by web
+  PR #12. Main's stale AIF-119 constructor issue is closed with execution/CI
+  evidence. Removed agent-ready from all eleven other completed Clearproof
+  issues, preserving their other labels and completion state.
+- October 5: AIF-158 implementation requires stable HKDF salt at API startup and
+  direct legacy derivation, with an explicit local-demo-only opt-in. Configured
+  UTF-8 salts preserve existing derivation; retained legacy ciphertext migration
+  is documented and tested. Focused encryption/startup checks: 51 passed, 100%
+  changed-module coverage. Full Python suite: 2,442 passed, 274 optional/service
+  skips, zero HKDF salt warnings under a warning-as-error gate. Remote real-service
+  CI and merging remain required before the issue is closed.
+
+- October 5: #91 merged as `8a7c428` after every required check and automated
+  approval succeeded. Fresh development setup, actual legacy/pilot proofs,
+  PostgreSQL acceptance, normal-bytecode E2E and aggregate coverage gates passed
+  in run [37381888518](https://github.com/repfigit/clearproof/actions/runs/37381888518).
+  GitHub #85 and #86 are closed. Production docs deployment
+  `dpl_F2bYk9Nt2apWV7gmZjB5eznYjG21` is Ready; its public catalogue reports
+  0.7.0 / pilot-transfer-v3 and eight currently published explainers, excluding
+  the October 7/12 articles.
+- October 5: AIF-158 is In Review under [PR #92](https://github.com/repfigit/clearproof/pull/92).
+  Clearproof's Linear project is now In Progress. A concurrent PR #90 duplicates
+  the now-merged #86 dependency cleanup; its additional supervisor-driver
+  correction is preserved here before reconciling that duplicate.
