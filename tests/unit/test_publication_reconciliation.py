@@ -40,11 +40,11 @@ def case():
     event = dict(
         address=binding.registry,
         topics=[
-            Web3.keccak(text="StatementPublished(bytes32,bytes32,bytes32)"),
+            Web3.keccak(text="StatementPublished(bytes32,bytes32,bytes32,address,uint256)"),
             tenant,
             bytes.fromhex(binding.statement_id),
         ],
-        data=b"c" * 32,
+        data=b"c" * 32 + bytes(12) + b"d" * 20 + (1003).to_bytes(32, "big"),
     )
     receipt = dict(
         transactionHash=hash_,
@@ -133,6 +133,8 @@ async def test_non_success_states_are_distinct_and_never_authorize_resubmission(
         "event",
         "tenant",
         "statement",
+        "short_event",
+        "legacy_event",
         "state",
         "stale",
         "missing_receipt",
@@ -159,6 +161,11 @@ async def test_inconsistent_observations_fail_closed(case, mutation):
         receipt["logs"] = []
     elif mutation in ("tenant", "statement"):
         receipt["logs"][0]["topics"][1 if mutation == "tenant" else 2] = bytes(32)
+    elif mutation == "short_event":
+        # The pre-enrichment event carried only the context digest.
+        receipt["logs"][0]["data"] = b"c" * 32
+    elif mutation == "legacy_event":
+        receipt["logs"][0]["topics"][0] = Web3.keccak(text="StatementPublished(bytes32,bytes32,bytes32)")
     elif mutation == "state":
         contract.functions.statementPublication.return_value.call.return_value = (False, 0)
     elif mutation == "stale":

@@ -45,7 +45,7 @@ uv run python -m pytest tests/path/to/file.py::test_name   # single test
 
 # TypeScript / contracts
 npm test                                                   # turbo (ts + hardhat)
-cd packages/contracts && npx hardhat test                  # Hardhat suite (~24 tests inc. E2E)
+cd packages/contracts && npx hardhat test                  # Hardhat suite inc. E2E (real-proof suites skip without artifacts)
 cd packages/proof && npx tsc --noEmit                      # type-check
 cd packages/cli && npx tsc --noEmit
 
@@ -60,6 +60,11 @@ bash scripts/compile_circuits.sh
 make build-sanctions-tree
 make update-sanctions-oracle NETWORK=sepolia
 make relay-sanctions                                       # sync root across all deployed chains
+
+# Pilot sanctions tree → Kind.Sanctions head (human-confirmed, per deployment)
+uv run python scripts/build_pilot_sanctions_tree.py        # from artifacts/sanctions_tree.json
+uv run python scripts/build_pilot_sanctions_tree.py --verify
+uv run python scripts/publish_pilot_sanctions_head.py --help
 
 # Dev API (PII_MASTER_KEY required or startup fails)
 make dev                                                   # uvicorn src.api.main:app --reload
@@ -99,9 +104,14 @@ The domain signals (pilot: `domain_chain_id`, `domain_registry`; legacy: `domain
 
 In the pilot, PostgreSQL owns authorization consumption and replay. `PilotCurrentRegistry` only mirrors receipts that have already been consumed, under publisher-attested checkpoints. It cannot create an authorization or detect a lying publisher. Read-only inspection and observation must never consume an authorization (spend a nullifier). See `docs/internal/PILOT_CURRENT_REGISTRY.md`.
 
-### 3. Sanctions tree rebuild **must** be followed by oracle relay
+### 3. Sanctions tree rebuild **must** be followed by root publication on every path
 
-`scripts/build_sanctions_tree.py` regenerates the Merkle tree from live OFAC/EU feeds. Until `make relay-sanctions` (or `make update-sanctions-oracle NETWORK=<x>`) propagates the new root on-chain, proofs are inconsistent across chains. The oracle enforces a 1h cooldown and a 50% leaf-count floor; skipping the relay is one of the project's loudest anti-patterns.
+There are two sanctions trees, and each needs its own on-chain step after a rebuild:
+
+- **Legacy (16-signal) path.** `scripts/build_sanctions_tree.py` regenerates `artifacts/sanctions_tree.json` from live OFAC/EU feeds (the daily `sanctions-update.yml` workflow runs it). Until `make relay-sanctions` (or `make update-sanctions-oracle NETWORK=<x>`) propagates the new root to every `SanctionsOracle`, legacy proofs are inconsistent across chains. The oracle enforces a 1h cooldown and a 50% leaf-count floor.
+- **Pilot (`pilot-transfer-v3`) path.** `scripts/build_pilot_sanctions_tree.py` derives `artifacts/pilot_sanctions_tree.json` (depth 20, key-sorted raw addresses, `PilotSanctionsTree`) from the same normalized feed output. A registrar then signs a `sanctions-root` snapshot for that root/source digest, and `scripts/publish_pilot_sanctions_head.py` (human-confirmed, once per deployment) publishes it as the `Kind.Sanctions` head of `PilotCurrentRegistry` (or, with `--target checkpoint`, to `PilotRootCheckpoint`). Until then, pilot statements keep pinning the old sanctions head and new proofs against the new root do not inspect. The circuit checks gap adjacency only, so the publisher is trusted for sortedness; auditors re-verify with `--verify` (see `specs/pilot-transfer-v3.md`).
+
+Skipping either publication step is one of the project's loudest anti-patterns.
 
 ### 4. Audit fixes in `circuits/` must not regress
 

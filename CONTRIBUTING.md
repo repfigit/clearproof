@@ -55,7 +55,8 @@ uv run pytest tests/unit/test_circuits.py -v
 cd packages/proof && npx tsc --noEmit
 cd packages/cli && npx tsc --noEmit
 
-# Run Hardhat contract tests (24 tests including E2E)
+# Run Hardhat contract tests (including E2E; real-proof suites skip unless
+# CLEARPROOF_PILOT_TEST_ARTIFACTS or legacy test vectors are present)
 cd packages/contracts && npx hardhat test
 ```
 

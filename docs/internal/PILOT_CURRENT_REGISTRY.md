@@ -55,6 +55,26 @@ same address. This invalidates old statements and heads until they are republish
 under the new epoch. Setting zero disables publication and inspection. Epoch
 changes do not clear recorded receipt mirrors. Choose these changes deliberately.
 
+## Administration, pause and events
+
+The default admin is managed by OpenZeppelin `AccessControlDefaultAdminRules`: a
+transfer is begun by the current admin, accepted by the new admin, and completes
+only after the admin delay (`INITIAL_ADMIN_DELAY`, two days at construction). The
+admin role cannot be granted directly. `PAUSER_ROLE`, granted to the initial admin,
+can pause; only the default admin can unpause. While paused, `publishHead`,
+`publishStatement`, `publishBatch` and `mirror` revert with `EnforcedPause`. Views,
+including `inspect`, still answer, and `setPublisher` stays available so an admin
+can disable a compromised publisher during an incident. Pausing does not change
+PostgreSQL authorization; consumed receipts simply wait to be mirrored.
+
+Events carry enough to index current state without extra reads:
+`PublisherChanged(tenant, publisher, epoch)` indexes the publisher;
+`HeadPublished` includes revision, digest, value (root for kinds 0–2), validity
+interval, enabled flag and publisher epoch; `StatementPublished` includes the
+context digest, designated consumer and projection commitment. The publication
+reconciler (`src/chain/publication_reconciliation.py`) decodes the statement event
+shape exactly and rejects the earlier one-word form.
+
 ## Inspection and receipt mirroring
 
 `inspect` is a view call. It checks the statement's tenant and publisher epoch,

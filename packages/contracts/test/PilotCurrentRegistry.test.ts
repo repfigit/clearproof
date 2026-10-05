@@ -65,8 +65,10 @@ const g2 = (p: string[][]): [G1, G1] => [[p[0][1], p[0][0]], [p[1][1], p[1][0]]]
     const { registry, pairing, tenant, publisher, outsider } = await loadFixture(fixture);
     const [admin] = await ethers.getSigners();
     const Factory = await ethers.getContractFactory("PilotCurrentRegistry");
+    // AccessControlDefaultAdminRules rejects a zero admin before the registry body runs.
+    await expect(Factory.deploy(ethers.ZeroAddress, await pairing.getAddress()))
+      .to.be.revertedWithCustomError(Factory, "AccessControlInvalidDefaultAdmin").withArgs(ethers.ZeroAddress);
     for (const [authority, target] of [
-      [ethers.ZeroAddress, await pairing.getAddress()],
       [admin.address, ethers.ZeroAddress],
       [admin.address, outsider.address],
     ]) {

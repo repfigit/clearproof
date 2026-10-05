@@ -1,3 +1,7 @@
+> **Archived.** This plan was written for another repository (nh-muni-watch) and is
+> not an implementation authority for clearproof. Kept only because
+> `docs/plans/2026-09-05-adoption-pilot-implementation.md` refers to it.
+
 # AIF-82 Implementation Plan: Comprehensive Verification Checks for Off-Chain /proof/verify Endpoint
 
 ## Overview

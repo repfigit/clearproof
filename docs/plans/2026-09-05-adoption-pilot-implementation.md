@@ -27,7 +27,7 @@ checks determine implementation status.
 - Retain the existing proving system unless the authenticated-input design requires a documented change. Verify approved artifact digests and provenance; local development keys must remain development-only.
 - Start integrations with read-only ingestion and local simulators. Customer data, vendor account access, external communications, deployments and production fund movement are separate operational steps; none is needed to complete the local pilot.
 - Use small reviewable changes. A milestone closes only with working code, meaningful acceptance tests and documented limitations. Do not convert failing tests into skips or declare a simulation to be live interoperability.
-- Reuse and correct the existing roadmap and verifier specification. The old `AIF-82-implementation-plan.md` contains an unrelated repository assumption; treat it as historical, not an implementation authority.
+- Reuse and correct the existing roadmap and verifier specification. The old AIF-82 plan (now [`docs/archive/AIF-82-implementation-plan.md`](../archive/AIF-82-implementation-plan.md)) describes an unrelated repository (nh-muni-watch); treat it as historical, not an implementation authority.
 
 **Milestones and dependency order**
 

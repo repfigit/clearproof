@@ -11,7 +11,15 @@ from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 from web3 import AsyncHTTPProvider, AsyncWeb3
 
 from src.chain.pilot_checkpoint import PilotCheckpointReader, publication_arguments
-from src.protocol.root_snapshot import RootAuthority, RootSnapshot, RootTrustError, RootTrustStore, sign_root
+from src.protocol.canonical import record_digest
+from src.protocol.root_snapshot import (
+    RootAuthority,
+    RootSnapshot,
+    RootTrustError,
+    RootTrustStore,
+    root_scope_id,
+    sign_root,
+)
 
 pytestmark = pytest.mark.skipif(not os.getenv("CHECKPOINT_TEST_RPC"), reason="requires isolated local Hardhat node")
 ROOT = Path(__file__).resolve().parents[2]
@@ -115,5 +123,106 @@ async def test_real_chain_checkpoint_current_head_and_scope():
             next_signed, trust, tenant_id="tenant-a", registry_address=accounts[2].lower(), now=now
         )
         assert await web3.eth.get_transaction_count(accounts[1]) == before
+        # Reassigning (even the same address) or disabling the publisher supersedes the head.
+        for publisher in (accounts[1], "0x" + "00" * 20):
+            tx = await contract.functions.setPublisher(args[0], publisher).transact({"from": accounts[0]})
+            await web3.eth.wait_for_transaction_receipt(tx)
+            now = (await web3.eth.get_block("latest"))["timestamp"]
+            with pytest.raises(RootTrustError, match="current tenant publisher"):
+                await reader.verify_current(
+                    next_signed, trust, tenant_id="tenant-a", registry_address=accounts[2].lower(), now=now
+                )
     finally:
         await web3.provider.disconnect()
+
+
+def test_real_chain_pilot_sanctions_head_publication(tmp_path):
+    """Build, authenticate and publish a pilot sanctions root to both pilot destinations."""
+    from eth_account import Account
+    from web3 import HTTPProvider, Web3
+
+    from scripts import publish_pilot_sanctions_head as publisher_cli
+    from src.chain.pilot_sanctions_head import registry_tenant_hash
+    from src.registry.pilot_sanctions import PilotSanctionsTree
+
+    url = os.environ["CHECKPOINT_TEST_RPC"]
+    assert urlsplit(url).hostname == "127.0.0.1", "test deployment is restricted to loopback"
+    web3 = Web3(HTTPProvider(url, request_kwargs={"timeout": 10}))
+    admin = web3.eth.accounts[0]
+
+    def artifact(name, folder="contracts"):
+        return json.loads((ROOT / f"packages/contracts/artifacts/{folder}/{name}.sol/{name}.json").read_text())
+
+    def deploy(data, *args):
+        factory = web3.eth.contract(abi=data["abi"], bytecode=data["bytecode"])
+        receipt = web3.eth.wait_for_transaction_receipt(factory.constructor(*args).transact({"from": admin}))
+        return web3.eth.contract(address=receipt["contractAddress"], abi=data["abi"]), data
+
+    verifier, _ = deploy(artifact("MockPilotVerifier", "contracts/test"), "0x" + "11" * 32)
+    registry, _ = deploy(artifact("PilotCurrentRegistry"), admin, verifier.address)
+    checkpoint, checkpoint_data = deploy(artifact("PilotRootCheckpoint"), admin)
+    # A fresh, test-only publisher key; never a configured or well-known key.
+    account = Account.create()
+    web3.eth.wait_for_transaction_receipt(
+        web3.eth.send_transaction({"from": admin, "to": account.address, "value": 10**18})
+    )
+    audience = registry.address.lower()
+    for contract, tenant in (
+        (registry, registry_tenant_hash("tenant-a")),
+        (checkpoint, bytes.fromhex(record_digest("clearproof/checkpoint-tenant/v1", "tenant-a"))),
+    ):
+        tx = contract.functions.setPublisher(tenant, account.address).transact({"from": admin})
+        web3.eth.wait_for_transaction_receipt(tx)
+
+    tree = PilotSanctionsTree(["0x" + "12" * 20, "0x" + "ab" * 20, "0x" + "03" * 20])
+    (tmp_path / "tree.json").write_text(json.dumps(tree.artifact()))
+    now = web3.eth.get_block("latest")["timestamp"]
+    private = Ed25519PrivateKey.generate()
+    authority = RootAuthority(
+        public_key=private.public_key().public_bytes_raw().hex(),
+        tenant_id="tenant-a",
+        chain_id=31337,
+        registry_address=audience,
+        kinds=("sanctions-root",),
+        not_before=now - 10,
+        not_after=now + 10000,
+    )
+    snapshot = RootSnapshot(
+        tenant_id="tenant-a",
+        chain_id=31337,
+        registry_address=audience,
+        kind="sanctions-root",
+        root=tree.root,
+        tree_depth=tree.depth,
+        source_digest=tree.source_digest,
+        revision=1,
+        issued_at=now - 5,
+        expires_at=now + 3600,
+        key_id=authority.key_id,
+    )
+    (tmp_path / "approval.json").write_text(sign_root(snapshot, private).model_dump_json())
+    (tmp_path / "trust.json").write_text(json.dumps([authority.model_dump(mode="json")]))
+    environ = {"PILOT_PUBLISHER_PRIVATE_KEY": account.key.hex(), "SKIP_CONFIRM": "1"}
+    pins = {
+        # The registry embeds immutables (verifier, code hash, manifest), so its pin is taken
+        # from the reviewed deployment's runtime; the checkpoint has none and matches its build.
+        "registry": hashlib.sha256(bytes(web3.eth.get_code(registry.address))).hexdigest(),
+        "checkpoint": hashlib.sha256(bytes.fromhex(checkpoint_data["deployedBytecode"][2:])).hexdigest(),
+    }
+    for target, contract in (("registry", registry), ("checkpoint", checkpoint)):
+        argv = [
+            "--artifact", str(tmp_path / "tree.json"),
+            "--approval", str(tmp_path / "approval.json"),
+            "--trust", str(tmp_path / "trust.json"),
+            "--target", target,
+            "--contract", contract.address.lower(),
+            "--chain-id", "31337",
+            "--runtime-sha256", pins[target],
+        ]  # fmt: skip
+        assert publisher_cli.main(argv, web3=web3, environ=environ) == 0
+        # The same approval is now current: a second run sends nothing.
+        nonce = web3.eth.get_transaction_count(account.address)
+        assert publisher_cli.main(argv, web3=web3, environ=environ) == 0
+        assert web3.eth.get_transaction_count(account.address) == nonce
+    head = registry.functions.head(registry_tenant_hash("tenant-a"), 2, bytes.fromhex(root_scope_id(snapshot))).call()
+    assert (bytes(head[0]).hex(), head[1], head[2], head[6]) == (snapshot.digest, int(tree.root), 1, True)

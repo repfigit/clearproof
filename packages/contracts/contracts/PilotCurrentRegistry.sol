@@ -1,13 +1,21 @@
 // SPDX-License-Identifier: Apache-2.0
 pragma solidity ^0.8.24;
 
-import "@openzeppelin/contracts/access/AccessControl.sol";
+import {AccessControlDefaultAdminRules} from
+    "@openzeppelin/contracts/access/extensions/AccessControlDefaultAdminRules.sol";
+import {Pausable} from "@openzeppelin/contracts/utils/Pausable.sol";
 import {PilotGroth16Verifier} from "./PilotGroth16Verifier.sol";
 
 /// @notice Development current-state checkpoints and mirrors of consumed PostgreSQL receipts.
 /// @dev Publishers authenticate private source records off-chain (ADR 0006).
 /// This contract verifies their versioned bindings, not JSON/Ed25519 source signatures.
-contract PilotCurrentRegistry is AccessControl {
+/// Administration uses two-step default-admin transfer with a delay. PAUSER_ROLE can halt
+/// every state-changing publication and mirror path; views, including `inspect`, stay readable.
+contract PilotCurrentRegistry is AccessControlDefaultAdminRules, Pausable {
+    /// @notice Role allowed to pause publication and mirroring. Only the default admin unpauses.
+    bytes32 public constant PAUSER_ROLE = keccak256("PAUSER_ROLE");
+    /// @notice Initial delay before an accepted default-admin transfer can complete.
+    uint48 public constant INITIAL_ADMIN_DELAY = 2 days;
     uint256 private constant R =
         21888242871839275222246405745257275088548364400416034343698204186575808495617;
     uint64 private constant MAX_SAFE = 9007199254740991;
@@ -63,20 +71,36 @@ contract PilotCurrentRegistry is AccessControl {
     error AlreadyMirrored();
     error InvalidProof();
 
-    event PublisherChanged(bytes32 indexed tenant, address publisher, uint64 epoch);
-    event HeadPublished(bytes32 indexed tenant, Kind indexed kind, bytes32 indexed scope, uint64 revision, bytes32 digest);
-    event StatementPublished(bytes32 indexed tenant, bytes32 indexed statementId, bytes32 contextDigest);
+    event PublisherChanged(bytes32 indexed tenant, address indexed publisher, uint64 epoch);
+    event HeadPublished(
+        bytes32 indexed tenant, Kind indexed kind, bytes32 indexed scope, uint64 revision, bytes32 digest,
+        uint256 value, uint64 validFrom, uint64 validUntil, bool enabled, uint64 publisherEpoch
+    );
+    event StatementPublished(
+        bytes32 indexed tenant, bytes32 indexed statementId, bytes32 contextDigest, address consumer,
+        uint256 projectionCommitment
+    );
     event AuthorizationMirrored(bytes32 indexed tenant, bytes32 statementId, bytes32 indexed receiptId, uint256 indexed nullifier);
 
-    constructor(address admin, PilotGroth16Verifier pairing) {
-        if (admin == address(0) || address(pairing).code.length == 0) revert InvalidScope();
-        _grantRole(DEFAULT_ADMIN_ROLE, admin);
+    /// @dev A zero admin reverts in AccessControlDefaultAdminRules before this body runs.
+    constructor(address admin, PilotGroth16Verifier pairing) AccessControlDefaultAdminRules(INITIAL_ADMIN_DELAY, admin) {
+        if (address(pairing).code.length == 0) revert InvalidScope();
+        _grantRole(PAUSER_ROLE, admin);
         verifier = pairing;
         verifierCodeHash = address(pairing).codehash;
         artifactManifestDigest = pairing.artifactManifestDigest();
         if (artifactManifestDigest == bytes32(0)) revert InvalidScope();
     }
 
+    function pause() external onlyRole(PAUSER_ROLE) {
+        _pause();
+    }
+
+    function unpause() external onlyRole(DEFAULT_ADMIN_ROLE) {
+        _unpause();
+    }
+
+    /// @dev Deliberately not pausable, so an admin can disable a compromised publisher during a pause.
     function setPublisher(bytes32 tenant, address publisher) external onlyRole(DEFAULT_ADMIN_ROLE) {
         if (tenant == bytes32(0)) revert InvalidScope();
         publishers[tenant] = publisher;
@@ -93,7 +117,7 @@ contract PilotCurrentRegistry is AccessControl {
     }
 
     function publishHead(bytes32 tenant, Kind kind, bytes32 scope, bytes32 digest, uint256 value,
-        uint64 expectedRevision, uint64 validFrom, uint64 validUntil, bool enabled) public {
+        uint64 expectedRevision, uint64 validFrom, uint64 validUntil, bool enabled) public whenNotPaused {
         if (msg.sender != publishers[tenant]) revert UnauthorizedPublisher();
         // These time bounds imply validUntil > validFrom, making subtraction safe.
         if (scope == bytes32(0) || digest == bytes32(0) || validFrom > block.timestamp ||
@@ -107,8 +131,9 @@ contract PilotCurrentRegistry is AccessControl {
         if (expectedRevision >= MAX_SAFE || previous.revision != expectedRevision || validFrom < previous.validFrom) {
             revert InvalidState();
         }
-        _heads[key] = Head(digest, value, expectedRevision + 1, validFrom, validUntil, publisherEpochs[tenant], enabled);
-        emit HeadPublished(tenant, kind, scope, expectedRevision + 1, digest);
+        uint64 epoch = publisherEpochs[tenant];
+        _heads[key] = Head(digest, value, expectedRevision + 1, validFrom, validUntil, epoch, enabled);
+        emit HeadPublished(tenant, kind, scope, expectedRevision + 1, digest, value, validFrom, validUntil, enabled, epoch);
     }
 
     function statementId(bytes32 tenant, Statement calldata statement) public pure returns (bytes32) {
@@ -125,7 +150,7 @@ contract PilotCurrentRegistry is AccessControl {
             block.timestamp >= current.validUntil) revert InvalidState();
     }
 
-    function publishStatement(bytes32 tenant, Statement calldata statement) public returns (bytes32 id) {
+    function publishStatement(bytes32 tenant, Statement calldata statement) public whenNotPaused returns (bytes32 id) {
         if (msg.sender != publishers[tenant]) revert UnauthorizedPublisher();
         if (statement.contextDigest == bytes32(0) || statement.transferDigest == bytes32(0) ||
             statement.projectionCommitment == 0 || statement.projectionCommitment >= R ||
@@ -146,13 +171,13 @@ contract PilotCurrentRegistry is AccessControl {
         approved.statement.validUntil = statement.validUntil;
         approved.statement.consumer = statement.consumer;
         for (uint8 i; i < 8; ++i) approved.statement.pins[i] = statement.pins[i];
-        emit StatementPublished(tenant, id, statement.contextDigest);
+        emit StatementPublished(tenant, id, statement.contextDigest, statement.consumer, statement.projectionCommitment);
     }
 
     /// @notice Publish a coherent checkpoint set and statement in one transaction.
     /// @dev Exact epochs and revisions reject stale preparation, including reused heads.
     function publishBatch(bytes32 tenant, uint64 expectedEpoch, HeadUpdate[8] calldata updates,
-        Statement calldata statement) external returns (bytes32 id) {
+        Statement calldata statement) external whenNotPaused returns (bytes32 id) {
         if (msg.sender != publishers[tenant]) revert UnauthorizedPublisher();
         if (expectedEpoch != publisherEpochs[tenant]) revert InvalidState();
         for (uint8 i; i < 8; ++i) {
@@ -203,7 +228,7 @@ contract PilotCurrentRegistry is AccessControl {
     }
 
     function mirror(bytes32 tenant, bytes32 id, bytes32 receiptId, uint256[2] calldata a, uint256[2][2] calldata b,
-        uint256[2] calldata c, uint256[8] calldata signals) external {
+        uint256[2] calldata c, uint256[8] calldata signals) external whenNotPaused {
         Approval storage approved = _statements[id];
         if (!approved.exists || msg.sender != approved.statement.consumer) revert UnauthorizedConsumer();
         if (mirroredReceipts[tenant][signals[3]] != bytes32(0)) revert AlreadyMirrored();
