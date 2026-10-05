@@ -18,7 +18,7 @@ dependencies = [
     "siwe>=4.0",
     # SIWE 4.4.0 redefines ABNF core rules; 2.9.0 rejects them at import.
     # Keep the locally tested parser until upstream grammar compatibility is fixed.
-    "abnf==2.6.0",
+    "abnf==2.9.0",
     "psycopg[binary,pool]>=3.2",
     "asyncpg>=0.30",
     "pyhpke>=0.6.5",
