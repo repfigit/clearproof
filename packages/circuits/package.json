@@ -45,7 +45,7 @@
     "test": "node scripts/sync.mjs && vitest run"
   },
   "devDependencies": {
-    "vitest": "^4.1.11"
+    "vitest": "^5.0.3"
   },
   "peerDependencies": {
     "circomlib": "^2.0.5"
