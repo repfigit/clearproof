@@ -38,7 +38,7 @@
     "@clearproof/content": "^0.7.0",
     "@clearproof/proof": "^0.7.0",
     "chalk": "^5.3",
-    "commander": "^12.1"
+    "commander": "^15.0"
   },
   "devDependencies": {
     "@vitest/coverage-v8": "^4.1.11",
