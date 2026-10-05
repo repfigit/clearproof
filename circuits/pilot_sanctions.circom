@@ -1,4 +1,5 @@
 pragma circom 2.1.6;
+include "./generated/pilot_constants.circom";
 include "../node_modules/circomlib/circuits/poseidon.circom";
 include "../node_modules/circomlib/circuits/bitify.circom";
 include "../node_modules/circomlib/circuits/comparators.circom";
@@ -34,10 +35,10 @@ template PilotSanctionsGap(depth) {
     sentinel_bound.in[1] <== 2**160;
     sentinel_bound.out === 1;
     component left_leaf = Poseidon(2);
-    left_leaf.inputs[0] <== 301;
+    left_leaf.inputs[0] <== PilotSanctionsLeafDomainTag();
     left_leaf.inputs[1] <== left_key;
     component right_leaf = Poseidon(2);
-    right_leaf.inputs[0] <== 301;
+    right_leaf.inputs[0] <== PilotSanctionsLeafDomainTag();
     right_leaf.inputs[1] <== right_key;
     component left = MerkleTreeVerifier(depth);
     left.leaf <== left_leaf.out;

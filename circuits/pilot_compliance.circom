@@ -1,7 +1,9 @@
 pragma circom 2.1.6;
+include "./generated/pilot_constants.circom";
 include "./pilot_transfer.circom";
 include "./pilot_credential.circom";
 include "./pilot_sanctions.circom";
+include "./generated/pilot_main.circom";
 
 // Development profile pilot-transfer-v3. Eight public inputs; no SAR/tier output.
 // Tree depths (ADR 0011): issuance 32, authorized issuers 20, sanctions 20.
@@ -40,7 +42,7 @@ template PilotCompliance(issuance_depth, issuer_depth, sanctions_depth) {
     transfer.valuation_remainder <== valuation_remainder;
     transfer.projection_commitment <== transfer_projection_commitment;
     component bound = Poseidon(4);
-    bound.inputs[0] <== 204;
+    bound.inputs[0] <== PilotBoundProjectionDomainTag();
     bound.inputs[1] <== transfer_projection_commitment;
     bound.inputs[2] <== credential_commitment;
     bound.inputs[3] <== issuance_root;
@@ -84,7 +86,7 @@ template PilotCompliance(issuance_depth, issuer_depth, sanctions_depth) {
         }
     }
     component nullifier = Poseidon(3);
-    nullifier.inputs[0] <== 203;
+    nullifier.inputs[0] <== PilotAuthorizationNullifierDomainTag();
     nullifier.inputs[1] <== holder_secret;
     nullifier.inputs[2] <== transfer.authorization_scope;
     authorization_nullifier === nullifier.out;
@@ -102,9 +104,6 @@ template PilotCompliance(issuance_depth, issuer_depth, sanctions_depth) {
     expiry_limits[1].in[0] <== proof_expires_at;
     expiry_limits[1].in[1] <== credential_fields[11];
     expiry_limits[2].in[0] <== proof_expires_at - evaluated_at;
-    expiry_limits[2].in[1] <== 300;
+    expiry_limits[2].in[1] <== PilotProofLifetimeSeconds();
     for (var i = 0; i < 3; i++) { expiry_limits[i].out === 1; }
 }
-
-component main {public [projection_commitment, authorized_issuer_root, sanctions_root,
-    authorization_nullifier, evaluated_at, proof_expires_at, domain_chain_id, domain_registry]} = PilotCompliance(32, 20, 20);

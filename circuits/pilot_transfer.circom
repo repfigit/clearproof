@@ -1,21 +1,10 @@
 pragma circom 2.1.6;
+include "./generated/pilot_constants.circom";
 
 include "../node_modules/circomlib/circuits/poseidon.circom";
 include "../node_modules/circomlib/circuits/bitify.circom";
 include "../node_modules/circomlib/circuits/comparators.circom";
 include "./pilot_valuation.circom";
-
-function PilotProjectionWidth(i) {
-    if (i == 10 || i == 11 || i == 13 || i == 27) { return 160; }
-    if (i == 12 || i == 26) { return 64; }
-    if (i == 14) { return 5; }
-    if (i >= 19 && i <= 23) { return 53; }
-    if (i == 24) { return 17; }
-    if (i == 25) { return 16; }
-    if (i == 35) { return 3; }
-    if (i == 38 || i == 41) { return 1; }
-    return 128;
-}
 
 // Private projection, matched exactly by src/prover/pilot_projection.py.
 // The verifier must recompute projection_commitment from validated records,
@@ -32,7 +21,7 @@ template PilotTransferProjection() {
         ranges[i].in <== transfer_fields[i];
     }
     signal states[7];
-    states[0] <== 201;
+    states[0] <== PilotProjectionDomainTag();
     component commits[6];
     for (var chunk = 0; chunk < 6; chunk++) {
         commits[chunk] = Poseidon(9);
@@ -75,12 +64,12 @@ template PilotTransferProjection() {
     age.out === 1;
     component max_age = LessEqThan(17);
     max_age.in[0] <== transfer_fields[24];
-    max_age.in[1] <== 86400;
+    max_age.in[1] <== PilotMaxTransferAgeSeconds();
     max_age.out === 1;
     transfer_fields[12] === transfer_fields[26];
     component decimals = LessEqThan(5);
     decimals.in[0] <== transfer_fields[14];
-    decimals.in[1] <== 18;
+    decimals.in[1] <== PilotMaxAssetDecimals();
     decimals.out === 1;
     component nonzero[5];
     var positive_indices[5] = [10, 11, 12, 13, 27];
@@ -98,7 +87,7 @@ template PilotTransferProjection() {
     // Stable across re-evaluation/quote/policy changes for this tenant's transfer
     // ID + nonce + deployment. The parent binds holder knowledge to this scope.
     component scope = Poseidon(9);
-    scope.inputs[0] <== 202;
+    scope.inputs[0] <== PilotAuthorizationScopeDomainTag();
     for (var i = 0; i < 6; i++) { scope.inputs[i+1] <== transfer_fields[4+i]; }
     scope.inputs[7] <== transfer_fields[26];
     scope.inputs[8] <== transfer_fields[27];

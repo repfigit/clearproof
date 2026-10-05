@@ -9,6 +9,7 @@ from pydantic import Field, StringConstraints, field_validator, model_validator
 
 from src.protocol.discovery_profile import parse_target
 from src.protocol.transfer import Address, Epoch, Hex32, OpaqueId, Record
+from src.prover.generated_signals import CREDENTIAL_DOMAIN_TAG, HOLDER_DOMAIN_TAG, ISSUER_LEAF_DOMAIN_TAG
 from src.registry.poseidon import BN254_SCALAR_FIELD, poseidon_hash
 
 Scalar = Annotated[str, StringConstraints(pattern=r"^(0|[1-9][0-9]{0,76})$", min_length=1, max_length=77)]
@@ -31,7 +32,7 @@ def digest_limbs(value: str) -> tuple[int, int]:
 
 
 def holder_commitment(secret: str) -> str:
-    return str(poseidon_hash([101, scalar(secret, nonzero=True)]))
+    return str(poseidon_hash([HOLDER_DOMAIN_TAG, scalar(secret, nonzero=True)]))
 
 
 class PilotCredential(Record):
@@ -71,7 +72,7 @@ class PilotCredential(Record):
     def fields(self) -> list[int]:
         nonce = bytes.fromhex(self.credential_nonce)
         return [
-            102,
+            CREDENTIAL_DOMAIN_TAG,
             *digest_limbs(self.issuer_did),
             *digest_limbs(self.tenant_id),
             int.from_bytes(nonce[:16], "big"),
@@ -90,7 +91,7 @@ class PilotCredential(Record):
         return str(poseidon_hash(self.fields()))
 
     def authorized_issuer_leaf(self, issuance_root: str) -> str:
-        return str(poseidon_hash([103, *digest_limbs(self.issuer_did), scalar(issuance_root)]))
+        return str(poseidon_hash([ISSUER_LEAF_DOMAIN_TAG, *digest_limbs(self.issuer_did), scalar(issuance_root)]))
 
     def witness(
         self,

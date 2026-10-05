@@ -2,6 +2,8 @@
 import { requestReport } from './api-client.js';
 import { recordDigest } from './canonical.js';
 import { isFieldElementArray } from './field.js';
+import { AUTHORIZATION_NULLIFIER_INDEX, PILOT_PUBLIC_SIGNAL_COUNT, PROOF_EXPIRES_AT_INDEX, PROFILE } from './generated-signals.js';
+export { AUTHORIZATION_NULLIFIER_INDEX, PILOT_PUBLIC_SIGNAL_COUNT, PROOF_EXPIRES_AT_INDEX } from './generated-signals.js';
 import type { ObservationRequest } from './observation.js';
 
 export type AuthorizationRequest = ObservationRequest;
@@ -9,7 +11,7 @@ const digests = ['receipt_id', 'proof_id', 'transfer_digest', 'context_digest', 
   'nullifier', 'envelope_digest', 'information_signature_digest', 'evidence_id'] as const;
 export type AuthorizationReceipt = Record<typeof digests[number], string> & {
   schema_version: 'clearproof-local-authorization-v1';
-  tenant_id: string; actor_id: string; proof_profile: 'pilot-transfer-v3';
+  tenant_id: string; actor_id: string; proof_profile: typeof PROFILE;
   recipient_key_id: string;
   authorized_at: number; expires_at: number; outcome: 'ALLOW'; execution: 'not-requested';
 };
@@ -25,10 +27,6 @@ const opaque = (v: unknown) => typeof v === 'string' && /^[a-z0-9][a-z0-9_-]{0,6
 const recipientKey = (v: unknown) => typeof v === 'string' && /^[A-Za-z0-9_-]{22}==$/.test(v) &&
   Buffer.from(v, 'base64url').toString('base64url') + '==' === v;
 const epoch = (v: unknown): v is number => typeof v === 'number' && Number.isSafeInteger(v) && v >= 0;
-/** pilot-transfer-v3 public signal count and the indices this module reads (see specs/pilot-transfer-v3.md). */
-export const PILOT_PUBLIC_SIGNAL_COUNT = 8;
-export const AUTHORIZATION_NULLIFIER_INDEX = 3;
-export const PROOF_EXPIRES_AT_INDEX = 5;
 export function validateAuthorizationReport(value: unknown, signals: string[]): AuthorizationReport {
   if (!isFieldElementArray(signals, PILOT_PUBLIC_SIGNAL_COUNT)) throw new Error('Invalid signals');
   const nullifier = BigInt(signals[AUTHORIZATION_NULLIFIER_INDEX]);
@@ -39,7 +37,7 @@ export function validateAuthorizationReport(value: unknown, signals: string[]): 
   const r = value.receipt;
   if (!exact(r, [...digests, 'schema_version', 'tenant_id', 'actor_id', 'proof_profile', 'authorized_at', 'expires_at',
     'outcome', 'execution', 'recipient_key_id']) || digests.some(k => !hex(r[k])) || !recipientKey(r.recipient_key_id) || !opaque(r.tenant_id) || !opaque(r.actor_id) ||
-    r.schema_version !== 'clearproof-local-authorization-v1' || r.proof_profile !== 'pilot-transfer-v3' ||
+    r.schema_version !== 'clearproof-local-authorization-v1' || r.proof_profile !== PROFILE ||
     r.outcome !== 'ALLOW' || r.execution !== 'not-requested' || !epoch(r.authorized_at) || !epoch(r.expires_at) ||
     r.authorized_at >= r.expires_at || nullifier === 0n ||
     r.nullifier !== nullifier.toString(16).padStart(64, '0') ||

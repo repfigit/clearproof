@@ -9,6 +9,7 @@ from src.protocol.credential import PilotCredential
 from src.protocol.root_snapshot import RootTrustStore, SignedRootSnapshot
 from src.protocol.transfer import AssetRegistry, Transfer, VerificationContext
 from src.protocol.valuation_approval import SignedValuationApproval, ValuationTrustStore
+from src.prover.generated_signals import AUTHORIZATION_NULLIFIER_INDEX, PROOF_EXPIRES_AT_INDEX, PROOF_LIFETIME_SECONDS
 from src.prover.pilot_artifacts import InspectedArtifacts
 from src.prover.pilot_compliance import credential_bound_projection
 from src.prover.pilot_projection import project_transfer
@@ -45,7 +46,7 @@ def expected_current_signals(
     credential = PilotCredential.model_validate(credential)
     root_pins = CurrentRootPins.model_validate(root_pins)
     observed = public_signals(signals)
-    if observed[3] == "0":
+    if observed[AUTHORIZATION_NULLIFIER_INDEX] == "0":
         raise ProofInspectionError("invalid_authorization_nullifier")
     artifacts.check_artifact_context(context)
     roots = verify_pilot_roots(
@@ -72,16 +73,20 @@ def expected_current_signals(
             valuation_approval, transfer, registry, tenant_id=root_pins.tenant_id, now=at
         )
     projection = project_transfer(transfer, context, registry, policy.tier_thresholds_usd_cents)
-    expiry = int(observed[5])
-    if not now < expiry <= min(transfer.expires_at, credential.expires_at, context.evaluated_at + 300):
+    expiry = int(observed[PROOF_EXPIRES_AT_INDEX])
+    if (
+        not now
+        < expiry
+        <= min(transfer.expires_at, credential.expires_at, context.evaluated_at + PROOF_LIFETIME_SECONDS)
+    ):
         raise ProofInspectionError("proof_expired_or_invalid_lifetime")
     return (
         credential_bound_projection(projection.commitment, credential.commitment, roots.issuance.root),
         roots.issuers.root,
         roots.sanctions.root,
-        observed[3],
+        observed[AUTHORIZATION_NULLIFIER_INDEX],
         str(context.evaluated_at),
-        observed[5],
+        observed[PROOF_EXPIRES_AT_INDEX],
         context.deployment_chain_id,
         str(int(context.deployment_address, 16)),
     )

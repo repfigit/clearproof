@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: Apache-2.0
 pragma solidity ^0.8.24;
 
+import {PilotSignalConstants as P, PILOT_SIGNAL_COUNT} from "./generated/PilotSignalConstants.sol";
+
 import {AccessControlDefaultAdminRules} from
     "@openzeppelin/contracts/access/extensions/AccessControlDefaultAdminRules.sol";
 import {Pausable} from "@openzeppelin/contracts/utils/Pausable.sol";
@@ -156,7 +158,7 @@ contract PilotCurrentRegistry is AccessControlDefaultAdminRules, Pausable {
             statement.projectionCommitment == 0 || statement.projectionCommitment >= R ||
             statement.consumer == address(0) || statement.evaluatedAt > block.timestamp ||
             statement.validUntil <= block.timestamp || statement.validUntil > MAX_SAFE ||
-            statement.validUntil > uint256(statement.evaluatedAt) + 300 ||
+            statement.validUntil > uint256(statement.evaluatedAt) + P.PROOF_LIFETIME_SECONDS ||
             statement.pins[7].scope != statement.contextDigest) revert InvalidStatement();
         for (uint8 i; i < 7; ++i) _currentHead(tenant, Kind(i), statement.pins[i], statement.evaluatedAt);
         id = statementId(tenant, statement);
@@ -203,39 +205,39 @@ contract PilotCurrentRegistry is AccessControlDefaultAdminRules, Pausable {
     }
 
     function _inspect(bytes32 tenant, bytes32 id, uint256[2] calldata a, uint256[2][2] calldata b,
-        uint256[2] calldata c, uint256[8] calldata signals) private view returns (bool) {
+        uint256[2] calldata c, uint256[PILOT_SIGNAL_COUNT] calldata signals) private view returns (bool) {
         Approval storage approved = _statements[id];
         if (!approved.exists || publishers[tenant] == address(0) || approved.publisherEpoch != publisherEpochs[tenant] ||
             address(verifier).codehash != verifierCodeHash) revert InvalidStatement();
         Statement memory statement = approved.statement;
         // Publication checked evaluatedAt; approvals are immutable and chain time is monotonic.
         if (keccak256(abi.encode(tenant, statement)) != id ||
-            signals[0] != statement.projectionCommitment || signals[3] == 0 ||
-            signals[4] != statement.evaluatedAt || signals[5] <= block.timestamp ||
-            signals[5] > statement.validUntil || signals[6] != block.chainid || signals[7] != uint160(address(this))) {
+            signals[P.PROJECTION_COMMITMENT_INDEX] != statement.projectionCommitment || signals[P.AUTHORIZATION_NULLIFIER_INDEX] == 0 ||
+            signals[P.EVALUATED_AT_INDEX] != statement.evaluatedAt || signals[P.PROOF_EXPIRES_AT_INDEX] <= block.timestamp ||
+            signals[P.PROOF_EXPIRES_AT_INDEX] > statement.validUntil || signals[P.DOMAIN_CHAIN_ID_INDEX] != block.chainid || signals[P.DOMAIN_REGISTRY_INDEX] != uint160(address(this))) {
             revert InvalidStatement();
         }
         for (uint8 i; i < 7; ++i) {
             Head memory current = _currentHead(tenant, Kind(i), statement.pins[i], statement.evaluatedAt);
-            if ((i == 1 && signals[1] != current.value) || (i == 2 && signals[2] != current.value)) revert InvalidStatement();
+            if ((i == 1 && signals[P.AUTHORIZED_ISSUER_ROOT_INDEX] != current.value) || (i == 2 && signals[P.SANCTIONS_ROOT_INDEX] != current.value)) revert InvalidStatement();
         }
         return verifier.verifyProof(a, b, c, signals);
     }
 
     function inspect(bytes32 tenant, bytes32 id, uint256[2] calldata a, uint256[2][2] calldata b,
-        uint256[2] calldata c, uint256[8] calldata signals) external view returns (bool) {
+        uint256[2] calldata c, uint256[PILOT_SIGNAL_COUNT] calldata signals) external view returns (bool) {
         return _inspect(tenant, id, a, b, c, signals);
     }
 
     function mirror(bytes32 tenant, bytes32 id, bytes32 receiptId, uint256[2] calldata a, uint256[2][2] calldata b,
-        uint256[2] calldata c, uint256[8] calldata signals) external whenNotPaused {
+        uint256[2] calldata c, uint256[PILOT_SIGNAL_COUNT] calldata signals) external whenNotPaused {
         Approval storage approved = _statements[id];
         if (!approved.exists || msg.sender != approved.statement.consumer) revert UnauthorizedConsumer();
-        if (mirroredReceipts[tenant][signals[3]] != bytes32(0)) revert AlreadyMirrored();
+        if (mirroredReceipts[tenant][signals[P.AUTHORIZATION_NULLIFIER_INDEX]] != bytes32(0)) revert AlreadyMirrored();
         if (!_inspect(tenant, id, a, b, c, signals)) revert InvalidProof();
         Head memory decision = _currentHead(tenant, Kind.Authorization, approved.statement.pins[7], approved.statement.evaluatedAt);
         if (decision.value != 1 || decision.digest != receiptId) revert AuthorizationUnavailable();
-        mirroredReceipts[tenant][signals[3]] = receiptId;
-        emit AuthorizationMirrored(tenant, id, receiptId, signals[3]);
+        mirroredReceipts[tenant][signals[P.AUTHORIZATION_NULLIFIER_INDEX]] = receiptId;
+        emit AuthorizationMirrored(tenant, id, receiptId, signals[P.AUTHORIZATION_NULLIFIER_INDEX]);
     }
 }

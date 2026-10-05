@@ -5,6 +5,7 @@ import hashlib
 from src.protocol.canonical import record_digest
 from src.protocol.credential import digest_limbs
 from src.protocol.root_snapshot import RootTrustError
+from src.prover.generated_signals import ISSUER_LEAF_DOMAIN_TAG
 from src.prover.pilot_compliance import PUBLIC_SIGNALS, compliance_witness
 from src.prover.pilot_current import expected_current_signals
 from src.registry.pilot_sanctions import PilotSanctionsTree
@@ -71,7 +72,15 @@ class ProofPreparationService(ProofInspectionService):
                 [
                     (
                         entry["entry_id"],
-                        str(poseidon_hash([103, *digest_limbs(entry["issuer_did"]), int(entry["issuance_root"])])),
+                        str(
+                            poseidon_hash(
+                                [
+                                    ISSUER_LEAF_DOMAIN_TAG,
+                                    *digest_limbs(entry["issuer_did"]),
+                                    int(entry["issuance_root"]),
+                                ]
+                            )
+                        ),
                     )
                     for entry in entries
                 ],

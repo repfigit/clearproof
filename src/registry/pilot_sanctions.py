@@ -4,12 +4,13 @@ import re
 from bisect import bisect_left
 
 from src.protocol.canonical import record_digest
+from src.prover.generated_signals import SANCTIONS_LEAF_DOMAIN_TAG
 from src.registry.pilot_tree import MAX_TREE_DEPTH, SANCTIONS_TREE_DEPTH, PilotTree
 from src.registry.poseidon import poseidon_hash
 
 ARTIFACT_SCHEMA = "clearproof-pilot-sanctions-tree-v1"
 PROFILE = "pilot-raw-address-sanctions-v1"
-LEAF_DOMAIN_TAG = 301
+LEAF_DOMAIN_TAG = SANCTIONS_LEAF_DOMAIN_TAG
 ORDERING = "ascending-uint160-address-key"
 SENTINELS = ("0", str(2**160))
 

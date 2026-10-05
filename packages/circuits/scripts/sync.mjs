@@ -19,7 +19,7 @@ export function rewriteIncludes(text) {
 function circomFiles(dir) {
   return readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {
     const path = join(dir, entry.name);
-    if (entry.isDirectory()) return entry.name === 'lib' ? circomFiles(path) : [];
+    if (entry.isDirectory()) return ['lib', 'generated'].includes(entry.name) ? circomFiles(path) : [];
     return entry.name.endsWith('.circom') ? [path] : [];
   });
 }

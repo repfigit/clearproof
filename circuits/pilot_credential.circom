@@ -1,4 +1,5 @@
 pragma circom 2.1.6;
+include "./generated/pilot_constants.circom";
 
 include "../node_modules/circomlib/circuits/poseidon.circom";
 include "../node_modules/circomlib/circuits/bitify.circom";
@@ -94,7 +95,7 @@ template PilotCredentialValidity(issuance_depth, issuer_depth) {
     secret_zero.in <== holder_secret;
     secret_zero.out === 0;
     component holder = Poseidon(2);
-    holder.inputs[0] <== 101;
+    holder.inputs[0] <== PilotHolderDomainTag();
     holder.inputs[1] <== holder_secret;
     holder.out === fields[7];
     component holder_zero = IsZero();
@@ -102,7 +103,7 @@ template PilotCredentialValidity(issuance_depth, issuer_depth) {
     holder_zero.out === 0;
 
     component commitment = Poseidon(14);
-    commitment.inputs[0] <== 102;
+    commitment.inputs[0] <== PilotCredentialDomainTag();
     for (var i = 0; i < 13; i++) {
         commitment.inputs[i+1] <== fields[i];
     }
@@ -115,7 +116,7 @@ template PilotCredentialValidity(issuance_depth, issuer_depth) {
         issuance.pathIndices[i] <== issuance_indices[i];
     }
     component issuer_leaf = Poseidon(4);
-    issuer_leaf.inputs[0] <== 103;
+    issuer_leaf.inputs[0] <== PilotIssuerLeafDomainTag();
     issuer_leaf.inputs[1] <== fields[0];
     issuer_leaf.inputs[2] <== fields[1];
     issuer_leaf.inputs[3] <== issuance_root;

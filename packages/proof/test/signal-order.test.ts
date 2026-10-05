@@ -7,12 +7,13 @@ import {
   PILOT_PUBLIC_SIGNAL_COUNT,
   PROOF_EXPIRES_AT_INDEX,
 } from '../src/authorization.js';
+import { PILOT_SIGNAL_INDICES, PUBLIC_SIGNALS, PROFILE } from '../src/generated-signals.js';
 
 /**
  * Cross-language guard for the pilot-transfer-v3 signal order (CLAUDE.md invariant 1).
- * authorization.ts reads the nullifier and expiry by index; the Python prover owns the order.
+ * authorization.ts and the Python prover consume constants generated from the profile schema.
  */
-const PYTHON_PROVER = join('src', 'prover', 'pilot_compliance.py');
+const PYTHON_PROVER = join('src', 'prover', 'generated_signals.py');
 
 function findRepoFile(relative: string): string {
   let dir = dirname(fileURLToPath(import.meta.url));
@@ -28,12 +29,17 @@ function findRepoFile(relative: string): string {
 function pythonPublicSignals(): string[] {
   const source = readFileSync(findRepoFile(PYTHON_PROVER), 'utf8');
   const match = /^PUBLIC_SIGNALS\s*=\s*[([]([\s\S]*?)[)\]]/m.exec(source);
-  if (!match) throw new Error('PUBLIC_SIGNALS tuple not found in pilot_compliance.py');
+  if (!match) throw new Error('PUBLIC_SIGNALS tuple not found in generated_signals.py');
   return [...match[1].matchAll(/["']([a-z_]+)["']/g)].map(m => m[1]);
 }
 
 it('keeps authorization.ts signal indices aligned with the Python pilot prover', () => {
   const signals = pythonPublicSignals();
+  const schema = JSON.parse(readFileSync(findRepoFile('specs/pilot-signals-v3.json'), 'utf8'));
+  expect(PROFILE).toBe(schema.profile);
+  expect([...PUBLIC_SIGNALS]).toEqual(signals);
+  expect(signals).toEqual(schema.public_signals.map((row: { name: string }) => row.name));
+  expect(PILOT_SIGNAL_INDICES).toEqual(Object.fromEntries(signals.map((name, i) => [name, i])));
   expect(signals).toHaveLength(PILOT_PUBLIC_SIGNAL_COUNT);
   expect(PILOT_PUBLIC_SIGNAL_COUNT).toBe(8);
   expect(signals[AUTHORIZATION_NULLIFIER_INDEX]).toBe('authorization_nullifier');

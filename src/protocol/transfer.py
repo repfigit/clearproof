@@ -15,6 +15,7 @@ from pydantic import BaseModel, ConfigDict, Field, StringConstraints, field_vali
 
 from src.protocol.canonical import canonical_bytes, record_digest
 from src.protocol.discovery_profile import parse_target
+from src.prover.generated_signals import MAX_ASSET_DECIMALS, MAX_TRANSFER_AGE_SECONDS
 
 Hex32 = Annotated[str, StringConstraints(pattern=r"^[0-9a-f]{64}$", min_length=64, max_length=64)]
 Address = Annotated[str, StringConstraints(pattern=r"^0x[0-9a-f]{40}$", min_length=42, max_length=42)]
@@ -52,7 +53,7 @@ def uint128(value: str) -> str:
 class AssetDefinition(Record):
     asset_id: str = Field(max_length=100)
     symbol: str = Field(pattern=r"^[A-Z0-9]{1,16}$", max_length=16)
-    decimals: int = Field(ge=0, le=18)
+    decimals: int = Field(ge=0, le=MAX_ASSET_DECIMALS)
 
     @field_validator("asset_id")
     @classmethod
@@ -206,7 +207,7 @@ class VerificationContext(Record):
     issuance_snapshot_digest: Hex32
     revocation_snapshot_digest: Hex32
     evaluated_at: Epoch
-    max_transfer_age_seconds: int = Field(ge=0, le=86400)
+    max_transfer_age_seconds: int = Field(ge=0, le=MAX_TRANSFER_AGE_SECONDS)
 
     @model_validator(mode="after")
     def deployment(self):

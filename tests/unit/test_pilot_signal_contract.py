@@ -8,6 +8,7 @@ never compiles circuits or contracts.
 import re
 from pathlib import Path
 
+from src.prover.generated_signals import AUTHORIZATION_NULLIFIER_INDEX, PROOF_EXPIRES_AT_INDEX
 from src.prover.pilot_compliance import PROFILE, PUBLIC_SIGNALS
 from src.registry.pilot_tree import ISSUANCE_TREE_DEPTH, ISSUER_TREE_DEPTH, SANCTIONS_TREE_DEPTH
 
@@ -26,14 +27,23 @@ def _strip_c_comments(source: str) -> str:
 
 
 def _circuit_main() -> tuple[tuple[str, ...], tuple[int, ...]]:
-    source = _strip_c_comments(CIRCUIT.read_text())
+    entry = CIRCUIT.read_text()
+    assert 'include "./generated/pilot_main.circom";' in entry
+    source = _strip_c_comments((CIRCUIT.parent / "generated/pilot_main.circom").read_text())
     match = re.search(
-        r"component\s+main\s*\{\s*public\s*\[(?P<signals>[^\]]*)\]\s*\}\s*=\s*PilotCompliance\s*\((?P<args>[^)]*)\)",
+        r"component\s+main\s*\{\s*public\s*\[(?P<signals>[^\]]*)\]\s*\}\s*=\s*PilotCompliance\s*\((?P<args>.*?)\);",
         source,
+        flags=re.S,
     )
     assert match, "component main {public [...]} = PilotCompliance(...) not found"
     signals = tuple(s.strip() for s in match["signals"].split(",") if s.strip())
-    args = tuple(int(a.strip()) for a in match["args"].split(","))
+    functions = dict(
+        re.findall(
+            r"function\s+(\w+)\(\)\s*\{\s*return\s+(\d+);\s*\}",
+            (CIRCUIT.parent / "generated/pilot_constants.circom").read_text(),
+        )
+    )
+    args = tuple(int(functions[a.strip().removesuffix("()")]) for a in match["args"].split(","))
     return signals, args
 
 
@@ -87,17 +97,20 @@ def _ts_reads_index(source: str, index: int, keywords: tuple[str, ...]) -> bool:
 
 def test_sdk_authorization_reads_nullifier_and_expiry_indices():
     source = _strip_c_comments(AUTHORIZATION_TS.read_text())
+    assert "from './generated-signals.js'" in source
+    source += _strip_c_comments(AUTHORIZATION_TS.with_name("generated-signals.ts").read_text())
     assert PUBLIC_SIGNALS[3] == "authorization_nullifier"
     assert PUBLIC_SIGNALS[5] == "proof_expires_at"
-    assert _ts_reads_index(source, 3, ("nullifier",)), "authorization.ts must read the nullifier at index 3"
-    assert _ts_reads_index(source, 5, ("expir", "expires")), "authorization.ts must read expiry at index 5"
+    assert _ts_reads_index(source, AUTHORIZATION_NULLIFIER_INDEX, ("nullifier",))
+    assert _ts_reads_index(source, PROOF_EXPIRES_AT_INDEX, ("expir", "expires"))
 
 
 def test_registry_checks_domain_signals_against_deployment():
     source = _strip_c_comments(REGISTRY_SOL.read_text())
     assert PUBLIC_SIGNALS[6] == "domain_chain_id"
     assert PUBLIC_SIGNALS[7] == "domain_registry"
-    assert re.search(r"signals\s*\[\s*6\s*\]\s*!=\s*block\.chainid", source), "registry must bind signal 6 to chainid"
-    assert re.search(r"signals\s*\[\s*7\s*\]\s*!=\s*uint160\s*\(\s*address\s*\(\s*this\s*\)\s*\)", source), (
-        "registry must bind signal 7 to address(this)"
-    )
+    assert "import {PilotSignalConstants as P, PILOT_SIGNAL_COUNT}" in source
+    assert re.search(r"signals\s*\[\s*P.DOMAIN_CHAIN_ID_INDEX\s*\]\s*!=\s*block\.chainid", source)
+    assert re.search(
+        r"signals\s*\[\s*P.DOMAIN_REGISTRY_INDEX\s*\]\s*!=\s*uint160\s*\(\s*address\s*\(\s*this\s*\)\s*\)", source
+    ), "registry must bind signal 7 to address(this)"
