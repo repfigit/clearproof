@@ -1,6 +1,6 @@
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
-import type { ReactNode } from 'react';
+import { Markdown } from '../../components/markdown';
 import { getExplainer, listExplainers } from '@clearproof/content';
 import { gatedVisible, visibleExplainers } from '../../../src/feed';
 
@@ -26,32 +26,6 @@ export async function generateMetadata({ params }: { params: Promise<{ slug: str
   };
 }
 
-function renderInlineMarkdown(text: string): ReactNode[] {
-  const nodes: ReactNode[] = [];
-  const linkPattern = /\[([^\]]+)\]\(([^)]+)\)/g;
-  let lastIndex = 0;
-  let match: RegExpExecArray | null;
-  let key = 0;
-
-  while ((match = linkPattern.exec(text)) !== null) {
-    if (match.index > lastIndex) {
-      nodes.push(text.slice(lastIndex, match.index));
-    }
-    nodes.push(
-      <a key={key++} className="x:underline" href={match[2]}>
-        {match[1]}
-      </a>,
-    );
-    lastIndex = match.index + match[0].length;
-  }
-
-  if (lastIndex < text.length) {
-    nodes.push(text.slice(lastIndex));
-  }
-
-  return nodes;
-}
-
 export default async function ExplainerPage({ params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params;
   const explainers = gatedVisible(
@@ -59,13 +33,6 @@ export default async function ExplainerPage({ params }: { params: Promise<{ slug
   );
   const explainer = explainers.find(item => item.slug === slug);
   if (!explainer) notFound();
-
-  const bodyParagraphs = explainer.body
-    .split(/\n{2,}/)
-    .map(paragraph => paragraph.trim())
-    .filter(Boolean);
-
-  const headingClass = 'x:mt-8 x:text-xl x:font-semibold x:tracking-tight';
 
   return (
     <main className="x:mx-auto x:w-full x:max-w-(--nextra-content-width) x:px-4 x:py-12">
@@ -79,17 +46,7 @@ export default async function ExplainerPage({ params }: { params: Promise<{ slug
         </div>
         <p className="x:mt-2 x:text-sm x:text-gray-400">{explainer.summary}</p>
         <div className="x:mt-8 x:text-gray-800 x:dark:text-gray-200">
-          {bodyParagraphs.map((paragraph, index) =>
-            paragraph.startsWith('## ') ? (
-              <h2 key={index} className={headingClass}>{renderInlineMarkdown(paragraph.slice(3))}</h2>
-            ) : paragraph.startsWith('### ') ? (
-              <h3 key={index} className="x:mt-6 x:text-lg x:font-semibold">{renderInlineMarkdown(paragraph.slice(4))}</h3>
-            ) : (
-              <p key={index} className="x:not-first:mt-[1.25em] x:leading-7 x:whitespace-pre-wrap">
-                {renderInlineMarkdown(paragraph)}
-              </p>
-            ),
-          )}
+          <Markdown>{explainer.body}</Markdown>
         </div>
       </article>
       {explainer.claimRefs.length > 0 && (

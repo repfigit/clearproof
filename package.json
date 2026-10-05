@@ -37,7 +37,8 @@
     "@ethersproject/providers": {
       "ws": "^8.21.0"
     },
-    "@xmldom/xmldom": "^0.9.12"
+    "@xmldom/xmldom": "^0.9.12",
+    "postcss": "8.5.29"
   },
   "devDependencies": {
     "@vitest/coverage-v8": "^5.0.3",

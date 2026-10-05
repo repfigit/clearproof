@@ -1,7 +1,8 @@
 import { readFileSync, readdirSync } from 'node:fs';
 import { resolve, relative, dirname } from 'node:path';
 import { test, expect } from '@playwright/test';
-import { getRecipe, getSignal, getTopic, listRecipes, listSignals, listTopics } from '@clearproof/content';
+import { PROJECT_STATUS, getRecipe, getSignal, getTopic, listRecipes, listSignals, listTopics } from '@clearproof/content';
+import { DOCUMENTATION_PAGES } from '../src/documentation';
 
 const app = resolve(__dirname, '../app');
 const pages = readdirSync(app, { recursive: true, withFileTypes: true })
@@ -26,6 +27,10 @@ for (const { route, heading } of pages) {
     await expect(page.getByRole('navigation').first()).toBeVisible();
     await expect(page.locator('footer')).toContainText('clearproof contributors');
     await expect(page.locator('html')).toHaveAttribute('lang', 'en');
+    const document = DOCUMENTATION_PAGES.find(item => item.path === route);
+    expect(document).toBeDefined();
+    await expect(page.locator('link[rel="canonical"]')).toHaveAttribute('href', `https://docs.clearproof.world${route === '/' ? '' : route}`);
+    await expect(page.locator('meta[name="description"]')).toHaveAttribute('content', document!.description);
     if (route === '/docs/system-diagram') {
       await expect(page.locator('article svg').filter({ hasText: 'Originating VASP' })).toBeVisible();
     }
@@ -53,6 +58,27 @@ test('hydrated content navigation preserves the client session and supports back
   await page.goBack();
   await expect(page).toHaveURL('/');
   await expect(page.getByRole('heading', { level: 1 })).toHaveText('clearproof');
+});
+
+test('public project catalogue matches documentation status and published explainer links', async ({ page, request }) => {
+  const response = await request.get('/api/content/project');
+  expect(response.status()).toBe(200);
+  const catalogue = await response.json();
+  expect(catalogue).toMatchObject(PROJECT_STATUS);
+  await page.goto('/docs/status');
+  await expect(page.locator('article')).toContainText(PROJECT_STATUS.npmVersion);
+  await expect(page.locator('article')).toContainText(PROJECT_STATUS.capacity);
+  const sitemap = await request.get('/sitemap.xml');
+  const xml = await sitemap.text();
+  for (const document of DOCUMENTATION_PAGES) {
+    expect(xml).toContain(`<loc>https://docs.clearproof.world${document.path}</loc>`);
+  }
+  for (const explainer of catalogue.explainers) {
+    expect(Date.parse(explainer.publishAfter)).toBeLessThanOrEqual(Date.now());
+    const detail = await request.get(`/explainers/${explainer.slug}`);
+    expect(detail.status()).toBe(200);
+    expect(await detail.text()).toContain(explainer.title.replaceAll('&', '&amp;'));
+  }
 });
 
 test('unknown pages render a real 404', async ({ page }) => {

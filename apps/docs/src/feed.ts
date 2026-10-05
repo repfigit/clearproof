@@ -1,6 +1,7 @@
 import { getUpdate, listUpdates, type Update } from "@clearproof/content";
 import { getExplainer, listExplainers, type Explainer } from "@clearproof/content";
 import { publishingEnabled } from "./publish-controls";
+import { DOCUMENTATION_PAGES } from "./documentation";
 
 const SITE_URL = (process.env.NEXT_PUBLIC_SITE_URL ?? "https://docs.clearproof.world").replace(/\/$/, "");
 const FEED_PATH = "/feed.xml";
@@ -103,7 +104,7 @@ export function buildSitemapXml(updates: Update[], generatedAt: Date = new Date(
     .map(explainer => getExplainer(explainer.slug))
     .filter((explainer): explainer is Explainer => explainer !== null);
   const entries = [
-    { loc: `${SITE_URL}/`, lastmod: undefined as string | undefined },
+    ...DOCUMENTATION_PAGES.map(page => ({ loc: `${SITE_URL}${page.path}`, lastmod: undefined as string | undefined })),
     { loc: `${SITE_URL}/explainers`, lastmod: gatedVisible(visibleExplainers(explainers, generatedAt))[0]?.date },
     ...gatedVisible(visibleExplainers(explainers, generatedAt)).map(explainer => ({
       loc: `${SITE_URL}${explainer.canonical}`,

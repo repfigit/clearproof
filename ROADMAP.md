@@ -1,11 +1,11 @@
 # Roadmap
 
-The next bounded delivery is governed by the [adoption pilot implementation plan](docs/plans/2026-09-05-adoption-pilot-implementation.md), created September 5, 2026. It sequences the current hardening findings, policy simulation, transfer investigations, historical verification and observation onboarding, with separate gates for customer integrations and production assurance. The dated progress snapshots below remain historical context.
+The next bounded delivery is governed by the [adoption pilot implementation plan](docs/plans/2026-09-05-adoption-pilot-implementation.md), created September 5, 2026. It sequences the current hardening findings, policy simulation, transfer investigations, historical verification and observation onboarding, with separate gates for customer integrations and production assurance. The dated progress snapshots below remain historical context. Current maintenance and backlog reconciliation are tracked in the [October improvements plan](docs/plans/2026-10-05-project-improvements.md).
 
-## Current Status (2026-09-26)
+## Current Status (2026-10-05)
 
 - The local adoption pilot (M0–M5, CP-001–CP-018) was merged to `main` on September 7, 2026 (PR #27). The current proof profile is `pilot-transfer-v3` (PR #49, September 25, 2026): eight public signals and production tree depths of 32/20/20 (ADR 0011).
-- Public npm packages are 0.6.0, published September 26, 2026. `@clearproof/circuits` is source-only: no compiled WASM, proving key, or verification key. The Python project in this repository is also 0.6.0; PyPI publishing stays off until the `PUBLISH_PYPI` repository variable is set.
+- Public npm packages are 0.7.0, as verified October 5, 2026. `@clearproof/circuits` is source-only: no compiled WASM, proving key, or verification key. The Python project in this repository is also 0.7.0; PyPI publishing stays off until the `PUBLISH_PYPI` repository variable is set.
 - Nothing is independently audited. Proving keys are development-only.
 - Follow-on gates F1–F5 (external credentials, re-screening, trusted distribution, live paid pilot, production authorization) are all open. None has met its start condition.
 - The Phase 0–5 checklists below predate the pilot and have not been reconciled item by item. For implemented capability, trust the plan's execution log and the README.

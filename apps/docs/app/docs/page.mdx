@@ -1,3 +1,13 @@
+import { PROJECT_STATUS } from '@clearproof/content';
+
+export const metadata = {
+  "title": "Introduction",
+  "description": "Clearproof components, intended evaluation workflows and current interoperability limits.",
+  "alternates": {
+    "canonical": "/docs"
+  }
+};
+
 # Introduction
 
 clearproof combines Circom/Groth16 proof components, encrypted personal-information payloads, a Python API, TypeScript tooling and EVM contracts. The intended users are teams at virtual asset service providers (VASPs), such as exchanges and custodians, evaluating transfer evidence alongside existing compliance systems.
@@ -20,6 +30,6 @@ Encrypted personal information can accompany a proof for an authorized recipient
 
 ## Availability
 
-As checked October 5, 2026, the [main repository](https://github.com/repfigit/clearproof) is public. npm packages are at **0.7.0** and include the pilot. The local pilot is merged into `main` through PR #27; source availability does not mean these features have shipped on npm.
+As checked {PROJECT_STATUS.checkedAt}, the [main repository](https://github.com/repfigit/clearproof) is public. npm packages are at **{PROJECT_STATUS.npmVersion}** and include the pilot. The local pilot is merged into `main` through PR #27; npm publication does not establish production readiness.
 
 Start with [project status](/docs/status), [quickstart requirements](/docs/quickstart) and [security limitations](/docs/security).

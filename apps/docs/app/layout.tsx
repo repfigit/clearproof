@@ -5,6 +5,7 @@ import { getPageMap } from 'nextra/page-map';
 import 'nextra-theme-docs/style.css';
 
 export const metadata = {
+  metadataBase: new URL('https://docs.clearproof.world'),
   title: {
     template: '%s | clearproof docs',
     default: 'clearproof docs',
