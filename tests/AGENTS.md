@@ -27,7 +27,7 @@ tests/
 ## TESTING MODEL
 
 **Unit** — fast, no external services, pure functions and data models.
-**Integration** — spin up real components (FastAPI via ASGI, asyncpg test DB, storage) but mock ZK and external chains.
+**Integration** — spin up real components (FastAPI via ASGI, psycopg test DB, storage) but mock ZK and external chains.
 **Compliance** — regulatory intent tests. These are the canary for "does this still satisfy the law?" even if the cryptographic implementation changes.
 
 `compliance/` is deliberately thin on crypto and thick on policy: sanctions list inclusion, real OFAC addresses (Tornado Cash, etc.), revocation, tier boundaries per jurisdiction.

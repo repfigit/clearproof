@@ -32,7 +32,7 @@ clearproof/
 | Sanctions update | `scripts/build_sanctions_tree.py` | Merkle root → oracle relay |
 | Proof generation | `packages/proof/src/` or `src/prover/` | TS (snarkjs) vs Python paths |
 | API route | `src/api/routes/` | JWT + SIWE auth required |
-| Storage layer | `src/storage/` | asyncpg + psycopg, sanctions Merkle |
+| Storage layer | `src/storage/` | psycopg (async) + psycopg_pool, sanctions Merkle |
 | Chain interaction | `src/chain/` | web3.py reader/writer + audit mirror |
 
 ## CODE MAP

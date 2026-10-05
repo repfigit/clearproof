@@ -34,7 +34,7 @@
 
 | Supervisor Request | clearproof Artifact | Status |
 |---|---|---|
-| Ability to retrieve transaction records within required timeframe | `audit_entries` table indexed by `sequence_number`, `entry_type`, `transaction_ref`; `ProofStore.get_by_id()` and `get_by_transfer_id()` for proof retrieval; Postgres asyncpg connection pool | COVERED |
+| Ability to retrieve transaction records within required timeframe | `audit_entries` table indexed by `sequence_number`, `entry_type`, `transaction_ref`; `ProofStore.get_by_id()` and `get_by_transfer_id()` for proof retrieval; Postgres psycopg (async) connection pool | COVERED |
 | Record retention for required period (typically 5 years) | `proofs.proof_expires_at` field (circuit-enforced); `audit_entries` are append-only with hash chain (no TTL in current schema); `idempotency_keys` have `expires_at` but are separate from audit records | COVERED (audit_entries); PARTIAL (proof expiry is for validity, not retention) |
 | Audit trail integrity (tamper evidence) | `PersistentAuditLog.verify_chain()`: validates hash chain from `start_seq`; each `entry_hash = SHA256(data_hash, prev_entry_hash, sequence_number)`; tamper-evident linked list | COVERED |
 | Record completeness (no gaps in sequence) | `audit_entries.sequence_number` is monotonically increasing; `_next_sequence()` = `MAX(sequence_number) + 1`; `verify_chain()` detects missing entries via hash chain break | COVERED |
