@@ -1,0 +1,56 @@
+name: Relay Sanctions Root
+
+# Relays the sanctions root from merged main only. The daily tree build (sanctions-update.yml)
+# opens a PR; once a reviewer merges it, this workflow relays exactly the committed tree.
+# It never rebuilds the tree from live feeds, so the relayed root is always the reviewed one.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - artifacts/sanctions_tree.json
+  workflow_dispatch: # Re-relay the tree committed on main (e.g. after a failed chain or a new deployment)
+
+permissions:
+  contents: read
+
+# Never cancel an in-flight relay: a half-relayed root leaves chains inconsistent.
+concurrency:
+  group: ${{ github.workflow }}
+  cancel-in-progress: false
+
+jobs:
+  relay-sanctions-root:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    if: github.ref == 'refs/heads/main'
+    # Add required reviewers to this environment to gate on-chain writes behind a human approval.
+    environment: sanctions-relay
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+
+      - name: Require a tree committed on main
+        run: |
+          if ! git ls-files --error-unmatch artifacts/sanctions_tree.json >/dev/null 2>&1; then
+            echo "::error::artifacts/sanctions_tree.json is not committed on main; refusing to relay an unreviewed root."
+            exit 1
+          fi
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: 24
+          cache: npm
+
+      - run: npm ci
+
+      - name: Relay sanctions root to all chains
+        env:
+          DEPLOYER_PRIVATE_KEY: ${{ secrets.DEPLOYER_PRIVATE_KEY }}
+          RELAY_NETWORKS: ${{ vars.RELAY_NETWORKS || 'sepolia' }}
+          SKIP_CONFIRM: "1"
+          SEPOLIA_RPC_URL: ${{ secrets.SEPOLIA_RPC_URL }}
+          BASE_SEPOLIA_RPC_URL: ${{ secrets.BASE_SEPOLIA_RPC_URL }}
+          ARBITRUM_SEPOLIA_RPC_URL: ${{ secrets.ARBITRUM_SEPOLIA_RPC_URL }}
+          POLYGON_AMOY_RPC_URL: ${{ secrets.POLYGON_AMOY_RPC_URL }}
+          OPTIMISM_SEPOLIA_RPC_URL: ${{ secrets.OPTIMISM_SEPOLIA_RPC_URL }}
+        run: cd packages/contracts && npx ts-node scripts/relay-sanctions-root.ts
