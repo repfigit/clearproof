@@ -155,7 +155,8 @@ First npm release since 0.3.0. It publishes `@clearproof/proof`, `@clearproof/co
 
 - Storage tests skip cleanly when `DATABASE_URL` is unset.
 
-[Unreleased]: https://github.com/repfigit/clearproof/compare/v0.6.0...HEAD
+[Unreleased]: https://github.com/repfigit/clearproof/compare/v0.7.0...HEAD
+[0.7.0]: https://github.com/repfigit/clearproof/compare/v0.6.0...v0.7.0
 [0.6.0]: https://github.com/repfigit/clearproof/compare/v0.5.0...v0.6.0
 [0.5.0]: https://github.com/repfigit/clearproof/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/repfigit/clearproof/compare/v0.3.0...v0.4.0
