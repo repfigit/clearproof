@@ -38,6 +38,30 @@ async def test_valid_keys_support_in_memory_lifecycle(module, monkeypatch, key, 
     assert key not in caplog.text
 
 
+@pytest.mark.parametrize("salt", [None, "", "  "])
+async def test_missing_salt_blocks_startup_before_database_connection(module, monkeypatch, salt):
+    if salt is None:
+        monkeypatch.delenv("HKDF_SALT", raising=False)
+    else:
+        monkeypatch.setenv("HKDF_SALT", salt)
+    monkeypatch.delenv("ALLOW_INSECURE_HKDF_SALT", raising=False)
+    monkeypatch.setenv("DATABASE_URL", "configured")
+    factory = Mock()
+    monkeypatch.setattr(module, "Database", factory)
+    with pytest.raises(RuntimeError, match="HKDF_SALT is required"):
+        async with module.lifespan(module.create_app()):
+            pytest.fail("missing salt reached serving state")
+    factory.assert_not_called()
+
+
+async def test_explicit_local_demo_opt_in_allows_startup_without_salt(module, monkeypatch):
+    monkeypatch.delenv("HKDF_SALT", raising=False)
+    monkeypatch.setenv("ALLOW_INSECURE_HKDF_SALT", "1")
+    app = module.create_app()
+    async with module.lifespan(app):
+        assert app.state.db is None
+
+
 @pytest.mark.parametrize("failure", ["none", "serving", "connecting"])
 async def test_database_closed_on_every_lifecycle_exit(module, monkeypatch, failure):
     monkeypatch.setenv("DATABASE_URL", "configured")

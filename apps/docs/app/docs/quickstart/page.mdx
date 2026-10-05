@@ -58,10 +58,11 @@ For a disposable local evaluation:
 export AUTH_MODE=api-key
 export API_KEY="$(openssl rand -hex 32)"
 export PII_MASTER_KEY="$(openssl rand -hex 32)"
+export HKDF_SALT="$(openssl rand -hex 32)"
 uv run uvicorn src.api.main:app --reload --host 127.0.0.1 --port 8000
 ```
 
-Open [the local OpenAPI UI](http://localhost:8000/docs). Protected requests use `X-API-Key` in this mode. Keep keys stable and protected for any evaluation whose encrypted records need to survive restart.
+Open [the local OpenAPI UI](http://localhost:8000/docs). Protected requests use `X-API-Key` in this mode. Keep keys and the HKDF salt stable and protected for any evaluation whose encrypted records need to survive restart. The commands above generate new material for a disposable run; do not rerun them over retained data. See the [legacy encryption migration guide](https://github.com/repfigit/clearproof/blob/main/docs/operations/legacy-encryption-migration.md) before upgrading a deployment that used the old default salt.
 
 Starting the server does not establish a working proof workflow. The pilot routes need PostgreSQL, storage keys, tenant trust configuration and compatible artifacts; `/health` reports process liveness only. Do not treat synthetic output as a live transfer authorization.
 

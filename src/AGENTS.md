@@ -62,6 +62,7 @@ make format
 
 ## NOTES
 - API startup fails fast if `PII_MASTER_KEY` invalid (64 hex or ≥32 UTF-8 bytes)
+- API startup also requires stable `HKDF_SALT`; `ALLOW_INSECURE_HKDF_SALT=1` is an explicit local-demo-only exception. Preserve the exact old salt when retained legacy envelopes still need decryption.
 - Sanctions tree rebuild (`scripts/build_sanctions_tree.py`) must be followed by oracle relay
 - Circuit artifacts path configurable via `CIRCUIT_ARTIFACTS_DIR` env
 - TRISA bridge requires `protos/` regeneration via protoc if `.proto` changes

@@ -53,6 +53,7 @@ clearproof/
 - Multi-chain: `make deploy NETWORK=<name>` then `make relay-sanctions`
 - Circuit artifacts: committed only from audited trusted setup; dev builds are local-only
 - PII_MASTER_KEY: required at API startup (64 hex chars or ≥32 UTF-8 bytes)
+- HKDF_SALT: required stable deployment salt at API startup; only explicit `ALLOW_INSECURE_HKDF_SALT=1` enables the historical default for disposable tests/demos
 
 ## ANTI-PATTERNS (THIS PROJECT)
 - NEVER log or store raw PII outside encrypted envelope
@@ -106,7 +107,7 @@ If you find a defect while using or working on clearproof and you are not fixing
 7. Prefer having a person review before submitting. Do not file duplicates, and do not open issues as a side effect of unrelated tasks unless asked.
 
 ## NOTES
-- API refuses to start without valid PII_MASTER_KEY
+- API refuses to start without valid PII_MASTER_KEY and configured HKDF_SALT (unless the explicit local-demo salt opt-in is set)
 - Circuit compilation (~5 min first run); CI caches ptau18
 - TRISA bridge depends on generated protobufs — regenerate via protoc if protos/ changes
 - Multi-chain deployment uses Hardhat scripts in `packages/contracts/scripts/`

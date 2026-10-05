@@ -18,7 +18,7 @@ reconciliation, not merely a change of issue status.
 | Native proving benchmark (GitHub #88) | Equivalent current-profile benchmark; measured backend decision; pinned optional backend if justified | Pending |
 | Canonical constants (GitHub #89) | Structured profile source, generated runtime constants, drift gate and cross-runtime compatibility tests | Pending |
 | Operational preflight and software scale | Scoped authenticated readiness checks, bounded cryptographic execution, paginated persisted inventories and measured limits | Pending |
-| Legacy configuration/parity and migration issues | AIF-158/89 hardened with compatibility; AIF-119/100 reconciled; AIF-67/99/65 remaining acceptance explicitly verified | Pending |
+| Legacy configuration/parity and migration issues | AIF-158/89 hardened with compatibility; AIF-119/100 reconciled; AIF-67/99/65 remaining acceptance explicitly verified | In progress; AIF-158 implemented and tested; AIF-119 closed |
 | External evaluation and adoption | Evaluation/feedback entry point and sample report; permitted real operator/counterparty evaluation with retained measurements | Pending; external access not yet established |
 | Production assurance | Existing F1–F5 start conditions preserved; independently reviewed artifacts, audits and live interoperability cannot be inferred from local tests | External gates remain open |
 
@@ -60,3 +60,16 @@ independent assurance require actual external evidence.
   root-page canonical assertions were corrected and passed on a focused rerun.
   Hosted deployment and full remote CI verification remain required before
   closing this work.
+
+- October 5: core maintenance [PR #91](https://github.com/repfigit/clearproof/pull/91)
+  links GitHub #85/#86 and the shared documentation catalogue consumed by web
+  PR #12. Main's stale AIF-119 constructor issue is closed with execution/CI
+  evidence. Removed agent-ready from all eleven other completed Clearproof
+  issues, preserving their other labels and completion state.
+- October 5: AIF-158 implementation requires stable HKDF salt at API startup and
+  direct legacy derivation, with an explicit local-demo-only opt-in. Configured
+  UTF-8 salts preserve existing derivation; retained legacy ciphertext migration
+  is documented and tested. Focused encryption/startup checks: 51 passed, 100%
+  changed-module coverage. Full Python suite: 2,442 passed, 274 optional/service
+  skips, zero HKDF salt warnings under a warning-as-error gate. Remote real-service
+  CI and merging remain required before the issue is closed.

@@ -150,6 +150,8 @@ Range checks (252-bit on sanctions keys, 64-bit on amounts, 16-bit on jurisdicti
 | Variable | Required | Purpose |
 |----------|----------|---------|
 | `PII_MASTER_KEY` | API | 32+ byte key (64-hex preferred). API refuses to start without it. |
+| `HKDF_SALT` | API | Unique, stable random deployment salt, encoded as UTF-8; missing/empty values block startup. Preserve it with retained legacy ciphertext. |
+| `ALLOW_INSECURE_HKDF_SALT` | No | Exactly `1` permits the historical default for local tests/demos only. Never set in production. |
 | `AUTH_MODE`, `API_KEY` | Tests/API | Required before importing the FastAPI app. |
 | `VASP_DID` | No | This VASP's DID. Default `did:web:vasp.example.com`. |
 | `CIRCUIT_ARTIFACTS_DIR` | No | Default `./artifacts`. |

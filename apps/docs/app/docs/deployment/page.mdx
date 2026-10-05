@@ -15,6 +15,8 @@ This page covers local and testnet evaluation. A production launch still needs l
 | Variable | Purpose |
 | --- | --- |
 | `PII_MASTER_KEY` | Required at API startup: 64 valid hex characters or at least 32 UTF-8 bytes; generate a random secret |
+| `HKDF_SALT` | Required stable random deployment salt; passed to HKDF as UTF-8 bytes, including hex-looking values. Keep it with retained legacy ciphertext |
+| `ALLOW_INSECURE_HKDF_SALT` | Exactly `1` explicitly permits the historical default for local tests/demos only; never configure it in production |
 | `AUTH_MODE` | Select the supported API-key, JWT or SIWE authentication mode |
 | `API_KEY` | Required for protected requests in API-key mode |
 | `DATABASE_URL` | PostgreSQL connection. Required by the pilot routes; without it only the legacy in-memory demo path works |

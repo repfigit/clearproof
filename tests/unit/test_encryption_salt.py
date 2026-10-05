@@ -2,6 +2,8 @@
 
 import pytest
 from cryptography.exceptions import InvalidTag
+from cryptography.hazmat.primitives import hashes
+from cryptography.hazmat.primitives.kdf.hkdf import HKDF
 
 from src.sar.encryption import decrypt_pii, derive_key, encrypt_pii
 
@@ -23,13 +25,43 @@ def test_configured_salt_is_stable_and_separates_deployments(monkeypatch):
     assert derive_key(master, b"different-envelope") != key
 
 
-@pytest.mark.parametrize("salt", [None, ""])
-def test_missing_or_empty_salt_warns_and_preserves_legacy_derivation(monkeypatch, salt):
+@pytest.mark.parametrize("salt", [None, "", "  "])
+@pytest.mark.parametrize("opt_in", [None, "", "0", "true"])
+def test_missing_salt_fails_closed_without_exact_opt_in(monkeypatch, salt, opt_in):
     if salt is None:
         monkeypatch.delenv("HKDF_SALT", raising=False)
     else:
         monkeypatch.setenv("HKDF_SALT", salt)
-    with pytest.warns(UserWarning, match="HKDF_SALT environment variable is not set"):
-        legacy = derive_key(b"a" * 32, b"synthetic-context")
+    if opt_in is None:
+        monkeypatch.delenv("ALLOW_INSECURE_HKDF_SALT", raising=False)
+    else:
+        monkeypatch.setenv("ALLOW_INSECURE_HKDF_SALT", opt_in)
+    with pytest.raises(RuntimeError, match="HKDF_SALT is required"):
+        derive_key(b"a" * 32, b"synthetic-context")
+
+
+def test_explicit_demo_opt_in_and_operator_migration_preserve_retained_ciphertext(monkeypatch):
+    master, context = b"a" * 32, b"synthetic-context"
+    historical = HKDF(algorithm=hashes.SHA256(), length=32, salt=b"zk-travel-rule-v1", info=context).derive(master)
+    nonce, ciphertext = encrypt_pii(b"synthetic-retained-payload", historical, "synthetic-envelope")
+    monkeypatch.delenv("HKDF_SALT", raising=False)
+    monkeypatch.setenv("ALLOW_INSECURE_HKDF_SALT", "1")
+    assert derive_key(master, context) == historical
+    assert (
+        decrypt_pii(nonce, ciphertext, derive_key(master, context), "synthetic-envelope")
+        == b"synthetic-retained-payload"
+    )
+    monkeypatch.delenv("ALLOW_INSECURE_HKDF_SALT")
     monkeypatch.setenv("HKDF_SALT", "zk-travel-rule-v1")
-    assert derive_key(b"a" * 32, b"synthetic-context") == legacy
+    assert (
+        decrypt_pii(nonce, ciphertext, derive_key(master, context), "synthetic-envelope")
+        == b"synthetic-retained-payload"
+    )
+
+
+@pytest.mark.parametrize("salt", ["ab" * 32, "é-synthetic-salt", "  preserved-padding  "])
+def test_configured_salt_keeps_utf8_encoding_and_takes_precedence_over_demo_opt_in(monkeypatch, salt):
+    monkeypatch.setenv("HKDF_SALT", salt)
+    monkeypatch.setenv("ALLOW_INSECURE_HKDF_SALT", "1")
+    expected = HKDF(algorithm=hashes.SHA256(), length=32, salt=salt.encode("utf-8"), info=b"context").derive(b"a" * 32)
+    assert derive_key(b"a" * 32, b"context") == expected

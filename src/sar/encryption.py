@@ -16,9 +16,23 @@ from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 from cryptography.hazmat.primitives.kdf.hkdf import HKDF
 
-__all__ = ["derive_key", "encrypt_pii", "decrypt_pii"]
+__all__ = ["derive_key", "encrypt_pii", "decrypt_pii", "hkdf_salt"]
 
 _NONCE_LENGTH = 12  # 96-bit nonce for AES-256-GCM
+
+
+def hkdf_salt() -> bytes:
+    """Require stable operator configuration; the legacy default needs explicit demo opt-in."""
+    value = os.environ.get("HKDF_SALT")
+    if value and value.strip():
+        # Preserve the historical UTF-8 encoding, including values written as hex.
+        return value.encode("utf-8")
+    if os.environ.get("ALLOW_INSECURE_HKDF_SALT") == "1":
+        return b"zk-travel-rule-v1"
+    raise RuntimeError(
+        "HKDF_SALT is required. Configure a unique, stable deployment salt; "
+        "ALLOW_INSECURE_HKDF_SALT=1 permits the historical default for local tests/demos only."
+    )
 
 
 def derive_key(master_key: bytes, context: bytes) -> bytes:
@@ -32,27 +46,10 @@ def derive_key(master_key: bytes, context: bytes) -> bytes:
     Returns:
         32-byte derived key suitable for AES-256-GCM.
     """
-    # H-7: HKDF salt is configurable via environment variable.
-    # Production recommendation: use a unique, random 32-byte salt per deployment
-    # and store it alongside the master key in your secrets manager.
-    salt_env = os.environ.get("HKDF_SALT")
-    if salt_env:
-        salt = salt_env.encode("utf-8")
-    else:
-        import warnings
-
-        warnings.warn(
-            "HKDF_SALT environment variable is not set. "
-            "Using a hardcoded default salt reduces key separation between deployments. "
-            "Set HKDF_SALT to a unique, stable value before production use.",
-            UserWarning,
-            stacklevel=2,
-        )
-        salt = b"zk-travel-rule-v1"
     hkdf = HKDF(
         algorithm=hashes.SHA256(),
         length=32,
-        salt=salt,
+        salt=hkdf_salt(),
         info=context,
     )
     return hkdf.derive(master_key)
