@@ -4,11 +4,18 @@ The legacy body omits mandatory person data and uses ambiguous symbol/SLIP-44
 mapping. It is not evidence of TRP conformance or negotiated extension support.
 Use build_pilot_request only with the matching local counterparty simulator;
 that profile validates encrypted identity semantics without claiming live TRP interoperability.
+
+Encrypted PII is serialized once through :meth:`HybridPayload.pii_wire_fields`:
+``ivms101_encrypted`` / ``ivms101_encryption_algorithm`` stay at the top level
+(unchanged keys) and ``pii_nonce``, ``pii_associated_data`` and the HPKE v2
+``pii_envelope`` (null for legacy v1) travel in ``extensions.zk_travel_rule``,
+together with ``transfer_id``. These keys are additive; :meth:`TRPBridge.parse_trp_request`
+reads older bodies without them as legacy v1 and takes the transfer id from
+``originator.accountNumber``.
 """
 
 from __future__ import annotations
 
-import base64
 from typing import Any
 
 from src.protocol.compliance_proof import ComplianceProof
@@ -67,6 +74,7 @@ class TRPBridge:
             Experimental legacy JSON body. Extension acceptance and required
             TRP identity semantics are not established by this formatter.
         """
+        pii = hybrid_payload.pii_wire_fields()
         return {
             "asset": {
                 "slip44": self._asset_to_slip44(asset),
@@ -81,13 +89,14 @@ class TRPBridge:
                 "accountNumber": [compliance_proof.transfer_id],
             },
             # Encrypted PII alongside the message for regulatory record-keeping
-            "ivms101_encrypted": base64.b64encode(hybrid_payload.encrypted_pii).decode("ascii"),
-            "ivms101_encryption_algorithm": hybrid_payload.encryption_algorithm,
+            "ivms101_encrypted": pii["encrypted_pii"],
+            "ivms101_encryption_algorithm": pii["encryption_algorithm"],
             # Experimental extension; remote acceptance must be negotiated
             "extensions": {
                 "zk_travel_rule": {
                     "version": "1.0",
                     "proof_id": compliance_proof.proof_id,
+                    "transfer_id": compliance_proof.transfer_id,
                     "groth16_proof": compliance_proof.groth16_proof,
                     "public_signals": compliance_proof.public_signals,
                     "verification_key": compliance_proof.verification_key,
@@ -98,12 +107,45 @@ class TRPBridge:
                     "proof_generated_at": compliance_proof.proof_generated_at,
                     "proof_expires_at": compliance_proof.proof_expires_at,
                     # sar_review_flag excluded — internal advisory only (BSA anti-tipping-off)
-                    # Encrypted PII nonce + AAD for envelope binding
-                    "pii_nonce": base64.b64encode(hybrid_payload.pii_nonce).decode("ascii"),
-                    "pii_associated_data": hybrid_payload.pii_associated_data,
+                    # Encrypted PII nonce + AAD for envelope binding, and the HPKE v2 envelope
+                    "pii_nonce": pii["pii_nonce"],
+                    "pii_associated_data": pii["pii_associated_data"],
+                    "pii_envelope": pii["pii_envelope"],
                 },
             },
         }
+
+    @staticmethod
+    def parse_trp_request(request: dict[str, Any]) -> HybridPayload:
+        """
+        Beneficiary side of :meth:`build_trp_request`.
+
+        Rebuilds the :class:`HybridPayload` (with any HPKE v2 envelope) so the
+        beneficiary can decrypt the PII with its own key. The proof fields are
+        taken as sent; verifying them is a separate step.
+        """
+        extension = request["extensions"]["zk_travel_rule"]
+        proof = ComplianceProof(
+            proof_id=extension["proof_id"],
+            transfer_id=extension.get("transfer_id") or request["originator"]["accountNumber"][0],
+            groth16_proof=extension["groth16_proof"],
+            public_signals=extension["public_signals"],
+            verification_key=extension["verification_key"],
+            originator_vasp_did=extension["originator_vasp_did"],
+            beneficiary_vasp_did=extension.get("beneficiary_vasp_did"),
+            jurisdiction=extension["jurisdiction"],
+            amount_tier=extension["amount_tier"],
+            proof_generated_at=extension["proof_generated_at"],
+            proof_expires_at=extension["proof_expires_at"],
+        )
+        fields = {
+            "encrypted_pii": request["ivms101_encrypted"],
+            "encryption_algorithm": request["ivms101_encryption_algorithm"],
+            "pii_nonce": extension["pii_nonce"],
+            "pii_associated_data": extension["pii_associated_data"],
+            "pii_envelope": extension.get("pii_envelope"),
+        }
+        return HybridPayload.from_pii_wire_fields(proof, fields)
 
     @staticmethod
     def _asset_to_slip44(asset: str) -> int:

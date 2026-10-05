@@ -8,17 +8,29 @@ Key components:
 - TRISAClient: gRPC client for TRISANetwork service
 - TRISAServer: gRPC server servant for handling incoming TRISA transfers
 - SecureEnvelopeBuilder: Helper for building wire-format SecureEnvelopes
+
+Security defaults:
+- Unsealed envelopes (``sealed=False``: no wrapped key, no HMAC) are rejected
+  with a TRISA ``UNTRUSTED`` error unless ``allow_unsealed=True`` is passed
+  explicitly (local testing only).
+- ``TRISAServer`` never auto-accepts. Without a ``transfer_handler`` (or a
+  subclass overriding ``handle_transfer``) every transfer is answered with a
+  TRISA ``UNIMPLEMENTED`` error.
+
+Inner payload: the PII fields come from :meth:`HybridPayload.pii_wire_fields`,
+so HPKE v2 envelopes (``pii_envelope`` with ``enc``/``kid``) travel inside the
+sealed payload bytes. The key is additive (``payload_version`` stays ``"1.0"``);
+its absence is read as legacy v1. No protobuf change is needed.
 """
 
 from __future__ import annotations
 
-import base64
 import hmac as hmac_module
 import json
 import logging
 import os
 from datetime import datetime, timezone
-from typing import Any, AsyncIterator, Optional
+from typing import Any, AsyncIterator, Awaitable, Callable, Optional
 
 import grpc
 from cryptography.hazmat.primitives import hashes, serialization
@@ -43,6 +55,8 @@ _ZK_ENVELOPE_TYPE = "ZK_TRAVEL_RULE_V1"
 
 # Default TRISA gRPC port
 _DEFAULT_TRISA_PORT = 18000
+
+TransferHandler = Callable[[dict[str, Any], "pb2.SecureEnvelope"], Awaitable["pb2.SecureEnvelope"]]
 
 
 class TRISAError(Exception):
@@ -106,19 +120,17 @@ class SecureEnvelopeBuilder:
 
         The payload is a JSON object containing:
         - zk_compliance_proof: ComplianceProof model dump
-        - encrypted_pii: Base64-encoded IVMS101 PII ciphertext
-        - pii_nonce: Base64-encoded AES-GCM nonce
-        - pii_associated_data: Envelope binding data
-        - payload_version: "1.0"
+        - the PII wire fields from HybridPayload.pii_wire_fields():
+          encrypted_pii, encryption_algorithm, pii_nonce (empty for HPKE v2),
+          pii_associated_data, pii_envelope (HPKE v2 envelope or null for v1)
+        - ivms101_version, payload_version: "1.0"
 
         Returns:
             JSON bytes of the inner payload
         """
         payload = {
             "zk_compliance_proof": compliance_proof.model_dump(mode="json"),
-            "encrypted_pii": base64.b64encode(hybrid_payload.encrypted_pii).decode("ascii"),
-            "pii_nonce": base64.b64encode(hybrid_payload.pii_nonce).decode("ascii"),
-            "pii_associated_data": hybrid_payload.pii_associated_data,
+            **hybrid_payload.pii_wire_fields(),
             "ivms101_version": "101.2023",
             "payload_version": "1.0",
         }
@@ -211,6 +223,8 @@ class SecureEnvelopeBuilder:
         self,
         envelope: pb2.SecureEnvelope,
         beneficiary_private_key: rsa.RSAPrivateKey,
+        *,
+        allow_unsealed: bool = False,
     ) -> dict[str, Any]:
         """
         Parse and decrypt a received TRISA SecureEnvelope.
@@ -218,10 +232,22 @@ class SecureEnvelopeBuilder:
         Args:
             envelope: The received SecureEnvelope protobuf
             beneficiary_private_key: RSA private key for decryption
+            allow_unsealed: Accept ``sealed=False`` envelopes (plaintext, no HMAC).
+                Off by default; enable only for local testing.
 
         Returns:
             Dict containing the decrypted payload data
+
+        Raises:
+            TRISAError: ``UNTRUSTED`` for an unsealed envelope when not allowed,
+                ``INVALID_SIGNATURE`` on HMAC mismatch.
         """
+        if not envelope.sealed and not allow_unsealed:
+            raise TRISAError(
+                errors_pb2.Error.UNTRUSTED,
+                "Unsealed envelopes are not accepted",
+                retry=False,
+            )
         if envelope.sealed:
             # Unwrap AES key
             aes_key = beneficiary_private_key.decrypt(
@@ -262,6 +288,23 @@ class SecureEnvelopeBuilder:
             inner_payload = envelope.payload
 
         return json.loads(inner_payload)
+
+    def parse_hybrid_payload(
+        self,
+        envelope: pb2.SecureEnvelope,
+        beneficiary_private_key: rsa.RSAPrivateKey,
+        *,
+        allow_unsealed: bool = False,
+    ) -> HybridPayload:
+        """
+        Parse a received envelope back into a :class:`HybridPayload`.
+
+        The PII stays encrypted; HPKE v2 envelopes round-trip so the beneficiary
+        can open them with its X25519 key, and legacy v1 payloads still parse.
+        """
+        payload = self.parse_envelope(envelope, beneficiary_private_key, allow_unsealed=allow_unsealed)
+        proof = ComplianceProof.model_validate(payload["zk_compliance_proof"])
+        return HybridPayload.from_pii_wire_fields(proof, payload)
 
 
 class TRISAClient:
@@ -398,8 +441,9 @@ class TRISAServer(pb2_grpc.TRISANetworkServicer):
     Inherits from the generated TRISANetworkServicer so that any
     unimplemented RPCs return proper gRPC UNIMPLEMENTED status codes.
 
-    Inherit from this class and implement handle_transfer() to add
-    custom transfer handling logic.
+    Pass ``transfer_handler`` or inherit and override handle_transfer() to
+    add transfer handling logic. With neither, transfers are refused with a
+    TRISA ``UNIMPLEMENTED`` error; the servant never auto-accepts.
     """
 
     def __init__(
@@ -407,6 +451,9 @@ class TRISAServer(pb2_grpc.TRISANetworkServicer):
         private_key: rsa.RSAPrivateKey,
         public_key: bytes,
         signing_key_data: bytes,
+        *,
+        transfer_handler: TransferHandler | None = None,
+        allow_unsealed: bool = False,
     ):
         """
         Initialize the TRISA server servant.
@@ -415,10 +462,16 @@ class TRISAServer(pb2_grpc.TRISANetworkServicer):
             private_key: RSA private key for decryption
             public_key: DER-encoded public key for encryption
             signing_key_data: PEM-encoded signing key data
+            transfer_handler: Async callable ``(payload, request) -> response``
+                invoked for each decrypted transfer.
+            allow_unsealed: Accept ``sealed=False`` envelopes. Off by default;
+                enable only for local testing.
         """
         self.private_key = private_key
         self.public_key = public_key
         self.signing_key_data = signing_key_data
+        self.transfer_handler = transfer_handler
+        self.allow_unsealed = allow_unsealed
         self.envelope_builder = SecureEnvelopeBuilder(
             beneficiary_public_key=public_key,
             originator_signing_key=signing_key_data,
@@ -436,7 +489,9 @@ class TRISAServer(pb2_grpc.TRISANetworkServicer):
         """
         try:
             # Parse and decrypt the incoming envelope
-            payload = self.envelope_builder.parse_envelope(request, self.private_key)
+            payload = self.envelope_builder.parse_envelope(
+                request, self.private_key, allow_unsealed=self.allow_unsealed
+            )
 
             # Handle the transfer (implement custom logic in subclass)
             response_envelope = await self.handle_transfer(payload, request)
@@ -510,7 +565,7 @@ class TRISAServer(pb2_grpc.TRISANetworkServicer):
         """
         Handle a decrypted TRISA transfer payload.
 
-        Override this method in a subclass to implement custom logic.
+        Delegates to ``transfer_handler``; override in a subclass for custom logic.
 
         Args:
             payload: Decrypted payload dict
@@ -518,14 +573,18 @@ class TRISAServer(pb2_grpc.TRISANetworkServicer):
 
         Returns:
             Response SecureEnvelope
+
+        Raises:
+            TRISAError: ``UNIMPLEMENTED`` when no handler is configured, so a
+                transfer is never accepted without compliance handling.
         """
-        # Default: acknowledge the transfer
-        return pb2.SecureEnvelope(
-            id=request.id,
-            payload=b"",
-            transfer_state=pb2.ACCEPTED,
-            timestamp=datetime.now(timezone.utc).isoformat(),
-        )
+        if self.transfer_handler is None:
+            raise TRISAError(
+                errors_pb2.Error.UNIMPLEMENTED,
+                "No transfer handler configured",
+                retry=False,
+            )
+        return await self.transfer_handler(payload, request)
 
 
 async def create_trisa_server(
@@ -534,6 +593,7 @@ async def create_trisa_server(
     port: int = _DEFAULT_TRISA_PORT,
     trusted_ca_path: str | None = None,
     require_mtls: bool = True,
+    transfer_handler: TransferHandler | None = None,
 ) -> grpc.aio.server:
     """
     Create a gRPC server with TRISA service handler.
@@ -545,6 +605,10 @@ async def create_trisa_server(
         trusted_ca_path: Path to trusted CA certificate(s) for mTLS client verification.
                          Required when require_mtls=True.
         require_mtls: Whether to require mTLS (default True, per TRISA spec).
+        transfer_handler: Async ``(payload, request) -> response`` callable for
+                          decrypted transfers. Without one, transfers are refused
+                          with a TRISA UNIMPLEMENTED error. Unsealed envelopes are
+                          always rejected by servers built here.
 
     Returns:
         Configured grpc.aio.Server
@@ -568,6 +632,7 @@ async def create_trisa_server(
         private_key=private_key,
         public_key=public_key,
         signing_key_data=cert_data,
+        transfer_handler=transfer_handler,
     )
 
     # Build TLS/mTLS server credentials
