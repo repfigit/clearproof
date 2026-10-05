@@ -98,9 +98,11 @@ packages/contracts/
 - `npx hardhat test` runs everything that needs no circuit artifacts, including
   `PilotRootCheckpoint.test.ts` and `PilotCurrentRegistryLogic.test.ts` (mock
   verifier: pause, admin rules, epochs, events, domain binding, mirroring).
-- `PilotCurrentRegistry.test.ts` and other real-proof suites are `describe.skip`
-  unless `CLEARPROOF_PILOT_TEST_ARTIFACTS` (or the legacy vectors) are present;
-  the CI `circuits` job supplies them.
+- `PilotCurrentRegistry.test.ts` and other real-proof suites require explicit
+  `CLEARPROOF_PILOT_TEST_ARTIFACTS` bundles. Legacy `E2E.test.ts` requires
+  `CLEARPROOF_LEGACY_TEST_ARTIFACTS`; it skips when absent and fails if a supplied
+  bundle is empty or incomplete. Ambient root `artifacts/` are never E2E inputs.
+  The CI `circuits` job supplies development bundles.
 - `uv run python scripts/test_checkpoint_evm.py` runs the Python observer and the
   pilot sanctions publication script against an owned loopback node.
 
