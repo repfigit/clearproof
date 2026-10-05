@@ -18,7 +18,7 @@ All five packages move to 0.7.0. Pre-production: nothing is independently audite
 ### Breaking
 
 - **`@clearproof/proof`:** `VerifyResult.sarReviewFlag` is now `boolean | null`, and `isCompliant` / `sarReviewFlag` are only meaningful for a valid proof (`false` / `null` otherwise). Wrong-length or malformed public signals return `valid: false` instead of throwing.
-- **Node ≥20** for `@clearproof/proof` and `@clearproof/cli`. Packages declare `exports` maps, so deep imports of `dist/*` are no longer supported.
+- **Node ≥20** for `@clearproof/proof` and **Node ≥22.12** for `@clearproof/cli` (its `commander` 15 and `chalk` 6 dependencies require it; Node 20 is end-of-life). Packages declare `exports` maps, so deep imports of `dist/*` are no longer supported.
 - **Pilot contracts:** `PilotCurrentRegistry` and `PilotRootCheckpoint` change events, add pause and two-step admin, and the checkpoint stores a publisher epoch. A zero admin reverts with `AccessControlInvalidDefaultAdmin`.
 - **Python API / bridges (source checkout):** `DOMAIN_CONTRACT_HASH` written as bare hex needs a `0x` prefix; the gRPC TRISA server rejects unsealed envelopes and requires a `transfer_handler`.
 
@@ -39,7 +39,7 @@ All five packages move to 0.7.0. Pre-production: nothing is independently audite
 
 ### Changed
 
-- **`@clearproof/proof` (breaking):** `verifyProof` returns `isCompliant: false` and `sarReviewFlag: null` unless the proof is valid, and returns `valid: false` (instead of throwing) for wrong-length or malformed public signals. Packages declare `exports` maps; `proof` and `cli` require Node ≥20.
+- **`@clearproof/proof` (breaking):** `verifyProof` returns `isCompliant: false` and `sarReviewFlag: null` unless the proof is valid, and returns `valid: false` (instead of throwing) for wrong-length or malformed public signals. Packages declare `exports` maps; `proof` requires Node ≥20 and `cli` Node ≥22.12.
 - `DOMAIN_CONTRACT_HASH` / `DOMAIN_CHAIN_ID` are parsed as full field elements (decimal or `0x` hex) instead of being truncated; bare hex without `0x` is rejected.
 - CI: actions pinned by SHA, least-privilege permissions, concurrency, caching and job timeouts; `uv sync --locked`; duplicated test runs removed. The sanctions relay moved to `sanctions-relay.yml` and only relays a root merged to main.
 - `make relay-sanctions` no longer rebuilds the tree (`make refresh-and-relay-sanctions` does both); `make benchmark` removed.

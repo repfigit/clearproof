@@ -7,7 +7,7 @@ Thank you for your interest in contributing to the clearproof compliance bridge.
 ### Prerequisites
 
 - **Python 3.11+** with [uv](https://docs.astral.sh/uv/) for package management
-- **Node.js 20+** with npm
+- **Node.js 22.12+** with npm
 - **circom 2.2.2+** for circuit compilation
 
 ### Install Dependencies

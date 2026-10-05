@@ -25,7 +25,7 @@ The CLI installs from npm with `npm install -g @clearproof/cli` (verified Septem
 
 ## Source setup
 
-Prerequisites: Git, Python 3.11+ with uv (the locked install uses 3.12), Node.js 20+ with npm, Circom 2.2.2 and PostgreSQL 18 for the pilot acceptance run.
+Prerequisites: Git, Python 3.11+ with uv (the locked install uses 3.12), Node.js 22.12+ with npm, Circom 2.2.2 and PostgreSQL 18 for the pilot acceptance run.
 
 ```bash
 git clone --branch main https://github.com/repfigit/clearproof.git

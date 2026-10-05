@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
-import yaml from 'js-yaml';
+import { load } from 'js-yaml';
 import { CONTENT_DIR } from './parser.js';
 
 export interface Signal {
@@ -23,7 +23,7 @@ interface SignalsFile {
 function loadSignals(): Signal[] {
   const filePath = resolve(CONTENT_DIR, 'signals.yaml');
   const raw = readFileSync(filePath, 'utf-8');
-  const data = yaml.load(raw) as SignalsFile;
+  const data = load(raw) as SignalsFile;
   return data.signals ?? [];
 }
 
