@@ -24,8 +24,12 @@ def isolated_stores(monkeypatch):
 def signed(nonce, domain="wallet.example", account=None):
     account = account or Account.from_key(b"\x11" * 32)
     message = SiweMessage(
-        domain=domain, address=account.address, uri=f"https://{domain}",
-        version="1", chain_id=1, nonce=nonce,
+        domain=domain,
+        address=account.address,
+        uri=f"https://{domain}",
+        version="1",
+        chain_id=1,
+        nonce=nonce,
         issued_at=datetime.now(timezone.utc).isoformat(),
     ).prepare_message()
     return message, account.sign_message(encode_defunct(text=message)).signature.hex(), account.address

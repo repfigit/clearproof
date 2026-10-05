@@ -12,6 +12,8 @@
  * test/thresholds.test.ts).
  */
 
+import { isFieldElementString } from './field.js';
+
 export interface Thresholds {
   tier2: number;
   tier3: number;
@@ -69,7 +71,8 @@ export function getThresholds(jurisdiction: string): Thresholds {
  * @returns true if the jurisdiction codes match, false otherwise
  */
 export function jurisdictionMatchesVASP(publicSignals: string[], expectedJurisdiction: string): boolean {
-  if (publicSignals.length < 16) return false;
+  if (!Array.isArray(publicSignals) || publicSignals.length < 16) return false;
+  if (!isFieldElementString(publicSignals[6])) return false;
 
   const claimedJurisdiction = decodeJurisdiction(publicSignals[6]);
   if (claimedJurisdiction === null) return false;
@@ -84,7 +87,9 @@ export function jurisdictionMatchesVASP(publicSignals: string[], expectedJurisdi
  * `publicSignals` must be the full 16-element array.
  */
 export function thresholdsMatchJurisdiction(publicSignals: string[]): boolean {
-  if (publicSignals.length < 16) return false;
+  if (!Array.isArray(publicSignals) || publicSignals.length < 16) return false;
+  // Caller-supplied strings: BigInt() throws a SyntaxError on anything that is not a canonical integer.
+  if (![6, 8, 9, 10].every(i => isFieldElementString(publicSignals[i]))) return false;
 
   const jurisdiction = decodeJurisdiction(publicSignals[6]);
   if (jurisdiction === null) return false;

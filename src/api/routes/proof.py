@@ -11,20 +11,22 @@ is configured. Falls back to in-memory registries when not.
 import asyncio
 import base64
 import hashlib
+import hmac
 import json
 import logging
 import os
+import re
 import time
 import uuid
-from typing import Optional
+from typing import Any, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, Field
 
 from src.api.dependencies import get_credential_registry
 from src.api.middleware.auth import JWTAuthDependency
-from src.api.middleware.rate_limit import RateLimiter
-from src.prover.snarkjs_prover import SnarkJSProver
+from src.api.middleware.rate_limit import PrincipalRateLimiter
+from src.prover.snarkjs_prover import ProverError, SnarkJSProver
 from src.registry.credential_registry import CredentialRegistry
 from src.registry.issuer_registry import IssuerRegistry
 from src.registry.sanctions_list import SanctionsMerkleTree, _address_to_int, _poseidon_hash
@@ -36,12 +38,18 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/proof", tags=["proof"])
 
+# Fallback only: this registry starts empty. Operators inject the trusted
+# issuer set as ``app.state.issuer_registry`` (see ``_get_issuer_registry``).
 _issuer_registry = IssuerRegistry(depth=10)
 _prover = SnarkJSProver()
 _audit_log = AuditLog()
 
-_proof_generate_limiter = RateLimiter(max_requests=30, window_seconds=60)
-_proof_verify_limiter = RateLimiter(max_requests=30, window_seconds=60)
+_proof_generate_limiter = PrincipalRateLimiter(max_requests=30, window_seconds=60)
+_proof_verify_limiter = PrincipalRateLimiter(max_requests=30, window_seconds=60)
+
+LEGACY_SIGNAL_COUNT = 16
+_DECIMAL = re.compile(r"[0-9]{1,78}")
+_HEX = re.compile(r"0[xX][0-9a-fA-F]{1,64}")
 
 
 class ProofGenerateRequest(BaseModel):
@@ -55,6 +63,15 @@ class ProofGenerateRequest(BaseModel):
         ..., min_length=2, max_length=2, description="ISO 3166-1 alpha-2 of originating jurisdiction"
     )
     idempotency_key: str = Field(..., description="Client-supplied idempotency key for retries")
+    transfer_nonce: Optional[str] = Field(
+        None,
+        min_length=1,
+        max_length=128,
+        description=(
+            "Optional per-transfer nonce or transfer ID. When set it is bound into the transfer hash and "
+            "nullifier, so repeated transfers with the same wallets and amount get distinct nullifiers."
+        ),
+    )
 
     originator_name: Optional[str] = None
     originator_address: Optional[str] = None
@@ -158,11 +175,34 @@ def _get_vasp_did() -> str:
     return os.getenv("VASP_DID", "did:web:vasp.example.com")
 
 
-def _load_vk() -> dict:
-    vk_path = os.path.join(
-        os.getenv("CIRCUIT_ARTIFACTS_DIR", "./artifacts"),
-        "verification_key.json",
-    )
+def _artifact_path(name: str) -> str:
+    return os.path.join(os.getenv("CIRCUIT_ARTIFACTS_DIR", "./artifacts"), name)
+
+
+def _artifact_stamp(path: str) -> Optional[tuple[int, int]]:
+    try:
+        stat = os.stat(path)
+    except OSError:
+        return None
+    return stat.st_mtime_ns, stat.st_size
+
+
+# path -> ((mtime_ns, size), parsed artifact). Reloaded when the file changes.
+_artifact_cache: dict[str, tuple[tuple[int, int], Any]] = {}
+
+
+def _cached_artifact(path: str, load):
+    stamp = _artifact_stamp(path)
+    cached = _artifact_cache.get(path)
+    if stamp is not None and cached is not None and cached[0] == stamp:
+        return cached[1]
+    value = load()
+    if stamp is not None:
+        _artifact_cache[path] = (stamp, value)
+    return value
+
+
+def _read_vk(vk_path: str) -> dict:
     try:
         with open(vk_path, "r") as f:
             return json.load(f)
@@ -170,6 +210,127 @@ def _load_vk() -> dict:
         raise RuntimeError(
             f"Verification key not found at {vk_path}. Circuit artifacts must be compiled before starting the service."
         )
+
+
+def _load_vk() -> dict:
+    """Return the verification key, re-reading the file only when it changes."""
+    vk_path = _artifact_path("verification_key.json")
+    return _cached_artifact(vk_path, lambda: _read_vk(vk_path))
+
+
+def _load_sanctions_tree() -> SanctionsMerkleTree:
+    """Return the sanctions tree, rebuilding it only when the artifact file changes.
+
+    A missing file is never cached, so ``SanctionsMerkleTree.load`` reports it.
+    """
+    return _cached_artifact(_artifact_path("sanctions_tree.json"), SanctionsMerkleTree.load)
+
+
+def _get_issuer_registry(app) -> IssuerRegistry:
+    """Operator-injected trusted issuer registry, else the (empty) module default."""
+    injected = getattr(getattr(app, "state", None), "issuer_registry", None)
+    return injected if injected is not None else _issuer_registry
+
+
+def _parse_field_setting(name: str, default: str) -> int:
+    """Parse a decimal or 0x-hex BN128 field element from configuration, without truncation."""
+    raw = os.getenv(name, default).strip()
+    if not raw:
+        return 0
+    if _DECIMAL.fullmatch(raw):
+        value = int(raw)
+    elif _HEX.fullmatch(raw):
+        value = int(raw, 16)
+    else:
+        value = _BN128_R
+    if value >= _BN128_R:
+        raise HTTPException(
+            status_code=503,
+            detail=f"Invalid {name} configuration: expected a decimal or 0x-hex BN128 field element",
+        )
+    return value
+
+
+def _domain_binding() -> tuple[int, int]:
+    """Domain signals checked by ComplianceRegistry, not by the circuit.
+
+    ``DOMAIN_CONTRACT_HASH`` must equal the contract's own computation,
+    ``uint256(keccak256(abi.encodePacked(registry))) % BN128_R``, supplied in
+    full as decimal or 0x-hex. Empty means unbound (0), which the deployed
+    registry rejects. Malformed values fail closed instead of being truncated.
+    """
+    return _parse_field_setting("DOMAIN_CHAIN_ID", "11155111"), _parse_field_setting("DOMAIN_CONTRACT_HASH", "")
+
+
+def _same_wallet(left: str, right: str) -> bool:
+    return left.strip().lower() == right.strip().lower()
+
+
+def _principal_id(auth: Any) -> str:
+    subject = auth.get("sub") if isinstance(auth, dict) else None
+    return subject if isinstance(subject, str) and subject else "unauthenticated"
+
+
+def _scoped_idempotency_key(principal: str, client_key: str) -> str:
+    """Idempotency keys are private to the authenticated principal."""
+    digest = hashlib.sha256(f"{principal}\x00{client_key}".encode()).hexdigest()
+    return f"proof-idem-v2:{digest}"
+
+
+def _request_fingerprint(request: "ProofGenerateRequest") -> str:
+    """Hash of the fields that define the transfer. Originator PII is excluded."""
+    salient = {
+        "credential_id": request.credential_id,
+        "wallet_address": request.wallet_address.strip().lower(),
+        "amount_usd": request.amount_usd,
+        "asset": request.asset,
+        "destination_wallet": request.destination_wallet.strip().lower(),
+        "destination_vasp_did": request.destination_vasp_did,
+        "jurisdiction": request.jurisdiction.upper(),
+        "transfer_nonce": request.transfer_nonce,
+        "beneficiary_hpke_public_key": request.beneficiary_hpke_public_key,
+    }
+    return hashlib.sha256(json.dumps(salient, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
+
+
+def _replayed_result(stored: str, fingerprint: str) -> str:
+    """Return the cached result digest, or 409 when the key was used for another request."""
+    recorded, separator, result_hash = stored.partition(":")
+    if not separator or not hmac.compare_digest(recorded, fingerprint):
+        raise HTTPException(status_code=409, detail="Idempotency key already used for a different request")
+    return result_hash
+
+
+def _root_int(value: Any) -> Optional[int]:
+    try:
+        text = str(value)
+        return int(text, 16) if text[:2].lower() == "0x" else int(text)
+    except (TypeError, ValueError):
+        return None
+
+
+async def _current_roots(app) -> tuple[Optional[int], Optional[int]]:
+    """Current sanctions and issuer roots, or None when no source is available."""
+    try:
+        tree = await asyncio.to_thread(_load_sanctions_tree)
+        sanctions_root = _root_int(tree.root)
+    except Exception:
+        sanctions_root = None
+    try:
+        issuer_root = _root_int(_get_issuer_registry(app).get_root())
+    except Exception:
+        issuer_root = None
+    return sanctions_root, issuer_root
+
+
+def _parse_public_signals(signals: list[str]) -> list[int]:
+    """Untrusted counterparty input: exactly 16 canonical field elements."""
+    if len(signals) != LEGACY_SIGNAL_COUNT:
+        raise HTTPException(status_code=400, detail=f"Expected exactly {LEGACY_SIGNAL_COUNT} public signals")
+    values = [int(signal) if _DECIMAL.fullmatch(signal) else _BN128_R for signal in signals]
+    if any(value >= _BN128_R for value in values):
+        raise HTTPException(status_code=400, detail="Malformed public signals (expected decimal field elements)")
+    return values
 
 
 # ---------------------------------------------------------------------------
@@ -223,17 +384,21 @@ async def generate_proof(
             ),
         )
 
+    domain_chain_id, domain_contract_hash = _domain_binding()
+
     db = _get_db(http_request.app)
     await _check_sanctions_staleness(db)
 
+    idempotency_key = _scoped_idempotency_key(_principal_id(_auth), request.idempotency_key)
+    fingerprint = _request_fingerprint(request)
     if db is not None:
         from src.storage.proofs import ProofStore
 
-        proof_store = ProofStore(db)
-        cached = await proof_store.check_idempotency(request.idempotency_key)
+        cached = await ProofStore(db).check_idempotency(idempotency_key)
         if cached is not None:
-            logger.info("Idempotent hit for key %s", request.idempotency_key[:8])
-            return {"status": "already_generated", "result_hash": cached}
+            result_hash = _replayed_result(cached, fingerprint)
+            logger.info("Idempotent hit for scoped key %s", idempotency_key[14:22])
+            return {"status": "already_generated", "result_hash": result_hash}
 
     # 4. Look up credential
     credential = _cred_registry.get(request.credential_id)
@@ -246,9 +411,16 @@ async def generate_proof(
     if int(time.time()) >= credential.expires_at:
         raise HTTPException(status_code=410, detail="Credential expired")
 
+    # 4c. The credential must belong to the wallet and jurisdiction being proved.
+    if not _same_wallet(request.wallet_address, credential.subject_wallet):
+        raise HTTPException(status_code=403, detail="Wallet address does not match credential subject")
+    if request.jurisdiction.upper() != credential.jurisdiction.upper():
+        raise HTTPException(status_code=403, detail="Jurisdiction does not match credential")
+    subject_wallet = credential.subject_wallet
+
     recipient_pubkey = await _resolve_recipient_key(request)
 
-    # 4c. Evaluate SAR flags
+    # 4d. Evaluate SAR flags
     sar_result = evaluate_sar_flags(
         tier,
         request.jurisdiction,
@@ -256,34 +428,36 @@ async def generate_proof(
     )
 
     # 5. Build circuit inputs
-    issuer_registry = _issuer_registry
+    issuer_registry = _get_issuer_registry(http_request.app)
     issuer_did_int = _encode_did(credential.issuer_did)
     commitment = _cred_registry.get_commitment(request.credential_id)
     commitment_int = int(commitment, 16) if commitment.startswith("0x") else int(commitment)
 
-    sanctions_tree = SanctionsMerkleTree.load()
-    wallet_hash = await _hash_wallet(request.wallet_address)
+    sanctions_tree = await asyncio.to_thread(_load_sanctions_tree)
+    wallet_hash = await _hash_wallet(subject_wallet)
 
     sanctions_root = sanctions_tree.root
     if sanctions_root is None:
         raise RuntimeError("Sanctions tree not built — run build_sanctions_tree.py first")
 
+    try:
+        issuer_witness = await issuer_registry.generate_membership_witness(credential.issuer_did)
+    except KeyError:
+        raise HTTPException(status_code=422, detail="Credential issuer not authorized")
     issuer_root = issuer_registry.get_root()
-    issuer_witness = await issuer_registry.generate_membership_witness(credential.issuer_did)
-    sanctions_witness = await sanctions_tree.generate_nonmembership_witness(request.wallet_address)
+    sanctions_witness = await sanctions_tree.generate_nonmembership_witness(subject_wallet)
 
-    transfer_id_hash = hashlib.sha256(
-        f"{request.wallet_address}:{request.destination_wallet}:{request.amount_usd}".encode()
-    ).hexdigest()
-    credential_nullifier = await _poseidon_hash(
-        [int(commitment, 16) if commitment.startswith("0x") else int(commitment), int(transfer_id_hash[:16], 16)]
-    )
+    transfer_preimage = f"{request.wallet_address}:{request.destination_wallet}:{request.amount_usd}"
+    if request.transfer_nonce is not None:
+        transfer_preimage += f":{request.transfer_nonce}"
+    transfer_id_hash = hashlib.sha256(transfer_preimage.encode()).hexdigest()
+    credential_nullifier = await _poseidon_hash([commitment_int, int(transfer_id_hash[:16], 16)])
 
-    domain_contract_hash = os.getenv("DOMAIN_CONTRACT_HASH", "0")
-    if domain_contract_hash:
-        domain_contract_hash = int(domain_contract_hash[:16], 16)
-    else:
-        domain_contract_hash = 0
+    # Fail fast on a spent nullifier; the insert below still guards concurrent requests.
+    if db is not None and await ProofStore(db).nullifier_exists(credential_nullifier):
+        raise HTTPException(status_code=409, detail="Proof nullifier already recorded")
+
+    verification_key = json.dumps(await asyncio.to_thread(_load_vk))
 
     generated_at = int(time.time())
     expires_at = generated_at + 3600
@@ -303,7 +477,7 @@ async def generate_proof(
         "credential_commitment": commitment_int,
         "sanctions_tree_root": int(sanctions_root),
         "issuer_tree_root": int(issuer_root),
-        "domain_chain_id": int(os.getenv("DOMAIN_CHAIN_ID", "11155111")),
+        "domain_chain_id": domain_chain_id,
         "domain_contract_hash": domain_contract_hash,
         "transfer_id_hash": int(transfer_id_hash[:16], 16),
         "credential_nullifier": int(credential_nullifier),
@@ -323,7 +497,11 @@ async def generate_proof(
     circuit_inputs = {name: str(value) if isinstance(value, int) else value for name, value in circuit_inputs.items()}
 
     # 9. Generate proof
-    proof_result, public_signals = await _prover.fullprove(circuit_inputs)
+    try:
+        proof_result, public_signals = await _prover.fullprove(circuit_inputs)
+    except (ProverError, FileNotFoundError, RuntimeError) as exc:
+        logger.error("Proof generation failed (%s)", type(exc).__name__)
+        raise HTTPException(status_code=503, detail="Proof generation temporarily unavailable") from exc
 
     # 10. Build compliance proof
     proof_id = str(uuid.uuid4())
@@ -334,7 +512,7 @@ async def generate_proof(
         transfer_id=transfer_id,
         groth16_proof=json.dumps(proof_result),
         public_signals=[str(s) for s in public_signals],
-        verification_key=json.dumps(_load_vk()),
+        verification_key=verification_key,
         originator_vasp_did=_get_vasp_did(),
         beneficiary_vasp_did=request.destination_vasp_did,
         jurisdiction=request.jurisdiction,
@@ -384,25 +562,22 @@ async def generate_proof(
     if db is not None:
         from src.storage.credentials import CredentialStore
         from src.storage.models import StoredCredential, StoredNullifier, StoredProof
-        from src.storage.proofs import ProofStore
 
         async with db.transaction() as transaction:
             async with transaction.connection() as conn:
                 # Serialize retries for this key, including requests that proved concurrently.
-                lock_id = int.from_bytes(
-                    hashlib.sha256(request.idempotency_key.encode()).digest()[:8], "big", signed=True
-                )
+                lock_id = int.from_bytes(hashlib.sha256(idempotency_key.encode()).digest()[:8], "big", signed=True)
                 await conn.execute("SELECT pg_advisory_xact_lock(%s)", (lock_id,))
-            cached = await ProofStore(transaction).check_idempotency(request.idempotency_key)
+            cached = await ProofStore(transaction).check_idempotency(idempotency_key)
             if cached is not None:
-                return {"status": "already_generated", "result_hash": cached}
+                return {"status": "already_generated", "result_hash": _replayed_result(cached, fingerprint)}
             cred_store = CredentialStore(transaction)
             await cred_store.upsert(
                 StoredCredential(
                     credential_id=request.credential_id,
                     issuer_did=credential.issuer_did,
-                    subject_wallet=request.wallet_address,
-                    jurisdiction=request.jurisdiction,
+                    subject_wallet=subject_wallet,
+                    jurisdiction=credential.jurisdiction,
                     kyc_tier=credential.kyc_tier,
                     sanctions_clear=credential.sanctions_clear,
                     issued_at=credential.issued_at,
@@ -419,7 +594,7 @@ async def generate_proof(
                     transfer_id=transfer_id,
                     groth16_proof=json.dumps(proof_result),
                     public_signals=[str(s) for s in public_signals],
-                    verification_key=json.dumps(_load_vk()),
+                    verification_key=verification_key,
                     originator_vasp_did=_get_vasp_did(),
                     beneficiary_vasp_did=request.destination_vasp_did,
                     jurisdiction=request.jurisdiction,
@@ -439,20 +614,18 @@ async def generate_proof(
             if not await proof_store.add_nullifier(nullifier):
                 raise HTTPException(status_code=409, detail="Proof nullifier already recorded")
 
-            await proof_store.record_idempotency(
-                request.idempotency_key,
-                request.wallet_address,
-                hashlib.sha256(
-                    json.dumps(
-                        {
-                            **hybrid_payload.model_dump(exclude={"encrypted_pii", "pii_nonce"}),
-                            "encrypted_pii": base64.b64encode(hybrid_payload.encrypted_pii).decode("ascii"),
-                            "pii_nonce": base64.b64encode(hybrid_payload.pii_nonce).decode("ascii"),
-                        },
-                        sort_keys=True,
-                    ).encode()
-                ).hexdigest(),
-            )
+            result_hash = hashlib.sha256(
+                json.dumps(
+                    {
+                        **hybrid_payload.model_dump(exclude={"encrypted_pii", "pii_nonce"}),
+                        "encrypted_pii": base64.b64encode(hybrid_payload.encrypted_pii).decode("ascii"),
+                        "pii_nonce": base64.b64encode(hybrid_payload.pii_nonce).decode("ascii"),
+                    },
+                    sort_keys=True,
+                ).encode()
+            ).hexdigest()
+            # The stored value binds the result to the request fingerprint ("fingerprint:result").
+            await proof_store.record_idempotency(idempotency_key, subject_wallet, f"{fingerprint}:{result_hash}")
 
             audit = PersistentAuditLog(transaction)
             await audit.append(
@@ -487,6 +660,12 @@ async def generate_proof(
     }
 
 
+def _root_status(signal: int, current: Optional[int]) -> str:
+    if current is None:
+        return "unverified"
+    return "current" if signal == current else "stale"
+
+
 @router.post("/verify", response_model=ProofVerifyResponse, summary="Verify ZK compliance proof")
 async def verify_proof(
     request: ProofVerifyRequest,
@@ -494,15 +673,16 @@ async def verify_proof(
     _auth: dict = Depends(JWTAuthDependency),
     _rl: None = Depends(_proof_verify_limiter),
 ):
-    try:
-        valid = await _prover.verify(request.groth16_proof, request.public_signals)
-    except Exception:
-        logger.error("Proof verification failed")
-        raise HTTPException(status_code=503, detail="Proof verification temporarily unavailable")
-
+    # Public signals arrive from a counterparty VASP: validate their shape and
+    # encoding before spending a snarkjs subprocess on them.
     signals = request.public_signals
-    if len(signals) < 16:
-        raise HTTPException(status_code=400, detail="Insufficient public signals (expected 16)")
+    values = _parse_public_signals(signals)
+
+    try:
+        valid = await _prover.verify(request.groth16_proof, signals)
+    except Exception as exc:
+        logger.error("Proof verification failed (%s)", type(exc).__name__)
+        raise HTTPException(status_code=503, detail="Proof verification temporarily unavailable")
 
     rejection_reasons: list[str] = []
     if not valid:
@@ -510,17 +690,35 @@ async def verify_proof(
 
     from src.prover.tier_mapping import decode_jurisdiction, jurisdiction_matches_vasp, thresholds_match_jurisdiction
 
-    # Public signals arrive from a counterparty VASP: treat every element as
-    # untrusted input, not as a well-formed integer.
-    try:
-        attestations = {
-            "is_compliant": int(signals[0]) == 1,
-            "sar_review_flag": int(signals[1]) == 1,
-            "amount_tier": int(signals[4]),
-            "jurisdiction": decode_jurisdiction(int(signals[6])),
-        }
-    except (TypeError, ValueError):
-        raise HTTPException(status_code=400, detail="Malformed public signals (expected decimal integers)")
+    attestations = {
+        "is_compliant": values[0] == 1,
+        "sar_review_flag": values[1] == 1,
+        "amount_tier": values[4],
+        "jurisdiction": decode_jurisdiction(values[6]),
+        "proof_expires_at": values[15],
+    }
+
+    if not attestations["is_compliant"]:
+        valid = False
+        rejection_reasons.append("not_compliant")
+
+    # Expiry is judged on the verifier's clock. transfer_timestamp is caller
+    # supplied and would let a caller revive an expired proof.
+    if values[15] <= int(time.time()):
+        valid = False
+        rejection_reasons.append("proof_expired")
+
+    # Roots must be the ones this verifier currently trusts. Without a
+    # current-root source the check is reported as unverified, not passed.
+    current_sanctions_root, current_issuer_root = await _current_roots(http_request.app)
+    attestations["sanctions_root_status"] = _root_status(values[2], current_sanctions_root)
+    attestations["issuer_root_status"] = _root_status(values[3], current_issuer_root)
+    if attestations["sanctions_root_status"] == "stale":
+        valid = False
+        rejection_reasons.append("sanctions_root_stale")
+    if attestations["issuer_root_status"] == "stale":
+        valid = False
+        rejection_reasons.append("issuer_root_stale")
 
     # Threshold binding. tier2/3/4_threshold (signals 8-10) are unconstrained
     # public inputs — the prover chooses them. A prover that submits an

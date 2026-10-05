@@ -18,9 +18,21 @@ declare module "hardhat/types/runtime" {
       signerOrOptions?: ethers.Signer | FactoryOptions
     ): Promise<Contracts.AccessControl__factory>;
     getContractFactory(
+      name: "AccessControlDefaultAdminRules",
+      signerOrOptions?: ethers.Signer | FactoryOptions
+    ): Promise<Contracts.AccessControlDefaultAdminRules__factory>;
+    getContractFactory(
+      name: "IAccessControlDefaultAdminRules",
+      signerOrOptions?: ethers.Signer | FactoryOptions
+    ): Promise<Contracts.IAccessControlDefaultAdminRules__factory>;
+    getContractFactory(
       name: "IAccessControl",
       signerOrOptions?: ethers.Signer | FactoryOptions
     ): Promise<Contracts.IAccessControl__factory>;
+    getContractFactory(
+      name: "IERC5313",
+      signerOrOptions?: ethers.Signer | FactoryOptions
+    ): Promise<Contracts.IERC5313__factory>;
     getContractFactory(
       name: "ERC165",
       signerOrOptions?: ethers.Signer | FactoryOptions
@@ -29,6 +41,10 @@ declare module "hardhat/types/runtime" {
       name: "IERC165",
       signerOrOptions?: ethers.Signer | FactoryOptions
     ): Promise<Contracts.IERC165__factory>;
+    getContractFactory(
+      name: "SafeCast",
+      signerOrOptions?: ethers.Signer | FactoryOptions
+    ): Promise<Contracts.SafeCast__factory>;
     getContractFactory(
       name: "Pausable",
       signerOrOptions?: ethers.Signer | FactoryOptions
@@ -82,6 +98,10 @@ declare module "hardhat/types/runtime" {
       signerOrOptions?: ethers.Signer | FactoryOptions
     ): Promise<Contracts.SanctionsRootRelay__factory>;
     getContractFactory(
+      name: "MockPilotVerifier",
+      signerOrOptions?: ethers.Signer | FactoryOptions
+    ): Promise<Contracts.MockPilotVerifier__factory>;
+    getContractFactory(
       name: "VASPRegistry",
       signerOrOptions?: ethers.Signer | FactoryOptions
     ): Promise<Contracts.VASPRegistry__factory>;
@@ -100,10 +120,25 @@ declare module "hardhat/types/runtime" {
       signer?: ethers.Signer
     ): Promise<Contracts.AccessControl>;
     getContractAt(
+      name: "AccessControlDefaultAdminRules",
+      address: string | ethers.Addressable,
+      signer?: ethers.Signer
+    ): Promise<Contracts.AccessControlDefaultAdminRules>;
+    getContractAt(
+      name: "IAccessControlDefaultAdminRules",
+      address: string | ethers.Addressable,
+      signer?: ethers.Signer
+    ): Promise<Contracts.IAccessControlDefaultAdminRules>;
+    getContractAt(
       name: "IAccessControl",
       address: string | ethers.Addressable,
       signer?: ethers.Signer
     ): Promise<Contracts.IAccessControl>;
+    getContractAt(
+      name: "IERC5313",
+      address: string | ethers.Addressable,
+      signer?: ethers.Signer
+    ): Promise<Contracts.IERC5313>;
     getContractAt(
       name: "ERC165",
       address: string | ethers.Addressable,
@@ -114,6 +149,11 @@ declare module "hardhat/types/runtime" {
       address: string | ethers.Addressable,
       signer?: ethers.Signer
     ): Promise<Contracts.IERC165>;
+    getContractAt(
+      name: "SafeCast",
+      address: string | ethers.Addressable,
+      signer?: ethers.Signer
+    ): Promise<Contracts.SafeCast>;
     getContractAt(
       name: "Pausable",
       address: string | ethers.Addressable,
@@ -179,6 +219,11 @@ declare module "hardhat/types/runtime" {
       address: string | ethers.Addressable,
       signer?: ethers.Signer
     ): Promise<Contracts.SanctionsRootRelay>;
+    getContractAt(
+      name: "MockPilotVerifier",
+      address: string | ethers.Addressable,
+      signer?: ethers.Signer
+    ): Promise<Contracts.MockPilotVerifier>;
     getContractAt(
       name: "VASPRegistry",
       address: string | ethers.Addressable,
@@ -200,9 +245,21 @@ declare module "hardhat/types/runtime" {
       signerOrOptions?: ethers.Signer | DeployContractOptions
     ): Promise<Contracts.AccessControl>;
     deployContract(
+      name: "AccessControlDefaultAdminRules",
+      signerOrOptions?: ethers.Signer | DeployContractOptions
+    ): Promise<Contracts.AccessControlDefaultAdminRules>;
+    deployContract(
+      name: "IAccessControlDefaultAdminRules",
+      signerOrOptions?: ethers.Signer | DeployContractOptions
+    ): Promise<Contracts.IAccessControlDefaultAdminRules>;
+    deployContract(
       name: "IAccessControl",
       signerOrOptions?: ethers.Signer | DeployContractOptions
     ): Promise<Contracts.IAccessControl>;
+    deployContract(
+      name: "IERC5313",
+      signerOrOptions?: ethers.Signer | DeployContractOptions
+    ): Promise<Contracts.IERC5313>;
     deployContract(
       name: "ERC165",
       signerOrOptions?: ethers.Signer | DeployContractOptions
@@ -211,6 +268,10 @@ declare module "hardhat/types/runtime" {
       name: "IERC165",
       signerOrOptions?: ethers.Signer | DeployContractOptions
     ): Promise<Contracts.IERC165>;
+    deployContract(
+      name: "SafeCast",
+      signerOrOptions?: ethers.Signer | DeployContractOptions
+    ): Promise<Contracts.SafeCast>;
     deployContract(
       name: "Pausable",
       signerOrOptions?: ethers.Signer | DeployContractOptions
@@ -263,6 +324,10 @@ declare module "hardhat/types/runtime" {
       name: "SanctionsRootRelay",
       signerOrOptions?: ethers.Signer | DeployContractOptions
     ): Promise<Contracts.SanctionsRootRelay>;
+    deployContract(
+      name: "MockPilotVerifier",
+      signerOrOptions?: ethers.Signer | DeployContractOptions
+    ): Promise<Contracts.MockPilotVerifier>;
     deployContract(
       name: "VASPRegistry",
       signerOrOptions?: ethers.Signer | DeployContractOptions
@@ -282,10 +347,25 @@ declare module "hardhat/types/runtime" {
       signerOrOptions?: ethers.Signer | DeployContractOptions
     ): Promise<Contracts.AccessControl>;
     deployContract(
+      name: "AccessControlDefaultAdminRules",
+      args: any[],
+      signerOrOptions?: ethers.Signer | DeployContractOptions
+    ): Promise<Contracts.AccessControlDefaultAdminRules>;
+    deployContract(
+      name: "IAccessControlDefaultAdminRules",
+      args: any[],
+      signerOrOptions?: ethers.Signer | DeployContractOptions
+    ): Promise<Contracts.IAccessControlDefaultAdminRules>;
+    deployContract(
       name: "IAccessControl",
       args: any[],
       signerOrOptions?: ethers.Signer | DeployContractOptions
     ): Promise<Contracts.IAccessControl>;
+    deployContract(
+      name: "IERC5313",
+      args: any[],
+      signerOrOptions?: ethers.Signer | DeployContractOptions
+    ): Promise<Contracts.IERC5313>;
     deployContract(
       name: "ERC165",
       args: any[],
@@ -296,6 +376,11 @@ declare module "hardhat/types/runtime" {
       args: any[],
       signerOrOptions?: ethers.Signer | DeployContractOptions
     ): Promise<Contracts.IERC165>;
+    deployContract(
+      name: "SafeCast",
+      args: any[],
+      signerOrOptions?: ethers.Signer | DeployContractOptions
+    ): Promise<Contracts.SafeCast>;
     deployContract(
       name: "Pausable",
       args: any[],
@@ -361,6 +446,11 @@ declare module "hardhat/types/runtime" {
       args: any[],
       signerOrOptions?: ethers.Signer | DeployContractOptions
     ): Promise<Contracts.SanctionsRootRelay>;
+    deployContract(
+      name: "MockPilotVerifier",
+      args: any[],
+      signerOrOptions?: ethers.Signer | DeployContractOptions
+    ): Promise<Contracts.MockPilotVerifier>;
     deployContract(
       name: "VASPRegistry",
       args: any[],

@@ -51,6 +51,52 @@ class HybridPayload(BaseModel):
         """True if this payload carries an HPKE v2 envelope rather than v1 AES-GCM."""
         return self.pii_envelope is not None and self.pii_envelope.get("v") == 2
 
+    def pii_wire_fields(self) -> dict[str, Any]:
+        """
+        JSON-safe wire fields for the encrypted PII component.
+
+        This is the single serialization every legacy bridge (TRISA dict,
+        TRISA gRPC, TRP) embeds, so both envelope versions survive transport:
+
+        - ``encrypted_pii`` / ``pii_nonce``: standard base64. For HPKE v2,
+          ``encrypted_pii`` is only the HPKE ciphertext and ``pii_nonce`` is empty.
+        - ``pii_envelope``: the full HPKE v2 envelope (``v``, suite ids, ``kid``,
+          ``enc``, ``ct``, ``aad``), or ``None`` for legacy v1 AES-256-GCM.
+          The beneficiary needs ``enc`` to decrypt v2, so this must never be dropped.
+
+        Only ciphertext and envelope metadata are emitted; no plaintext PII.
+        """
+        return {
+            "encrypted_pii": base64.b64encode(self.encrypted_pii).decode("ascii"),
+            "encryption_algorithm": self.encryption_algorithm,
+            "pii_nonce": base64.b64encode(self.pii_nonce).decode("ascii"),
+            "pii_associated_data": self.pii_associated_data,
+            "pii_envelope": self.pii_envelope,
+        }
+
+    @classmethod
+    def from_pii_wire_fields(cls, compliance_proof: ComplianceProof, fields: dict[str, Any]) -> HybridPayload:
+        """
+        Rebuild a payload from :meth:`pii_wire_fields` output.
+
+        ``pii_envelope`` and ``encryption_algorithm`` are optional so bodies
+        produced before the envelope was carried still parse as legacy v1.
+
+        Raises:
+            ValueError: On non-canonical base64 or a non-object ``pii_envelope``.
+        """
+        envelope = fields.get("pii_envelope")
+        if envelope is not None and not isinstance(envelope, dict):
+            raise ValueError("pii_envelope must be an object")
+        return cls(
+            compliance_proof=compliance_proof,
+            encrypted_pii=base64.b64decode(fields["encrypted_pii"], validate=True),
+            encryption_algorithm=fields.get("encryption_algorithm", "AES-256-GCM"),
+            pii_nonce=base64.b64decode(fields["pii_nonce"], validate=True),
+            pii_associated_data=fields["pii_associated_data"],
+            pii_envelope=envelope,
+        )
+
     def to_trp_extension(self) -> dict[str, Any]:
         """
         Serialize to TRP v3 extensions field format.
@@ -76,11 +122,7 @@ class HybridPayload(BaseModel):
                     "proof_expires_at": self.compliance_proof.proof_expires_at,
                     # sar_review_flag excluded — internal advisory only (BSA anti-tipping-off)
                 },
-                "encrypted_pii": base64.b64encode(self.encrypted_pii).decode("ascii"),
-                "encryption_algorithm": self.encryption_algorithm,
-                "pii_nonce": base64.b64encode(self.pii_nonce).decode("ascii"),
-                "pii_associated_data": self.pii_associated_data,
-                "pii_envelope": self.pii_envelope,
+                **self.pii_wire_fields(),
             }
         }
 

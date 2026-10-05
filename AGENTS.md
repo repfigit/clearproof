@@ -11,13 +11,13 @@ ZK infrastructure for FATF Travel Rule compliance. Generates Groth16 proofs (Cir
 ```
 clearproof/
 ├── src/                    # Python SDK (FastAPI, protocol, storage, chain, sar, registry)
-├── packages/contracts/     # Solidity (Hardhat) — Groth16Verifier, ComplianceRegistry, VASPRegistry, SanctionsOracle
+├── packages/contracts/     # Solidity (Hardhat) — pilot: PilotGroth16Verifier, PilotCurrentRegistry, PilotRootCheckpoint; legacy: ComplianceRegistry, SanctionsOracle, …
 ├── packages/proof/         # TypeScript SDK (snarkjs) — generateProof/verifyProof
 ├── packages/cli/           # CLI (demo, proof generation)
 ├── packages/content/       # Marketing/content package
 ├── circuits/               # Circom sources (compliance.circom + test vectors)
 ├── tests/                  # pytest: unit/, integration/, compliance/
-├── scripts/                # sanctions tree, circuit compile, benchmark, deploy
+├── scripts/                # sanctions tree, circuit compile, deploy
 ├── apps/docs/              # Next.js documentation site
 ├── protos/                 # gRPC .proto for TRISA bridge
 └── artifacts/              # Compiled circuit artifacts (wasm, zkey, vkey, ptau cache)
@@ -82,7 +82,8 @@ make test-compliance
 # Sanctions
 make build-sanctions-tree
 make update-sanctions-oracle NETWORK=ethereum
-make relay-sanctions        # all deployed chains
+make relay-sanctions        # relay the committed root to all deployed chains (no rebuild)
+make refresh-and-relay-sanctions  # rebuild the tree from live feeds, then relay
 
 # Dev API
 make dev                    # uvicorn src.api.main:app --reload

@@ -1,0 +1,16 @@
+# Install: uvx pre-commit install   Run on everything: uvx pre-commit run --all-files
+# Keep the ruff rev equal to the ruff version locked in uv.lock so hooks match `make lint` and CI.
+repos:
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: 321478e58f4938179c6b86e4ddfa923d1547a49b # frozen: v0.16.6
+    hooks:
+      # Ruff reads [tool.ruff] from pyproject.toml (including the generated protobuf excludes).
+      - id: ruff-check
+        files: ^(src|tests|scripts)/
+      - id: ruff-format
+        files: ^(src|tests|scripts)/
+
+  - repo: https://github.com/fsfe/reuse-tool
+    rev: a1bb792acda6fd0724936b4ebbdbc8eceb9c0459 # frozen: v6.2.0
+    hooks:
+      - id: reuse

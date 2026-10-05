@@ -21,6 +21,7 @@ pytestmark = [
     ),
 ]
 
+
 @pytest.fixture
 def credential_store(db):
     from src.storage.credentials import CredentialStore

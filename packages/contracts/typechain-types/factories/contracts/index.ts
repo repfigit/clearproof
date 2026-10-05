@@ -3,6 +3,7 @@
 /* eslint-disable */
 export * as verifierRouterSol from "./VerifierRouter.sol";
 export * as bench from "./bench";
+export * as test from "./test";
 export { ComplianceRegistry__factory } from "./ComplianceRegistry__factory";
 export { Groth16Verifier__factory } from "./Groth16Verifier__factory";
 export { ISanctionsRootReceiver__factory } from "./ISanctionsRootReceiver__factory";

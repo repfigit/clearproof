@@ -40,8 +40,13 @@ def setup(tmp_path, monkeypatch):
     execute = Mock(side_effect=run)
     monkeypatch.setattr(runner.subprocess, "run", execute)
     return SimpleNamespace(
-        binaries=binaries, artifacts=artifacts, output=output,
-        version=version, execute=execute, commands=commands, run=run,
+        binaries=binaries,
+        artifacts=artifacts,
+        output=output,
+        version=version,
+        execute=execute,
+        commands=commands,
+        run=run,
     )
 
 
@@ -121,9 +126,12 @@ def test_failure_after_initialization_always_attempts_stop(setup, stage):
     def fail(command, **kwargs):
         setup.run(command, **kwargs)
         is_stage = (
-            stage == "start" and command[-1] == "start"
-            or stage == "createdb" and Path(command[0]).name == "createdb"
-            or stage == "child" and "--output" in command
+            stage == "start"
+            and command[-1] == "start"
+            or stage == "createdb"
+            and Path(command[0]).name == "createdb"
+            or stage == "child"
+            and "--output" in command
         )
         if is_stage:
             raise error

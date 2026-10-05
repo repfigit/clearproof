@@ -4,6 +4,7 @@ import fs from 'fs';
 import { generateProof } from '@clearproof/proof';
 import type { ComplianceInput } from '@clearproof/proof';
 import { defaultArtifactsDir, requireArtifactPaths } from '../legacy-artifacts.js';
+import { parseComplianceInput } from '../input-guards.js';
 
 export const proveCommand = new Command('prove')
   .description('Generate a ZK compliance proof from an input JSON file')
@@ -18,12 +19,12 @@ export const proveCommand = new Command('prove')
     async (opts: { input: string; artifacts: string; output?: string }) => {
       const artifactsDir = path.resolve(opts.artifacts);
       let selected;
-      try { selected = requireArtifactPaths(artifactsDir); }
-      catch (error) { console.error((error as Error).message); process.exitCode = 2; return; }
+      let inputData: ComplianceInput;
+      try {
+        selected = requireArtifactPaths(artifactsDir);
+        inputData = parseComplianceInput(fs.readFileSync(path.resolve(opts.input), 'utf-8'));
+      } catch (error) { console.error((error as Error).message); process.exitCode = 2; return; }
       const { wasmPath, zkeyPath } = selected;
-      const inputData: ComplianceInput = JSON.parse(
-        fs.readFileSync(path.resolve(opts.input), 'utf-8'),
-      );
 
       console.error(`Generating proof (artifacts: ${artifactsDir})...`);
 

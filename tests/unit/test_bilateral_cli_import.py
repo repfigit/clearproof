@@ -9,12 +9,16 @@ from pathlib import Path
 def test_bilateral_cli_import_has_no_command_side_effects():
     module = "src.protocol.bridges.pilot_bilateral_cli"
     result = subprocess.run(
-        [sys.executable, "-c", (
-            "import importlib, io, sys; "
-            "source = io.TextIOWrapper(io.BytesIO(b'synthetic-secret')); sys.stdin = source; "
-            f"importlib.import_module({module!r}); "
-            "assert source.tell() == 0"
-        )],
+        [
+            sys.executable,
+            "-c",
+            (
+                "import importlib, io, sys; "
+                "source = io.TextIOWrapper(io.BytesIO(b'synthetic-secret')); sys.stdin = source; "
+                f"importlib.import_module({module!r}); "
+                "assert source.tell() == 0"
+            ),
+        ],
         capture_output=True,
         text=True,
         cwd=Path(__file__).resolve().parents[2],

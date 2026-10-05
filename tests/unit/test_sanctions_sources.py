@@ -23,9 +23,9 @@ FETCHERS = [
 @pytest.mark.parametrize("namespace", ["", ' xmlns="urn:synthetic-sanctions"'])
 async def test_ofac_xml_extracts_crypto_features_ids_and_raw_text(namespace):
     payload = (
-        f'<root{namespace}><feature>Digital currency address <value>{ADDRESS}</value></feature>'
-        f'<id>ordinary label</id><id>ETH {OTHER}</id><feature/>'
-        f'<notes>{ADDRESS}</notes><!-- {OTHER} --></root>'
+        f"<root{namespace}><feature>Digital currency address <value>{ADDRESS}</value></feature>"
+        f"<id>ordinary label</id><id>ETH {OTHER}</id><feature/>"
+        f"<notes>{ADDRESS}</notes><!-- {OTHER} --></root>"
     ).encode()
     calls = []
 
@@ -47,10 +47,16 @@ async def test_ofac_xml_extracts_crypto_features_ids_and_raw_text(namespace):
 @pytest.mark.parametrize(
     "fetcher,url,payload",
     [
-        (builder.fetch_ofac_consolidated_csv, builder.OFAC_CONS_CSV_URL,
-         f'ordinary,ignored\nDigital currency,"{ADDRESS}";({OTHER})\n"{ADDRESS}"\n'),
-        (builder.fetch_eu_sanctions_xml, builder.EU_SANCTIONS_URL,
-         f'<root> "{ADDRESS}" <entry> {OTHER} </entry> {ADDRESS} ignored </root>'),
+        (
+            builder.fetch_ofac_consolidated_csv,
+            builder.OFAC_CONS_CSV_URL,
+            f'ordinary,ignored\nDigital currency,"{ADDRESS}";({OTHER})\n"{ADDRESS}"\n',
+        ),
+        (
+            builder.fetch_eu_sanctions_xml,
+            builder.EU_SANCTIONS_URL,
+            f'<root> "{ADDRESS}" <entry> {OTHER} </entry> {ADDRESS} ignored </root>',
+        ),
     ],
 )
 async def test_csv_and_eu_sources_extract_addresses_and_record_raw_digest(fetcher, url, payload):
@@ -60,9 +66,14 @@ async def test_csv_and_eu_sources_extract_addresses_and_record_raw_digest(fetche
         addresses, metadata = await fetcher(client)
     assert set(addresses) == {ADDRESS, OTHER}
     assert metadata == {
-        "source": url, "fetched": True, "error": None, "status_code": 200,
-        "content_length": len(payload.encode()), "sha256": hashlib.sha256(payload.encode()).hexdigest(),
-        "last_modified": "unknown", "addresses_found": 2,
+        "source": url,
+        "fetched": True,
+        "error": None,
+        "status_code": 200,
+        "content_length": len(payload.encode()),
+        "sha256": hashlib.sha256(payload.encode()).hexdigest(),
+        "last_modified": "unknown",
+        "addresses_found": 2,
     }
 
 
@@ -130,7 +141,8 @@ async def test_build_outputs_retain_provenance_and_verify_without_rewriting(outp
 
     client_type = httpx.AsyncClient
     monkeypatch.setattr(
-        builder.httpx, "AsyncClient",
+        builder.httpx,
+        "AsyncClient",
         lambda **kwargs: client_type(transport=httpx.MockTransport(serve), **kwargs),
     )
     await builder.main(offline=offline, target_depth=3)
@@ -185,10 +197,21 @@ def test_cli_verify_entry_uses_isolated_existing_vectors(tmp_path, monkeypatch):
     artifacts = root / "artifacts"
     artifacts.mkdir()
     vectors = artifacts / "sanctions_test_vectors.json"
-    vectors.write_text(json.dumps({"vectors": [{
-        "address_int": str(int(ADDRESS, 16)), "normalized": ADDRESS,
-        "expected_leaf_hash": str(builder._native_poseidon_hash([builder.SANCTIONS_DOMAIN_TAG, int(ADDRESS, 16)])),
-    }]}))
+    vectors.write_text(
+        json.dumps(
+            {
+                "vectors": [
+                    {
+                        "address_int": str(int(ADDRESS, 16)),
+                        "normalized": ADDRESS,
+                        "expected_leaf_hash": str(
+                            builder._native_poseidon_hash([builder.SANCTIONS_DOMAIN_TAG, int(ADDRESS, 16)])
+                        ),
+                    }
+                ]
+            }
+        )
+    )
     before = vectors.read_bytes()
     monkeypatch.setattr(sys, "argv", [str(script), "--verify"])
     with pytest.raises(SystemExit) as result:

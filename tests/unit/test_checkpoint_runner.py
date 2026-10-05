@@ -35,8 +35,13 @@ def boundary(monkeypatch):
     monkeypatch.setattr(runner.os, "killpg", kill)
     monkeypatch.setattr(runner, "time", clock)
     return SimpleNamespace(
-        node=node, processes=processes, commands=commands, run=run_command,
-        response=response, kill=kill, clock=clock,
+        node=node,
+        processes=processes,
+        commands=commands,
+        run=run_command,
+        response=response,
+        kill=kill,
+        clock=clock,
     )
 
 
@@ -111,7 +116,8 @@ def test_stubborn_node_is_killed_after_grace_period(boundary):
     boundary.node.wait.side_effect = [subprocess.TimeoutExpired("synthetic node", 5), 0]
     assert runner.main() == 0
     assert boundary.kill.call_args_list == [
-        call(boundary.node.pid, signal.SIGTERM), call(boundary.node.pid, signal.SIGKILL),
+        call(boundary.node.pid, signal.SIGTERM),
+        call(boundary.node.pid, signal.SIGKILL),
     ]
     assert boundary.node.wait.call_args_list == [call(timeout=5), call()]
 

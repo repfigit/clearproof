@@ -72,7 +72,9 @@ export interface VerifyResult {
   jurisdiction: string | null;
   /** Machine-readable rejection reasons; empty when `valid` is true. */
   rejectionReasons: string[];
+  /** Circuit output signal 0; always false when `valid` is false. */
   isCompliant: boolean;
-  sarReviewFlag: boolean;
+  /** Circuit output signal 1; null when `valid` is false (an unaccepted proof makes no SAR claim). */
+  sarReviewFlag: boolean | null;
   publicSignals: string[];
 }

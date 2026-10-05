@@ -1,4 +1,4 @@
-"""Current v2 inspection with operator-selected trust and no authorization writes."""
+"""Current pilot-transfer-v3 inspection with operator-selected trust and no authorization writes."""
 
 import time
 from dataclasses import asdict, dataclass

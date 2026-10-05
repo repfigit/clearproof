@@ -4,6 +4,15 @@
   "description": "Circom source for the clearproof proof profiles (pilot-transfer-v3 and the legacy demo circuit). Source only: no compiled artifacts or proving keys.",
   "license": "Apache-2.0",
   "main": "index.js",
+  "types": "index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./index.d.ts",
+      "default": "./index.js"
+    },
+    "./circuits/*": "./circuits/*",
+    "./package.json": "./package.json"
+  },
   "files": [
     "circuits/",
     "index.js",
@@ -36,9 +45,8 @@
     "test": "node scripts/sync.mjs && vitest run"
   },
   "devDependencies": {
-    "vitest": "^4.1.5"
+    "vitest": "^4.1.11"
   },
-  "types": "index.d.ts",
   "peerDependencies": {
     "circomlib": "^2.0.5"
   }

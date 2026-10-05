@@ -40,9 +40,7 @@ N_ROUNDS_F = 8
 # from the Poseidon paper's round-number bounds, rounded up to divide t).
 N_ROUNDS_P = [56, 57, 56, 60, 60, 63, 64, 63, 60, 66, 60, 65, 70, 60, 64, 68]
 
-OUTPUT_PATH = os.path.join(
-    os.path.dirname(__file__), "..", "src", "registry", "poseidon_constants.json"
-)
+OUTPUT_PATH = os.path.join(os.path.dirname(__file__), "..", "src", "registry", "poseidon_constants.json")
 
 
 class GrainLFSR:
@@ -109,9 +107,7 @@ def generate_parameters(t: int, n_rounds_p: int) -> tuple[list[int], list[list[i
     lfsr = GrainLFSR(t, n_rounds_p)
 
     # Round constants: (R_F + R_P) rounds x t elements.
-    round_constants = [
-        lfsr.next_field_element() for _ in range((N_ROUNDS_F + n_rounds_p) * t)
-    ]
+    round_constants = [lfsr.next_field_element() for _ in range((N_ROUNDS_F + n_rounds_p) * t)]
 
     # MDS matrix (Cauchy): draw 2t values reduced mod p (NO < p rejection);
     # if any of the 2t are duplicated, or any x_i + y_j == 0, redraw ALL 2t.

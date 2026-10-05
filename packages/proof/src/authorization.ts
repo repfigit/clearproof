@@ -1,6 +1,7 @@
 /** Explicit local authorization through an operator-selected trusted API. */
 import { requestReport } from './api-client.js';
 import { recordDigest } from './canonical.js';
+import { isFieldElementArray } from './field.js';
 import type { ObservationRequest } from './observation.js';
 
 export type AuthorizationRequest = ObservationRequest;
@@ -24,10 +25,14 @@ const opaque = (v: unknown) => typeof v === 'string' && /^[a-z0-9][a-z0-9_-]{0,6
 const recipientKey = (v: unknown) => typeof v === 'string' && /^[A-Za-z0-9_-]{22}==$/.test(v) &&
   Buffer.from(v, 'base64url').toString('base64url') + '==' === v;
 const epoch = (v: unknown): v is number => typeof v === 'number' && Number.isSafeInteger(v) && v >= 0;
-const scalarModulus = 21888242871839275222246405745257275088548364400416034343698204186575808495617n;
+/** pilot-transfer-v3 public signal count and the indices this module reads (see specs/pilot-transfer-v3.md). */
+export const PILOT_PUBLIC_SIGNAL_COUNT = 8;
+export const AUTHORIZATION_NULLIFIER_INDEX = 3;
+export const PROOF_EXPIRES_AT_INDEX = 5;
 export function validateAuthorizationReport(value: unknown, signals: string[]): AuthorizationReport {
-  if (!Array.isArray(signals) || signals.length !== 8 || signals.some(s => typeof s !== 'string' ||
-    !/^(0|[1-9][0-9]{0,77})$/.test(s) || BigInt(s) >= scalarModulus)) throw new Error('Invalid signals');
+  if (!isFieldElementArray(signals, PILOT_PUBLIC_SIGNAL_COUNT)) throw new Error('Invalid signals');
+  const nullifier = BigInt(signals[AUTHORIZATION_NULLIFIER_INDEX]);
+  const proofExpiresAt = BigInt(signals[PROOF_EXPIRES_AT_INDEX]);
   if (!object(value) || !exact(value, ['schema_version', 'scope', 'assurance', 'receipt']) ||
     value.schema_version !== 'clearproof-authorization-response-v1' || value.scope !== 'recorded-local-authorization' ||
     value.assurance !== 'development-unapproved' || !object(value.receipt)) throw new Error('Invalid authorization report');
@@ -36,9 +41,9 @@ export function validateAuthorizationReport(value: unknown, signals: string[]): 
     'outcome', 'execution', 'recipient_key_id']) || digests.some(k => !hex(r[k])) || !recipientKey(r.recipient_key_id) || !opaque(r.tenant_id) || !opaque(r.actor_id) ||
     r.schema_version !== 'clearproof-local-authorization-v1' || r.proof_profile !== 'pilot-transfer-v3' ||
     r.outcome !== 'ALLOW' || r.execution !== 'not-requested' || !epoch(r.authorized_at) || !epoch(r.expires_at) ||
-    r.authorized_at >= r.expires_at || BigInt(signals[3]) === 0n ||
-    r.nullifier !== BigInt(signals[3]).toString(16).padStart(64, '0') ||
-    BigInt(r.expires_at) !== BigInt(signals[5])) throw new Error('Invalid authorization receipt');
+    r.authorized_at >= r.expires_at || nullifier === 0n ||
+    r.nullifier !== nullifier.toString(16).padStart(64, '0') ||
+    BigInt(r.expires_at) !== proofExpiresAt) throw new Error('Invalid authorization receipt');
   const { receipt_id, ...receipt } = r;
   if (recordDigest('clearproof/local-authorization/v1', receipt) !== receipt_id) throw new Error('Receipt identity mismatch');
   return value as unknown as AuthorizationReport;

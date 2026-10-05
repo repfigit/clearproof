@@ -243,10 +243,14 @@ def test_historical_markdown_contains_finite_sensitivity_thresholds(capsys):
 @pytest.fixture
 def measured_inputs(tmp_path):
     path = tmp_path / "synthetic-measured-inputs.json"
-    path.write_text(json.dumps({
-        "groth16": {"execution_gas": 100, "signed_tx": {"hex": "0x010203"}},
-        "fflonk": {"execution_gas": 50, "signed_tx": {"hex": "0x040506"}},
-    }))
+    path.write_text(
+        json.dumps(
+            {
+                "groth16": {"execution_gas": 100, "signed_tx": {"hex": "0x010203"}},
+                "fflonk": {"execution_gas": 50, "signed_tx": {"hex": "0x040506"}},
+            }
+        )
+    )
     return path
 
 
@@ -261,7 +265,9 @@ def test_main_reports_loaded_measurements_in_each_format(measured_inputs, monkey
         assert len(rows) == 18
         assert {(row["chain"], row["regime"], row["system"]) for row in rows} == {
             (chain.name, regime.name, system)
-            for chain in CHAINS for regime in model.REGIMES for system in ("groth16", "fflonk")
+            for chain in CHAINS
+            for regime in model.REGIMES
+            for system in ("groth16", "fflonk")
         }
         for row in rows:
             assert row["execution_gas"] == (100 if row["system"] == "groth16" else 50)

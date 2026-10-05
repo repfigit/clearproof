@@ -6,7 +6,18 @@ separate from the encrypted credential database. Tenant-specific publishers are
 assigned by the contract admin; setting the publisher to zero disables future
 publication. Updates compare the expected checkpoint revision and require a
 strictly newer approval revision. Skipped unpublished revisions are permitted;
-rollback and conflicting updates are rejected. Events retain publication facts.
+rollback and conflicting updates are rejected. Events retain publication facts,
+including the publisher epoch.
+
+Every `setPublisher` call, including zero or the same address, increments the
+tenant's publisher epoch, and each head records the epoch it was published under.
+A head is current only while its epoch equals `publisherEpochs(tenant)` and the
+publisher is nonzero (`isCurrent`). Revisions stay monotonic across epochs, so
+restoring a superseded tenant needs a newly signed approval revision.
+
+Administration uses OpenZeppelin `AccessControlDefaultAdminRules` (two-step
+transfer, two-day initial delay). `PAUSER_ROLE` can pause `publish`; only the
+default admin unpauses. Views and `setPublisher` remain available while paused.
 
 The publisher must authenticate the registrar's signed snapshot and its source
 policy before publication. The contract does not parse canonical JSON, verify
@@ -27,7 +38,10 @@ approved build/deployment artifact, never by trusting the queried RPC's own code
 It checks tenant, target proof-registry audience, root kind/issuer, key scope and
 validity, then observes code and head at one numbered block. It compares digest,
 root, revision and validity fields and rechecks the block hash to detect a changed
-observation. The returned block number/hash identifies the evidence used. Reads
+observation. It also requires a nonzero tenant publisher and a head epoch equal to
+the current tenant epoch, so a replaced or disabled publisher's heads are rejected
+even though their fields still match. The returned block number/hash identifies
+the evidence used. Reads
 have a 30-second total deadline, do not cache acceptance, send transactions or
 consume nullifiers.
 
@@ -43,6 +57,10 @@ malicious RPC can fabricate chain data. Use an operator-trusted node/provider an
 an appropriate finality policy. Signatures and database history alone are not a
 replacement for this independent head source. Earlier block events plus trusted
 historical chain evidence still need integration into offline bundles.
+
+Pilot sanctions roots use the same publisher flow: see
+`scripts/publish_pilot_sanctions_head.py --target checkpoint` and the sanctions
+section of `specs/pilot-transfer-v3.md`.
 
 Run `npx hardhat test test/PilotRootCheckpoint.test.ts` from `packages/contracts`,
 then `uv run python scripts/test_checkpoint_evm.py` from the repo root. The latter

@@ -9,14 +9,34 @@ Thin wrapper around snarkjs that (1) maps camelCase SDK inputs to the snake_case
 ```
 packages/proof/
 ├── src/
-│   ├── index.ts          # Public exports
-│   ├── prover.ts         # generateProof + camel→snake mapping + validation
-│   ├── verifier.ts       # verifyProof + result interpretation
-│   ├── types.ts          # ComplianceInput, ProofResult, VerifyResult
-│   ├── discovery.ts      # discoverVASP + well-known client
-│   └── snarkjs.d.ts      # Type declarations for snarkjs
-├── test/                 # Vitest unit tests
-└── dist/                 # Compiled output (generated)
+│   ├── index.ts               # Public exports (the only supported entry point; see package.json "exports")
+│   │
+│   │   # Legacy 16-signal profile (circuits/compliance.circom) — demo/parity path
+│   ├── prover.ts              # generateProof + camel→snake mapping + validation
+│   ├── verifier.ts            # verifyProof: shape check, pairing, threshold binding, output interpretation
+│   ├── thresholds.ts          # Jurisdiction → tier threshold table (mirrors config/jurisdiction_thresholds.json)
+│   ├── types.ts               # ComplianceInput, ProofResult, VerifyResult
+│   ├── snarkjs.d.ts           # Type declarations for snarkjs
+│   │
+│   │   # Shared helpers
+│   ├── field.ts               # BN254 scalar modulus + canonical decimal field-element validators
+│   ├── canonical.ts           # Restricted canonical JSON bytes + domain-separated record digests
+│   │
+│   │   # Current pilot profile (pilot-transfer-v3) — thin clients of the operator API
+│   ├── api-client.ts          # requestReport/reportEndpoint: bounded, authenticated POST to the gateway
+│   ├── authorization.ts       # authorizeCurrentProof + receipt validation; pilot signal indices [3]/[5]
+│   ├── current-inspection.ts  # inspectCurrentProof (read-only; never consumes an authorization)
+│   ├── observation.ts         # createObservation/readObservation + portable-record consistency
+│   ├── observation-page.ts    # listObservations (paged retained-record discovery)
+│   ├── observation-cohort.ts  # reportObservationCohort (selected-cohort consistency)
+│   ├── wallet-ownership.ts    # walletOwnershipSigningMessage (canonical challenge bytes)
+│   │
+│   │   # VASP discovery (self-declared .well-known metadata)
+│   ├── discovery.ts           # discoverVASP, supportsChain, DiscoveryClient, cache
+│   ├── discovery-profile.ts   # Target parsing, document schema, HPKE key decoding
+│   └── discovery-transport.ts # Node HTTPS transport with EgressPolicy (DNS resolved once, vetted IP)
+├── test/                      # Vitest unit tests (100% coverage gate via test:coverage)
+└── dist/                      # Compiled output (generated)
 ```
 
 ## WHERE TO LOOK
@@ -24,26 +44,46 @@ packages/proof/
 |------|----------|-------|
 | Add new circuit input field | `types.ts` (ComplianceInput) + `prover.ts` (mapping) | Must match Circom signal name exactly |
 | Change validation rules | `prover.ts` (top of generateProof) | Keep in sync with circuit constraints |
-| Modify proof interpretation | `verifier.ts` | Currently assumes publicSignals[0]=is_compliant, [1]=sar_review_flag |
+| Modify proof interpretation | `verifier.ts` | Legacy profile: publicSignals[0]=is_compliant, [1]=sar_review_flag; reported only when `valid` |
+| Validate public signals | `field.ts` | Use `isFieldElementString`/`isFieldElementArray` before any `BigInt()` on caller input |
+| Pilot signal indices | `authorization.ts` | `AUTHORIZATION_NULLIFIER_INDEX`/`PROOF_EXPIRES_AT_INDEX`; `test/signal-order.test.ts` checks them against `src/prover/pilot_compliance.py` |
 | Add discovery metadata field | `discovery.ts` + types | Update well-known schema docs too |
 | Debug input mapping bugs | `prover.ts` lines 37–70 (the big object literal) | This is the only place the SDK knows the circuit ABI |
 
 ## PUBLIC API
 
-**Core proving/verification:**
+Everything is exported from the package root (`@clearproof/proof`); there are no supported subpath imports.
+
+**Legacy profile proving/verification (16 signals, demo/parity only):**
 ```ts
 import { generateProof, verifyProof, type ComplianceInput } from '@clearproof/proof';
 
 const result = await generateProof(input, wasmPath, zkeyPath);
 // result: { proof, publicSignals: string[], proofTime }
 
-const verified = await verifyProof(proof, publicSignals, vkeyPath);
-// verified: { valid, isCompliant, sarReviewFlag, publicSignals }
+const verified = await verifyProof(proof, publicSignals, vkeyPath, 'US' /* optional */);
+// verified: { valid, proofValid, thresholdsBound, jurisdictionMatchesVASP, jurisdiction,
+//             rejectionReasons, isCompliant, sarReviewFlag, publicSignals }
+// valid = pairing check AND threshold binding. isCompliant is false and sarReviewFlag is null
+// unless valid. Wrong-length or non-canonical signals return valid:false with
+// 'invalid_signal_count' / 'malformed_public_signals' before snarkjs runs.
 ```
+
+Threshold helpers: `JURISDICTION_THRESHOLDS`, `DEFAULT_THRESHOLDS`, `getThresholds`, `decodeJurisdiction`, `thresholdsMatchJurisdiction`.
+Field helpers: `SCALAR_FIELD_MODULUS`, `isFieldElementString`, `isFieldElementArray`. Constants: `LEGACY_PUBLIC_SIGNAL_COUNT`, `PILOT_PUBLIC_SIGNAL_COUNT`, `AUTHORIZATION_NULLIFIER_INDEX`, `PROOF_EXPIRES_AT_INDEX`.
+
+**Current pilot (pilot-transfer-v3) API clients** — the operator gateway is the trust boundary; these validate response shape and digests only:
+```ts
+import { authorizeCurrentProof, inspectCurrentProof, createObservation, readObservation,
+  listObservations, reportObservationCohort, requestReport, reportEndpoint } from '@clearproof/proof';
+```
+`authorizeCurrentProof` is the only call that consumes an authorization. Inspection and observation are read-only.
+
+**Canonical encoding / wallet ownership:** `canonicalBytes`, `recordDigest`, `walletOwnershipSigningMessage`.
 
 **VASP discovery (optional convenience):**
 ```ts
-import { discoverVASP, supportsChain, clearDiscoveryCache } from '@clearproof/proof';
+import { discoverVASP, supportsChain, clearDiscoveryCache, DiscoveryClient, DiscoveryError, EgressPolicy } from '@clearproof/proof';
 
 const info = await discoverVASP('exchange.example.com');
 // Fetches https://exchange.example.com/.well-known/clearproof.json
@@ -92,7 +132,7 @@ The SDK has **no baked-in artifacts**. Callers must supply:
 
 ## TESTING
 
-- Run with `npm test` (vitest) inside the package or via turbo from root.
+- Run with `npm test` (vitest) inside the package or via turbo from root. `npm run test:coverage` enforces 100% lines/branches/functions/statements.
 - Most tests should focus on the mapping layer and validation, not on actual proving (which is slow and requires artifacts).
 
 ## COMMANDS (from package root)
@@ -104,6 +144,6 @@ npm test               # vitest run
 
 ## NOTES
 
-- The package is intentionally small (~6 source files) so that the only thing that can go wrong is the name mapping or a missing validation that the circuit already performs.
-- When the circuit public signal order changes, both this package (if it interprets indices) and the Python model must be updated together. Currently `verifier.ts` hardcodes indices 0 and 1.
+- The legacy proving path (`prover.ts`, `verifier.ts`, `thresholds.ts`) stays deliberately thin. The pilot modules are API clients that validate response shape; they make no authorization decision of their own.
+- When the circuit public signal order changes, both this package (if it interprets indices) and the Python model must be updated together. `verifier.ts` hardcodes legacy indices 0, 1, 6 and 8-10; `authorization.ts` exports the pilot indices it reads.
 - Discovery feature was added later and is deliberately decoupled from the proving path.

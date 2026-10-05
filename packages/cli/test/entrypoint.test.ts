@@ -23,3 +23,17 @@ it('registers the supported command set and dispatches real documentation help',
   ]);
   expect(output.mock.calls.flat().join('\n')).toContain('/wallet/ownership/verify');
 });
+
+it.each([[new Error('synthetic failure'), 'synthetic failure'], ['plain failure', 'plain failure']])(
+  'prints a rejected command and sets a failing exit code (%#)', async (failure, message) => {
+    vi.resetModules();
+    const originalExitCode = process.exitCode;
+    const { Command } = await import('commander');
+    vi.spyOn(Command.prototype, 'parseAsync').mockRejectedValue(failure);
+    const errors = vi.spyOn(console, 'error').mockImplementation(() => {});
+    process.argv = [process.execPath, 'clearproof', 'verify'];
+    await import('../src/index.js');
+    await vi.waitFor(() => expect(process.exitCode).toBe(1));
+    expect(errors).toHaveBeenCalledWith(message);
+    process.exitCode = originalExitCode;
+  });

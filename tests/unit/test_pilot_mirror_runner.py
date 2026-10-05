@@ -40,8 +40,16 @@ def boundary(tmp_path, monkeypatch):
     monkeypatch.setattr(runner.urllib.request, "urlopen", response)
     monkeypatch.setattr(runner, "time", clock)
     return SimpleNamespace(
-        artifacts=artifacts, output=output, node=node, tests=tests, processes=processes,
-        doctor=doctor, finish=finish, kill=kill, response=response, clock=clock,
+        artifacts=artifacts,
+        output=output,
+        node=node,
+        tests=tests,
+        processes=processes,
+        doctor=doctor,
+        finish=finish,
+        kill=kill,
+        response=response,
+        clock=clock,
     )
 
 
@@ -68,7 +76,8 @@ def test_success_scopes_child_environment_and_cleans_both_processes(boundary, mo
     assert tests_call.args[0][-2:] == ["-q", "--tb=short"]
     assert boundary.tests.wait.call_args_list == [call(timeout=420), call()]
     assert boundary.kill.call_args_list == [
-        call(boundary.tests.pid, signal.SIGKILL), call(boundary.node.pid, signal.SIGKILL),
+        call(boundary.tests.pid, signal.SIGKILL),
+        call(boundary.node.pid, signal.SIGKILL),
     ]
     if retain:
         for directory in (boundary.output, boundary.output / "reports", boundary.output / "private"):

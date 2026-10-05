@@ -23,7 +23,7 @@ async function evaluate(input: ComplianceInput, wasm: string, zkey: string, vkey
 
 The caller supplies compatible artifacts. The SDK maps camelCase fields to Circom signal names; it does not create issuer or sanctions witnesses for you. Field encodings, amount units and public-signal ordering must match the exact proof version.
 
-`verified.valid` describes cryptographic verification. `isCompliant` and `sarReviewFlag` interpret circuit outputs; they do not establish full registry acceptance, current policy authorization or legal compliance. Additional trust, freshness, revocation, domain and replay checks remain necessary.
+`verified.valid` describes cryptographic verification. `isCompliant` and `sarReviewFlag` interpret circuit outputs and are only reported for a valid proof (`isCompliant` is `false` and `sarReviewFlag` is `null` otherwise; `rejectionReasons` explains why); they do not establish full registry acceptance, current policy authorization or legal compliance. Additional trust, freshness, revocation, domain and replay checks remain necessary.
 
 ## Pilot functions
 

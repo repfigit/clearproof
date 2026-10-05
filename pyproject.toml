@@ -63,6 +63,7 @@ source = ["src"]
 
 [tool.coverage.report]
 show_missing = true
+fail_under = 100
 
 [tool.ruff]
 target-version = "py311"

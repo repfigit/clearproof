@@ -5,11 +5,22 @@ import hashlib
 import pytest
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 from eth_abi import encode
-from web3 import AsyncWeb3
+from web3 import AsyncWeb3, Web3
 from web3.providers.async_base import AsyncBaseProvider
 
 from src.chain.pilot_checkpoint import PilotCheckpointReader, publication_arguments, tenant_checkpoint_hash
 from src.protocol.root_snapshot import RootAuthority, RootSnapshot, RootTrustError, RootTrustStore, sign_root
+
+
+def selector(signature):
+    return "0x" + Web3.keccak(text=signature)[:4].hex().removeprefix("0x")
+
+
+HEAD, PUBLISHERS, EPOCHS = (
+    selector("head(bytes32,bytes32)"),
+    selector("publishers(bytes32)"),
+    selector("publisherEpochs(bytes32)"),
+)
 
 
 class CheckpointProvider(AsyncBaseProvider):
@@ -21,7 +32,9 @@ class CheckpointProvider(AsyncBaseProvider):
         self.timestamp = 110
         self.hash = "0x" + "ab" * 32
         self.confirmed_hash = self.hash
-        self.head = [bytes.fromhex(snapshot.digest), 123, 1, 100, 200, 105]
+        self.head = [bytes.fromhex(snapshot.digest), 123, 1, 100, 200, 105, 1]
+        self.publisher = "0x" + "56" * 20
+        self.epoch = 1
 
     async def make_request(self, method, params):
         self.calls.append((method, params))
@@ -35,8 +48,12 @@ class CheckpointProvider(AsyncBaseProvider):
             }
         elif method == "eth_getCode":
             result = "0x" + self.code.hex()
-        elif method == "eth_call":
-            result = "0x" + encode(["(bytes32,uint256,uint64,uint64,uint64,uint64)"], [self.head]).hex()
+        elif method == "eth_call" and params[0]["data"].startswith(HEAD):
+            result = "0x" + encode(["(bytes32,uint256,uint64,uint64,uint64,uint64,uint64)"], [self.head]).hex()
+        elif method == "eth_call" and params[0]["data"].startswith(PUBLISHERS):
+            result = "0x" + encode(["address"], [self.publisher]).hex()
+        elif method == "eth_call" and params[0]["data"].startswith(EPOCHS):
+            result = "0x" + encode(["uint64"], [self.epoch]).hex()
         else:
             raise AssertionError(f"Unexpected RPC operation: {method}")
         return {"jsonrpc": "2.0", "id": 1, "result": result}
@@ -180,6 +197,25 @@ async def test_checkpoint_head_must_match_every_signed_field(checkpoint_case, in
     provider.head[index] = value
     with pytest.raises(RootTrustError, match="observed chain head"):
         await observe(checkpoint_case)
+
+
+@pytest.mark.parametrize(
+    "changes",
+    [
+        {"publisher": "0x" + "00" * 20},
+        {"epoch": 2},
+        {"head_epoch": 0},
+        {"head_epoch": 2},
+    ],
+)
+async def test_checkpoint_head_must_be_under_current_enabled_publisher(checkpoint_case, changes):
+    provider, _, _, _ = checkpoint_case
+    provider.publisher = changes.get("publisher", provider.publisher)
+    provider.epoch = changes.get("epoch", provider.epoch)
+    provider.head[6] = changes.get("head_epoch", provider.head[6])
+    with pytest.raises(RootTrustError, match="current tenant publisher"):
+        await observe(checkpoint_case)
+    assert not any(method == "eth_getBlockByNumber" and params[0] == "0x7" for method, params in provider.calls)
 
 
 async def test_checkpoint_reorg_during_observation_rejected(checkpoint_case):

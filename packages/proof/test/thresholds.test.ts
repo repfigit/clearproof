@@ -131,3 +131,21 @@ it('does not treat incomplete or malformed signals as a jurisdiction match', () 
   malformed[6] = 'invalid';
   expect(jurisdictionMatchesVASP(malformed, 'US')).toBe(false);
 });
+
+it('returns false instead of throwing on non-canonical threshold strings', () => {
+  for (const bad of ['abc', ' 250', '250 ', '0xfa', '-250', '1e3', '']) {
+    const s = signals('US');
+    s[8] = bad;
+    expect(() => thresholdsMatchJurisdiction(s)).not.toThrow();
+    expect(thresholdsMatchJurisdiction(s)).toBe(false);
+  }
+  const padded = signals('US');
+  padded[6] = ` ${padded[6]}`;
+  expect(thresholdsMatchJurisdiction(padded)).toBe(false);
+  expect(jurisdictionMatchesVASP(padded, 'US')).toBe(false);
+  const notLetters = signals('US');
+  notLetters[6] = '0';
+  expect(jurisdictionMatchesVASP(notLetters, 'US')).toBe(false);
+  expect(thresholdsMatchJurisdiction('x'.repeat(16) as unknown as string[])).toBe(false);
+  expect(jurisdictionMatchesVASP('x'.repeat(16) as unknown as string[], 'US')).toBe(false);
+});

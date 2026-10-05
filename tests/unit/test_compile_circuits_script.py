@@ -11,12 +11,15 @@ import pytest
 
 ROOT = Path(__file__).resolve().parents[2]
 ARTIFACTS = [
-    "artifacts/compliance.r1cs", "artifacts/compliance.sym", "artifacts/compliance_js/compliance.wasm",
-    "artifacts/compliance_final.zkey", "artifacts/verification_key.json",
+    "artifacts/compliance.r1cs",
+    "artifacts/compliance.sym",
+    "artifacts/compliance_js/compliance.wasm",
+    "artifacts/compliance_final.zkey",
+    "artifacts/verification_key.json",
     "packages/contracts/contracts/Groth16Verifier.sol",
 ]
 PIN = "e970efa7774da80101e0ac336d083ef3339855c98112539338d706b2b89ac694"
-TOOL = r'''
+TOOL = r"""
 import json, os, pathlib, sys
 name = pathlib.Path(sys.argv[0]).name
 args = sys.argv[1:]
@@ -59,7 +62,7 @@ elif name == 'stat':
     if mode == 'missing' or (mode == 'bsd' and args[0] == '-c%s'): sys.exit(1)
     print(pathlib.Path(args[1]).stat().st_size)
 else: raise AssertionError(name)
-'''
+"""
 
 
 @pytest.fixture
@@ -81,8 +84,12 @@ def build_tree(tmp_path):
 
     def run():
         result = subprocess.run(
-            ["/bin/bash", "scripts/compile_circuits.sh"], cwd=root, env=env,
-            capture_output=True, text=True, timeout=30,
+            ["/bin/bash", "scripts/compile_circuits.sh"],
+            cwd=root,
+            env=env,
+            capture_output=True,
+            text=True,
+            timeout=30,
         )
         assert not list((root / "artifacts").glob("*.download.*")), "temporary downloads must be cleaned"
         return result
@@ -106,7 +113,7 @@ def test_build_shell_completes_each_phase_one_path_with_synthetic_outputs(build_
     assert result.returncode == 0, result.stdout + result.stderr
     assert "=== Build Complete ===" in result.stdout
     assert all((root / path).is_file() for path in ARTIFACTS)
-    assert not list((root / "artifacts").glob('*_000[01].*'))
+    assert not list((root / "artifacts").glob("*_000[01].*"))
     recorded = calls(root)
     assert any(call[:4] == ["npx", "snarkjs", "groth16", "setup"] for call in recorded)
     assert any(call[:2] == ["node", "scripts/generate_verifier.mjs"] for call in recorded)
@@ -179,13 +186,21 @@ def test_build_shell_artifact_size_reporting_has_portable_fallbacks(build_tree, 
     assert "(? bytes)" in result.stdout if mode == "missing" else "(? bytes)" not in result.stdout
 
 
-@pytest.mark.parametrize("stage", [
-    "npx snarkjs powersoftau new", "npx snarkjs powersoftau contribute", "npx snarkjs powersoftau prepare",
-    "circom circuits/compliance.circom --r1cs --wasm", "npx snarkjs r1cs info",
-    "npx snarkjs groth16 setup", "npx snarkjs zkey contribute", "npx snarkjs zkey export",
-    "node scripts/generate_verifier.mjs artifacts/verification_key.json "
-    "packages/contracts/contracts/Groth16Verifier.sol",
-])
+@pytest.mark.parametrize(
+    "stage",
+    [
+        "npx snarkjs powersoftau new",
+        "npx snarkjs powersoftau contribute",
+        "npx snarkjs powersoftau prepare",
+        "circom circuits/compliance.circom --r1cs --wasm",
+        "npx snarkjs r1cs info",
+        "npx snarkjs groth16 setup",
+        "npx snarkjs zkey contribute",
+        "npx snarkjs zkey export",
+        "node scripts/generate_verifier.mjs artifacts/verification_key.json "
+        "packages/contracts/contracts/Groth16Verifier.sol",
+    ],
+)
 def test_build_shell_stops_at_failed_tool_stage(build_tree, stage):
     root, _, env, run = build_tree
     env["CLEARPROOF_GENERATE_PTAU"] = "1"

@@ -11,6 +11,28 @@ maintains its own version line in this file.
 
 ## [Unreleased]
 
+### Security
+
+- **Legacy `/proof/generate` binds the proof to the credential holder.** The request wallet and jurisdiction must match the credential (403 otherwise), and the stored record uses the credential's wallet. Unknown issuers return 422 instead of 500, and the issuer registry is injectable through `app.state.issuer_registry`.
+- **Legacy `/proof/verify` rejects non-compliant, expired and stale-root proofs** (`not_compliant`, `proof_expired`, `sanctions_root_stale`, `issuer_root_stale`), and validates signal count and format before running snarkjs (400 on malformed input).
+- **Idempotency keys are scoped to the authenticated principal and a request fingerprint**; nullifier collisions fail before proving. Optional `transfer_nonce` lets identical transfers coexist.
+- **Rate limiting keys on the authenticated principal** (or a hash of API key + client IP), no longer on raw unvalidated headers, and evicts idle windows.
+- **TRISA/TRP bridges carry the HPKE v2 envelope**, so beneficiaries can decrypt the default encryption mode. The gRPC TRISA server rejects unsealed envelopes and no longer auto-accepts transfers without a configured handler.
+- **Pilot contracts:** `PilotCurrentRegistry` and `PilotRootCheckpoint` gain a global pause, two-step admin transfer (`AccessControlDefaultAdminRules`, 2-day delay) and, for the checkpoint, per-tenant publisher epochs. Events now carry enough data to rebuild root history from logs.
+
+### Added
+
+- Pilot sanctions-root pipeline: `scripts/build_pilot_sanctions_tree.py` (with `--verify` for auditors) and human-confirmed `scripts/publish_pilot_sanctions_head.py`, plus `make build-pilot-sanctions-tree` / `verify-pilot-sanctions-tree` / `publish-pilot-sanctions-head`.
+- Static cross-layer signal-contract tests (`tests/unit/test_pilot_signal_contract.py`, `packages/proof/test/signal-order.test.ts`).
+- CI `lint` job (ruff check + format), Dependabot, pre-commit config, Python 3.11 test run.
+
+### Changed
+
+- **`@clearproof/proof` (breaking):** `verifyProof` returns `isCompliant: false` and `sarReviewFlag: null` unless the proof is valid, and returns `valid: false` (instead of throwing) for wrong-length or malformed public signals. Packages declare `exports` maps; `proof` and `cli` require Node ≥20.
+- `DOMAIN_CONTRACT_HASH` / `DOMAIN_CHAIN_ID` are parsed as full field elements (decimal or `0x` hex) instead of being truncated; bare hex without `0x` is rejected.
+- CI: actions pinned by SHA, least-privilege permissions, concurrency, caching and job timeouts; `uv sync --locked`; duplicated test runs removed. The sanctions relay moved to `sanctions-relay.yml` and only relays a root merged to main.
+- `make relay-sanctions` no longer rebuilds the tree (`make refresh-and-relay-sanctions` does both); `make benchmark` removed.
+
 ## [0.6.0] - 2026-09-26
 
 All five packages are published at 0.6.0 through npm trusted publishing with signed provenance, including `@clearproof/circuits` for the first time since 0.3.0. Pre-production: nothing is independently audited, and keys remain development-only.

@@ -52,7 +52,10 @@ def test_fresh_python_process_converts_from_foreign_working_directory(isolated_c
     root, _, output = isolated_converter
     process = subprocess.run(
         [sys.executable, str(root / "scripts/make_bls_input.py")],
-        cwd=tmp_path, capture_output=True, text=True, timeout=30,
+        cwd=tmp_path,
+        capture_output=True,
+        text=True,
+        timeout=30,
     )
     assert process.returncode == 0, process.stderr
     assert process.stderr == ""

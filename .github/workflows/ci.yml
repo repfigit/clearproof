@@ -5,32 +5,64 @@ on:
   pull_request:
     branches: [main]
 
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  # Superseded PR runs are cancelled; every commit on main keeps its own complete run.
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+# Third-party actions are pinned to full commit SHAs; Dependabot (.github/dependabot.yml) bumps them.
+# Every job uses the same Node LTS (24). Release publishing needs Node >= 22.14 for npm trusted publishing.
+
 jobs:
+  lint:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+      - uses: astral-sh/setup-uv@38f3f104447c67c051c4a08e39b64a148898af3a # v4.2.0
+        with:
+          enable-cache: true
+      - run: uv sync --locked --extra dev
+      - name: Ruff lint
+        run: uv run ruff check src tests scripts
+      - name: Ruff format check
+        run: uv run ruff format --check src tests scripts
+
   pilot-root-checkpoint:
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     steps:
-      - uses: actions/checkout@v4
-      - uses: astral-sh/setup-uv@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+      - uses: astral-sh/setup-uv@38f3f104447c67c051c4a08e39b64a148898af3a # v4.2.0
         with:
-          node-version: 20
+          enable-cache: true
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: 24
+          cache: npm
       - run: npm ci
-      - run: uv sync --frozen --extra dev
-      - name: Checkpoint contract invariants
-        run: cd packages/contracts && npx hardhat test test/PilotRootCheckpoint.test.ts
+      - run: uv sync --locked --extra dev
+      # The Hardhat PilotRootCheckpoint contract tests run as part of the full suite in hardhat-tests.
       - name: Python checkpoint verification on an isolated local EVM
         run: uv run python scripts/test_checkpoint_evm.py
 
   pilot-credential-witness:
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     steps:
-      - uses: actions/checkout@v4
-      - uses: astral-sh/setup-uv@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+      - uses: astral-sh/setup-uv@38f3f104447c67c051c4a08e39b64a148898af3a # v4.2.0
         with:
-          node-version: 20
+          enable-cache: true
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: 24
+          cache: npm
       - run: npm ci
-      - run: uv sync --frozen --extra dev
+      - run: uv sync --locked --extra dev
       - name: Install pinned Circom for witness checks
         run: |
           set -euo pipefail
@@ -44,10 +76,13 @@ jobs:
 
   discovery:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v4
-      - uses: astral-sh/setup-uv@v4
-      - run: uv sync --frozen --extra dev
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+      - uses: astral-sh/setup-uv@38f3f104447c67c051c4a08e39b64a148898af3a # v4.2.0
+        with:
+          enable-cache: true
+      - run: uv sync --locked --extra dev
       - name: Discovery profile, real TLS, encryption policy and SIWE compatibility
         run: >-
           uv run python -m pytest -q
@@ -57,6 +92,7 @@ jobs:
 
   proof-storage:
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     services:
       postgres:
         image: postgres:18
@@ -74,12 +110,15 @@ jobs:
     env:
       DATABASE_URL: postgresql://postgres:local-ci-only@localhost:5432/clearproof_test
     steps:
-      - uses: actions/checkout@v4
-      - uses: astral-sh/setup-uv@v4
-      - run: uv sync --frozen --extra dev
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+      - uses: astral-sh/setup-uv@38f3f104447c67c051c4a08e39b64a148898af3a # v4.2.0
         with:
-          node-version: 20
+          enable-cache: true
+      - run: uv sync --locked --extra dev
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: 24
+          cache: npm
       - run: npm ci
       - name: Build policy CLI and its workspace dependencies
         run: |
@@ -91,33 +130,37 @@ jobs:
           CLEARPROOF_POLICY_CLI_TEST: "1"
         run: uv run python -m pytest tests/integration/test_storage.py tests/integration/test_proof_persistence.py tests/integration/test_proof_storage.py tests/integration/test_pilot_storage.py tests/integration/test_publication_journal.py tests/integration/test_wallet_ownership.py tests/unit/test_stored_signals.py tests/unit/test_pilot_cipher.py -q
 
+  # Required check. Fast full-suite run without coverage on the minimum supported Python (3.11,
+  # pyproject requires-python). The `circuits` job runs the same suite on the default runner Python
+  # with PostgreSQL and real artifacts and owns the 100% coverage gate (with python-aggregate-coverage).
   python-tests:
     runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      UV_PYTHON: "3.11"
     steps:
-      - uses: actions/checkout@v4
-      - uses: astral-sh/setup-uv@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+      - uses: astral-sh/setup-uv@38f3f104447c67c051c4a08e39b64a148898af3a # v4.2.0
         with:
-          node-version: 20
+          enable-cache: true
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: 24
+          cache: npm
       - run: npm ci
-      - run: uv sync --frozen --all-extras
-      - run: uv run python -m pytest tests/ -v --cov=src --cov-branch --cov-report=xml --cov-report=json
-      - uses: actions/upload-artifact@v4
-        if: always()
-        with:
-          name: python-coverage
-          path: |
-            coverage.xml
-            coverage.json
-          if-no-files-found: error
+      - run: uv sync --locked --extra dev
+      - run: uv run python --version
+      - run: uv run python -m pytest tests -q
 
   typescript-build:
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
-          node-version: 20
+          node-version: 24
+          cache: npm
       - run: npm ci
       - name: Build @clearproof/content (dependency of cli)
         run: cd packages/content && npx tsc
@@ -133,7 +176,7 @@ jobs:
         run: npm run test:coverage --workspace=@clearproof/proof
       - name: Docs content API tests and source coverage
         run: npm run test:coverage --workspace=@clearproof/docs
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         if: always()
         with:
           name: typescript-coverage
@@ -146,16 +189,22 @@ jobs:
 
   operational-tests:
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     env:
       COVERAGE_FILE: operational-coverage.data
     steps:
-      - uses: actions/checkout@v4
-      - uses: astral-sh/setup-uv@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+      - uses: astral-sh/setup-uv@38f3f104447c67c051c4a08e39b64a148898af3a # v4.2.0
+        with:
+          enable-cache: true
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: 24
+          cache: npm
       - run: npm ci
-      - run: uv sync --frozen --extra dev
+      - run: uv sync --locked --extra dev
+      # Partial evidence: pyproject's fail_under = 100 is applied to the selected files below and
+      # to the combined data in python-aggregate-coverage, not to this subset run.
       - name: Operational Python coverage and real Node helper acceptance
         run: >-
           uv run python -m pytest
@@ -173,14 +222,16 @@ jobs:
           tests/unit/test_circuit_lint_script.py
           tests/unit/test_regen_protobufs_script.py
           tests/unit/test_compile_circuits_script.py
+          tests/unit/test_build_pilot_sanctions_tree_script.py
+          tests/unit/test_publish_pilot_sanctions_head_script.py
           --cov=scripts --cov-branch --cov-report=json:operational-coverage.json
-          --cov-report=term-missing -q
+          --cov-report=term-missing --cov-fail-under=0 -q
       - name: Preserve completed operational script coverage
         run: >-
           uv run python -m coverage report
-          --include="scripts/hpke_keygen.py,scripts/l2_cost_model.py,scripts/generate_poseidon_constants.py,scripts/make_bls_input.py,scripts/build_sanctions_tree.py,scripts/test_checkpoint_evm.py,scripts/test_pilot_local.py,scripts/test_pilot_mirror.py"
+          --include="scripts/hpke_keygen.py,scripts/l2_cost_model.py,scripts/generate_poseidon_constants.py,scripts/make_bls_input.py,scripts/build_sanctions_tree.py,scripts/test_checkpoint_evm.py,scripts/test_pilot_local.py,scripts/test_pilot_mirror.py,scripts/build_pilot_sanctions_tree.py,scripts/publish_pilot_sanctions_head.py"
           --fail-under=100
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         if: always()
         with:
           name: operational-python-coverage
@@ -192,15 +243,17 @@ jobs:
 
   operational-javascript:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: 24
+          cache: npm
       - run: npm ci
       - run: npm run test:scripts:coverage
       - run: npm run test:contract-scripts:coverage
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         if: always()
         with:
           name: operational-javascript-coverage
@@ -212,18 +265,29 @@ jobs:
 
   docs-browser:
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: 24
+          cache: npm
       - run: npm ci
+      - name: Resolve Playwright version
+        id: playwright
+        run: echo "version=$(node -p "require('@playwright/test/package.json').version")" >> "$GITHUB_OUTPUT"
+      - name: Cache Playwright browsers
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ steps.playwright.outputs.version }}
+      # Always run: system dependencies are not cached, and cached browsers are skipped.
       - run: npm exec --workspace=@clearproof/docs -- playwright install --with-deps chromium firefox webkit
       - run: npm run build --workspace=@clearproof/content
       - run: npm run build --workspace=@clearproof/docs
       - name: Production MDX pages, navigation and content APIs
         run: npm run test:e2e --workspace=@clearproof/docs
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         if: always()
         with:
           name: docs-browser-evidence
@@ -232,13 +296,17 @@ jobs:
             apps/docs/test-results/
           retention-days: 7
 
+  # Required check. Full Hardhat suite without real circuit artifacts (fixture-gated tests skip);
+  # the circuits job re-runs it with fresh legacy and pilot artifacts.
   hardhat-tests:
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
-          node-version: 20
+          node-version: 24
+          cache: npm
       - run: npm ci
       - run: cd packages/contracts && npx hardhat test
       - run: npm run typecheck --workspace=@clearproof/contracts
@@ -262,44 +330,57 @@ jobs:
           --health-timeout 5s
           --health-retries 12
     steps:
-      - uses: actions/checkout@v4
-      - uses: astral-sh/setup-uv@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+      - uses: astral-sh/setup-uv@38f3f104447c67c051c4a08e39b64a148898af3a # v4.2.0
         with:
-          node-version: 20
+          enable-cache: true
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: 24
+          cache: npm
       - run: npm ci
-      - run: uv sync --frozen --extra dev
+      - run: uv sync --locked --extra dev
       - name: Install pinned Circom
         run: |
           set -euo pipefail
           curl --fail --location --max-time 120 https://github.com/iden3/circom/releases/download/v2.2.2/circom-linux-amd64 -o /tmp/pilot-circom
           echo 'f3d8d1fdbc123779b80e210c909ee941d7a1e130c70365524646b48b8b0fe9d5  /tmp/pilot-circom' | sha256sum --check
           sudo install /tmp/pilot-circom /usr/local/bin/circom
+      - name: Cache pinned phase-1 parameters
+        id: ptau-cache
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        with:
+          path: ${{ runner.temp }}/ppot_0080_17.ptau
+          key: ptau-ppot_0080_17-f807e065fde53f72f4bf4d57140fab85b26daa6cc95bdfec7cce93622b3a367c
       - name: Download pinned phase-1 parameters (PSE perpetual powers of tau, 2^17)
         # Public multi-party phase 1 (80 contributions). The phase-2 keys produced below remain
         # unapproved development keys; this is not a production ceremony.
+        if: steps.ptau-cache.outputs.cache-hit != 'true'
         run: |
           set -euo pipefail
           curl --fail --location --max-time 600 https://pse-trusted-setup-ppot.s3.eu-central-1.amazonaws.com/pot28_0080/ppot_0080_17.ptau -o "$RUNNER_TEMP/ppot_0080_17.ptau"
-          echo "f807e065fde53f72f4bf4d57140fab85b26daa6cc95bdfec7cce93622b3a367c  $RUNNER_TEMP/ppot_0080_17.ptau" | sha256sum --check
+      - name: Verify phase-1 parameters (cached or downloaded)
+        run: echo "f807e065fde53f72f4bf4d57140fab85b26daa6cc95bdfec7cce93622b3a367c  $RUNNER_TEMP/ppot_0080_17.ptau" | sha256sum --check
       - name: Isolated development setup and real proofs for both profiles
         env:
           COVERAGE_FILE: ${{ runner.temp }}/python-coverage-development.data
         run: uv run python -m coverage run --parallel-mode --branch --source=scripts scripts/test_development_circuits.py "$RUNNER_TEMP/clearproof-development-circuits" --prepared-ptau "$RUNNER_TEMP/ppot_0080_17.ptau"
+      # Steps below collect partial coverage evidence with --cov-fail-under=0 / --fail-under=0; the
+      # 100% gates (pyproject fail_under) are the explicit `coverage report` calls on combined data.
       - name: Development setup failure paths and coverage gate
         run: |
           COVERAGE_FILE="$RUNNER_TEMP/python-coverage-development.data" uv run python -m coverage combine --keep "$RUNNER_TEMP"
-          COVERAGE_FILE="$RUNNER_TEMP/python-coverage-development-unit.data" uv run python -m pytest tests/unit/test_development_setup.py tests/unit/test_development_runner.py --cov=scripts --cov-branch --cov-report= -q
+          COVERAGE_FILE="$RUNNER_TEMP/python-coverage-development-unit.data" uv run python -m pytest tests/unit/test_development_setup.py tests/unit/test_development_runner.py --cov=scripts --cov-branch --cov-report= --cov-fail-under=0 -q
           export COVERAGE_FILE="$RUNNER_TEMP/python-coverage-development-combined.data"
           uv run python -m coverage combine --keep "$RUNNER_TEMP/python-coverage-development.data" "$RUNNER_TEMP/python-coverage-development-unit.data"
-          uv run python -m coverage json -o "$RUNNER_TEMP/python-coverage-development-combined.json"
+          uv run python -m coverage json -o "$RUNNER_TEMP/python-coverage-development-combined.json" --fail-under=0
           uv run python -m coverage report --include=scripts/test_development_circuits.py --fail-under=100
       - name: Contract fixture generation and rejection with real proofs
         env:
           CLEARPROOF_PILOT_TEST_ARTIFACTS: ${{ runner.temp }}/clearproof-development-circuits/pilot
           COVERAGE_FILE: ${{ runner.temp }}/python-coverage-contract-fixture.data
         run: |
-          uv run python -m pytest tests/unit/test_pilot_contract_fixture_script.py --cov=scripts --cov-branch --cov-report=json:"$RUNNER_TEMP/python-coverage-contract-fixture.json" -q
+          uv run python -m pytest tests/unit/test_pilot_contract_fixture_script.py --cov=scripts --cov-branch --cov-report=json:"$RUNNER_TEMP/python-coverage-contract-fixture.json" --cov-fail-under=0 -q
           uv run python -m coverage report --include=scripts/pilot_contract_fixture.py --fail-under=100
       - name: Durable current authorization and local EVM mirror with fresh proofs
         env:
@@ -307,7 +388,7 @@ jobs:
           CLEARPROOF_PILOT_TEST_ARTIFACTS: ${{ runner.temp }}/clearproof-development-circuits/pilot
           CLEARPROOF_POLICY_CLI_TEST: "1"
           COVERAGE_FILE: ${{ runner.temp }}/python-coverage-mirror.data
-          PYTEST_ADDOPTS: --cov=src --cov-branch --cov-report=
+          PYTEST_ADDOPTS: --cov=src --cov-branch --cov-report= --cov-fail-under=0
         run: uv run python scripts/test_pilot_mirror.py "$CLEARPROOF_PILOT_TEST_ARTIFACTS" --output "$RUNNER_TEMP/clearproof-pilot-run"
       - name: Build SDK and CLI for full Python acceptance tests
         run: |
@@ -321,22 +402,22 @@ jobs:
           CLEARPROOF_LEGACY_TEST_ARTIFACTS: ${{ runner.temp }}/clearproof-development-circuits/legacy
           CLEARPROOF_POLICY_CLI_TEST: "1"
           COVERAGE_FILE: ${{ runner.temp }}/python-coverage-suite.data
-        run: uv run python -m pytest tests --cov=src --cov-branch --cov-report=term -q
+        run: uv run python -m pytest tests --cov=src --cov-branch --cov-report=term --cov-fail-under=0 -q
       - name: Cover checkpoint verification on its owned EVM
         env:
           COVERAGE_FILE: ${{ runner.temp }}/python-coverage-checkpoint.data
-          PYTEST_ADDOPTS: --cov=src --cov-branch --cov-report=
+          PYTEST_ADDOPTS: --cov=src --cov-branch --cov-report= --cov-fail-under=0
         run: uv run python scripts/test_checkpoint_evm.py
       - name: Combine full Python evidence and require complete coverage
         env:
           COVERAGE_FILE: ${{ runner.temp }}/python-coverage-combined.data
         run: |
           uv run python -m coverage combine --keep "$RUNNER_TEMP/python-coverage-suite.data" "$RUNNER_TEMP/python-coverage-checkpoint.data" "$RUNNER_TEMP/python-coverage-mirror.data"
-          uv run python -m coverage json -o "$RUNNER_TEMP/python-coverage-combined.json"
+          uv run python -m coverage json -o "$RUNNER_TEMP/python-coverage-combined.json" --fail-under=0
           uv run python -m coverage report --fail-under=100
       - name: Retain full Python coverage evidence
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: python-full-coverage
           path: ${{ runner.temp }}/python-coverage-*
@@ -357,7 +438,7 @@ jobs:
         run: npm exec --workspace=@clearproof/contracts -- hardhat test --no-compile
       - name: Retain Solidity coverage evidence
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: solidity-coverage
           path: |
@@ -366,7 +447,7 @@ jobs:
           retention-days: 7
       - name: Upload synthetic pilot reports and encrypted export
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: SYNTHETIC-development-pilot-reports
           path: |
@@ -375,7 +456,7 @@ jobs:
           if-no-files-found: error
       - name: Upload unapproved development artifacts
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: UNAPPROVED-development-circuit-artifacts
           path: |
@@ -388,16 +469,19 @@ jobs:
 
   python-aggregate-coverage:
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     needs: [operational-tests, circuits]
     steps:
-      - uses: actions/checkout@v4
-      - uses: astral-sh/setup-uv@v4
-      - run: uv sync --frozen --extra dev
-      - uses: actions/download-artifact@v4
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+      - uses: astral-sh/setup-uv@38f3f104447c67c051c4a08e39b64a148898af3a # v4.2.0
+        with:
+          enable-cache: true
+      - run: uv sync --locked --extra dev
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
           name: operational-python-coverage
           path: coverage-input/operational
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
           name: python-full-coverage
           path: coverage-input/full
@@ -410,9 +494,9 @@ jobs:
             coverage-input/operational/operational-coverage.data \
             coverage-input/full/python-coverage-development-combined.data \
             coverage-input/full/python-coverage-contract-fixture.data
-          uv run python -m coverage json -o "$RUNNER_TEMP/repository-python-coverage.json"
+          uv run python -m coverage json -o "$RUNNER_TEMP/repository-python-coverage.json" --fail-under=0
           uv run python -m coverage report --fail-under=100
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         if: always()
         with:
           name: repository-python-coverage
@@ -422,15 +506,17 @@ jobs:
 
   circuit-lint:
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
-          node-version: 20
+          node-version: 24
+          cache: npm
       # circuits include ../node_modules/circomlib — needed for include resolution
       - run: npm ci
       # ubuntu-latest runners ship rustup + stable cargo; no toolchain action needed
-      - uses: Swatinem/rust-cache@v2
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
       - name: Install circomspect
         run: cargo install circomspect --locked
       - name: Static-analysis gate on circuits
@@ -438,16 +524,22 @@ jobs:
 
   protobuf-freshness:
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v4
-      - uses: astral-sh/setup-uv@v4
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+      - uses: astral-sh/setup-uv@38f3f104447c67c051c4a08e39b64a148898af3a # v4.2.0
+        with:
+          enable-cache: true
       - name: Verify committed gRPC stubs match protos/
         run: bash scripts/regen_protobufs.sh --check
 
   license-compliance:
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v4
-      - uses: astral-sh/setup-uv@v4
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+      - uses: astral-sh/setup-uv@38f3f104447c67c051c4a08e39b64a148898af3a # v4.2.0
+        with:
+          enable-cache: true
       - name: REUSE compliance (SPDX license metadata)
         run: uvx reuse lint
