@@ -11,6 +11,17 @@ maintains its own version line in this file.
 
 ## [Unreleased]
 
+## [0.7.0] - 2026-10-05
+
+All five packages move to 0.7.0. Pre-production: nothing is independently audited, and keys remain development-only. The pilot contract ABIs and events change, so existing `PilotCurrentRegistry` / `PilotRootCheckpoint` deployments do not match this release.
+
+### Breaking
+
+- **`@clearproof/proof`:** `VerifyResult.sarReviewFlag` is now `boolean | null`, and `isCompliant` / `sarReviewFlag` are only meaningful for a valid proof (`false` / `null` otherwise). Wrong-length or malformed public signals return `valid: false` instead of throwing.
+- **Node ≥20** for `@clearproof/proof` and `@clearproof/cli`. Packages declare `exports` maps, so deep imports of `dist/*` are no longer supported.
+- **Pilot contracts:** `PilotCurrentRegistry` and `PilotRootCheckpoint` change events, add pause and two-step admin, and the checkpoint stores a publisher epoch. A zero admin reverts with `AccessControlInvalidDefaultAdmin`.
+- **Python API / bridges (source checkout):** `DOMAIN_CONTRACT_HASH` written as bare hex needs a `0x` prefix; the gRPC TRISA server rejects unsealed envelopes and requires a `transfer_handler`.
+
 ### Security
 
 - **Legacy `/proof/generate` binds the proof to the credential holder.** The request wallet and jurisdiction must match the credential (403 otherwise), and the stored record uses the credential's wallet. Unknown issuers return 422 instead of 500, and the issuer registry is injectable through `app.state.issuer_registry`.
