@@ -1,23 +1,31 @@
 import fs from 'node:fs';
 import path from 'node:path';
 
-export function resolveArtifactPaths(directory: string) {
+export type LegacyArtifactPaths = { wasmPath: string; zkeyPath: string; vkeyPath: string };
+export type LegacyArtifact = keyof LegacyArtifactPaths;
+const ALL_ARTIFACTS: readonly LegacyArtifact[] = ['wasmPath', 'zkeyPath', 'vkeyPath'];
+
+/** Regular, non-empty file; symlinks are rejected so selection and validation agree. */
+function isArtifactFile(file: string): boolean {
+  try {
+    const info = fs.lstatSync(file);
+    return info.isFile() && info.size > 0;
+  } catch { return false; }
+}
+
+export function resolveArtifactPaths(directory: string): LegacyArtifactPaths {
   const dir = path.resolve(directory);
   const packaged = path.join(dir, 'compliance.wasm');
   return {
-    wasmPath: fs.existsSync(packaged) ? packaged : path.join(dir, 'compliance_js', 'compliance.wasm'),
+    wasmPath: isArtifactFile(packaged) ? packaged : path.join(dir, 'compliance_js', 'compliance.wasm'),
     zkeyPath: path.join(dir, 'compliance_final.zkey'),
     vkeyPath: path.join(dir, 'verification_key.json'),
   };
 }
 
-export function artifactsAvailable(directory: string): boolean {
-  return Object.values(resolveArtifactPaths(directory)).every(file => {
-    try {
-      const info = fs.lstatSync(file);
-      return info.isFile() && info.size > 0;
-    } catch { return false; }
-  });
+export function artifactsAvailable(directory: string, required: readonly LegacyArtifact[] = ALL_ARTIFACTS): boolean {
+  const paths = resolveArtifactPaths(directory);
+  return required.every(key => isArtifactFile(paths[key]));
 }
 
 /**
@@ -30,8 +38,9 @@ export function defaultArtifactsDir(local = path.resolve(__dirname, '../../../ar
   return local;
 }
 
-export function requireArtifactPaths(directory: string) {
-  if (!artifactsAvailable(directory)) {
+/** Resolve artifact paths, throwing an actionable error unless every `required` artifact is present. */
+export function requireArtifactPaths(directory: string, required: readonly LegacyArtifact[] = ALL_ARTIFACTS) {
+  if (!artifactsAvailable(directory, required)) {
     throw new Error('Legacy circuit artifacts are missing or incomplete. Generate isolated development artifacts with '
       + 'scripts/test_development_circuits.py, then pass --artifacts <output>/legacy. '
       + 'See docs/internal/PILOT_DEVELOPMENT_ARTIFACTS.md.');

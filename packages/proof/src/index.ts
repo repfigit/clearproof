@@ -1,6 +1,7 @@
 export { generateProof } from './prover.js';
 export { canonicalBytes, recordDigest } from './canonical.js';
-export { verifyProof } from './verifier.js';
+export { verifyProof, LEGACY_PUBLIC_SIGNAL_COUNT } from './verifier.js';
+export { SCALAR_FIELD_MODULUS, isFieldElementString, isFieldElementArray } from './field.js';
 export { discoverVASP, supportsChain, clearDiscoveryCache, DiscoveryClient, DiscoveryError, EgressPolicy } from './discovery.js';
 export {
   JURISDICTION_THRESHOLDS,
@@ -27,7 +28,12 @@ export type { ObservationCohortRequest, ObservationCohortReport } from './observ
 export { listObservations } from './observation-page.js';
 export type { ObservationPageRequest, ObservationPage } from './observation-page.js';
 
-export { authorizeCurrentProof } from './authorization.js';
+export {
+  authorizeCurrentProof,
+  PILOT_PUBLIC_SIGNAL_COUNT,
+  AUTHORIZATION_NULLIFIER_INDEX,
+  PROOF_EXPIRES_AT_INDEX,
+} from './authorization.js';
 export type { AuthorizationRequest, AuthorizationReceipt, AuthorizationReport } from './authorization.js';
 
 export { walletOwnershipSigningMessage } from './wallet-ownership.js';

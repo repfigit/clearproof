@@ -5,6 +5,15 @@
       "dependsOn": ["^build"],
       "outputs": ["dist/**", ".next/**", "!.next/cache/**"]
     },
+    "@clearproof/circuits#build": {
+      "dependsOn": ["^build"],
+      "inputs": [
+        "$TURBO_DEFAULT$",
+        "$TURBO_ROOT$/circuits/*.circom",
+        "$TURBO_ROOT$/circuits/lib/**/*.circom"
+      ],
+      "outputs": ["circuits/**"]
+    },
     "test": {
       "dependsOn": ["build"],
       "outputs": [],
@@ -16,10 +25,6 @@
         "BLS_ARTIFACTS_DIR",
         "TMPDIR"
       ]
-    },
-    "lint": {
-      "dependsOn": [],
-      "outputs": []
     }
   }
 }

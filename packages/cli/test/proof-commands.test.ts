@@ -75,10 +75,37 @@ describe('proof CLI file and SDK boundary', () => {
     expect(process.exitCode).toBe(2);
     expect(output).not.toHaveBeenCalled();
   });
-  it('propagates malformed input without invoking the SDK', async () => {
+  it('reports malformed input JSON without invoking the SDK', async () => {
     fs.writeFileSync(path.join(directory, 'input.json'), '{');
-    await expect(prove()).rejects.toBeInstanceOf(SyntaxError);
+    await prove();
     expect(clients.generateProof).not.toHaveBeenCalled();
+    expect(process.exitCode).toBe(2);
+    expect(errors.mock.calls.flat().join('\n')).toContain('Input file is not valid JSON');
+  });
+  it.each([
+    [[1, 2], 'must contain a JSON object'],
+    [null, 'must contain a JSON object'],
+    [{ ...input, credentialNullifier: undefined }, 'missing credentialNullifier'],
+    [{ ...input, amountTier: '2' }, 'amountTier must be number'],
+    [{ ...input, actualAmount: Number.NaN }, 'actualAmount must be number'],
+    [{ ...input, issuerPathElements: [108] }, 'issuerPathElements must be string[]'],
+    [{ ...input, issuerPathIndices: '0' }, 'issuerPathIndices must be string[]'],
+    [{ ...input, domainChainId: '31337' }, 'domainChainId must be number'],
+    [{ ...input, credential_nullifier: '106' }, 'unknown field credential_nullifier'],
+  ])('rejects input of the wrong shape before proving (%#)', async (value, message) => {
+    fs.writeFileSync(path.join(directory, 'input.json'), JSON.stringify(value));
+    await prove();
+    expect(clients.generateProof).not.toHaveBeenCalled();
+    expect(process.exitCode).toBe(2);
+    expect(errors.mock.calls.flat().join('\n')).toContain(message);
+  });
+  it('accepts input without the optional domain fields', async () => {
+    const { domainChainId, domainContractHash, transferIdHash, ...minimal } = input;
+    fs.writeFileSync(path.join(directory, 'input.json'), JSON.stringify(minimal));
+    await prove();
+    expect(clients.generateProof).toHaveBeenCalledOnce();
+    expect(clients.generateProof.mock.calls[0][0]).toEqual(minimal);
+    expect([domainChainId, domainContractHash, transferIdHash]).toHaveLength(3);
   });
   it('does not write a successful proof after SDK rejection', async () => {
     clients.generateProof.mockRejectedValueOnce(new Error('constraint rejected'));
@@ -87,16 +114,51 @@ describe('proof CLI file and SDK boundary', () => {
     expect(fs.existsSync(destination)).toBe(false);
     expect(output).not.toHaveBeenCalled();
   });
-  it.each([true, false])('prints verifier result %s and sets the matching exit status', async valid => {
-    const result = { valid, isCompliant: valid, sarReviewFlag: !valid, publicSignals: generated.publicSignals };
-    clients.verifyProof.mockResolvedValueOnce(result);
+  async function verify() {
     const { verifyCommand } = await import('../src/commands/verify.js');
-    await expect(verifyCommand.parseAsync(['--proof', path.join(directory, 'proof.json'), '--artifacts', directory],
-      { from: 'user' })).rejects.toThrow('synthetic exit');
+    return verifyCommand.parseAsync(['--proof', path.join(directory, 'proof.json'), '--artifacts', directory],
+      { from: 'user' });
+  }
+  it.each([true, false])('prints verifier result %s and sets the matching exit status', async valid => {
+    // A misbehaving verifier that reports circuit outputs for a rejected proof must not leak them.
+    const result = { valid, isCompliant: true, sarReviewFlag: false, publicSignals: generated.publicSignals,
+      rejectionReasons: valid ? [] : ['groth16_invalid'] };
+    clients.verifyProof.mockResolvedValueOnce(result);
+    await expect(verify()).rejects.toThrow('synthetic exit');
     expect(clients.verifyProof).toHaveBeenCalledExactlyOnceWith(generated.proof, generated.publicSignals,
       path.join(directory, 'verification_key.json'));
-    expect(JSON.parse(output.mock.calls[0][0] as string)).toEqual(result);
+    expect(JSON.parse(output.mock.calls[0][0] as string)).toEqual(valid ? result
+      : { ...result, isCompliant: false, sarReviewFlag: null });
     expect(exit).toHaveBeenCalledExactlyOnceWith(valid ? 0 : 1);
+  });
+  it('verifies with only the verification key present', async () => {
+    fs.unlinkSync(path.join(directory, 'compliance.wasm'));
+    fs.unlinkSync(path.join(directory, 'compliance_final.zkey'));
+    clients.verifyProof.mockResolvedValueOnce({ valid: true, isCompliant: true, sarReviewFlag: false,
+      publicSignals: generated.publicSignals, rejectionReasons: [] });
+    await expect(verify()).rejects.toThrow('synthetic exit');
+    expect(exit).toHaveBeenCalledExactlyOnceWith(0);
+  });
+  it('fails before verifying when the verification key is missing', async () => {
+    fs.unlinkSync(path.join(directory, 'verification_key.json'));
+    await verify();
+    expect(clients.verifyProof).not.toHaveBeenCalled();
+    expect(process.exitCode).toBe(2);
+    expect(errors.mock.calls.flat().join('\n')).toContain('missing or incomplete');
+  });
+  it.each([
+    ['{', 'Proof file is not valid JSON'],
+    ['[]', 'must contain a "proof" object'],
+    [JSON.stringify({ publicSignals: [] }), 'must contain a "proof" object'],
+    [JSON.stringify({ proof: [], publicSignals: [] }), 'must contain a "proof" object'],
+    [JSON.stringify({ proof: {} }), '"publicSignals" array of strings'],
+    [JSON.stringify({ proof: {}, publicSignals: [1, 2] }), '"publicSignals" array of strings'],
+  ])('rejects a malformed proof file before verifying (%#)', async (text, message) => {
+    fs.writeFileSync(path.join(directory, 'proof.json'), text);
+    await verify();
+    expect(clients.verifyProof).not.toHaveBeenCalled();
+    expect(process.exitCode).toBe(2);
+    expect(errors.mock.calls.flat().join('\n')).toContain(message);
   });
 });
 

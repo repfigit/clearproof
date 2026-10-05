@@ -41,4 +41,7 @@ program.addCommand(recipesCommand);
 program.addCommand(explainCommand);
 program.addCommand(reportCommand);
 
-void program.parseAsync();
+program.parseAsync().catch((error: unknown) => {
+  console.error(error instanceof Error ? error.message : String(error));
+  process.exitCode = 1;
+});
