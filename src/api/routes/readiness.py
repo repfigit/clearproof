@@ -67,9 +67,10 @@ def check_target(request: Request, principal: Principal, capability: Capability,
         config.transfer
     )
     config.policy_trust.for_transfer(config.transfer, config.context, tenant_id=principal.tenant_id, now=now)
-    config.valuation_trust.verify_for_transfer(
-        config.valuation_approval, config.transfer, config.registry, tenant_id=principal.tenant_id, now=now
-    )
+    for at in (config.context.evaluated_at, now):
+        config.valuation_trust.verify_for_transfer(
+            config.valuation_approval, config.transfer, config.registry, tenant_id=principal.tenant_id, now=at
+        )
     verify_pilot_roots(
         trust=config.root_trust,
         pins=config.root_pins,

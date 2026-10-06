@@ -343,3 +343,10 @@ actual external evidence; local tests cannot establish those prerequisites.
   build passed. Ruff/format, REUSE and diff checks pass. This is configuration
   preflight, not full live/production readiness; updated CI/review and hosted
   verification remain required. Remaining inventory/scale work is still open.
+
+- October 5: readiness review found that a valuation valid at the current clock
+  can still have been signed after the configured evaluation clock. Preflight now
+  verifies both clocks, matching live inspection. Two regression cases use actual
+  scoped Ed25519 signatures and demonstrate rejection for inspection and proving
+  without invoking either backend. All 43 readiness unit checks pass, with 100%
+  statement/branch coverage of the route. Updated review and full CI remain required.

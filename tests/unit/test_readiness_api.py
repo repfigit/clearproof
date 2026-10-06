@@ -11,10 +11,12 @@ from unittest.mock import AsyncMock
 
 import httpx
 import pytest
+from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 from fastapi import FastAPI
 
 from src.api.routes import readiness as route
 from src.auth.principal import Principal, TenantPrincipalDependency
+from src.protocol.valuation_approval import ValuationApproval, ValuationAuthority, ValuationTrustStore, sign_valuation
 from src.prover.pilot_native_prover import PilotNativeProver
 from src.prover.pilot_prover import PilotProver
 from src.prover.pilot_verifier import PilotPairingVerifier
@@ -96,6 +98,55 @@ async def test_ready_is_minimized_scoped_readonly_configuration_report(api, capa
     assert statements[1].args == ("SET LOCAL statement_timeout = '1500ms'",)
     assert statements[-1].args[-1] == (route.SCHEMA_VERSION + 1,)
     assert not any(word in str(statements).upper() for word in ("INSERT", "UPDATE", "DELETE"))
+    api.verifier.inspect.assert_not_called()
+    api.prover.prove.assert_not_called()
+
+
+@pytest.mark.parametrize("capability", ["inspection", "proving"])
+async def test_valuation_signed_after_evaluation_is_not_ready_even_if_valid_now(api, monkeypatch, capability):
+    config = api.config
+    evaluated_at = config.context.evaluated_at
+    now = evaluated_at + 2
+    key = Ed25519PrivateKey.generate()
+    authority = ValuationAuthority(
+        public_key=key.public_key().public_bytes_raw().hex(),
+        tenant_id=api.who.tenant_id,
+        asset_registry_digest=config.registry.digest,
+        asset_ids=(config.transfer.asset_id,),
+        source_ids=(config.transfer.valuation.source_id,),
+        not_before=config.transfer.valuation.observed_at,
+        not_after=config.transfer.valuation.expires_at,
+        max_quote_lifetime_seconds=600,
+        max_observation_age_seconds=300,
+    )
+    approval = sign_valuation(
+        ValuationApproval(
+            tenant_id=api.who.tenant_id,
+            asset_registry_digest=config.registry.digest,
+            valuation=config.transfer.valuation,
+            signed_at=evaluated_at + 1,
+            key_id=authority.key_id,
+        ),
+        key,
+    )
+    trust = ValuationTrustStore([authority])
+    assert (
+        trust.verify_for_transfer(approval, config.transfer, config.registry, tenant_id=api.who.tenant_id, now=now)
+        == approval.approval
+    )
+    with pytest.raises(ValueError, match="outside its validity interval"):
+        trust.verify_for_transfer(
+            approval, config.transfer, config.registry, tenant_id=api.who.tenant_id, now=evaluated_at
+        )
+    config = replace(config, valuation_approval=approval, valuation_trust=trust)
+    api.app.state.pilot_inspection_targets[(api.who.tenant_id, "target-a")] = route.InspectionTarget(
+        config, api.verifier
+    )
+    target = api.app.state.pilot_proving_targets[(api.who.tenant_id, "target-a")]
+    api.app.state.pilot_proving_targets[(api.who.tenant_id, "target-a")] = replace(target, configuration=config)
+    monkeypatch.setattr(route.time, "time", lambda: now)
+    response = await api.client.get(f"/pilot/readiness/{capability}/target-a")
+    assert response.status_code == 503 and response.json()["checks"]["target_configuration"] is False
     api.verifier.inspect.assert_not_called()
     api.prover.prove.assert_not_called()
 
