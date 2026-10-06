@@ -22,6 +22,8 @@ This page covers local and testnet evaluation. A production launch still needs l
 | `DATABASE_URL` | PostgreSQL connection. Required by the pilot routes; without it only the legacy in-memory demo path works |
 | `CIRCUIT_ARTIFACTS_DIR` | Compatible local circuit artifacts |
 | `PILOT_PROVING_FACTORY` | Operator-owned `module:callable` returning tenant-bound proving targets for the API and separate job worker |
+| `CLEARPROOF_RAPIDSNARK_BIN` | Optional operator-owned Linux native executable, selected by the target factory helper |
+| `CLEARPROOF_RAPIDSNARK_SHA256` | Independently approved native binary digest; unpinned discovery preserves JavaScript |
 | `VASP_DID` | Configured VASP identity |
 | `VASP_DOMAIN` | Domain used by the discovery publisher |
 | `VASP_HPKE_PRIVATE_KEY` | Recipient X25519 private key for the HPKE path; keep secret |
@@ -32,6 +34,8 @@ This page covers local and testnet evaluation. A production launch still needs l
 The pilot routes also need independently configured storage keys and tenant/trust configuration; see the [tenant storage guide](https://github.com/repfigit/clearproof/blob/main/docs/operations/pilot-tenant-storage.md). Startup checks key encoding/length and configures storage. It does not certify key randomness, artifact assurance, complete tenant isolation or end-to-end readiness. Current CORS handling removes wildcard origins when credentials are enabled.
 
 Durable proving jobs additionally need a separately supervised Linux worker: `uv run python -m src.prover.proof_job_worker`. Use the same database, storage keyring and independently pinned target configuration in both services. Configure host/container memory bounds, disable sensitive-memory swapping and core dumps, and measure capacity before increasing queue concurrency. The Node heap limit alone is not an RSS bound. See the [proving jobs runbook](https://github.com/repfigit/clearproof/blob/main/docs/operations/pilot-proving-jobs.md).
+
+The factory can select an optional pinned native backend with `select_pilot_backend(javascript_prover)`. It uses anonymous RAM for WTNS and proof intermediates and independently pairs native output in JavaScript. Without a discovered binary/pin, JavaScript remains selected; explicit invalid configuration fails closed. Native process RSS excludes the Node and parent phases. See the [native runbook and measured scope](https://github.com/repfigit/clearproof/blob/main/docs/operations/pilot-native-proving.md).
 
 ## Validation
 

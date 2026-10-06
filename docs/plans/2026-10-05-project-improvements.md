@@ -16,11 +16,11 @@ documentation recommendations. GitHub #89 and Linear AIF-89 are separate work.
 | Shared release and publication catalogue | Homepage and docs consume one status/catalogue; future/paused articles not promoted; live links work | Done; production docs/site share 0.7.0 and published catalogue |
 | Documentation accuracy and presentation | Reconciled roadmap/agent guidance, proper Markdown, technical sitemap/metadata, maintained web README | Done; #91/web #12 merged and deployed with browser acceptance |
 | Two onboarding paths | Small synthetic evidence inspection with tamper case; reproducible complete pilot with preflight/recovery; current SDK example first | Pending |
-| Backlog reconciliation | Source/test evidence for every open Linear/GitHub item; delivered work closed and remaining criteria retained | In progress; five of the original twelve issues closed with evidence |
+| Backlog reconciliation | Source/test evidence for every open Linear/GitHub item; delivered work closed and remaining criteria retained | In progress; six of the original twelve issues closed with evidence |
 | Artifact isolation (GitHub #85) | Explicit test bundles required; incomplete supplied bundles fail; local ambient artifacts ignored | Done; #91 merged and fresh-bundle CI passed; GitHub issue closed |
 | Dependency cleanup (GitHub #86) | Unused drivers removed; locked install and relevant Python tests pass; storage guidance accurate | Done; #91 merged, locked install and full remote CI passed; GitHub issue closed |
-| Proving execution (GitHub #87) | Correct service scope; durable bounded jobs, privacy-safe input/output, retries/cancellation/concurrency/freshness tests | In progress; worker/API and real-proof freshness acceptance pass locally; full CI, review and merge remain |
-| Native proving benchmark (GitHub #88) | Equivalent current-profile benchmark; measured backend decision; pinned optional backend if justified | Pending |
+| Proving execution (GitHub #87) | Correct service scope; durable bounded jobs, privacy-safe input/output, retries/cancellation/concurrency/freshness tests | Done; #94 merged after full exact-head CI and approval, GitHub issue closed |
+| Native proving benchmark (GitHub #88) | Equivalent current-profile benchmark; measured backend decision; pinned optional backend if justified | In progress; equivalent benchmark and memory-only optional backend verified locally; full CI, review, merge and documentation deployment remain |
 | Canonical constants (GitHub #89) | Structured profile source, generated runtime constants, drift gate and cross-runtime compatibility tests | Done; #93 merged after full current-head CI and approval; GitHub issue closed |
 | Operational preflight and software scale | Scoped authenticated readiness checks, bounded cryptographic execution, paginated persisted inventories and measured limits | Pending |
 | Legacy configuration/parity and migration issues | AIF-158/89 hardened with compatibility; AIF-119/100 reconciled; AIF-67/99/65 remaining acceptance explicitly verified | In progress; AIF-158 merged and closed; AIF-119 closed |
@@ -29,8 +29,8 @@ documentation recommendations. GitHub #89 and Linear AIF-89 are separate work.
 
 ## Verified tracker reconciliation
 
-- Original issue inventory: GitHub #85, #86 and #89, and Linear AIF-119 and
-  AIF-158 are closed. GitHub #87/#88 and Linear AIF-100/99/89/67/65 remain open;
+- Original issue inventory: GitHub #85, #86, #87 and #89, and Linear AIF-119 and
+  AIF-158 are closed. GitHub #88 and Linear AIF-100/99/89/67/65 remain open;
   their original acceptance criteria still apply.
 
 - **AIF-119: Done.** Seven-argument router fixtures are already on public main
@@ -171,3 +171,29 @@ actual external evidence; local tests cannot establish those prerequisites.
   PostgreSQL. The focused queue/API/worker and actual-proof suite passed all
   83 tests with 100% coverage of the queue and service. Updated full regression,
   remote CI and approval remain required before #87 can close.
+
+- October 5: the clock-skew revision `abce008` passed the full local
+  PostgreSQL/artifact/CLI regression: 2,956 passed, two optional skips and
+  100% src statement/branch coverage. All exact-head remote checks, including
+  fresh circuits, PostgreSQL and aggregate coverage, succeeded. Bugbot cleared
+  the finding and an approving review was recorded. #94 merged as `300bb2c`;
+  GitHub #87 is verified closed. Documentation deployment
+  `dpl_VcxEaWoYL539irdgCVR76dZQar8q` is Ready at `docs.clearproof.world`;
+  live API/deployment pages include the new routes, roles and worker factory.
+
+- October 5: #88's equivalent current-profile prove-only comparison used the
+  same development key/WTNS and four physical cores. Five measured invocations
+  per implementation: snarkjs median 4.91 seconds / 2,595.3 MiB peak process RSS,
+  native median 1.05 seconds / about 86 MiB. All 18 warmup/measured proofs paired
+  independently and matched the expected eight signals; altered statements were
+  rejected. The measured ratio is 4.7, not a claimed universal 10–30-fold gain.
+  The optional native backend uses sealed anonymous memory, operator binary
+  pins, guarded subprocesses and independent JS pairing. Its 66 transport,
+  pinning, cancellation, replacement and worker-crash checks initially passed
+  at 100% branch coverage; two additional executable/permission-failure checks
+  bring the module total to 68. The focused factory/API/worker and real-proof
+  regression passed all 132 tests with 100% native/service branch coverage.
+  Documentation: 115 unit tests and a production build pass; SDK/CLI builds,
+  Ruff/format and REUSE pass. The final source-pinned build
+  recipe completed and yielded the same observed binary SHA256 as the benchmark.
+  Full regression, remote CI, review and merge remain before #88 can close.

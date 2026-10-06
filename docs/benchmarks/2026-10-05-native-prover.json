@@ -1,0 +1,227 @@
+{
+  "scope": "Prove only: process start, key/witness reads, proof/public writes included; witness generation and independent pairing excluded",
+  "assurance": "Unapproved development artifacts and wholly synthetic input; no production SLA or audited backend assurance",
+  "cpu_affinity": [
+    0,
+    1,
+    2,
+    3
+  ],
+  "physical_cores": 4,
+  "logical_cpus_reported": 24,
+  "node_version": "v26.5.1",
+  "platform": "Linux-7.0.0-38-generic-x86_64-with-glibc2.43",
+  "upstream_commit": "81eddf1a536d26497b237c0b8a04fe90baf7e439",
+  "native_binary_sha256": "f2938dd7fb064365fa522d1c38551232b7122417d216ba449f940de827fd6263",
+  "proving_key_sha256": "f12b2309eecf26901a3f6e7d24d1da53a2699cec0743a1478b87370650053409",
+  "witness_sha256": "0e3d261dca762f67f0e6e5a121b22a0e66f53274ceb06daa28acf2ef76455308",
+  "r1cs_sha256": "4248cc7b67e7ead5a4ac7a4425acd0debffaee9642d540846be58daeae551aa8",
+  "constraints": 95408,
+  "build_notes": [
+    "GCC 15.2 Release; upstream source unchanged; -include cstdint for missing header compatibility",
+    "GMP 6.3.0 static built with -O2 -std=gnu17; NASM 3.01"
+  ],
+  "samples": [
+    {
+      "backend": "snarkjs-cli-default",
+      "warmup": true,
+      "wall_seconds": 4.79,
+      "user_seconds": 12.71,
+      "system_seconds": 1.37,
+      "max_rss_kib": 2655440
+    },
+    {
+      "backend": "snarkjs-cli-default",
+      "warmup": false,
+      "wall_seconds": 4.59,
+      "user_seconds": 12.14,
+      "system_seconds": 1.29,
+      "max_rss_kib": 2657560
+    },
+    {
+      "backend": "snarkjs-cli-default",
+      "warmup": false,
+      "wall_seconds": 4.64,
+      "user_seconds": 12.6,
+      "system_seconds": 1.36,
+      "max_rss_kib": 2682144
+    },
+    {
+      "backend": "snarkjs-cli-default",
+      "warmup": false,
+      "wall_seconds": 4.91,
+      "user_seconds": 13.4,
+      "system_seconds": 1.42,
+      "max_rss_kib": 2652632
+    },
+    {
+      "backend": "snarkjs-cli-default",
+      "warmup": false,
+      "wall_seconds": 4.97,
+      "user_seconds": 12.7,
+      "system_seconds": 1.33,
+      "max_rss_kib": 2643196
+    },
+    {
+      "backend": "snarkjs-cli-default",
+      "warmup": false,
+      "wall_seconds": 5.2,
+      "user_seconds": 13.0,
+      "system_seconds": 1.37,
+      "max_rss_kib": 2663564
+    },
+    {
+      "backend": "rapidsnark-omp1",
+      "warmup": true,
+      "wall_seconds": 1.15,
+      "user_seconds": 2.54,
+      "system_seconds": 0.04,
+      "max_rss_kib": 88088
+    },
+    {
+      "backend": "rapidsnark-omp1",
+      "warmup": false,
+      "wall_seconds": 1.03,
+      "user_seconds": 2.53,
+      "system_seconds": 0.03,
+      "max_rss_kib": 88116
+    },
+    {
+      "backend": "rapidsnark-omp1",
+      "warmup": false,
+      "wall_seconds": 1.03,
+      "user_seconds": 2.37,
+      "system_seconds": 0.04,
+      "max_rss_kib": 88156
+    },
+    {
+      "backend": "rapidsnark-omp1",
+      "warmup": false,
+      "wall_seconds": 1.07,
+      "user_seconds": 2.76,
+      "system_seconds": 0.03,
+      "max_rss_kib": 88128
+    },
+    {
+      "backend": "rapidsnark-omp1",
+      "warmup": false,
+      "wall_seconds": 1.3,
+      "user_seconds": 3.1,
+      "system_seconds": 0.05,
+      "max_rss_kib": 88240
+    },
+    {
+      "backend": "rapidsnark-omp1",
+      "warmup": false,
+      "wall_seconds": 1.05,
+      "user_seconds": 2.88,
+      "system_seconds": 0.04,
+      "max_rss_kib": 87888
+    },
+    {
+      "backend": "rapidsnark-omp4",
+      "warmup": true,
+      "wall_seconds": 1.08,
+      "user_seconds": 2.5,
+      "system_seconds": 0.03,
+      "max_rss_kib": 87672
+    },
+    {
+      "backend": "rapidsnark-omp4",
+      "warmup": false,
+      "wall_seconds": 1.09,
+      "user_seconds": 2.87,
+      "system_seconds": 0.04,
+      "max_rss_kib": 87960
+    },
+    {
+      "backend": "rapidsnark-omp4",
+      "warmup": false,
+      "wall_seconds": 0.91,
+      "user_seconds": 2.63,
+      "system_seconds": 0.04,
+      "max_rss_kib": 87700
+    },
+    {
+      "backend": "rapidsnark-omp4",
+      "warmup": false,
+      "wall_seconds": 1.05,
+      "user_seconds": 2.62,
+      "system_seconds": 0.03,
+      "max_rss_kib": 87740
+    },
+    {
+      "backend": "rapidsnark-omp4",
+      "warmup": false,
+      "wall_seconds": 0.96,
+      "user_seconds": 2.52,
+      "system_seconds": 0.04,
+      "max_rss_kib": 87720
+    },
+    {
+      "backend": "rapidsnark-omp4",
+      "warmup": false,
+      "wall_seconds": 1.14,
+      "user_seconds": 2.8,
+      "system_seconds": 0.02,
+      "max_rss_kib": 88264
+    }
+  ],
+  "summaries": {
+    "snarkjs-cli-default": {
+      "count": 5,
+      "median_wall_seconds": 4.91,
+      "min_wall_seconds": 4.59,
+      "max_wall_seconds": 5.2,
+      "median_max_rss_kib": 2657560,
+      "max_rss_kib": 2682144
+    },
+    "rapidsnark-omp4": {
+      "count": 5,
+      "median_wall_seconds": 1.05,
+      "min_wall_seconds": 0.91,
+      "max_wall_seconds": 1.14,
+      "median_max_rss_kib": 87740,
+      "max_rss_kib": 88264
+    },
+    "rapidsnark-omp1": {
+      "count": 5,
+      "median_wall_seconds": 1.05,
+      "min_wall_seconds": 1.03,
+      "max_wall_seconds": 1.3,
+      "median_max_rss_kib": 88128,
+      "max_rss_kib": 88240
+    }
+  },
+  "parallelism_notes": [
+    "Both backends were pinned to the same four distinct physical cores.",
+    "snarkjs defaults to os.cpus().length (24) workers on this host; CPU affinity does not reduce that worker count.",
+    "rapidsnark FFT/MSM ThreadPool defaults to std::thread::hardware_concurrency() (24); OMP settings restrict only OpenMP regions, not that thread pool."
+  ],
+  "acceptance": {
+    "all_18_proofs_independently_verified": true,
+    "all_public_vectors_match_expected_eight_signals": true,
+    "tampered_public_signal_rejected_for_each_backend": true
+  },
+  "cpu_model": "AMD Ryzen AI 9 HX 470 w/ Radeon 890M",
+  "snarkjs_version": "0.7.6",
+  "repeated_source_build": {
+    "same_binary_sha256": true,
+    "upstream_sources_unchanged": true,
+    "recipe": "scripts/build_native_prover.sh"
+  },
+  "measurement_date": "2026-10-05",
+  "measurement_timezone": "America/New_York",
+  "build_receipt": {
+    "assurance": "source-pinned development build; independent operator approval still required",
+    "upstream_commit": "81eddf1a536d26497b237c0b8a04fe90baf7e439",
+    "ffiasm_commit": "aa90166dc4c5a075b835a398e15cc1e06ac90e95",
+    "json_commit": "350ff4f7ced7c4117eae2fb93df02823c8021fcb",
+    "gmp_source_sha256": "a3c2b80201b89e68616f4ad30bc66aee4927c3ce50e33929ca819d5c43538898",
+    "binary_sha256": "f2938dd7fb064365fa522d1c38551232b7122417d216ba449f940de827fd6263",
+    "compiler": "g++ (Ubuntu 15.2.0-16ubuntu1) 15.2.0",
+    "assembler": "NASM version 3.01",
+    "gmp_cflags": "-O2 -std=gnu17",
+    "cxxflags": "-include cstdint"
+  }
+}

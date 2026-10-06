@@ -12,6 +12,7 @@ from src.protocol.credential import Scalar, scalar
 from src.protocol.transfer import Hex32, OpaqueId, Record
 from src.prover.generated_signals import PROOF_LIFETIME_SECONDS
 from src.prover.pilot_compliance import PUBLIC_SIGNALS
+from src.prover.pilot_native_prover import PilotNativeProver
 from src.prover.pilot_prover import PilotProver
 from src.prover.pilot_verifier import PilotProof, public_signals
 from src.registry.pilot_sanctions import PilotSanctionsTree
@@ -51,7 +52,7 @@ class ProvingTarget:
     """
 
     configuration: CurrentStatementConfiguration
-    prover: PilotProver
+    prover: PilotProver | PilotNativeProver
     sanctions: PilotSanctionsTree
 
     @property
@@ -75,7 +76,9 @@ class ProvingTarget:
                 "registry_digest": cfg.registry.digest,
                 "sanctions_source_digest": self.sanctions.source_digest,
                 "manifest_digest": self.prover.verifier.artifacts.manifest.digest,
-                "runtime_digest": hashlib.sha256(self.prover.verifier.bundle).hexdigest(),
+                "runtime_digest": getattr(
+                    self.prover, "runtime_digest", hashlib.sha256(self.prover.verifier.bundle).hexdigest()
+                ),
             },
         )
 

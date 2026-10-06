@@ -398,12 +398,26 @@ jobs:
           npm run build --workspace=@clearproof/content
           npm run build --workspace=@clearproof/proof
           npm run build --workspace=@clearproof/cli
+      - name: Install optional native source-build prerequisites
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes --no-install-recommends build-essential cmake nasm m4
+      - name: Build pinned unapproved native test runtime
+        id: native-prover
+        run: |
+          bash scripts/build_native_prover.sh "$RUNNER_TEMP/clearproof-native-prover"
+          native_binary="$RUNNER_TEMP/clearproof-native-prover/build_prover/src/prover"
+          native_sha=$(sha256sum "$native_binary")
+          native_sha="${native_sha%% *}"
+          printf 'binary=%s\nsha256=%s\n' "$native_binary" "$native_sha" >> "$GITHUB_OUTPUT"
       - name: Full Python coverage with PostgreSQL and both proof profiles
         env:
           DATABASE_URL: postgresql://postgres:local-ci-only@localhost:5432/clearproof_test
           CLEARPROOF_PILOT_TEST_ARTIFACTS: ${{ runner.temp }}/clearproof-development-circuits/pilot
           CLEARPROOF_LEGACY_TEST_ARTIFACTS: ${{ runner.temp }}/clearproof-development-circuits/legacy
           CLEARPROOF_POLICY_CLI_TEST: "1"
+          CLEARPROOF_RAPIDSNARK_TEST_BIN: ${{ steps.native-prover.outputs.binary }}
+          CLEARPROOF_RAPIDSNARK_TEST_SHA256: ${{ steps.native-prover.outputs.sha256 }}
           COVERAGE_FILE: ${{ runner.temp }}/python-coverage-suite.data
         run: uv run python -m pytest tests --cov=src --cov-branch --cov-report=term --cov-fail-under=0 -q
       - name: Cover checkpoint verification on its owned EVM

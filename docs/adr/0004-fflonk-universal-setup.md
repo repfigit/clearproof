@@ -44,7 +44,11 @@ The reason is specific to us and worth recording: Groth16's verifier cost scales
 | Proving (mean of 3) | 1.83 s | **37.44 s** (20.5×) |
 | Peak RSS | 1.21 GB | 5.79 GB (4.8×) |
 
-And the gap is understated: **Groth16 has a production native prover (rapidsnark, typically 10–50× faster than snarkjs); fflonk has none.** A realistic production Groth16 deployment could be sub-second where fflonk stays in the tens of seconds.
+Groth16 also supports optional native proving with rapidsnark. A later
+[current eight-signal benchmark](../benchmarks/2026-10-05-native-prover.md)
+measured a 4.7-fold prove-only improvement on that profile. It does not establish
+a universal native speedup or sub-second production latency, and it cannot be
+combined with this legacy 16-signal comparison to infer a deployment ratio.
 
 ### The second real cost is licensing
 
