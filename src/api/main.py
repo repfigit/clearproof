@@ -24,6 +24,7 @@ from src.api.routes.pilot_proof import router as pilot_proof_router
 from src.api.routes.policy import router as policy_router
 from src.api.routes.proof import router as proof_router
 from src.api.routes.proof_jobs import router as proof_jobs_router
+from src.api.routes.readiness import router as readiness_router
 from src.api.routes.usage import router as usage_router
 from src.api.routes.wallet_ownership import router as wallet_ownership_router
 from src.sar.encryption import hkdf_salt
@@ -122,6 +123,7 @@ def create_app() -> FastAPI:
     app.include_router(proof_router)
     app.include_router(credential_router)
     app.include_router(health_router)
+    app.include_router(readiness_router)
     app.include_router(auth_router)
     app.include_router(discovery_router)
     app.include_router(enrollment_router)

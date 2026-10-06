@@ -128,7 +128,7 @@ jobs:
       - name: Real PostgreSQL proof storage, migration and parsing checks
         env:
           CLEARPROOF_POLICY_CLI_TEST: "1"
-        run: uv run python -m pytest tests/integration/test_storage.py tests/integration/test_proof_persistence.py tests/integration/test_proof_storage.py tests/integration/test_pilot_storage.py tests/integration/test_publication_journal.py tests/integration/test_wallet_ownership.py tests/unit/test_stored_signals.py tests/unit/test_pilot_cipher.py -q
+        run: uv run python -m pytest tests/integration/test_storage.py tests/integration/test_proof_persistence.py tests/integration/test_proof_storage.py tests/integration/test_pilot_storage.py tests/integration/test_pilot_readiness.py tests/integration/test_publication_journal.py tests/integration/test_wallet_ownership.py tests/unit/test_stored_signals.py tests/unit/test_pilot_cipher.py -q
 
   # Required check. Fast full-suite run without coverage on the minimum supported Python (3.11,
   # pyproject requires-python). The `circuits` job runs the same suite on the default runner Python

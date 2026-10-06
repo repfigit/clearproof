@@ -11,14 +11,16 @@ compliance, counterparty acceptance, settlement or production readiness.
 | `GET /health` | Public process-liveness response, software version and server clock | No database, key, artifact, trust, chain or provider readiness checks. HTTP 200 alone is not readiness. |
 | `GET /metrics` | Legacy configured SIWE/JWT/API-key-protected process-local debug counters and uptime | Counters reset on restart and are not wired to the pilot services. Zero is not evidence that no pilot operations occurred. No Prometheus/OTEL exporter is configured here. |
 | `GET /pilot/usage` | `usage:read`; one tenant-scoped database snapshot of encrypted records, bytes, observations, events, proofs, receipts, policy versions and consumed nullifiers | No decryption; a successful response checks this database path only. Excludes publication journal/history tables. Not a billing ledger, HTTP request count or adoption metric. |
+| `GET /pilot/readiness/{capability}/{target_id}` | `usage:read`; configured-target preflight for this tenant's inspection or proving target | Bounded read-only DB/schema probe, active-key synthetic round trip, loaded trust/freshness and runtime/artifact availability. No retained-current-state check, proof work, fresh large-file hash, worker heartbeat, provider check or consumption. |
 | Observation discovery/read/cohort report | Policy-read/decryption roles; durable scoped observations, four outcomes, coverage, disagreement and latency | Evaluation timing excludes end-to-end onboarding/transport/settlement. Missing and old v1 timings remain unknown. See [observation semantics](../internal/PILOT_OBSERVATION_MODE.md). |
 | Investigation timeline/queue | Evidence-read/decryption roles; independent states, aged findings, owners, next actions and scoped provider links | Queue pages are separate observations, not one frozen snapshot. Exhausted page budgets are partial; follow the continuation cursor. No findings does not authorize a transfer. |
 | Artifact doctor | Read-only pin/profile/size/hash diagnostics with explicit development assurance | Does not check current sources, source truth or production eligibility. Matching files are not a trusted setup. |
 | Publication journal/recovery service | Authenticated retained intent, pinned chain observation and encrypted reconciliation history | Inclusion-time effects are not current authorization. The journal is not included in `/pilot/usage`; consult its own service/runbook. |
 | Offline historical report | Separately configured reviewer trust, exact encrypted export and declared review time | Supported/contradicted/indeterminate applies to recorded local evidence. It never authorizes replay or establishes live provider status. |
 
-There is no single aggregate readiness endpoint. For an operator's configured
-pilot, combine process liveness with authenticated database access, an authorized
+The [readiness endpoint](pilot-readiness.md) reports configuration preflight with
+explicit scope; it is not an aggregate live-workflow assurance. For an operator's configured
+pilot, combine process liveness and scoped preflight with an authorized
 encrypted-record read, artifact inspection and the read-only current inspection
 path. Each must use independently supplied tenant, deployment and trust inputs.
 Do not use authorization consumption as a health probe. The disposable

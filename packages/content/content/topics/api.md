@@ -7,7 +7,7 @@ cli-topic: api
 
 # API reference
 
-The Python API (FastAPI) is a development component in the source checkout, reviewed September 25, 2026. It is not part of the published npm packages. Use the running application's [local OpenAPI UI](http://localhost:8000/docs) for exact request and response schemas.
+The Python API (FastAPI) is a development component in the source checkout, reviewed October 5, 2026. It is not part of the published npm packages. Use the running application's [local OpenAPI UI](http://localhost:8000/docs) for exact request and response schemas.
 
 Protected routes require the configured authentication. Pilot routes also require an authenticated tenant principal with explicit roles and issuer scope; there is no implicit administrator override. PostgreSQL, storage keys and tenant trust configuration are required for the pilot routes. See [deployment](/docs/deployment).
 
@@ -21,6 +21,9 @@ Protected routes require the configured authentication. Pilot routes also requir
 | `POST /pilot/policy/diff` | Compare a proposed policy against supplied cases |
 | `POST /pilot/policy/diff/stored` | Compare a proposed policy against retained evidence |
 | `POST /pilot/proof/inspect` | Read-only inspection of a current proof against current state; never consumes |
+| `POST /pilot/proof/jobs` | Admit a tenant-bound encrypted proving job; returns `202` and an opaque job ID |
+| `GET /pilot/proof/jobs/{job_id}` | Read an owned job and a completed proof only while its statement remains current |
+| `POST /pilot/proof/jobs/{job_id}/cancel`, `/retry` | Cancel owned work or retry within its original deadline and three-claim limit |
 | `POST /pilot/proof/evaluate` | Explained policy evaluation of a current proof |
 | `POST /pilot/proof/authorize` | Consume one authorization after an `ALLOW`, sealing information to the recipient |
 | `POST /pilot/proof/observe` | Record a non-authorizing observation |
@@ -30,6 +33,9 @@ Protected routes require the configured authentication. Pilot routes also requir
 | `POST /pilot/events/queue` | Paginated investigation queue |
 | `POST /pilot/fireblocks/{integration_id}` | Verify and retain a signed Fireblocks notification from a tenant relay |
 | `GET /pilot/usage` | Retained record counters (not billable charges) |
+| `GET /pilot/readiness/{capability}/{target_id}` | Tenant-scoped configuration preflight for `inspection` or `proving`; no proof work or consumption |
+
+Proving jobs require explicit `proof:generate`, `policy:read` and `evidence:decrypt` roles, PostgreSQL and an independently configured worker. The API does not start a prover. Queue limits apply across workers; a full queue returns `429` with `Retry-After`. A running cancellation keeps its slot until cleanup is acknowledged. Completed results are rechecked against current enrollment, policy, approved roots and time before retrieval; completion never consumes authorization. See the [proving jobs runbook](https://github.com/repfigit/clearproof/blob/main/docs/operations/pilot-proving-jobs.md) for configuration, retry and recovery.
 
 ## Wallet ownership extension
 
@@ -57,5 +63,7 @@ The extension circuit is staged; no deployed verifier accepts it. See the [walle
 The legacy routes serve the demo profile. A legacy proof is never current pilot authorization.
 
 ## Limits
+
+A `usage:read` principal can request readiness for its own configured target. The report is configuration preflight: database/schema, active-key self-test and loaded target binding/freshness. It performs no proof work, retained-current-state check or consumption. See [readiness scope and recovery](https://github.com/repfigit/clearproof/blob/main/docs/operations/pilot-readiness.md).
 
 A successful response is not legal compliance, settlement or a live counterparty's acceptance. Inspection and observation results never authorize a transfer. Only `/pilot/proof/authorize` consumes an authorization, and only after an `ALLOW`. See [architecture](/docs/architecture) and [security](/docs/security).

@@ -22,7 +22,7 @@ documentation recommendations. GitHub #89 and Linear AIF-89 are separate work.
 | Proving execution (GitHub #87) | Correct service scope; durable bounded jobs, privacy-safe input/output, retries/cancellation/concurrency/freshness tests | Done; #94 merged after full exact-head CI and approval, GitHub issue closed |
 | Native proving benchmark (GitHub #88) | Equivalent current-profile benchmark; measured backend decision; pinned optional backend if justified | Done; #95 merged after final-head CI and active approval; GitHub issue closed and native deployment guidance verified live |
 | Canonical constants (GitHub #89) | Structured profile source, generated runtime constants, drift gate and cross-runtime compatibility tests | Done; #93 merged after full current-head CI and approval; GitHub issue closed |
-| Operational preflight and software scale | Scoped authenticated readiness checks, bounded cryptographic execution, paginated persisted inventories and measured limits | Local acceptance preflight implemented; authenticated service readiness and remaining scale work pending |
+| Operational preflight and software scale | Scoped authenticated readiness checks, bounded cryptographic execution, paginated persisted inventories and measured limits | Local acceptance preflight and authenticated target configuration readiness implemented; readiness CI/review and remaining scale work pending |
 | Legacy configuration/parity and migration issues | AIF-158/89 hardened with compatibility; AIF-119/100 reconciled; AIF-67/99/65 remaining acceptance explicitly verified | In progress; AIF-158/119/89/100 merged or reconciled and closed; AIF-67/99/65 remain open |
 | External evaluation and adoption | Evaluation/feedback entry point and sample report; permitted real operator/counterparty evaluation with retained measurements | Pending; external access not yet established |
 | Production assurance | Existing F1–F5 start conditions preserved; independently reviewed artifacts, audits and live interoperability cannot be inferred from local tests | External gates remain open |
@@ -327,3 +327,19 @@ actual external evidence; local tests cannot establish those prerequisites.
   produced the same observed native binary SHA256 as the previously verified
   build; no source pin, arithmetic, setup key or compiled artifact changed.
   Updated full CI and approving review remain required.
+
+- October 5: tenant-scoped inspection/proving readiness requires `usage:read`,
+  selects only an operator-configured target and rejects query scope overrides.
+  The report checks a bounded read-only PostgreSQL ping/migration history, a
+  synthetic in-memory active-key round trip, loaded profile/trust/freshness and
+  executable/artifact availability. It performs no proving, pairing, migrations,
+  retained-customer decryption, current-head/credential reads, worker heartbeat,
+  provider requests or authorization consumption. Both success/failure reports
+  are minimized and not cacheable; public process liveness remains independent.
+  Three real PostgreSQL checks preserve migration timestamps, record counts and
+  consumption counts, reject drift without repair and retain liveness during a
+  closed pool. API regression: 109 passed; new route at 100% statement/branch
+  coverage. Content: 25 passed at 100%; docs: 115 passed at 100% and a production
+  build passed. Ruff/format, REUSE and diff checks pass. This is configuration
+  preflight, not full live/production readiness; updated CI/review and hosted
+  verification remain required. Remaining inventory/scale work is still open.
