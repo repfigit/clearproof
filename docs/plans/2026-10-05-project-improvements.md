@@ -269,3 +269,13 @@ actual external evidence; local tests cannot establish those prerequisites.
   review is on that exact revision. AIF-89 is verified Done in Linear with its acceptance evidence retained
   and agent-ready removed. AIF-100 is In Review under PR #97 and is rebased onto the parity
   merge; its refreshed CI and review remain required.
+
+- October 5: the parity merge's production docs deployment
+  `dpl_8tHQFNvijD9WTShPMRfMYkoGG9qd` is Ready from exact revision `e12aa27`,
+  with the docs.clearproof.world alias and live deployment-page checks verified.
+  AIF-100's rebased PR #97 received an approval on `de6066b`. Its operational
+  JavaScript gate exposed old deployment-script mocks that lacked the new ABI
+  and assumed immediate selection. Updated both-delay, retry, incompatible-ABI
+  and failure-path checks: all 181 passed, with 100% coverage of 699 statements,
+  274 branches and 51 functions across 12 operational modules. This follow-up
+  changes tests and this log only; refreshed full CI remains required.

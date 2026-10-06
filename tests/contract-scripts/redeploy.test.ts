@@ -2,7 +2,7 @@ import { afterEach, beforeEach, expect, test, vi } from 'vitest';
 const mock = vi.hoisted(() => ({
   existsSync: vi.fn(), readFileSync: vi.fn(), writeFileSync: vi.fn(), renameSync: vi.fn(), rmSync: vi.fn(), getSigners: vi.fn(),
   provider: { getNetwork: vi.fn(), getBalance: vi.fn(), getBlock: vi.fn() },
-  getContractAt: vi.fn(), getContractFactory: vi.fn(), id: vi.fn(), ZeroAddress: 'zero',
+  getContractAt: vi.fn(), getContractFactory: vi.fn(), id: vi.fn(), ZeroAddress: 'zero', ZeroHash: 'hashzero',
 }));
 vi.mock('fs', () => ({ existsSync: mock.existsSync, readFileSync: mock.readFileSync, writeFileSync: mock.writeFileSync, renameSync: mock.renameSync, rmSync: mock.rmSync }));
 vi.mock('hardhat', () => ({ ethers: mock }));
@@ -12,6 +12,8 @@ let time: number;
 let registered: string;
 let info: { active: boolean; verifier: string };
 let selected: string;
+let scheduled: string;
+let selectAfter: bigint;
 let deploy: ReturnType<typeof vi.fn>;
 let router: Record<string, ReturnType<typeof vi.fn>>;
 let registry: Record<string, ReturnType<typeof vi.fn>>;
@@ -24,7 +26,7 @@ beforeEach(() => {
   vi.stubEnv('HARDHAT_NETWORK', undefined);
   stored = { chainId: '31337', contracts: { VerifierRouter: 'router', ComplianceRegistry: 'registry',
     Groth16Verifier: 'old', VASPRegistry: 'vasp', SanctionsOracle: 'oracle' }, previous: { marker: 'preserved' } };
-  time = 100; registered = 'zero'; selected = 'v1'; info = { active: false, verifier: 'zero' };
+  time = 100; registered = 'zero'; selected = 'v1'; scheduled = 'hashzero'; selectAfter = 0n; info = { active: false, verifier: 'zero' };
   mock.existsSync.mockReturnValue(true);
   mock.readFileSync.mockImplementation(() => JSON.stringify(stored));
   mock.writeFileSync.mockImplementation((_path, value) => { staged = JSON.parse(value); });
@@ -38,6 +40,9 @@ beforeEach(() => {
     getAddress: vi.fn().mockResolvedValue('new') });
   mock.getContractFactory.mockResolvedValue({ deploy });
   router = {
+    timelockFloor: vi.fn().mockResolvedValue(60n),
+    getVerifier: vi.fn().mockImplementation(async () => info.verifier),
+    isVerifierActive: vi.fn().mockImplementation(async () => info.active),
     verifiers: vi.fn().mockImplementation(async () => info),
     pendingRegistrations: vi.fn().mockImplementation(async () => registered),
     timelocks: vi.fn().mockResolvedValue(200n),
@@ -49,7 +54,18 @@ beforeEach(() => {
   };
   registry = { verifierRouter: vi.fn().mockResolvedValue('ROUTER'),
     verifierSelector: vi.fn().mockImplementation(async () => selected),
-    setVerifierSelector: vi.fn().mockImplementation(async value => { selected = value; return tx(); }) };
+    verifierSelectionDelay: vi.fn().mockResolvedValue(60n),
+    pendingVerifierSelector: vi.fn().mockImplementation(async () => scheduled),
+    verifierSelectionAfter: vi.fn().mockImplementation(async () => selectAfter),
+    previousSelectorUntil: vi.fn().mockResolvedValue(86660n),
+    setVerifierSelector: vi.fn().mockImplementation(async value => {
+      scheduled = value; selectAfter = BigInt(time) + 60n; return tx();
+    }),
+    activateVerifierSelector: vi.fn().mockImplementation(async () => {
+      if (BigInt(time) < selectAfter) throw new Error('selection timelock has not expired');
+      selected = scheduled; scheduled = 'hashzero'; return tx();
+    }),
+  };
   mock.getContractAt.mockImplementation(async name => name === 'VerifierRouter' ? router : registry);
   vi.spyOn(console, 'log').mockImplementation(() => finish());
   vi.spyOn(console, 'error').mockImplementation(() => finish());
@@ -57,6 +73,7 @@ beforeEach(() => {
 afterEach(() => { process.exitCode = originalExit; vi.restoreAllMocks(); vi.unstubAllEnvs(); });
 async function run() {
   vi.resetModules();
+  process.exitCode = originalExit;
   const done = new Promise<void>(resolve => { finish = resolve; });
   await import('../../packages/contracts/scripts/redeploy-verifier');
   await done;
@@ -82,16 +99,32 @@ test('persists the new verifier, waits without resetting its timelock, then pres
   await run();
   expect(router.activateVerifier).toHaveBeenCalledWith('v2', 'Groth16 BN254 v2');
   expect(registry.setVerifierSelector).toHaveBeenCalledWith('v2');
+  expect(stored.contracts.Groth16Verifier).toBe('old');
+  expect(stored.pendingVerifierReplacement.selectAfter).toBe('260');
+  expect(registry.activateVerifierSelector).not.toHaveBeenCalled();
+  await run();
+  expect(registry.setVerifierSelector).toHaveBeenCalledOnce();
+  time = 260;
+  await run();
+  expect(registry.activateVerifierSelector).toHaveBeenCalledOnce();
   expect(stored.contracts).toEqual({ VerifierRouter: 'router', ComplianceRegistry: 'registry', Groth16Verifier: 'new',
     VASPRegistry: 'vasp', SanctionsOracle: 'oracle' });
   expect(stored.previous).toMatchObject({ Groth16Verifier: 'old', verifierSelector: 'v1', marker: 'preserved' });
   expect(stored.pendingVerifierReplacement).toBeUndefined();
   expect(stored.verifierActivation).toMatchObject({ status: 'active', selector: 'v2', verifier: 'new' });
+  expect(stored.previous.registryGraceEndsAt).toBe('86660');
+  await run();
+  expect(deploy).toHaveBeenCalledOnce();
+  expect(registry.activateVerifierSelector).toHaveBeenCalledOnce();
 });
 
-test('can activate immediately only when the actual chain timestamp permits it', async () => {
+test('uses the actual chain timestamps for registration and separate default selection', async () => {
   vi.stubEnv('HARDHAT_NETWORK', 'selected-network');
   time = 200;
+  await run();
+  expect(info.active).toBe(true);
+  expect(selected).toBe('v1');
+  time = 260;
   await run();
   expect(stored.contracts.Groth16Verifier).toBe('new');
   expect(mock.renameSync.mock.calls[0][1]).toContain('/deployments/selected-network.json');
@@ -110,19 +143,24 @@ test('reuses the recorded verifier after registration fails', async () => {
 test.each(['activation', 'selection'])('resumes after %s succeeded but the next step failed', async phase => {
   await prepare(); time = 200;
   if (phase === 'activation') registry.setVerifierSelector.mockRejectedValueOnce(new Error('selection failed'));
-  else mock.writeFileSync.mockImplementationOnce((_path, value) => { staged = JSON.parse(value); })
-    .mockImplementationOnce(() => { throw new Error('record failed'); });
+  else {
+    await run(); time = 260;
+    mock.writeFileSync.mockImplementationOnce((_path, value) => { staged = JSON.parse(value); })
+      .mockImplementationOnce(() => { throw new Error('record failed'); });
+  }
   await run();
   expect(process.exitCode).toBe(1);
   expect(stored.pendingVerifierReplacement).toBeDefined();
   await run();
+  time = 260; await run();
   expect(deploy).toHaveBeenCalledOnce();
   expect(router.activateVerifier).toHaveBeenCalledOnce();
+  expect(registry.activateVerifierSelector).toHaveBeenCalledOnce();
   expect(registry.setVerifierSelector).toHaveBeenCalledTimes(phase === 'activation' ? 2 : 1);
   expect(stored.previous.Groth16Verifier).toBe('old');
 });
 
-test.each(['file', 'chain', 'router', 'registry', 'verifier', 'balance', 'router-binding'])(
+test.each(['file', 'chain', 'router', 'registry', 'verifier', 'balance', 'router-binding', 'signer', 'old-router', 'old-registry'])(
   'rejects invalid %s before deployment', async problem => {
     if (problem === 'file') mock.existsSync.mockReturnValue(false);
     else if (problem === 'chain') stored.chainId = '1';
@@ -130,6 +168,9 @@ test.each(['file', 'chain', 'router', 'registry', 'verifier', 'balance', 'router
     else if (problem === 'registry') delete stored.contracts.ComplianceRegistry;
     else if (problem === 'verifier') delete stored.contracts.Groth16Verifier;
     else if (problem === 'balance') mock.provider.getBalance.mockResolvedValue(0n);
+    else if (problem === 'signer') mock.getSigners.mockResolvedValue([]);
+    else if (problem === 'old-router') router.timelockFloor.mockRejectedValue(new Error('incompatible ABI'));
+    else if (problem === 'old-registry') registry.verifierSelectionDelay.mockRejectedValue(new Error('incompatible ABI'));
     else registry.verifierRouter.mockResolvedValue('different-router');
     await run();
     expect(process.exitCode).toBe(1);
@@ -165,6 +206,7 @@ test.each(['selector', 'pending', 'disabled', 'block'])('refuses unsafe or unava
 
 test('keeps the prior record if atomic publication fails after selection, then resumes', async () => {
   await prepare(); time = 200;
+  await run(); time = 260;
   const publish = mock.renameSync.getMockImplementation()!;
   mock.renameSync.mockImplementationOnce(publish).mockImplementationOnce(() => { throw new Error('rename failed'); });
   await run();
@@ -175,5 +217,38 @@ test('keeps the prior record if atomic publication fails after selection, then r
   await run();
   expect(stored.contracts.Groth16Verifier).toBe('new');
   expect(router.activateVerifier).toHaveBeenCalledOnce();
+  expect(registry.setVerifierSelector).toHaveBeenCalledOnce();
+});
+
+
+test.each(['address', 'disabled'])('rejects an inconsistent completed replacement: %s', async reason => {
+  selected = 'v2'; stored.contracts.Groth16Verifier = 'new';
+  info = { verifier: reason === 'address' ? 'wrong' : 'new', active: false };
+  await run();
+  expect(process.exitCode).toBe(1);
+  expect(deploy).not.toHaveBeenCalled();
+});
+
+test('rejects another pending default without changing it or deploying again', async () => {
+  await prepare(); time = 200; scheduled = 'unrelated';
+  await run();
+  expect(process.exitCode).toBe(1);
+  expect(scheduled).toBe('unrelated');
+  expect(registry.setVerifierSelector).not.toHaveBeenCalled();
+  expect(registry.activateVerifierSelector).not.toHaveBeenCalled();
+  expect(deploy).toHaveBeenCalledOnce();
+});
+
+test('retains the scheduled default if the latest block is unavailable after registration activates', async () => {
+  await prepare(); time = 200;
+  mock.provider.getBlock.mockResolvedValueOnce({ timestamp: 200 }).mockResolvedValueOnce(null);
+  await run();
+  expect(process.exitCode).toBe(1);
+  expect(scheduled).toBe('v2');
+  expect(stored.pendingVerifierReplacement.selectAfter).toBe('260');
+  expect(registry.activateVerifierSelector).not.toHaveBeenCalled();
+  await run(); time = 260; await run();
+  expect(selected).toBe('v2');
+  expect(deploy).toHaveBeenCalledOnce();
   expect(registry.setVerifierSelector).toHaveBeenCalledOnce();
 });
