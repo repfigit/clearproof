@@ -15,7 +15,7 @@ documentation recommendations. GitHub #89 and Linear AIF-89 are separate work.
 | Website dependencies and maintenance | Patched framework, dependency audit disposition, lint/build/browser/link CI, deployed verification | Done; web #12 merged, production Ready and live checks passed |
 | Shared release and publication catalogue | Homepage and docs consume one status/catalogue; future/paused articles not promoted; live links work | Done; production docs/site share 0.7.0 and published catalogue |
 | Documentation accuracy and presentation | Reconciled roadmap/agent guidance, proper Markdown, technical sitemap/metadata, maintained web README | Done; #91/web #12 merged and deployed with browser acceptance |
-| Two onboarding paths | Small synthetic evidence inspection with tamper case; reproducible complete pilot with preflight/recovery; current SDK example first | Implemented and locally verified; full CI, review, merge and hosted verification pending |
+| Two onboarding paths | Small synthetic evidence inspection with tamper case; reproducible complete pilot with preflight/recovery; current SDK example first | Done in #98 after all 23 exact-head checks and approval; production deployment verification pending |
 | Backlog reconciliation | Source/test evidence for every open Linear/GitHub item; delivered work closed and remaining criteria retained | In progress; nine of the original twelve issues closed with evidence |
 | Artifact isolation (GitHub #85) | Explicit test bundles required; incomplete supplied bundles fail; local ambient artifacts ignored | Done; #91 merged and fresh-bundle CI passed; GitHub issue closed |
 | Dependency cleanup (GitHub #86) | Unused drivers removed; locked install and relevant Python tests pass; storage guidance accurate | Done; #91 merged, locked install and full remote CI passed; GitHub issue closed |
@@ -350,3 +350,10 @@ actual external evidence; local tests cannot establish those prerequisites.
   scoped Ed25519 signatures and demonstrate rejection for inspection and proving
   without invoking either backend. All 43 readiness unit checks pass, with 100%
   statement/branch coverage of the route. Updated review and full CI remain required.
+
+- October 5: onboarding #98 merged as `54492bf` after all 23 checks on `4e01fff`
+  passed and an approving review covered that exact revision. This includes fresh
+  both-profile proofs, the source-built native backend, PostgreSQL acceptance,
+  full Python aggregate coverage and normal/coverage contract verification. Its
+  exact-revision production documentation deployment is building. Readiness #99
+  is rebased onto this merge and will run the complete main-targeted CI workflow.
