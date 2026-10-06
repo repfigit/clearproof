@@ -4,6 +4,7 @@ The local bundle's own pin is read for reproducibility only. Production trust
 configuration must be independent; this fixture never approves a policy or key.
 """
 
+import asyncio
 import hashlib
 import json
 import os
@@ -48,6 +49,8 @@ async def test_real_pinned_pairing_and_tampered_proof():
     assert expected == [witness[name] for name in PUBLIC_SIGNALS]
     result = await inspect_current_statement(verifier, proof, signals=signals, **trusted_inputs)
     assert result.cryptographic_valid
+    concurrent = await asyncio.gather(*(verifier.inspect(proof, signals, expected_signals=expected) for _ in range(2)))
+    assert all(item.cryptographic_valid for item in concurrent)
     alternate, _, alternate_inputs = fixture["synthetic_case"](
         artifact_manifest_digest=artifacts.manifest.digest, alternate_credential=True, with_trust=True
     )

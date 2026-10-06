@@ -2,6 +2,7 @@ export default {
   index: 'Introduction',
   status: 'Project Status',
   quickstart: 'Quick Start',
+  evaluate: 'Evaluate Clearproof',
   architecture: 'Architecture',
   'system-diagram': 'System Diagram',
   '---protocol': {

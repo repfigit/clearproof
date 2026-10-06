@@ -49,21 +49,30 @@ registrar operational independence, chain publication or real proof acceptance.
 ## Issuance tree candidates
 
 `build_issuance_tree()` requires an issuer-scoped transaction with encrypted-read
-access. It scans the tenant's enrollment IDs in deterministic order, checks the
+access. It scans the persisted issuer/deployment inventory in deterministic pages, checks the
 issuer and enrollment deployment, re-verifies retained wallet signatures and
 acceptance time, and excludes revoked, expired or screening-failed credentials.
 Identity/commitment inconsistencies and malformed evidence stop construction.
 
-The local pilot scan is capped at 256 total tenant enrollments; excess records
-cause an explicit error, never a partial tree. This bound requires pagination and
-incremental construction work before larger deployments. `PilotTree` uses sparse
-Poseidon nodes with deterministic zero padding and supports depths 1–20 (default
-issuance depth 8). It rejects duplicate IDs/leaves and capacity overflow. Its
-membership witnesses are exercised by the actual credential WASM circuit tests.
+The index is maintained atomically as each enrollment is accepted. Reads verify
+encrypted audience count heads and reject incomplete indexes. Legacy records
+require explicit validated [backfill](pilot-enrollment-inventory.md). The software
+guard is 1,024 scanned records across all configured issuers per refresh,
+including ineligible ones;
+excess records fail explicitly before publication. This guard is not a measured
+operating capacity. `PilotTree` supports depths 1–32; the accepted current profile
+has issuance depth 32 and issuer/sanctions depth 20. It rejects duplicate
+IDs/leaves and capacity overflow. Full revalidation still precedes each root
+publication; index updates do not authorize roots or replace wallet signatures.
 
 The returned private source record binds tenant, issuer, audience, evaluation
 time, depth and sorted credential IDs/commitments. Its canonical digest is the
 snapshot's proposed `source_digest`; source records belong in encrypted evidence.
+Up to 256 leaves retain the existing v1 source and digest. Larger sources use a
+v2 manifest linking 128-entry encrypted pages by canonical domain-separated
+hashes. Registrar publication commits every page, manifest, root and retry
+receipt together. Witness reconstruction checks every page, scope, position,
+length, ordering and the complete tree root before producing a membership path.
 The candidate is not a signed approval. Hold the tenant lock through validation
 and construction. Do not nest `RootPublicationService.publish()` inside that
 transaction. Use `PilotRegistrar.refresh()`, which calls the shared transaction

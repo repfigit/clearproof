@@ -249,6 +249,8 @@ async def test_additive_wallet_migration_preserves_enrollment(db, enrolled):
         assert (await (await conn.execute("SELECT max(version) FROM schema_migrations")).fetchone())[0] == len(
             _SCHEMA_MIGRATIONS
         )
+        await conn.execute("DELETE FROM pilot_records WHERE kind='enrollment-inventory'")
+        await conn.execute("DROP TABLE pilot_enrollment_index")
         await conn.execute(OBSERVATION_MIGRATION)
         await conn.execute("DROP TABLE proof_jobs, proof_job_control")
         await conn.execute("DELETE FROM schema_migrations WHERE version>=20")

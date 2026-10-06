@@ -573,6 +573,11 @@ async def test_durable_revocation_scope_retry_and_proving_precondition(db, monke
     bad["credential_commitment"] = changed_credential.commitment
     async with PilotStore(db, cipher(), principal).transaction() as tx:
         await tx.put("credential", "b" * 64, bad)
+        # A faulted internal writer can index invalid evidence. An authentic
+        # inventory count must not replace retained signature verification.
+        from src.services.enrollment import enrollment_scope
+
+        await tx.index_enrollment("b" * 64, enrollment_scope(changed_consent))
         with pytest.raises(EnrollmentError):
             await load_unrevoked_enrollment(tx, "b" * 64, chain_id=31337, registry_address="0x" + "1" * 40, now=140)
         with pytest.raises(EnrollmentError):
@@ -602,7 +607,7 @@ async def test_durable_revocation_scope_retry_and_proving_precondition(db, monke
                 await load_unrevoked_enrollment(tx, nonce, chain_id=31337, registry_address="0x" + "1" * 40, now=201)
 
 
-async def test_tenant_keyset_scan_and_issuance_capacity_fail_without_truncation(db):
+async def test_tenant_keyset_scan_and_unindexed_issuance_fail_without_truncation(db):
     from src.services.issuance_tree import build_issuance_tree
 
     principal = Principal(
@@ -618,7 +623,7 @@ async def test_tenant_keyset_scan_and_issuance_capacity_fail_without_truncation(
         ids = await tx.record_ids("credential")
         assert len(ids) == 256 and ids[0] == "id-0000" and ids[-1] == "id-0255"
         assert await tx.record_ids("credential", after=ids[-1]) == ["id-0256"]
-        with pytest.raises(ValueError, match="capacity"):
+        with pytest.raises(ValueError, match="inventory is incomplete"):
             await build_issuance_tree(
                 tx, issuer_did="did:web:issuer.example", chain_id=31337, registry_address="0x" + "1" * 40, now=120
             )
@@ -2352,6 +2357,24 @@ async def test_durable_current_inspection_real_pairing_and_revocation(db, monkey
                 assert report["assurance"] == "development-unapproved"
                 assert set(report) == {"schema_version", "scope", "assurance", "receipt"}
                 return report["receipt"]
+
+            # Saturation is transient and must leave no consumption or receipt.
+            from src.prover.pilot_verifier import _PAIRING_SLOTS, PAIRING_PROCESS_LIMIT
+
+            async with db.connection() as conn:
+                before_busy = (await (await conn.execute("SELECT count(*) FROM pilot_records")).fetchone())[0]
+            for _ in range(PAIRING_PROCESS_LIMIT):
+                assert _PAIRING_SLOTS.acquire(blocking=False)
+            try:
+                busy = await invoke_authorization({"idempotency_key": "consume-once"})
+                assert busy.status_code == 503 and busy.headers["Retry-After"] == "1"
+                assert "receipt" not in busy.json()
+            finally:
+                for _ in range(PAIRING_PROCESS_LIMIT):
+                    _PAIRING_SLOTS.release()
+            async with db.connection() as conn:
+                assert (await (await conn.execute("SELECT count(*) FROM pilot_records")).fetchone())[0] == before_busy
+                assert (await (await conn.execute("SELECT count(*) FROM pilot_consumptions")).fetchone())[0] == 0
 
             # Different request keys compete for the same real proof nullifier.
             contenders = ("consume-once", "competing-spend")

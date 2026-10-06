@@ -12,6 +12,7 @@ from src.prover.pilot_current import expected_current_signals
 from src.registry.pilot_sanctions import PilotSanctionsTree
 from src.registry.pilot_tree import ISSUANCE_TREE_DEPTH, ISSUER_TREE_DEPTH, PilotTree
 from src.registry.poseidon import poseidon_hash
+from src.services.issuance_source import issuance_source_domain, load_issuance_entries
 from src.services.proof_inspection import ProofInspectionService
 
 
@@ -54,7 +55,12 @@ class ProofPreparationService(ProofInspectionService):
             for name, domain in (("issuance", "issuance"), ("issuers", "issuer")):
                 snapshot = self._inputs[name].snapshot
                 source = await tx.get("root-source", snapshot.source_digest)
-                if source is None or record_digest(f"clearproof/{domain}-source/v1", source) != snapshot.source_digest:
+                source_domain = (
+                    issuance_source_domain(source)
+                    if name == "issuance" and source is not None
+                    else f"clearproof/{domain}-source/v1"
+                )
+                if source is None or record_digest(source_domain, source) != snapshot.source_digest:
                     raise RootTrustError("Retained registrar source is missing or inconsistent")
                 if any(
                     source.get(key) != value
@@ -72,7 +78,7 @@ class ProofPreparationService(ProofInspectionService):
             if issuance_source.get("issuer_did") != credential.issuer_did:
                 raise RootTrustError("Retained issuance source issuer differs")
             issuance_tree = PilotTree(
-                [(entry["credential_id"], entry["commitment"]) for entry in issuance_source["entries"]],
+                await load_issuance_entries(tx, issuance_source),
                 depth=ISSUANCE_TREE_DEPTH,
             )
             if (credential_id, credential.commitment) not in issuance_tree.entries:

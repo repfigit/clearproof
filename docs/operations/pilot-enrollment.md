@@ -69,3 +69,7 @@ precondition, not a historical verifier or complete proving authorization check.
 The composed prover and root builder must call it at their transaction boundary;
 those integrations and independently authenticated revocation evidence remain
 open. This API does not update deployed contracts or the legacy credential route.
+
+Accepted enrollment also updates the opaque audience index and encrypted count
+head in the same transaction. Discovery and retained-record migration are
+documented in [inventory and backfill](pilot-enrollment-inventory.md).

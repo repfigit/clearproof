@@ -304,3 +304,75 @@ async def test_observation_conflict_has_stable_http_status(inspection_case, monk
         response = await client.post("/pilot/proof/observe", json={})
     assert response.status_code == 409
     assert response.json() == {"detail": "Observation request or idempotency conflict"}
+
+
+@pytest.mark.parametrize("operation", ["inspect", "evaluate", "observe"])
+async def test_pairing_saturation_is_retryable_service_unavailability(inspection_case, monkeypatch, operation):
+    from unittest.mock import Mock
+
+    from src.prover.pilot_verifier import PairingCapacityExceeded
+
+    app, routes, values = inspection_case
+    model = {"inspect": routes.InspectionBody, "evaluate": routes.EvaluationBody, "observe": routes.ObservationBody}[
+        operation
+    ]
+    extra = {} if operation == "inspect" else {"fact_ids": ()}
+    if operation == "observe":
+        extra["idempotency_key"] = "synthetic-retry"
+    body = model.model_validate({**values, **extra})
+    called = AsyncMock(side_effect=PairingCapacityExceeded("SYNTHETIC-PRIVATE-DETAIL"))
+    service = SimpleNamespace(**{operation: called})
+    target = SimpleNamespace(fact_trust=Mock(spec=routes.FactTrustStore))
+    monkeypatch.setattr(routes, "prepare_inspection", AsyncMock(return_value=(service, target, body, b"{}", ())))
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        response = await client.post(f"/pilot/proof/{operation}", json={})
+    assert response.status_code == 503
+    assert response.headers["Retry-After"] == "1"
+    assert response.json() == {"detail": "Pilot pairing capacity is temporarily unavailable"}
+    assert "PRIVATE" not in response.text
+    called.assert_awaited_once()
+
+
+async def test_authorization_saturation_returns_unavailability_without_a_receipt(route_case, monkeypatch):
+    from unittest.mock import Mock
+
+    from src.api.routes import authorization as routes
+    from src.prover.pilot_verifier import PairingCapacityExceeded
+
+    app, _ = route_case
+    app.include_router(routes.router)
+    principal = Principal(
+        tenant_id="synthetic-tenant",
+        actor_id="synthetic-actor",
+        roles=("proof:consume", "proof:generate", "proof:inspect", "policy:read", "evidence:decrypt"),
+    )
+    app.dependency_overrides[TenantPrincipalDependency] = lambda: principal
+    body = routes.AuthorizationBody(
+        target_id="synthetic-target",
+        credential_id="synthetic-credential",
+        proof_json="{}",
+        public_signals=["0"] * 8,
+        fact_ids=(),
+        idempotency_key="synthetic-retry",
+    )
+    information = Mock(spec=routes.SealedAuthorizationInformation)
+    information.open.return_value = (b"synthetic-information", None)
+    target = SimpleNamespace(
+        fact_trust=Mock(spec=routes.FactTrustStore),
+        information_trust=Mock(spec=routes.InformationTrustStore),
+        decision_signer=Mock(spec=routes.DecisionSigner),
+        recipient_trust=Mock(spec=routes.RecipientTrustStore),
+        recipient_key_id="synthetic-recipient",
+        information=information,
+        verifier=SimpleNamespace(
+            artifacts=SimpleNamespace(manifest=SimpleNamespace(assurance="development-unapproved"))
+        ),
+    )
+    service = SimpleNamespace(authorize=AsyncMock(side_effect=PairingCapacityExceeded("SYNTHETIC-PRIVATE-DETAIL")))
+    monkeypatch.setattr(routes, "prepare_inspection", AsyncMock(return_value=(service, target, body, b"{}", ())))
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        response = await client.post("/pilot/proof/authorize", json={})
+    assert response.status_code == 503 and response.headers["Retry-After"] == "1"
+    assert response.json() == {"detail": "Pilot pairing capacity is temporarily unavailable"}
+    assert "receipt" not in response.json() and "PRIVATE" not in response.text
+    service.authorize.assert_awaited_once()

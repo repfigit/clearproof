@@ -38,3 +38,12 @@ broad benefits from a small selected sample.
 The [observability guide](pilot-observability.md) covers operational diagnosis.
 The [usage inventory](usage-inventory.md) describes metadata counters; it is not
 an activity, adoption or billing ledger.
+
+## Start and share an evaluation
+
+The [public evaluation page](https://docs.clearproof.world/docs/evaluate) links
+both onboarding paths and the voluntary feedback form. Copy the
+[report template](../evaluation/report-template.md) and compare it with the
+[internal synthetic sample](../evaluation/example-synthetic-report.md).
+The sample retains unmeasured values and simulator/clean-environment limits;
+it is not evidence of a real operator or counterparty evaluation.

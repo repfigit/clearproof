@@ -1,0 +1,43 @@
+{
+  "checkedAt": "2026-10-06",
+  "registry": "https://registry.npmjs.org",
+  "npmVersion": "0.6.0",
+  "sourceVersion": "0.7.0",
+  "packages": [
+    {
+      "name": "@clearproof/proof",
+      "version": "0.6.0",
+      "sourceVersionPublished": false,
+      "integrity": "sha512-TBC6HJODlk5LCoTgfbNNIg9RAGFbfQuSMt8ayoC6KpWtdhe/W0xZIpu/4NNZik2kgpsdtVcuV2WOmi2+iOunOA==",
+      "attestationsUrl": "https://registry.npmjs.org/-/npm/v1/attestations/@clearproof%2fproof@0.6.0"
+    },
+    {
+      "name": "@clearproof/cli",
+      "version": "0.6.0",
+      "sourceVersionPublished": false,
+      "integrity": "sha512-MJK43zpQ0Um7YjIo6x0Lnor2oBGOt2+sEcvzcq+X+Ja+p0JHXQe9V5/HnJjttRXo66XKDfcdPakVEHo1Fv4u8w==",
+      "attestationsUrl": "https://registry.npmjs.org/-/npm/v1/attestations/@clearproof%2fcli@0.6.0"
+    },
+    {
+      "name": "@clearproof/content",
+      "version": "0.6.0",
+      "sourceVersionPublished": false,
+      "integrity": "sha512-VGsGB8VpcyVsax/JZu2yCAVUuu4v5ybHT3CraeHXb1i2xLMY+A8lmpMXUkqwv7b57koy/qC7B6XTGMyzcnNo5g==",
+      "attestationsUrl": "https://registry.npmjs.org/-/npm/v1/attestations/@clearproof%2fcontent@0.6.0"
+    },
+    {
+      "name": "@clearproof/contracts",
+      "version": "0.6.0",
+      "sourceVersionPublished": false,
+      "integrity": "sha512-v1oJItUeXc/ubLm9eCbfcLPHnTTs3EYxdF9OXP3v9BewHUQ1x9/dHxLSlZrGiJeJ9J8ESqpm08FDfjfHzrkvYA==",
+      "attestationsUrl": "https://registry.npmjs.org/-/npm/v1/attestations/@clearproof%2fcontracts@0.6.0"
+    },
+    {
+      "name": "@clearproof/circuits",
+      "version": "0.6.0",
+      "sourceVersionPublished": false,
+      "integrity": "sha512-qHnKwMOiwh8i5kYHWK9UIThyiPSfLY3oSRhyH29OwfDsSXs84yBci8awqhGDlbhhgzzrXGmKXjCK8r6zCDM2Cw==",
+      "attestationsUrl": "https://registry.npmjs.org/-/npm/v1/attestations/@clearproof%2fcircuits@0.6.0"
+    }
+  ]
+}

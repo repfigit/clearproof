@@ -9,6 +9,7 @@ from typing import AsyncIterator
 import psycopg
 from psycopg_pool import AsyncConnectionPool
 
+from src.storage.enrollment_inventory_schema import ENROLLMENT_INVENTORY_MIGRATION
 from src.storage.pilot_schema import (
     AUTHORIZATION_EVIDENCE_MIGRATION,
     EVENT_INDEX_MIGRATION,
@@ -139,6 +140,7 @@ _SCHEMA_MIGRATIONS = [
     PUBLICATION_ATTEMPTS_MIGRATION,
     WALLET_OWNERSHIP_MIGRATION,
     PROOF_JOBS_MIGRATION,
+    ENROLLMENT_INVENTORY_MIGRATION,
 ]
 
 SCHEMA_VERSION = len(_SCHEMA_MIGRATIONS)

@@ -13,6 +13,8 @@ from src.prover.pilot_artifacts import InspectedArtifacts, PilotArtifactManifest
 from src.prover.pilot_compliance import PUBLIC_SIGNALS
 from src.prover.pilot_verifier import (
     BASE_FIELD,
+    PAIRING_PROCESS_LIMIT,
+    PairingCapacityExceeded,
     PilotPairingVerifier,
     PilotProof,
     ProofInspectionError,
@@ -269,6 +271,9 @@ async def test_cancellation_during_spawn_retains_process_ownership(tmp_path, art
             task.cancel()
             # Deliver cancellation while the shielded spawn still owns the child.
             await asyncio.sleep(0)
+            task.cancel()
+            await asyncio.sleep(0)
+            assert not task.done()
             release.set()
             with pytest.raises(asyncio.CancelledError):
                 await task
@@ -314,3 +319,80 @@ async def test_process_exit_race_during_cleanup_is_reaped(tmp_path, artifacts, m
     assert not owned["script"].parent.exists()
     with pytest.raises(ProcessLookupError):
         os.kill(owned["process"].pid, 0)
+
+
+async def test_shared_pairing_limit_rejects_without_spawn_and_holds_slots_through_cleanup(
+    tmp_path, artifacts, monkeypatch
+):
+    assert PAIRING_PROCESS_LIMIT == 2
+    original_spawn = asyncio.create_subprocess_exec
+    spawned = []
+    cleaning = asyncio.Event()
+    release_cleanup = asyncio.Event()
+
+    async def track_spawn(*args, **kwargs):
+        proc = await original_spawn(*args, **kwargs)
+        spawned.append(proc)
+        if len(spawned) == 1:
+            original_wait = proc.wait
+
+            async def delayed_wait():
+                result = await original_wait()
+                cleaning.set()
+                await release_cleanup.wait()
+                return result
+
+            proc.wait = delayed_wait
+        return proc
+
+    monkeypatch.setattr(asyncio, "create_subprocess_exec", track_spawn)
+    tasks = []
+    proof = json.dumps(synthetic_proof()).encode()
+    signals = ["0"] * 8
+    for index in range(PAIRING_PROCESS_LIMIT):
+        folder = tmp_path / str(index)
+        folder.mkdir()
+        verifier = runtime(
+            folder, artifacts, b"const snarkjs={groth16:{verify:async()=>new Promise(()=>{setInterval(()=>{},1000)})}};"
+        )
+        tasks.append(asyncio.create_task(verifier.inspect(proof, signals, expected_signals=signals, timeout=60)))
+    extra_folder = tmp_path / "extra"
+    extra_folder.mkdir()
+    extra = runtime(extra_folder, artifacts, b"const snarkjs={groth16:{verify:async()=>true}};")
+    try:
+        async with asyncio.timeout(5):
+            while len(spawned) < PAIRING_PROCESS_LIMIT:
+                await asyncio.sleep(0.01)
+            with pytest.raises(PairingCapacityExceeded, match="^pairing_capacity_exceeded$"):
+                await extra.inspect(proof, signals, expected_signals=signals)
+            assert len(spawned) == PAIRING_PROCESS_LIMIT
+            tasks[0].cancel()
+            await cleaning.wait()
+            tasks[0].cancel()
+            await asyncio.sleep(0)
+            tasks[0].cancel()
+            await asyncio.sleep(0)
+            assert not tasks[0].done()
+            with pytest.raises(PairingCapacityExceeded):
+                await extra.inspect(proof, signals, expected_signals=signals)
+            assert len(spawned) == PAIRING_PROCESS_LIMIT
+            release_cleanup.set()
+            with pytest.raises(asyncio.CancelledError):
+                await tasks[0]
+            assert (await extra.inspect(proof, signals, expected_signals=signals)).cryptographic_valid
+            tasks[1].cancel()
+            with pytest.raises(asyncio.CancelledError):
+                await tasks[1]
+        for proc in spawned:
+            assert proc.returncode is not None
+            with pytest.raises(ProcessLookupError):
+                os.kill(proc.pid, 0)
+    finally:
+        release_cleanup.set()
+        for task in tasks:
+            if not task.done():
+                task.cancel()
+        await asyncio.gather(*tasks, return_exceptions=True)
+    # Both slots are reusable after failures/cancellation, across verifier objects.
+    results = await asyncio.gather(*(extra.inspect(proof, signals, expected_signals=signals) for _ in range(2)))
+    assert all(result.cryptographic_valid for result in results)

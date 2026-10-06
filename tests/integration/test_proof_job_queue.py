@@ -67,7 +67,6 @@ async def test_request_result_privacy_and_reconnect(queue, db):
 
 
 async def test_prequeue_schema_upgrade_preserves_encrypted_tenant_evidence(queue, db):
-    from src.storage.database import _SCHEMA_MIGRATIONS
     from tests.integration.test_pilot_storage import store
 
     retained = store(db)
@@ -76,8 +75,8 @@ async def test_prequeue_schema_upgrade_preserves_encrypted_tenant_evidence(queue
     before = await retained.read("credential", "synthetic-record")
     async with db.connection() as conn:
         assert (await (await conn.execute("SELECT count(*) FROM proof_jobs")).fetchone())[0] == 0
-        await conn.execute("DROP TABLE proof_jobs, proof_job_control")
-        await conn.execute("DELETE FROM schema_migrations WHERE version=%s", (len(_SCHEMA_MIGRATIONS),))
+        await conn.execute("DROP TABLE proof_jobs, proof_job_control, pilot_enrollment_index")
+        await conn.execute("DELETE FROM schema_migrations WHERE version>=21")
     await db.close()
     await db.connect()
     assert await retained.read("credential", "synthetic-record") == before

@@ -23,6 +23,7 @@ from src.storage.database import Database
 from src.storage.pilot_cipher import RecordCipher
 
 _WRITE_ROLES = {
+    "enrollment-inventory": "credential:issue",
     "wallet-challenge": "credential:issue",
     "wallet-challenge-slot": "credential:issue",
     "wallet-quota": "credential:issue",
@@ -236,7 +237,14 @@ class PilotTransaction:
         if (row is None and expected_revision is not None) or (row and row["revision"] != expected_revision):
             raise RecordConflict("Record already exists or expected revision differs")
         # Proofs/events/receipts/revocations/idempotency results are append-only.
-        if row and kind not in ("issuance-root", "issuer-root", "sanctions-root", "policy-activation", "wallet-quota"):
+        if row and kind not in (
+            "issuance-root",
+            "issuer-root",
+            "sanctions-root",
+            "policy-activation",
+            "wallet-quota",
+            "enrollment-inventory",
+        ):
             raise RecordConflict("Pilot record is immutable")
         revision = (row["revision"] if row else 0) + 1
         sealed = self._cipher.seal(self._principal.tenant_id, kind, record_id, revision, value)
@@ -256,6 +264,118 @@ class PilotTransaction:
             ),
         )
         return revision
+
+    async def index_enrollment(self, record_id: str, scope_digest: str) -> None:
+        self._check_open()
+        self._principal.require("credential:issue")
+        if not all(type(v) is str and re.fullmatch(r"[0-9a-f]{64}", v) for v in (record_id, scope_digest)):
+            raise ValueError("Invalid enrollment index binding")
+        inserted = await (
+            await self._conn.execute(
+                "INSERT INTO pilot_enrollment_index (tenant_id,record_id,scope_digest) VALUES (%s,%s,%s) "
+                "ON CONFLICT (tenant_id,record_id) DO NOTHING RETURNING record_id",
+                (self.tenant_id, record_id, scope_digest),
+            )
+        ).fetchone()
+        row = await (
+            await self._conn.execute(
+                "SELECT scope_digest FROM pilot_enrollment_index WHERE tenant_id=%s AND record_id=%s",
+                (self.tenant_id, record_id),
+            )
+        ).fetchone()
+        if row != (scope_digest,):
+            raise RecordConflict("Enrollment index scope differs")
+        # Encrypted per-audience counts authenticate index completeness. This
+        # internal write path does not expose private records to an issue-only
+        # caller; service enrollment verification still establishes issuer scope.
+        head = await self._row("enrollment-inventory", scope_digest)
+        if head is None:
+            scopes = await (
+                await self._conn.execute(
+                    "SELECT count(DISTINCT scope_digest) FROM pilot_enrollment_index WHERE tenant_id=%s",
+                    (self.tenant_id,),
+                )
+            ).fetchone()
+            if scopes[0] > 256:
+                raise RecordConflict("Enrollment inventory audience capacity exceeded")
+        count = 0
+        if head:
+            value = self._cipher.open(self.tenant_id, "enrollment-inventory", scope_digest, head)
+            if (
+                type(value.get("count")) is not int
+                or not 1 <= value["count"] < 2**53 - 1
+                or value.get("scope_digest") != scope_digest
+            ):
+                raise RecordConflict("Enrollment inventory head is inconsistent")
+            count = value["count"]
+        expected = count + (1 if inserted else 0)
+        actual = await (
+            await self._conn.execute(
+                "SELECT count(*) FROM pilot_enrollment_index WHERE tenant_id=%s AND scope_digest=%s",
+                (self.tenant_id, scope_digest),
+            )
+        ).fetchone()
+        if actual != (expected,):
+            raise RecordConflict("Enrollment inventory count differs")
+        if inserted:
+            await self._put(
+                "enrollment-inventory",
+                scope_digest,
+                dict(scope_digest=scope_digest, count=expected),
+                head["revision"] if head else None,
+            )
+
+    async def check_enrollment_inventory(self) -> None:
+        self._check_open()
+        self._principal.require("evidence:decrypt")
+        row = await (
+            await self._conn.execute(
+                "SELECT EXISTS (SELECT 1 FROM pilot_records r WHERE r.tenant_id=%s AND r.kind='credential' "
+                "AND NOT EXISTS (SELECT 1 FROM pilot_enrollment_index i "
+                "WHERE i.tenant_id=r.tenant_id AND i.record_id=r.record_id))",
+                (self.tenant_id,),
+            )
+        ).fetchone()
+        if row != (False,):
+            raise ValueError("Enrollment inventory is incomplete; validated backfill is required")
+        scopes = await (
+            await self._conn.execute(
+                "SELECT scope_digest,count(*) FROM pilot_enrollment_index WHERE tenant_id=%s "
+                "GROUP BY scope_digest ORDER BY scope_digest LIMIT 257",
+                (self.tenant_id,),
+            )
+        ).fetchall()
+        ids = await self.record_ids("enrollment-inventory")
+        if (
+            len(scopes) > 256
+            or [scope for scope, _ in scopes] != ids
+            or (len(ids) == 256 and await self.record_ids("enrollment-inventory", after=ids[-1], limit=1))
+        ):
+            raise ValueError("Enrollment inventory scope set differs or exceeds capacity")
+        for scope, count in scopes:
+            head = await self.get("enrollment-inventory", scope)
+            if head is None or type(head.get("count")) is not int or head != dict(scope_digest=scope, count=count):
+                raise ValueError("Enrollment inventory count differs")
+
+    async def enrollment_ids(self, scope_digest: str, *, after: str | None = None, limit: int = 64) -> list[str]:
+        self._check_open()
+        self._principal.require("evidence:decrypt")
+        if (
+            type(limit) is not int
+            or not 1 <= limit <= 65
+            or type(scope_digest) is not str
+            or not re.fullmatch(r"[0-9a-f]{64}", scope_digest)
+            or (after is not None and (type(after) is not str or not re.fullmatch(r"[0-9a-f]{64}", after)))
+        ):
+            raise ValueError("Invalid enrollment inventory page")
+        rows = await (
+            await self._conn.execute(
+                "SELECT record_id FROM pilot_enrollment_index WHERE tenant_id=%s AND scope_digest=%s "
+                "AND record_id>%s ORDER BY record_id LIMIT %s",
+                (self.tenant_id, scope_digest, after or "", limit),
+            )
+        ).fetchall()
+        return [row[0] for row in rows]
 
     async def event_scopes(self, *, after: str | None, limit: int) -> list[str]:
         self._check_open()

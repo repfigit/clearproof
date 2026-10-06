@@ -13,18 +13,18 @@ documentation recommendations. GitHub #89 and Linear AIF-89 are separate work.
 | Work | Completion evidence | State |
 | --- | --- | --- |
 | Website dependencies and maintenance | Patched framework, dependency audit disposition, lint/build/browser/link CI, deployed verification | Done; web #12 merged, production Ready and live checks passed |
-| Shared release and publication catalogue | Homepage and docs consume one status/catalogue; future/paused articles not promoted; live links work | Done; production docs/site share 0.7.0 and published catalogue |
+| Shared release and publication catalogue | Homepage and docs consume one status/catalogue; future/paused articles not promoted; live links work | Shared catalogue deployed; the 0.6.0 npm / 0.7.0 source correction is consolidated in integration #103, pending merge and production verification |
 | Documentation accuracy and presentation | Reconciled roadmap/agent guidance, proper Markdown, technical sitemap/metadata, maintained web README | Done; #91/web #12 merged and deployed with browser acceptance |
-| Two onboarding paths | Small synthetic evidence inspection with tamper case; reproducible complete pilot with preflight/recovery; current SDK example first | Done in #98 after all 23 exact-head checks and approval; production deployment verification pending |
+| Two onboarding paths | Small synthetic evidence inspection with tamper case; reproducible complete pilot with preflight/recovery; current SDK example first | Done; #98 merged after 23 exact-head checks and exact approval, with production docs Ready and live guidance verified |
 | Backlog reconciliation | Source/test evidence for every open Linear/GitHub item; delivered work closed and remaining criteria retained | In progress; nine of the original twelve issues closed with evidence |
 | Artifact isolation (GitHub #85) | Explicit test bundles required; incomplete supplied bundles fail; local ambient artifacts ignored | Done; #91 merged and fresh-bundle CI passed; GitHub issue closed |
 | Dependency cleanup (GitHub #86) | Unused drivers removed; locked install and relevant Python tests pass; storage guidance accurate | Done; #91 merged, locked install and full remote CI passed; GitHub issue closed |
 | Proving execution (GitHub #87) | Correct service scope; durable bounded jobs, privacy-safe input/output, retries/cancellation/concurrency/freshness tests | Done; #94 merged after full exact-head CI and approval, GitHub issue closed |
 | Native proving benchmark (GitHub #88) | Equivalent current-profile benchmark; measured backend decision; pinned optional backend if justified | Done; #95 merged after final-head CI and active approval; GitHub issue closed and native deployment guidance verified live |
 | Canonical constants (GitHub #89) | Structured profile source, generated runtime constants, drift gate and cross-runtime compatibility tests | Done; #93 merged after full current-head CI and approval; GitHub issue closed |
-| Operational preflight and software scale | Scoped authenticated readiness checks, bounded cryptographic execution, paginated persisted inventories and measured limits | Local acceptance preflight and authenticated target configuration readiness implemented; readiness CI/review and remaining scale work pending |
+| Operational preflight and software scale | Scoped authenticated readiness checks, bounded cryptographic execution, paginated persisted inventories and measured limits | Readiness #99 merged and deployed; pairing and inventory are jointly validated in #103 with measured limits, awaiting latest-revision CI/review, merge and deployment |
 | Legacy configuration/parity and migration issues | AIF-158/89 hardened with compatibility; AIF-119/100 reconciled; AIF-67/99/65 remaining acceptance explicitly verified | In progress; AIF-158/119/89/100 merged or reconciled and closed; AIF-67/99/65 remain open |
-| External evaluation and adoption | Evaluation/feedback entry point and sample report; permitted real operator/counterparty evaluation with retained measurements | Pending; external access not yet established |
+| External evaluation and adoption | Evaluation/feedback entry point and sample report; permitted real operator/counterparty evaluation with retained measurements | Entry, feedback form and internal sample jointly validated in core #103; website #18 approved with passing CI. Merge/deployment and a permitted real partner evaluation remain outstanding |
 | Production assurance | Existing F1–F5 start conditions preserved; independently reviewed artifacts, audits and live interoperability cannot be inferred from local tests | External gates remain open |
 
 ## Verified tracker reconciliation
@@ -357,3 +357,123 @@ actual external evidence; local tests cannot establish those prerequisites.
   full Python aggregate coverage and normal/coverage contract verification. Its
   exact-revision production documentation deployment is building. Readiness #99
   is rebased onto this merge and will run the complete main-targeted CI workflow.
+
+- October 6: readiness #99 merged as `9dc5ec5` after all 23 latest exact-head
+  checks passed and active approval covered unchanged production source.
+  Production docs `dpl_FFGYwdP3kLgaavYs2WaUMgeKJmTw` are Ready from that
+  exact merge; live API and deployment guidance passed. Pairing #100 is rebased
+  onto this main and running fresh exact-head checks; its older approval is not
+  treated as approval of new production source.
+- October 6: encrypted enrollment inventory is maintained atomically on issuance,
+  discovered in private 64-entry pages, and migrated by explicit validated admin
+  backfill. Encrypted count heads detect incomplete indexes. Larger issuance
+  sources use authenticated 128-entry pages; existing sources up to 256 leaves
+  preserve their format/digest. A real accepted-profile proof from 258 enrolled
+  leaves and a 32-sibling witness independently verified; deleting a source page
+  prevents preparation. Initial broader PostgreSQL regression: 338 passed.
+  A synthetic scan benchmark found 1,024 entries took about 17 seconds to build
+  a root on the measured host. The construction guard is consequently 1,024
+  scanned records across all configured issuers per refresh, retaining the
+  30-second transaction timeout. Final measurements/checks, review, merge and
+  hosted verification remain required; this is not a production capacity claim.
+
+- October 6: final inventory acceptance: 104 passed, with 100% statement/branch
+  coverage across inventory, issuance source and tree construction. The shared
+  registrar budget counts expired/revoked entries and rolls back partial roots;
+  real PostgreSQL API/backfill, audience limit, missing-head and exact retry
+  cases passed. Final three-sample root medians: 1.041 / 4.319 / 8.401 / 16.730 s
+  at 64 / 256 / 512 / 1,024 entries; first 64-entry pages remain 0.72–0.77 s.
+  Receipts, source hashes, reproducible commands and exclusions are committed
+  under `docs/benchmarks/2026-10-06-pilot-enrollment-inventory.*`. Documentation
+  checks (115) and content checks (25), plus production docs build, passed.
+  Updated full regression, remote CI, approval, merge and hosted guidance
+  verification remain required.
+
+- October 6: updated full inventory/storage/queue/wallet/publication regression:
+  355 passed. Another 32 route, real proving-job and paged-source persistence
+  checks passed, including corrupted-page rollback and safe page reuse. The
+  two focused suites together exercise every statement and branch in all eight
+  changed runtime modules. Benchmark source hashes match the implementation.
+  Ruff/format, diff checks and REUSE pass. Remote full CI/review, merge and
+  production-hosted guidance verification remain outstanding.
+
+- October 6: the shared public capacity catalogue and ADR 0011 still described
+  the old 256-record software guard. They now match the implemented 1,024-record
+  shared refresh budget, paged encrypted inventory and measured synthetic
+  latency, while explicitly retaining the production-scale incremental-tree
+  requirement and lack of demonstrated production throughput. Updated source
+  checks, full CI and review remain required before publication.
+
+- October 6: authoritative npm metadata contradicts the earlier 0.7.0 publication
+  claim: all five packages currently publish 0.6.0, and 0.7.0 is unavailable.
+  Retrieved 0.6.0 tarballs confirm pilot-transfer-v3 sources/SDK support, while
+  registry metadata includes signatures and attestation URLs. The public
+  catalogue now separates npm 0.6.0 from workspace/source 0.7.0, and current
+  install commands and README/SDK/CLI guidance use the available release.
+  Earlier publication assertions in this execution log are superseded by this
+  registry check. Updated documentation acceptance, CI, review and deployment
+  verification remain required.
+
+- October 6: corrected-release documentation acceptance: content 25, docs 115,
+  production docs build and all 84 desktop/mobile/Firefox/WebKit browser checks
+  passed. The five packed 0.6.0 tarballs match registry SHA512 integrity; SDK
+  exports and current profile were inspected. The release snapshot is retained
+  in `docs/releases/2026-10-06-npm.*` and public facts are checked against it.
+
+- October 6: the evaluation workflow now includes a documentation entry, a
+  voluntary synthetic-feedback form, a report template and a curated internal
+  acceptance example. Missing revision, environment, attempt and timing evidence
+  remains explicitly unknown in that example. The guide distinguishes pairing,
+  source authenticity, policy, consumption and counterparty acceptance. No real
+  evaluation partner is established; a permitted external evaluation remains
+  outstanding. Final combined-source validation, CI/review, merge and hosted
+  verification remain required before announcing these entry points.
+
+- October 6: the evaluation branch includes the corrected release/capacity
+  catalogue and passed 25 content checks, 115 documentation checks, production
+  build and all 88 desktop/mobile/Firefox/WebKit browser checks. REUSE and diff
+  checks pass. Website #18 passed lint, 22 unit checks, build/typecheck and eight
+  browser checks. Its promotion depends on the hosted evaluation route becoming
+  available. These checks establish the entry workflow, not an external trial.
+
+
+- October 5: process-shared pairing admission now limits all verifier instances
+  to two active children per Python process, rejects saturation without a new
+  process or waiting queue, and retains slots through repeated cancellation and
+  reaping. Pilot inspection/evaluation/observation/authorization report retryable
+  503, and durable workers preserve bounded retries. Runtime/HTTP checks: 124
+  initially passed at 100% verifier coverage; worker tests: 24 passed at 100%.
+  Actual current-profile positive/tampered pairing and two concurrent real
+  pairings passed. Eighteen warmup/measured synthetic pairings on four cores
+  accepted: two-child median request time 0.249 s and maximum sampled aggregate
+  child RSS 152.0 MiB. This is pairing-only evidence, not service capacity or an
+  SLA. Persisted/incremental inventories and further scale work remain open.
+
+- October 5: pairing saturation was exercised through real PostgreSQL and the
+  current authorization service with actual proofs. HTTP 503 creates no new
+  record, receipt or nullifier consumption, and the same idempotency key can
+  subsequently succeed. All 73 authorization/HTTP checks passed with 100%
+  authorization-route coverage. Documentation: 115 checks and a production
+  build passed; content: 25 checks and build passed. Full CI, approval and
+  hosted guidance verification remain required for this change.
+
+- October 6: the integration branch combines pairing #100, inventory/release
+  #101 and evaluation #102 without changing their runtime implementations. API
+  guidance retains both limits and removes a duplicate proving paragraph. The
+  original pairing/inventory approvals reference older production revisions, so
+  this combined source will receive fresh complete CI and review before merge.
+  Existing PRs retain their evidence and will be superseded only after the new
+  integration PR is established. Real testnet measurements, the wallet-profile
+  decision and external evaluation/production assurance gates remain open.
+
+- October 6: core integration #103 supersedes #100–#102, which retain their
+  commits and review history. The complete combined regression at `04ff0ff`
+  passed 3,190 tests with two optional local-EVM skips and 100% measured src
+  statement/branch coverage (9,988 statements; 2,502 branches). All 14 changed
+  runtime modules match their validated source branches exactly. Content: 25,
+  CLI: 184, SDK: 223 and documentation: 116 tests pass at 100% measured workspace
+  coverage; production builds and all 88 documentation browser checks pass.
+  Ruff lint/scoped format, signal drift, REUSE and diff checks pass. The hosted
+  exact-revision preview is Ready. Fresh required CI/review, merge and production
+  deployment verification remain required; external evaluation and the original
+  three unfinished Linear acceptance criteria remain open.

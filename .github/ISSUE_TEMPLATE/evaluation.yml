@@ -1,0 +1,63 @@
+name: Evaluation feedback
+description: Record synthetic reproduction and evidence-review results, including incomplete attempts.
+title: "[Evaluation]: "
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Follow the [evaluation guide](https://docs.clearproof.world/docs/evaluate).
+        Public reports use synthetic data. Exclude keys, private URLs, decrypted envelopes and real customer records.
+        Security findings belong in the [private advisory channel](https://github.com/repfigit/clearproof/security/advisories/new).
+  - type: dropdown
+    id: evaluation-type
+    attributes:
+      label: Evaluation type
+      options:
+        - Internal synthetic rehearsal
+        - Independent evaluation with synthetic cases
+        - Permitted counterparty trial (public synthetic summary only)
+    validations:
+      required: true
+  - type: textarea
+    id: task
+    attributes:
+      label: Task and expected result
+      description: State the review task, reviewer role and predefined success criteria; distinguish pairing, policy, consumption and acceptance.
+    validations:
+      required: true
+  - type: textarea
+    id: environment
+    attributes:
+      label: Reproduction and environment
+      description: Source revision, tool/package versions, proof profile, artifact manifest digest and exact synthetic commands. No secrets or private URLs.
+    validations:
+      required: true
+  - type: textarea
+    id: results
+    attributes:
+      label: Observed outcomes and attempts
+      description: Keep complete, incomplete and error outcomes visible, including stale/missing/tampered cases and manual intervention. Include denominators.
+    validations:
+      required: true
+  - type: textarea
+    id: measurements
+    attributes:
+      label: Measurements and limits
+      description: Installation time, active review time and wall-clock time separately. Mark unmeasured values unknown; explain sample size and comparison method.
+  - type: textarea
+    id: findings
+    attributes:
+      label: Useful or missing evidence and next decision
+      description: State what the result supports, what remains unknown and what should happen next.
+    validations:
+      required: true
+  - type: dropdown
+    id: reported-by
+    attributes:
+      label: Reported by
+      options:
+        - A person
+        - An AI agent, reviewed by a person
+        - An AI agent, unreviewed
+    validations:
+      required: true
