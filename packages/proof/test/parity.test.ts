@@ -14,15 +14,24 @@ const vectorDir = path.resolve(__dirname, '../../../tests/vectors/compliance');
 const proofPath = path.join(vectorDir, 'proof.json');
 const publicPath = path.join(vectorDir, 'public.json');
 const vkeyPath = path.join(vectorDir, 'verification_key.json');
-const vectorPresent = [proofPath, publicPath, vkeyPath].every((p) =>
-  fs.existsSync(p),
-);
+const inputPath = path.join(vectorDir, 'input.json');
 
-describe.skipIf(!vectorPresent)('verifier parity vector (off-chain)', () => {
+describe('development-only verifier parity vector (off-chain)', () => {
   const proof = JSON.parse(fs.readFileSync(proofPath, 'utf-8'));
   const publicSignals: string[] = JSON.parse(
     fs.readFileSync(publicPath, 'utf-8'),
   );
+  const input = JSON.parse(fs.readFileSync(inputPath, 'utf-8'));
+
+  it('keeps every declared public input consistent with the recorded statement', () => {
+    const fields = [
+      'sanctionsTreeRoot', 'issuerTreeRoot', 'amountTier', 'transferTimestamp',
+      'jurisdictionCode', 'credentialCommitment', 'tier2Threshold', 'tier3Threshold',
+      'tier4Threshold', 'domainChainId', 'domainContractHash', 'transferIdHash',
+      'credentialNullifier', 'proofExpiresAt',
+    ];
+    expect(fields.map((field) => String(input[field]))).toEqual(publicSignals.slice(2));
+  });
 
   it('verifies the committed compliance proof off-chain', async () => {
     const result = await verifyProof(proof, publicSignals, vkeyPath);
@@ -45,10 +54,10 @@ describe.skipIf(!vectorPresent)('verifier parity vector (off-chain)', () => {
     // the repo's own reference artifact: cryptographically valid, policy
     // meaningless.
     //
-    // The vector cannot be regenerated without the proving key, which is not
-    // committed (dev artifacts only; MANIFEST.json marks it devKeysOnly).
-    // Regenerating it end-to-end is tracked in AIF-89; when that lands, this
-    // test should flip to expecting `valid === true` and be deleted.
+    // Keep this historical rejection fixture. The development circuits job
+    // re-derives all 16 signals from input.json using a fresh, isolated key and
+    // retains a matching input/proof/public/vkey bundle. The ordinary demo and
+    // real E2E flow separately exercise policy-positive inputs.
     const result = await verifyProof(proof, publicSignals, vkeyPath);
     expect(result.thresholdsBound).toBe(false);
     expect(result.valid).toBe(false);
@@ -92,7 +101,7 @@ describe.skipIf(!vectorPresent)('verifier parity vector (off-chain)', () => {
 
 });
 
-it.skipIf(!vectorPresent)('rejects incomplete signals without reporting a jurisdiction', async () => {
+it('rejects incomplete signals without reporting a jurisdiction', async () => {
   const proof = JSON.parse(fs.readFileSync(proofPath, 'utf8'));
   const result = await verifyProof(proof, [], vkeyPath);
   expect(result.valid).toBe(false);

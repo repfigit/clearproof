@@ -21,6 +21,52 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
+# The committed legacy fixture is deliberately policy-negative. Reproduce every
+# public signal from its private inputs rather than trusting a saved proof alone.
+# All output, including the fresh verification key, stays in the development tree.
+LEGACY_PARITY_PROGRAM = r"""
+import fs from 'node:fs';
+import path from 'node:path';
+import crypto from 'node:crypto';
+import { generateProof, verifyProof } from './packages/proof/dist/index.js';
+const [artifacts, inputPath, publicPath, output] = process.argv.slice(1);
+const input = JSON.parse(fs.readFileSync(inputPath, 'utf8'));
+const expected = JSON.parse(fs.readFileSync(publicPath, 'utf8'));
+const wasm = path.join(artifacts, 'compliance_js/compliance.wasm');
+const zkey = path.join(artifacts, 'compliance_final.zkey');
+const vkey = path.join(artifacts, 'verification_key.json');
+const phase1 = fs.readFileSync(path.join(artifacts, '../ptau-sha256.txt'), 'utf8').trim();
+const generated = await generateProof(input, wasm, zkey);
+if (JSON.stringify(generated.publicSignals) !== JSON.stringify(expected)) {
+  throw new Error('Development legacy parity: input-derived public signals diverge from fixture');
+}
+const verified = await verifyProof(generated.proof, generated.publicSignals, vkey);
+if (!verified.proofValid || verified.valid || !verified.rejectionReasons.includes('threshold_mismatch')) {
+  throw new Error('Development legacy parity: expected pairing-valid, policy-negative proof');
+}
+fs.mkdirSync(output);
+fs.copyFileSync(inputPath, path.join(output, 'input.json'));
+fs.writeFileSync(path.join(output, 'proof.json'), JSON.stringify(generated.proof, null, 2) + '\n');
+fs.writeFileSync(path.join(output, 'public.json'), JSON.stringify(generated.publicSignals, null, 2) + '\n');
+fs.copyFileSync(vkey, path.join(output, 'verification_key.json'));
+const sha256 = file => crypto.createHash('sha256').update(fs.readFileSync(file)).digest('hex');
+const manifest = {
+  description: 'Re-derived legacy compliance parity vector; threshold-policy rejection is intentional',
+  circuit: 'compliance', proofSystem: 'groth16', curve: 'bn128',
+  devKeysOnly: true,
+  warning: 'UNAPPROVED single-party development phase-2 keys. NOT valid for production.',
+  artifacts: { wasm_sha256: sha256(wasm), zkey_sha256: sha256(zkey), vkey_sha256: sha256(vkey) },
+  files: Object.fromEntries(['input.json', 'proof.json', 'public.json', 'verification_key.json']
+    .map(name => [name, sha256(path.join(output, name))])),
+  phase1_sha256: phase1,
+  expected_public_sha256: sha256(publicPath),
+  all_public_signals_reproduced: true, pairing_valid: true, policy_valid: false,
+};
+fs.writeFileSync(path.join(output, 'MANIFEST.json'), JSON.stringify(manifest, null, 2) + '\n');
+console.log('UNAPPROVED legacy parity: all 16 input-derived signals match; pairing passes; policy rejects');
+process.exit(0);
+"""
+
 
 def run(*args, cwd=ROOT, env=None, timeout=1800):
     # Arguments are development artifact paths/options, never customer inputs.
@@ -121,6 +167,16 @@ def main():
         )
         run(node, compiler, cwd=directory)
     run(node, ROOT / "packages/cli/dist/index.js", "demo", "--artifacts", output / "legacy")
+    run(
+        node,
+        "--input-type=module",
+        "-e",
+        LEGACY_PARITY_PROGRAM,
+        output / "legacy",
+        ROOT / "tests/vectors/compliance/input.json",
+        ROOT / "tests/vectors/compliance/public.json",
+        output / "legacy/regenerated-parity",
+    )
 
     # Reproduce the composed profile from synthetic fixtures, without private data.
     from src.policy.model import POLICY_SCHEMA_DIGEST

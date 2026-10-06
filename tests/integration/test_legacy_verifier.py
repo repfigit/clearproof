@@ -40,6 +40,7 @@ async def test_real_legacy_prover_round_trip():
     inputs = {re.sub(r"(?<!^)(?=[A-Z])", "_", key).lower(): value for key, value in inputs.items()}
     prover = SnarkJSProver(artifacts_dir=artifacts, prove_timeout=120)
     proof, public = await prover.fullprove(inputs)
+    assert public == json.loads((root / "tests/vectors/compliance/public.json").read_text())
     assert proof["_meta"]["proving_time_ms"] >= 0
     assert await prover.verify(proof, public)
     public[0] = str(int(public[0]) + 1)
