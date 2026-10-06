@@ -21,6 +21,7 @@ This page covers local and testnet evaluation. A production launch still needs l
 | `API_KEY` | Required for protected requests in API-key mode |
 | `DATABASE_URL` | PostgreSQL connection. Required by the pilot routes; without it only the legacy in-memory demo path works |
 | `CIRCUIT_ARTIFACTS_DIR` | Compatible local circuit artifacts |
+| `PILOT_PROVING_FACTORY` | Operator-owned `module:callable` returning tenant-bound proving targets for the API and separate job worker |
 | `VASP_DID` | Configured VASP identity |
 | `VASP_DOMAIN` | Domain used by the discovery publisher |
 | `VASP_HPKE_PRIVATE_KEY` | Recipient X25519 private key for the HPKE path; keep secret |
@@ -29,6 +30,8 @@ This page covers local and testnet evaluation. A production launch still needs l
 | `COMPLIANCE_REGISTRY_ADDRESS` | Registry deployment used for the intended verification context |
 
 The pilot routes also need independently configured storage keys and tenant/trust configuration; see the [tenant storage guide](https://github.com/repfigit/clearproof/blob/main/docs/operations/pilot-tenant-storage.md). Startup checks key encoding/length and configures storage. It does not certify key randomness, artifact assurance, complete tenant isolation or end-to-end readiness. Current CORS handling removes wildcard origins when credentials are enabled.
+
+Durable proving jobs additionally need a separately supervised Linux worker: `uv run python -m src.prover.proof_job_worker`. Use the same database, storage keyring and independently pinned target configuration in both services. Configure host/container memory bounds, disable sensitive-memory swapping and core dumps, and measure capacity before increasing queue concurrency. The Node heap limit alone is not an RSS bound. See the [proving jobs runbook](https://github.com/repfigit/clearproof/blob/main/docs/operations/pilot-proving-jobs.md).
 
 ## Validation
 

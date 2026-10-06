@@ -136,3 +136,31 @@ async def test_cancelled_lifespan_closes_database(module, monkeypatch):
         await task
     database.close.assert_awaited_once()
     assert app.state.db is None
+
+
+@pytest.mark.parametrize("failure", [False, True])
+async def test_operator_proving_factory_loads_before_serving_and_closes_on_failure(module, monkeypatch, failure):
+    monkeypatch.setenv("DATABASE_URL", "configured")
+    monkeypatch.setenv("PILOT_PROVING_FACTORY", "synthetic_operator:configure")
+    database = SimpleNamespace(connect=AsyncMock(), close=AsyncMock())
+    monkeypatch.setattr(module, "Database", Mock(return_value=database))
+    targets = {("synthetic-tenant", "synthetic-target"): object()}
+    loader = AsyncMock(return_value=targets)
+    if failure:
+        loader.side_effect = RuntimeError("Operator proving configuration could not be loaded")
+    monkeypatch.setattr(module, "load_proving_targets", loader)
+    app = module.create_app()
+
+    async def serve():
+        async with module.lifespan(app):
+            assert app.state.db is database and app.state.pilot_proving_targets is targets
+
+    if failure:
+        with pytest.raises(RuntimeError, match="could not be loaded"):
+            await serve()
+    else:
+        await serve()
+    loader.assert_awaited_once()
+    assert loader.call_args.args[0] is database
+    database.close.assert_awaited_once()
+    assert app.state.db is None

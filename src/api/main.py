@@ -23,10 +23,14 @@ from src.api.routes.health import router as health_router
 from src.api.routes.pilot_proof import router as pilot_proof_router
 from src.api.routes.policy import router as policy_router
 from src.api.routes.proof import router as proof_router
+from src.api.routes.proof_jobs import router as proof_jobs_router
 from src.api.routes.usage import router as usage_router
 from src.api.routes.wallet_ownership import router as wallet_ownership_router
 from src.sar.encryption import hkdf_salt
+from src.services.proving_configuration import load_proving_targets
 from src.storage.database import Database
+from src.storage.keyring import load_keyring
+from src.storage.pilot_cipher import RecordCipher
 from src.version import VERSION
 
 logger = logging.getLogger(__name__)
@@ -77,6 +81,8 @@ async def lifespan(app: FastAPI):
             logger.info("Database connected")
         else:
             logger.warning("DATABASE_URL not set — running in in-memory mode")
+        if os.getenv("PILOT_PROVING_FACTORY"):
+            app.state.pilot_proving_targets = await load_proving_targets(db, RecordCipher(load_keyring()))
         yield
     finally:
         app.state.db = None
@@ -122,6 +128,7 @@ def create_app() -> FastAPI:
     app.include_router(wallet_ownership_router)
     app.include_router(policy_router)
     app.include_router(pilot_proof_router)
+    app.include_router(proof_jobs_router)
     app.include_router(authorization_router)
     app.include_router(usage_router)
     app.include_router(events_router)

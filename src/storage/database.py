@@ -23,6 +23,7 @@ from src.storage.pilot_schema import (
     ROOT_SOURCE_MIGRATION,
     WALLET_OWNERSHIP_MIGRATION,
 )
+from src.storage.proof_job_schema import PROOF_JOBS_MIGRATION
 from src.storage.signals import PUBLIC_SIGNALS_CONSTRAINT, migrate_public_signals
 
 logger = logging.getLogger(__name__)
@@ -137,6 +138,7 @@ _SCHEMA_MIGRATIONS = [
     PUBLICATION_HISTORY_MIGRATION,
     PUBLICATION_ATTEMPTS_MIGRATION,
     WALLET_OWNERSHIP_MIGRATION,
+    PROOF_JOBS_MIGRATION,
 ]
 
 
