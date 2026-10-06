@@ -30,7 +30,8 @@ Introduce `pilot-transfer-v3` with `PilotCompliance(32, 20, 20)`:
 | Authorized issuers | 20 | 1,048,576 issuer leaves |
 | Sanctions | 20 | 1,048,574 addresses (two leaves hold the `0` and `2^160` sentinels) |
 
-The depths are defined once in `src/registry/pilot_tree.py`
+The depths are defined in `specs/pilot-signals-v3.json`, generated into
+`src/prover/generated_signals.py` and imported by `src/registry/pilot_tree.py`
 (`ISSUANCE_TREE_DEPTH`, `ISSUER_TREE_DEPTH`, `SANCTIONS_TREE_DEPTH`,
 `ROOT_TREE_DEPTHS`). The witness builder, registrar, proof preparation, issuance
 tree service and root verification all use them. Signed root snapshots must carry
@@ -86,11 +87,15 @@ vs. a universal setup).
 - **Software capacity limits.** These are upgradeable without new keys and are
   not addressed here:
   - the registrar is configured for 1–16 issuers;
-  - issuance tree construction scans at most 256 enrollments per refresh;
+  - issuance tree construction scans at most 1,024 enrollments across configured
+    issuers per refresh, under a 30-second tenant transaction;
   - `PilotTree` builds sparse trees in memory with pure-Python Poseidon, at about
     210 µs per hash. A one-million-address sanctions tree takes several minutes
     to build.
 
-  Production scale needs an incremental, persisted tree service and paginated
-  inventories.
+  Persisted audience indexes and encrypted paginated source inventories are now
+  implemented. [Synthetic measurements](../benchmarks/2026-10-06-pilot-enrollment-inventory.md)
+  describe the measured workload and exclusions. Trees are still reconstructed
+  in memory for a refresh; larger production cohorts need an incremental,
+  persisted tree service and deployment-specific capacity measurements.
 - **Proving keys.** v3 keys are development-only until an approved setup exists.

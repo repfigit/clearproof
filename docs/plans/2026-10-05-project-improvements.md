@@ -396,3 +396,26 @@ actual external evidence; local tests cannot establish those prerequisites.
   changed runtime modules. Benchmark source hashes match the implementation.
   Ruff/format, diff checks and REUSE pass. Remote full CI/review, merge and
   production-hosted guidance verification remain outstanding.
+
+- October 6: the shared public capacity catalogue and ADR 0011 still described
+  the old 256-record software guard. They now match the implemented 1,024-record
+  shared refresh budget, paged encrypted inventory and measured synthetic
+  latency, while explicitly retaining the production-scale incremental-tree
+  requirement and lack of demonstrated production throughput. Updated source
+  checks, full CI and review remain required before publication.
+
+- October 6: authoritative npm metadata contradicts the earlier 0.7.0 publication
+  claim: all five packages currently publish 0.6.0, and 0.7.0 is unavailable.
+  Retrieved 0.6.0 tarballs confirm pilot-transfer-v3 sources/SDK support, while
+  registry metadata includes signatures and attestation URLs. The public
+  catalogue now separates npm 0.6.0 from workspace/source 0.7.0, and current
+  install commands and README/SDK/CLI guidance use the available release.
+  Earlier publication assertions in this execution log are superseded by this
+  registry check. Updated documentation acceptance, CI, review and deployment
+  verification remain required.
+
+- October 6: corrected-release documentation acceptance: content 25, docs 115,
+  production docs build and all 84 desktop/mobile/Firefox/WebKit browser checks
+  passed. The five packed 0.6.0 tarballs match registry SHA512 integrity; SDK
+  exports and current profile were inspected. The release snapshot is retained
+  in `docs/releases/2026-10-06-npm.*` and public facts are checked against it.
