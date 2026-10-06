@@ -12,8 +12,8 @@ documentation recommendations. GitHub #89 and Linear AIF-89 are separate work.
 
 | Work | Completion evidence | State |
 | --- | --- | --- |
-| Website dependencies and maintenance | Patched framework, dependency audit disposition, lint/build/browser/link CI, deployed verification | Done; web #12 merged, production Ready and live checks passed |
-| Shared release and publication catalogue | Homepage and docs consume one status/catalogue; future/paused articles not promoted; live links work | Shared catalogue deployed; the 0.6.0 npm / 0.7.0 source correction is consolidated in integration #103, pending merge and production verification |
+| Website dependencies and maintenance | Patched framework, dependency audit disposition, lint/build/browser/link CI, deployed verification | Done; web #12/#19 merged, exact production revisions Ready; all 14 live documentation links and metadata checks passed |
+| Shared release and publication catalogue | Homepage and docs consume one status/catalogue; future/paused articles not promoted; live links work | Done; #103 merged, production Ready; live catalogue separates npm 0.6.0 from source 0.7.0 |
 | Documentation accuracy and presentation | Reconciled roadmap/agent guidance, proper Markdown, technical sitemap/metadata, maintained web README | Done; #91/web #12 merged and deployed with browser acceptance |
 | Two onboarding paths | Small synthetic evidence inspection with tamper case; reproducible complete pilot with preflight/recovery; current SDK example first | Done; #98 merged after 23 exact-head checks and exact approval, with production docs Ready and live guidance verified |
 | Backlog reconciliation | Source/test evidence for every open Linear/GitHub item; delivered work closed and remaining criteria retained | In progress; nine of the original twelve issues closed with evidence |
@@ -22,9 +22,9 @@ documentation recommendations. GitHub #89 and Linear AIF-89 are separate work.
 | Proving execution (GitHub #87) | Correct service scope; durable bounded jobs, privacy-safe input/output, retries/cancellation/concurrency/freshness tests | Done; #94 merged after full exact-head CI and approval, GitHub issue closed |
 | Native proving benchmark (GitHub #88) | Equivalent current-profile benchmark; measured backend decision; pinned optional backend if justified | Done; #95 merged after final-head CI and active approval; GitHub issue closed and native deployment guidance verified live |
 | Canonical constants (GitHub #89) | Structured profile source, generated runtime constants, drift gate and cross-runtime compatibility tests | Done; #93 merged after full current-head CI and approval; GitHub issue closed |
-| Operational preflight and software scale | Scoped authenticated readiness checks, bounded cryptographic execution, paginated persisted inventories and measured limits | Readiness #99 merged and deployed; pairing and inventory are jointly validated in #103 with measured limits, awaiting latest-revision CI/review, merge and deployment |
+| Operational preflight and software scale | Scoped authenticated readiness checks, bounded cryptographic execution, paginated persisted inventories and measured limits | Readiness #99 and pairing/inventory #103 merged and deployed with measured software limits; production throughput and incremental tree service remain unproven |
 | Legacy configuration/parity and migration issues | AIF-158/89 hardened with compatibility; AIF-119/100 reconciled; AIF-67/99/65 remaining acceptance explicitly verified | In progress; AIF-158/119/89/100 merged or reconciled and closed; AIF-67/99/65 remain open |
-| External evaluation and adoption | Evaluation/feedback entry point and sample report; permitted real operator/counterparty evaluation with retained measurements | Entry, feedback form and internal sample jointly validated in core #103; website #18 approved with passing CI. Merge/deployment and a permitted real partner evaluation remain outstanding |
+| External evaluation and adoption | Evaluation/feedback entry point and sample report; permitted real operator/counterparty evaluation with retained measurements | Core entry, feedback form and internal sample #103 and website entry #19 deployed and verified; a permitted real partner evaluation remains outstanding |
 | Production assurance | Existing F1–F5 start conditions preserved; independently reviewed artifacts, audits and live interoperability cannot be inferred from local tests | External gates remain open |
 
 ## Verified tracker reconciliation
@@ -477,3 +477,62 @@ actual external evidence; local tests cannot establish those prerequisites.
   exact-revision preview is Ready. Fresh required CI/review, merge and production
   deployment verification remain required; external evaluation and the original
   three unfinished Linear acceptance criteria remain open.
+
+
+- October 6: #103 merged as `90b9661` after all 23 final-head checks
+  succeeded, including actual development circuits and aggregate Python coverage.
+  Its active approving review covers `04ff0ff`; the complete subsequent diff is
+  only this progress ledger. Production docs deployment
+  `dpl_4fy5fotKTKCRjDUtQUd2jGHmVaxw` is Ready for that merge revision and owns
+  `docs.clearproof.world`. The live catalogue reports npm 0.6.0, source 0.7.0,
+  pilot-transfer-v3 and the measured 1,024-record software guard. Evaluation,
+  API and sitemap pages, the main-branch report template, curated internal sample
+  and feedback form all return HTTP 200. Visible API guidance includes the
+  two-child pairing bound and 64-entry private inventory pages. These software
+  limits do not establish production throughput or independent assurance.
+
+- October 6: website #19 consolidates evaluation entry #18 and compatible
+  dependency updates #13/#14/#16/#17; superseded PRs retain their histories.
+  Its combined version passed lint, production build, typecheck, 22 unit tests
+  and all eight desktop/mobile/Firefox/WebKit browser checks. Production audit
+  has zero advisories; the full audit retains five development lint-chain
+  advisories. ESLint 10 #15 remains open because its existing CI fails with the
+  React plugin's removed `getFilename` API. The exact #19 hosted preview is
+  Ready, displays npm 0.6.0 and links to the now-live evaluation and small
+  verification guides. Final approval, merge and promoted-site verification
+  remain required.
+
+## Remaining completion evidence
+
+- AIF-99: access to the existing funded testnet signer and actual Base,
+  Arbitrum and Optimism receipts, rollup data fees and dated ETH/USD comparisons.
+- AIF-65: funded Sepolia signer, verifier-only deployment and valid/tampered
+  on-chain receipt; ADR 0002 remains DRAFT until the required evidence exists.
+- AIF-67: resolve the original curve/profile staging dependency and integrate
+  wallet ownership into the credential preimage and supported composed proof.
+  The current standalone extension witness does not satisfy that acceptance.
+- External evaluation: a permitted real operator/counterparty and retained
+  attempt, timing and outcome measurements. No partner is established.
+- Production assurance and scale: existing F1–F5 gates, independent review,
+  approved setup, live interoperability and production authorization remain
+  open. The measured paginated pilot inventory still rebuilds sparse trees in
+  memory; a production incremental-tree service and sustained throughput are
+  not delivered by the 1,024-record software guard.
+
+The three unfinished Linear issues remain Backlog with their original criteria.
+Agent-ready was removed from AIF-99 and AIF-67 while retaining unrelated labels;
+AIF-65 already lacked it. The core has only environment templates and the
+inspected web/docs environment files provide no testnet signer. No live testnet
+transaction or external evaluation is claimed.
+
+
+- October 6: website #19 merged as `5480ea2` after all applicable checks
+  completed successfully and its exact source revision received an approving
+  review. `public-links` is intentionally skipped on PR events; the live check
+  ran separately after promotion. Production deployment
+  `dpl_ESehhaxiKtHEfPrRVesw9fJfhiuM` is Ready for that merge revision and owns
+  both `clearproof.world` and `www.clearproof.world`. Both public origins return
+  HTTP 200, show npm 0.6.0 and expose the evaluation and small-verification
+  links. All 14 linked documentation URLs, robots/sitemap and shared release
+  status passed the live check. The user's website branch remains unchanged.
+  These entry points do not establish an external evaluation or adoption.
