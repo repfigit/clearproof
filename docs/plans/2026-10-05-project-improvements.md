@@ -197,3 +197,13 @@ actual external evidence; local tests cannot establish those prerequisites.
   Ruff/format and REUSE pass. The final source-pinned build
   recipe completed and yielded the same observed binary SHA256 as the benchmark.
   Full regression, remote CI, review and merge remain before #88 can close.
+
+- October 5: the native revision `4fea6f1` passed the full local PostgreSQL,
+  both-profile, native and CLI regression: 3,027 passed, two optional skips,
+  100% src statement/branch coverage (9,523 statements; 2,376 branches).
+  Ordinary Python CI identified a test-worker import dependency on the parent's
+  `PYTHONPATH`. The crash test now supplies its repository import path explicitly
+  and removes inherited `PYTHONPATH` when launching the worker. Production code
+  is unchanged. The ordinary suite passed after clearing optional artifact,
+  service and import-path settings: 2,668 passed, 361 optional skips. Updated
+  exact-head CI and approval remain required before #88 closes.

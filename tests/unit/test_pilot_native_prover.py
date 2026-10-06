@@ -504,6 +504,7 @@ async def test_native_child_dies_when_its_worker_is_sigkilled(bundle):
     script = root / "public-worker.py"
     script.write_text(
         "import asyncio,json,sys\nfrom pathlib import Path\n"
+        f"sys.path.insert(0,{str(Path(__file__).resolve().parents[2])!r})\n"
         "from src.prover.pilot_prover import PilotProver\n"
         "from src.prover.pilot_native_prover import PilotNativeProver\n"
         f"js=PilotProver.load(Path({str(root)!r}),trusted_digest={pin!r},"
@@ -514,7 +515,12 @@ async def test_native_child_dies_when_its_worker_is_sigkilled(bundle):
         f"binary_sha256={target.binary_sha256!r})\n"
         f"asyncio.run(native.prove(json.loads(sys.stdin.read()),expected_signals={SIGNALS!r}))\n"
     )
-    worker = subprocess.Popen([sys.executable, str(script)], stdin=subprocess.PIPE, stdout=subprocess.DEVNULL)
+    worker = subprocess.Popen(
+        [sys.executable, str(script)],
+        stdin=subprocess.PIPE,
+        stdout=subprocess.DEVNULL,
+        env={name: value for name, value in os.environ.items() if name != "PYTHONPATH"},
+    )
     try:
         worker.stdin.write(json.dumps(PRIVATE).encode())
         worker.stdin.close()
