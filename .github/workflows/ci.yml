@@ -314,7 +314,8 @@ jobs:
       - run: cd packages/contracts && npx hardhat test
       - run: npm run typecheck --workspace=@clearproof/contracts
 
-  circuits:
+  development-circuits:
+    name: UNAPPROVED development circuits
     runs-on: ubuntu-latest
     # Local phase-2 preparation exceeded 30 minutes at 2^16; CI now uses pinned prepared parameters.
     timeout-minutes: 150
@@ -364,7 +365,7 @@ jobs:
           curl --fail --location --max-time 600 https://pse-trusted-setup-ppot.s3.eu-central-1.amazonaws.com/pot28_0080/ppot_0080_17.ptau -o "$RUNNER_TEMP/ppot_0080_17.ptau"
       - name: Verify phase-1 parameters (cached or downloaded)
         run: echo "f807e065fde53f72f4bf4d57140fab85b26daa6cc95bdfec7cce93622b3a367c  $RUNNER_TEMP/ppot_0080_17.ptau" | sha256sum --check
-      - name: Isolated development setup and real proofs for both profiles
+      - name: UNAPPROVED development setup, input-derived parity and real proofs for both profiles
         env:
           COVERAGE_FILE: ${{ runner.temp }}/python-coverage-development.data
         run: uv run python -m coverage run --parallel-mode --branch --source=scripts scripts/test_development_circuits.py "$RUNNER_TEMP/clearproof-development-circuits" --prepared-ptau "$RUNNER_TEMP/ppot_0080_17.ptau"
@@ -483,6 +484,17 @@ jobs:
             ${{ runner.temp }}/clearproof-development-circuits/legacy/
             ${{ runner.temp }}/clearproof-development-circuits/pilot/
           retention-days: 7
+
+  # Preserve the existing required check while labeling the actual artifact job.
+  circuits:
+    needs: [development-circuits]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Require successful unapproved development acceptance
+        env:
+          DEVELOPMENT_RESULT: ${{ needs.development-circuits.result }}
+        run: test "$DEVELOPMENT_RESULT" = success
 
   python-aggregate-coverage:
     runs-on: ubuntu-latest

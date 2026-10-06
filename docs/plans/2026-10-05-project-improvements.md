@@ -16,21 +16,21 @@ documentation recommendations. GitHub #89 and Linear AIF-89 are separate work.
 | Shared release and publication catalogue | Homepage and docs consume one status/catalogue; future/paused articles not promoted; live links work | Done; production docs/site share 0.7.0 and published catalogue |
 | Documentation accuracy and presentation | Reconciled roadmap/agent guidance, proper Markdown, technical sitemap/metadata, maintained web README | Done; #91/web #12 merged and deployed with browser acceptance |
 | Two onboarding paths | Small synthetic evidence inspection with tamper case; reproducible complete pilot with preflight/recovery; current SDK example first | Pending |
-| Backlog reconciliation | Source/test evidence for every open Linear/GitHub item; delivered work closed and remaining criteria retained | In progress; six of the original twelve issues closed with evidence |
+| Backlog reconciliation | Source/test evidence for every open Linear/GitHub item; delivered work closed and remaining criteria retained | In progress; seven of the original twelve issues closed with evidence |
 | Artifact isolation (GitHub #85) | Explicit test bundles required; incomplete supplied bundles fail; local ambient artifacts ignored | Done; #91 merged and fresh-bundle CI passed; GitHub issue closed |
 | Dependency cleanup (GitHub #86) | Unused drivers removed; locked install and relevant Python tests pass; storage guidance accurate | Done; #91 merged, locked install and full remote CI passed; GitHub issue closed |
 | Proving execution (GitHub #87) | Correct service scope; durable bounded jobs, privacy-safe input/output, retries/cancellation/concurrency/freshness tests | Done; #94 merged after full exact-head CI and approval, GitHub issue closed |
-| Native proving benchmark (GitHub #88) | Equivalent current-profile benchmark; measured backend decision; pinned optional backend if justified | In progress; equivalent benchmark and memory-only optional backend verified locally; full CI, review, merge and documentation deployment remain |
+| Native proving benchmark (GitHub #88) | Equivalent current-profile benchmark; measured backend decision; pinned optional backend if justified | Done; #95 merged after final-head CI and active approval; GitHub issue closed and native deployment guidance verified live |
 | Canonical constants (GitHub #89) | Structured profile source, generated runtime constants, drift gate and cross-runtime compatibility tests | Done; #93 merged after full current-head CI and approval; GitHub issue closed |
 | Operational preflight and software scale | Scoped authenticated readiness checks, bounded cryptographic execution, paginated persisted inventories and measured limits | Pending |
-| Legacy configuration/parity and migration issues | AIF-158/89 hardened with compatibility; AIF-119/100 reconciled; AIF-67/99/65 remaining acceptance explicitly verified | In progress; AIF-158 merged and closed; AIF-119 closed |
+| Legacy configuration/parity and migration issues | AIF-158/89 hardened with compatibility; AIF-119/100 reconciled; AIF-67/99/65 remaining acceptance explicitly verified | In progress; AIF-158 merged and closed; AIF-119 closed; AIF-89 input-derived parity implemented, CI/review pending |
 | External evaluation and adoption | Evaluation/feedback entry point and sample report; permitted real operator/counterparty evaluation with retained measurements | Pending; external access not yet established |
 | Production assurance | Existing F1–F5 start conditions preserved; independently reviewed artifacts, audits and live interoperability cannot be inferred from local tests | External gates remain open |
 
 ## Verified tracker reconciliation
 
-- Original issue inventory: GitHub #85, #86, #87 and #89, and Linear AIF-119 and
-  AIF-158 are closed. GitHub #88 and Linear AIF-100/99/89/67/65 remain open;
+- Original issue inventory: GitHub #85, #86, #87, #88 and #89, and Linear AIF-119 and
+  AIF-158 are closed. Linear AIF-100/99/89/67/65 remain open;
   their original acceptance criteria still apply.
 
 - **AIF-119: Done.** Seven-argument router fixtures are already on public main
@@ -207,3 +207,34 @@ actual external evidence; local tests cannot establish those prerequisites.
   is unchanged. The ordinary suite passed after clearing optional artifact,
   service and import-path settings: 2,668 passed, 361 optional skips. Updated
   exact-head CI and approval remain required before #88 closes.
+
+- October 5: AIF-89's current input reproduces the historical fixture's complete
+  16-signal statement through a real witness/proof round trip. The development
+  build now retains matching input/proof/public/vkey files and their actual
+  hashes together, with explicit unapproved-key warnings. The recorded vector
+  remains intentionally threshold-policy negative and has no chain binding.
+  Ordinary SDK checks fail if a committed file is missing or a declared public
+  input drifts. Actual development-artifact regression covers public-statement
+  divergence and an inconsistent private credential preimage; neither publishes
+  a vector. The documented fresh build passed five Python real-proof checks and
+  32 normal-bytecode Hardhat checks, including the legacy E2E flow. The complete
+  SDK suite passed 223 checks at 100% coverage, and the development runner reached
+  100% statement/branch coverage. The artifact-producing CI job is explicitly
+  named UNAPPROVED development circuits; the existing circuits check gates its
+  success. Full remote CI, review, merge and tracker reconciliation remain.
+
+- October 5: #95 merged as `3d18674` after all 22 final-head checks passed,
+  including source-built native proofs, PostgreSQL, real EVM acceptance and
+  aggregate coverage. The active approving review covers unchanged production
+  source; the final follow-up changed only test-worker imports and this log.
+  GitHub #88 is verified closed. Documentation deployment
+  `dpl_GEbD23SjBi6TdSqy4opW82rTKgXG` is Ready from that exact merge revision;
+  live deployment guidance includes the native binary/hash settings and factory.
+  AIF-89 is In Review under PR #96, rebased onto this merged native work; its
+  updated complete CI and review remain required.
+- October 5: the user expects an existing funded testnet account on file and
+  confirms that no real evaluation partner exists yet. The deployment manifest
+  supplies a historical public deployer address; local configuration and GitHub
+  repository secret metadata contain no signer. Deployment-environment lookup
+  is unresolved. Live benchmarks still require verified account access and
+  funding; real operator evaluation remains open.

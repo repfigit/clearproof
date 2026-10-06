@@ -1,49 +1,75 @@
-# Test Vectors
+# Test vectors
 
-Committed, versioned cryptographic test vectors. These anchor the
-**off-chain ≡ on-chain verifier parity** guarantee: the same proof must
-verify in both environments.
+These are development fixtures, not production attestations. The legacy
+`compliance/` vector has 16 public signals; the current `pilot-transfer-v3`
+profile has eight and uses separate artifacts and acceptance tests.
 
-## `compliance/`
+## Historical legacy fixture
 
-A Groth16 proof for the `compliance` circuit with a fixed, deterministic
-input (tier-2 US transfer, sanctions non-membership, valid credential):
+The committed `compliance/` input, proof, public signals and verification key
+form one historical key set. Its pairing check passes, but its US thresholds
+are intentionally rejected by the SDK's policy binding. Its domain chain ID
+is zero. Preserve those negative cases rather than advertising this proof as
+a policy-valid or replay-protected transfer.
 
 | File | Content |
-|------|---------|
-| `input.json` | Full circuit input (public + private signals) |
-| `proof.json` | snarkjs Groth16 proof (`pi_a`, `pi_b`, `pi_c`) |
-| `public.json` | 16 public signals (see README "Public Signals") |
-| `verification_key.json` | Verification key for the dev trusted setup |
-| `MANIFEST.json` | Artifact hashes + toolchain provenance |
+| --- | --- |
+| `input.json` | Synthetic camelCase SDK input, including private witness fields |
+| `proof.json` | Groth16 proof for the historical development key |
+| `public.json` | Recorded 16-signal statement |
+| `verification_key.json` | Matching historical development verification key |
+| `MANIFEST.json` | Historical artifact hashes, toolchain and development warning |
 
-Consumed by:
+Ordinary SDK tests require the committed files, compare every declared public
+input with the recorded statement, verify pairing and preserve threshold-policy
+rejection. Contract tests pair the same proof against the historical verifier.
+Those checks alone cannot establish that private witness fields derive the
+recorded public statement.
 
-- **Off-chain**: `packages/proof/test/parity.test.ts` (snarkjs verify + tamper cases)
-- **On-chain**: `packages/contracts/test/Verifier.test.ts` (`Groth16Verifier.verifyProof`)
+## One-command input-derived regeneration
 
-## Regenerating
-
-snarkjs mixes OS randomness into every `zkey contribute` even when `-e` is
-passed, so dev keys are **never byte-reproducible**. The vector,
-`packages/contracts/contracts/Groth16Verifier.sol`, and the local
-`artifacts/` directory therefore form one key set and **must be regenerated
-and committed together** whenever `circuits/` or the proving toolchain
-changes:
+After `npm ci` and `uv sync --locked --extra dev`, with Node and Circom installed,
+run from the repository root:
 
 ```bash
-npm install
-bash scripts/compile_circuits.sh   # downloads pinned Hermez ptau, fresh dev zkey
-cd packages/content && npx tsc && cd ../proof && npx tsc && cd ../cli && npx tsc && cd ../..
-node packages/cli/dist/index.js demo --export tests/vectors/compliance
+uv run python scripts/test_development_circuits.py /tmp/clearproof-development-vectors
 ```
 
-CI enforces consistency: the `circuits` job smoke-tests proof generation from
-a fresh build, `hardhat-tests` verifies the committed vector against the
-committed verifier contract, and the TypeScript job verifies the same vector
-off-chain against the committed verification key. A PR that changes one half
-of the key set without the other fails these checks.
+The output directory must be new. The command prepares development parameters,
+builds both profiles and their matching keys, and runs SDK/Python/local-EVM
+acceptance. `--prepared-ptau /absolute/path/parameters.ptau` can reuse an explicit
+local development input; CI verifies its pinned public phase-1 parameters before
+supplying them. Fresh phase-2 keys remain unapproved in both cases.
 
-> ⚠️ These keys come from a **single-party dev trusted setup**. They are
-> insecure by construction and exist for testing only. Production keys come
-> from the MPC ceremony — see `docs/internal/CEREMONY_RUNBOOK.md`.
+For the legacy fixture, the command computes the witness from `input.json`,
+generates a fresh proof, compares **all 16 derived signals** with committed
+`public.json`, and independently pairs the new proof. A mismatch or unsatisfied
+private witness fails the command. It retains these matching files together in
+`legacy/regenerated-parity/`:
+
+- `input.json`, `proof.json`, `public.json` and `verification_key.json`;
+- `MANIFEST.json`, written after successful derivation and pairing, with hashes
+  of all four files, the actual WASM/key hashes, phase-1 digest and the
+  `devKeysOnly: true` / `NOT valid for production` warning.
+
+The fresh proof is randomized and uses a new key. It is not expected to equal
+the historical proof bytes. Never replace only half a key set, and never copy
+these unapproved development keys or generated verifiers into repository source
+or a production deployment. Production artifacts require the documented audit
+and multi-party ceremony.
+
+## CI evidence
+
+The **UNAPPROVED development circuits** job runs the one-command build and
+retains the regenerated vector. The existing required `circuits` check now
+gates that job's successful completion, including failures and skipped runs. The full
+Python regression re-derives the recorded statement and tests that changed
+public signals and an inconsistent private credential preimage fail before a
+vector is published.
+
+That same development job runs `packages/contracts/test/E2E.test.ts` with explicit
+fresh legacy artifacts and normal verifier bytecode: prove, submit and record
+on a local EVM. A supplied empty or incomplete bundle fails. The ordinary
+`hardhat-tests` job omits artifact-dependent tests; it is not the evidence for
+the real prove-submit-verify flow. The development CLI demo separately tests a
+policy-positive SDK proof.

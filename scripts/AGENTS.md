@@ -20,7 +20,7 @@ Build, acceptance and operational scripts for reproducible proofs and sanctions 
 - **After running `build_sanctions_tree.py`** you **must** run the oracle relay (`make relay-sanctions` or equivalent) on all deployed chains. Skipping this is a critical anti-pattern (see root AGENTS.md).
 - **The pilot tree is separate:** rebuild it with `build_pilot_sanctions_tree.py` and publish its signed root with `publish_pilot_sanctions_head.py` on every pilot deployment. The legacy oracle relay does not update pilot heads.
 - Circuit compilation is a prerequisite for local proving; CI caches the Hermez ptau18 file.
-- After `compile_circuits.sh`, the regenerated `Groth16Verifier.sol` and `tests/vectors/compliance/` (via `node packages/cli/dist/index.js demo --export tests/vectors/compliance`) must be committed together — they are one key set.
+- Development regeneration: `uv run python scripts/test_development_circuits.py /tmp/new-development-output` retains a matching legacy input/proof/public/vkey bundle and manifest in `legacy/regenerated-parity/`, and runs real local-EVM acceptance. Preserve the historical policy-negative committed fixture. Unapproved development keys, generated verifiers and compiled artifacts stay local; production replacements require the documented audited multi-party ceremony and a complete matching key set.
 
 ## WHERE TO LOOK
 
