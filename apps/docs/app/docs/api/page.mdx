@@ -34,6 +34,7 @@ Protected routes require the configured authentication. Pilot routes also requir
 | `POST /pilot/events/queue` | Paginated investigation queue |
 | `POST /pilot/fireblocks/{integration_id}` | Verify and retain a signed Fireblocks notification from a tenant relay |
 | `GET /pilot/usage` | Retained record counters (not billable charges) |
+| `GET /pilot/readiness/{capability}/{target_id}` | Tenant-scoped configuration preflight for `inspection` or `proving`; no proof work or consumption |
 
 Proving jobs require explicit `proof:generate`, `policy:read` and `evidence:decrypt` roles, PostgreSQL and an independently configured worker. The API does not start a prover. Queue limits apply across workers; a full queue returns `429` with `Retry-After`. A running cancellation keeps its slot until cleanup is acknowledged. Completed results are rechecked against current enrollment, policy, approved roots and time before retrieval; completion never consumes authorization. See the [proving jobs runbook](https://github.com/repfigit/clearproof/blob/main/docs/operations/pilot-proving-jobs.md) for configuration, retry and recovery.
 
@@ -63,5 +64,7 @@ The extension circuit is staged; no deployed verifier accepts it. See the [walle
 The legacy routes serve the demo profile. A legacy proof is never current pilot authorization.
 
 ## Limits
+
+A `usage:read` principal can request readiness for its own configured target. The report is configuration preflight: database/schema, active-key self-test and loaded target binding/freshness. It performs no proof work, retained-current-state check or consumption. See [readiness scope and recovery](https://github.com/repfigit/clearproof/blob/main/docs/operations/pilot-readiness.md).
 
 A successful response is not legal compliance, settlement or a live counterparty's acceptance. Inspection and observation results never authorize a transfer. Only `/pilot/proof/authorize` consumes an authorization, and only after an `ALLOW`. See [architecture](/docs/architecture) and [security](/docs/security).

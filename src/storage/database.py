@@ -141,6 +141,8 @@ _SCHEMA_MIGRATIONS = [
     PROOF_JOBS_MIGRATION,
 ]
 
+SCHEMA_VERSION = len(_SCHEMA_MIGRATIONS)
+
 
 class Transaction:
     """Connection provider for stores participating in one owned transaction."""

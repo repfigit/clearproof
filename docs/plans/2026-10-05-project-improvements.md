@@ -15,14 +15,14 @@ documentation recommendations. GitHub #89 and Linear AIF-89 are separate work.
 | Website dependencies and maintenance | Patched framework, dependency audit disposition, lint/build/browser/link CI, deployed verification | Done; web #12 merged, production Ready and live checks passed |
 | Shared release and publication catalogue | Homepage and docs consume one status/catalogue; future/paused articles not promoted; live links work | Done; production docs/site share 0.7.0 and published catalogue |
 | Documentation accuracy and presentation | Reconciled roadmap/agent guidance, proper Markdown, technical sitemap/metadata, maintained web README | Done; #91/web #12 merged and deployed with browser acceptance |
-| Two onboarding paths | Small synthetic evidence inspection with tamper case; reproducible complete pilot with preflight/recovery; current SDK example first | Implemented and locally verified; full CI, review, merge and hosted verification pending |
+| Two onboarding paths | Small synthetic evidence inspection with tamper case; reproducible complete pilot with preflight/recovery; current SDK example first | Done in #98 after all 23 exact-head checks and approval; production deployment verification pending |
 | Backlog reconciliation | Source/test evidence for every open Linear/GitHub item; delivered work closed and remaining criteria retained | In progress; nine of the original twelve issues closed with evidence |
 | Artifact isolation (GitHub #85) | Explicit test bundles required; incomplete supplied bundles fail; local ambient artifacts ignored | Done; #91 merged and fresh-bundle CI passed; GitHub issue closed |
 | Dependency cleanup (GitHub #86) | Unused drivers removed; locked install and relevant Python tests pass; storage guidance accurate | Done; #91 merged, locked install and full remote CI passed; GitHub issue closed |
 | Proving execution (GitHub #87) | Correct service scope; durable bounded jobs, privacy-safe input/output, retries/cancellation/concurrency/freshness tests | Done; #94 merged after full exact-head CI and approval, GitHub issue closed |
 | Native proving benchmark (GitHub #88) | Equivalent current-profile benchmark; measured backend decision; pinned optional backend if justified | Done; #95 merged after final-head CI and active approval; GitHub issue closed and native deployment guidance verified live |
 | Canonical constants (GitHub #89) | Structured profile source, generated runtime constants, drift gate and cross-runtime compatibility tests | Done; #93 merged after full current-head CI and approval; GitHub issue closed |
-| Operational preflight and software scale | Scoped authenticated readiness checks, bounded cryptographic execution, paginated persisted inventories and measured limits | Local acceptance preflight implemented; authenticated service readiness and remaining scale work pending |
+| Operational preflight and software scale | Scoped authenticated readiness checks, bounded cryptographic execution, paginated persisted inventories and measured limits | Local acceptance preflight and authenticated target configuration readiness implemented; readiness CI/review and remaining scale work pending |
 | Legacy configuration/parity and migration issues | AIF-158/89 hardened with compatibility; AIF-119/100 reconciled; AIF-67/99/65 remaining acceptance explicitly verified | In progress; AIF-158/119/89/100 merged or reconciled and closed; AIF-67/99/65 remain open |
 | External evaluation and adoption | Evaluation/feedback entry point and sample report; permitted real operator/counterparty evaluation with retained measurements | Pending; external access not yet established |
 | Production assurance | Existing F1–F5 start conditions preserved; independently reviewed artifacts, audits and live interoperability cannot be inferred from local tests | External gates remain open |
@@ -327,3 +327,33 @@ actual external evidence; local tests cannot establish those prerequisites.
   produced the same observed native binary SHA256 as the previously verified
   build; no source pin, arithmetic, setup key or compiled artifact changed.
   Updated full CI and approving review remain required.
+
+- October 5: tenant-scoped inspection/proving readiness requires `usage:read`,
+  selects only an operator-configured target and rejects query scope overrides.
+  The report checks a bounded read-only PostgreSQL ping/migration history, a
+  synthetic in-memory active-key round trip, loaded profile/trust/freshness and
+  executable/artifact availability. It performs no proving, pairing, migrations,
+  retained-customer decryption, current-head/credential reads, worker heartbeat,
+  provider requests or authorization consumption. Both success/failure reports
+  are minimized and not cacheable; public process liveness remains independent.
+  Three real PostgreSQL checks preserve migration timestamps, record counts and
+  consumption counts, reject drift without repair and retain liveness during a
+  closed pool. API regression: 109 passed; new route at 100% statement/branch
+  coverage. Content: 25 passed at 100%; docs: 115 passed at 100% and a production
+  build passed. Ruff/format, REUSE and diff checks pass. This is configuration
+  preflight, not full live/production readiness; updated CI/review and hosted
+  verification remain required. Remaining inventory/scale work is still open.
+
+- October 5: readiness review found that a valuation valid at the current clock
+  can still have been signed after the configured evaluation clock. Preflight now
+  verifies both clocks, matching live inspection. Two regression cases use actual
+  scoped Ed25519 signatures and demonstrate rejection for inspection and proving
+  without invoking either backend. All 43 readiness unit checks pass, with 100%
+  statement/branch coverage of the route. Updated review and full CI remain required.
+
+- October 5: onboarding #98 merged as `54492bf` after all 23 checks on `4e01fff`
+  passed and an approving review covered that exact revision. This includes fresh
+  both-profile proofs, the source-built native backend, PostgreSQL acceptance,
+  full Python aggregate coverage and normal/coverage contract verification. Its
+  exact-revision production documentation deployment is building. Readiness #99
+  is rebased onto this merge and will run the complete main-targeted CI workflow.
