@@ -13,7 +13,7 @@ documentation recommendations. GitHub #89 and Linear AIF-89 are separate work.
 | Work | Completion evidence | State |
 | --- | --- | --- |
 | Website dependencies and maintenance | Patched framework, dependency audit disposition, lint/build/browser/link CI, deployed verification | Done; web #12 merged, production Ready and live checks passed |
-| Shared release and publication catalogue | Homepage and docs consume one status/catalogue; future/paused articles not promoted; live links work | Shared catalogue deployed; fresh registry verification requires the 0.6.0 npm / 0.7.0 source correction in #101 to merge and deploy |
+| Shared release and publication catalogue | Homepage and docs consume one status/catalogue; future/paused articles not promoted; live links work | Shared catalogue deployed; the 0.6.0 npm / 0.7.0 source correction is consolidated in integration #103, pending merge and production verification |
 | Documentation accuracy and presentation | Reconciled roadmap/agent guidance, proper Markdown, technical sitemap/metadata, maintained web README | Done; #91/web #12 merged and deployed with browser acceptance |
 | Two onboarding paths | Small synthetic evidence inspection with tamper case; reproducible complete pilot with preflight/recovery; current SDK example first | Done; #98 merged after 23 exact-head checks and exact approval, with production docs Ready and live guidance verified |
 | Backlog reconciliation | Source/test evidence for every open Linear/GitHub item; delivered work closed and remaining criteria retained | In progress; nine of the original twelve issues closed with evidence |
@@ -22,9 +22,9 @@ documentation recommendations. GitHub #89 and Linear AIF-89 are separate work.
 | Proving execution (GitHub #87) | Correct service scope; durable bounded jobs, privacy-safe input/output, retries/cancellation/concurrency/freshness tests | Done; #94 merged after full exact-head CI and approval, GitHub issue closed |
 | Native proving benchmark (GitHub #88) | Equivalent current-profile benchmark; measured backend decision; pinned optional backend if justified | Done; #95 merged after final-head CI and active approval; GitHub issue closed and native deployment guidance verified live |
 | Canonical constants (GitHub #89) | Structured profile source, generated runtime constants, drift gate and cross-runtime compatibility tests | Done; #93 merged after full current-head CI and approval; GitHub issue closed |
-| Operational preflight and software scale | Scoped authenticated readiness checks, bounded cryptographic execution, paginated persisted inventories and measured limits | Readiness #99 merged and deployed; pairing #100 and inventory #101 locally validated with measured limits, awaiting latest-revision CI/review, merge and deployment |
+| Operational preflight and software scale | Scoped authenticated readiness checks, bounded cryptographic execution, paginated persisted inventories and measured limits | Readiness #99 merged and deployed; pairing and inventory are jointly validated in #103 with measured limits, awaiting latest-revision CI/review, merge and deployment |
 | Legacy configuration/parity and migration issues | AIF-158/89 hardened with compatibility; AIF-119/100 reconciled; AIF-67/99/65 remaining acceptance explicitly verified | In progress; AIF-158/119/89/100 merged or reconciled and closed; AIF-67/99/65 remain open |
-| External evaluation and adoption | Evaluation/feedback entry point and sample report; permitted real operator/counterparty evaluation with retained measurements | Entry, feedback form and internal sample locally validated; website #18 opened. Core review/merge/deployment and a permitted real partner evaluation remain outstanding |
+| External evaluation and adoption | Evaluation/feedback entry point and sample report; permitted real operator/counterparty evaluation with retained measurements | Entry, feedback form and internal sample jointly validated in core #103; website #18 approved with passing CI. Merge/deployment and a permitted real partner evaluation remain outstanding |
 | Production assurance | Existing F1–F5 start conditions preserved; independently reviewed artifacts, audits and live interoperability cannot be inferred from local tests | External gates remain open |
 
 ## Verified tracker reconciliation
@@ -465,3 +465,15 @@ actual external evidence; local tests cannot establish those prerequisites.
   Existing PRs retain their evidence and will be superseded only after the new
   integration PR is established. Real testnet measurements, the wallet-profile
   decision and external evaluation/production assurance gates remain open.
+
+- October 6: core integration #103 supersedes #100–#102, which retain their
+  commits and review history. The complete combined regression at `04ff0ff`
+  passed 3,190 tests with two optional local-EVM skips and 100% measured src
+  statement/branch coverage (9,988 statements; 2,502 branches). All 14 changed
+  runtime modules match their validated source branches exactly. Content: 25,
+  CLI: 184, SDK: 223 and documentation: 116 tests pass at 100% measured workspace
+  coverage; production builds and all 88 documentation browser checks pass.
+  Ruff lint/scoped format, signal drift, REUSE and diff checks pass. The hosted
+  exact-revision preview is Ready. Fresh required CI/review, merge and production
+  deployment verification remain required; external evaluation and the original
+  three unfinished Linear acceptance criteria remain open.
