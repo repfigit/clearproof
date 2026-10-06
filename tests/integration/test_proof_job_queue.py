@@ -66,6 +66,27 @@ async def test_request_result_privacy_and_reconnect(queue, db):
         await queue.finish(claim, result={"proof": "replacement"})
 
 
+async def test_prequeue_schema_upgrade_preserves_encrypted_tenant_evidence(queue, db):
+    from src.storage.database import _SCHEMA_MIGRATIONS
+    from tests.integration.test_pilot_storage import store
+
+    retained = store(db)
+    async with retained.transaction() as tx:
+        await tx.put("credential", "synthetic-record", {"evidence": "SYNTHETIC-PRIVATE-RETAINED"})
+    before = await retained.read("credential", "synthetic-record")
+    async with db.connection() as conn:
+        assert (await (await conn.execute("SELECT count(*) FROM proof_jobs")).fetchone())[0] == 0
+        await conn.execute("DROP TABLE proof_jobs, proof_job_control")
+        await conn.execute("DELETE FROM schema_migrations WHERE version=%s", (len(_SCHEMA_MIGRATIONS),))
+    await db.close()
+    await db.connect()
+    assert await retained.read("credential", "synthetic-record") == before
+    job = await enqueue(queue)
+    claim = await queue.claim()
+    assert claim.snapshot.job_id == job.job_id
+    assert await queue.finish(claim, result={"proof": "synthetic"}) == "completed"
+
+
 async def test_concurrent_idempotency_scope_and_conflict(queue):
     expiry = int(time.time()) + 240
     jobs = await asyncio.gather(*[enqueue(queue, expires_at=expiry) for _ in range(8)])

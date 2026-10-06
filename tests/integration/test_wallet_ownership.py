@@ -239,15 +239,19 @@ async def test_parent_expiry_caps_extension_and_revocation_survives_restart(db, 
 
 
 async def test_additive_wallet_migration_preserves_enrollment(db, enrolled):
+    from src.storage.database import _SCHEMA_MIGRATIONS
     from src.storage.pilot_schema import OBSERVATION_MIGRATION
 
     _, consent, principal, _ = enrolled
     service = wallet_service(db, principal, consent)
     before = await service.store.get("credential", consent.credential.credential_nonce)
     async with db.connection() as conn:
-        assert (await (await conn.execute("SELECT max(version) FROM schema_migrations")).fetchone())[0] == 20
+        assert (await (await conn.execute("SELECT max(version) FROM schema_migrations")).fetchone())[0] == len(
+            _SCHEMA_MIGRATIONS
+        )
         await conn.execute(OBSERVATION_MIGRATION)
-        await conn.execute("DELETE FROM schema_migrations WHERE version=20")
+        await conn.execute("DROP TABLE proof_jobs, proof_job_control")
+        await conn.execute("DELETE FROM schema_migrations WHERE version>=20")
     await db.close()
     await db.connect()
     service = wallet_service(db, principal, consent)

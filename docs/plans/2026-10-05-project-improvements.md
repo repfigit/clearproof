@@ -151,3 +151,12 @@ actual external evidence; local tests cannot establish those prerequisites.
   accepting that case while rejecting reparenting races and failed parent-death
   setup. Backend checks now total 42 passing tests at 100% branch coverage;
   a fresh real-proof check covers the updated launcher.
+
+- October 5: full PostgreSQL/artifact regression completed with 2,943 passing
+  tests, two optional skips and two failures in historical migration fixtures.
+  Those fixtures removed later version rows while leaving newly introduced queue
+  tables, or assumed version 20 was still latest. They now reconstruct their
+  actual historical schemas before upgrading. Both corrected fixtures and a
+  new prequeue-upgrade test passed against PostgreSQL, preserving retained
+  encrypted evidence and proving the upgraded queue usable. Exact-revision full
+  regression is being repeated with the optional CLI acceptance enabled.
