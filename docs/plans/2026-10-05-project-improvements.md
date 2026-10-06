@@ -12,7 +12,7 @@ documentation recommendations. GitHub #89 and Linear AIF-89 are separate work.
 
 | Work | Completion evidence | State |
 | --- | --- | --- |
-| Website dependencies and maintenance | Patched framework, dependency audit disposition, lint/build/browser/link CI, deployed verification | Done; web #12 merged, production Ready and live checks passed |
+| Website dependencies and maintenance | Patched framework, dependency audit disposition, lint/build/browser/link CI, deployed verification | Done; web #12/#19 merged, exact production revisions Ready; all 14 live documentation links and metadata checks passed |
 | Shared release and publication catalogue | Homepage and docs consume one status/catalogue; future/paused articles not promoted; live links work | Done; #103 merged, production Ready; live catalogue separates npm 0.6.0 from source 0.7.0 |
 | Documentation accuracy and presentation | Reconciled roadmap/agent guidance, proper Markdown, technical sitemap/metadata, maintained web README | Done; #91/web #12 merged and deployed with browser acceptance |
 | Two onboarding paths | Small synthetic evidence inspection with tamper case; reproducible complete pilot with preflight/recovery; current SDK example first | Done; #98 merged after 23 exact-head checks and exact approval, with production docs Ready and live guidance verified |
@@ -24,7 +24,7 @@ documentation recommendations. GitHub #89 and Linear AIF-89 are separate work.
 | Canonical constants (GitHub #89) | Structured profile source, generated runtime constants, drift gate and cross-runtime compatibility tests | Done; #93 merged after full current-head CI and approval; GitHub issue closed |
 | Operational preflight and software scale | Scoped authenticated readiness checks, bounded cryptographic execution, paginated persisted inventories and measured limits | Readiness #99 and pairing/inventory #103 merged and deployed with measured software limits; production throughput and incremental tree service remain unproven |
 | Legacy configuration/parity and migration issues | AIF-158/89 hardened with compatibility; AIF-119/100 reconciled; AIF-67/99/65 remaining acceptance explicitly verified | In progress; AIF-158/119/89/100 merged or reconciled and closed; AIF-67/99/65 remain open |
-| External evaluation and adoption | Evaluation/feedback entry point and sample report; permitted real operator/counterparty evaluation with retained measurements | Core entry, feedback form and internal sample deployed in #103; website evaluation entry and compatible updates consolidated in web #19. A permitted real partner evaluation remains outstanding |
+| External evaluation and adoption | Evaluation/feedback entry point and sample report; permitted real operator/counterparty evaluation with retained measurements | Core entry, feedback form and internal sample #103 and website entry #19 deployed and verified; a permitted real partner evaluation remains outstanding |
 | Production assurance | Existing F1–F5 start conditions preserved; independently reviewed artifacts, audits and live interoperability cannot be inferred from local tests | External gates remain open |
 
 ## Verified tracker reconciliation
@@ -524,3 +524,15 @@ Agent-ready was removed from AIF-99 and AIF-67 while retaining unrelated labels;
 AIF-65 already lacked it. The core has only environment templates and the
 inspected web/docs environment files provide no testnet signer. No live testnet
 transaction or external evaluation is claimed.
+
+
+- October 6: website #19 merged as `5480ea2` after all applicable checks
+  completed successfully and its exact source revision received an approving
+  review. `public-links` is intentionally skipped on PR events; the live check
+  ran separately after promotion. Production deployment
+  `dpl_ESehhaxiKtHEfPrRVesw9fJfhiuM` is Ready for that merge revision and owns
+  both `clearproof.world` and `www.clearproof.world`. Both public origins return
+  HTTP 200, show npm 0.6.0 and expose the evaluation and small-verification
+  links. All 14 linked documentation URLs, robots/sitemap and shared release
+  status passed the live check. The user's website branch remains unchanged.
+  These entry points do not establish an external evaluation or adoption.
