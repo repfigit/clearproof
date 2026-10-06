@@ -31,6 +31,19 @@ context are operator inputs. Request bodies cannot replace them. Factory loading
 rejects tenant mismatches, artifact-context mismatches and a sanctions root that
 differs from its configured approval.
 
+For an optional Linux native backend, call
+`src.prover.pilot_native_prover.select_pilot_backend(javascript_prover)` in the
+factory and pass its result as the target's prover. Set
+`CLEARPROOF_RAPIDSNARK_SHA256` to an independently approved binary SHA256;
+`CLEARPROOF_RAPIDSNARK_BIN` selects an explicit path. With a pin but no explicit
+path, discovery checks `rapidsnark` then `prover` in `PATH`. Without a discovered
+binary or an automatic-discovery pin, the helper returns the JavaScript backend.
+An explicit missing binary, absent pin or mismatching bytes fails closed.
+Outside Linux the helper preserves the supplied JavaScript backend; the durable
+worker remains Linux-only and existing SDK/CLI development paths are unchanged.
+See [native proving](pilot-native-proving.md) for the source-pinned build,
+measured comparison and RAM/resource requirements.
+
 Targets bind a particular transfer and verification context; they are not
 long-lived templates. The factory loads at service startup. The operator's
 integration must provision fresh targets and approvals as transfers arrive or

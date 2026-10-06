@@ -66,6 +66,8 @@ Current-profile [proving jobs](docs/operations/pilot-proving-jobs.md) use an
 encrypted PostgreSQL queue and a separate Linux worker. The API admits work with
 `POST /pilot/proof/jobs`; it rechecks current state before returning completed
 proofs. Queue completion does not authorize a transfer.
+The worker can select an [optional pinned native backend](docs/operations/pilot-native-proving.md),
+with JavaScript fallback and independent pairing of native results.
 
 ## Proof and authorization boundaries
 

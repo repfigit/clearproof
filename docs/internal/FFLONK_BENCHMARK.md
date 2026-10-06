@@ -59,7 +59,13 @@ fflonk's verifier is dominated by a fixed set of pairings and field operations t
 
 37 seconds versus 1.8. The measured variance on fflonk (30.2–42.7 s) reflects a contended shared machine; the ratio is stable enough to act on.
 
-This matters more than it first appears because of an asymmetry in the tooling: **Groth16 has a production-grade native prover (rapidsnark, typically 10–50× faster than snarkjs), and fflonk does not.** So the realistic production gap is wider than 20×, not narrower. A VASP proving on server-class hardware could plausibly get Groth16 under 200 ms while fflonk stays in the tens of seconds.
+Groth16 also has an optional native prover, rapidsnark. The
+[October current-profile benchmark](../benchmarks/2026-10-05-native-prover.md)
+measured a 4.7-fold prove-only improvement on a different, eight-signal circuit.
+It does not establish a universal 10–50-fold improvement or sub-200 ms production
+latency. The July figures above remain measurements of this legacy 16-signal
+circuit; native timing and production throughput must be measured for the chosen
+profile, host and complete pipeline.
 
 Whether that matters is a product question, not a cryptographic one. Travel Rule proof generation is not an interactive, sub-second path — it happens once per transfer, ahead of settlement. 37 s per transfer is survivable for a pilot; it is a poor fit for a VASP doing thousands of transfers an hour, and it is a bad fit for the `/proof/generate` request/response API shape (it would need to become a job queue).
 
