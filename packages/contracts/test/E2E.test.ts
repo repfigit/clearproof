@@ -27,7 +27,7 @@ const VKEY_PATH = path.join(ARTIFACTS_DIR, "verification_key.json");
 
 describe("E2E: Prove -> Submit On-Chain -> Verify", function () {
   // Circuit proof generation can take a few seconds
-  this.timeout(30000);
+  this.timeout(60000);
 
   before(function () {
     // Missing opt-in skips; supplied-but-invalid inputs fail loudly in CI.
@@ -251,7 +251,39 @@ describe("E2E: Prove -> Submit On-Chain -> Verify", function () {
     const pC: [bigint, bigint] = [BigInt(proof.pi_c[0]), BigInt(proof.pi_c[1])];
     const pubSignals = publicSignals.map((s: string) => BigInt(s));
 
-    const tx = await registry.verifyAndRecord(
+    // Rotate two actual verifiers backed by the same fresh development key.
+    // This validates lifecycle/domain behavior, not a cross-profile migration.
+    const replacement = await Verifier.deploy();
+    await replacement.waitForDeployment();
+    const nextSelector = ethers.id("groth16-bn254-v2");
+    await router.registerVerifier(nextSelector, await replacement.getAddress(), "Development Groth16 v2");
+    await time.increase(2);
+    await router.activateVerifier(nextSelector, "Development Groth16 v2");
+    await registry.setVerifierSelector(nextSelector);
+    expect(await registry.verifierSelector()).to.equal(selector);
+    await time.increase(2);
+    await registry.activateVerifierSelector();
+    await router.scheduleRetirement(selector);
+    await time.increase(2);
+    await router.completeRetirement(selector);
+    expect(await router.isVerifierActive(selector)).to.equal(false);
+    expect(await router.isVerifierResolvable(selector)).to.equal(true);
+    expect(await registry.getAddress()).to.equal(registryAddress);
+    for (const selected of [selector, nextSelector]) {
+      const wrongChain = [...pubSignals]; wrongChain[11] += 1n;
+      await expect(registry.verifyAndRecordWithSelector(selected, transferId, pA, pB, pC, wrongChain, vaspDid))
+        .to.be.revertedWithCustomError(registry, "WrongChain");
+      const routerDomain = [...pubSignals];
+      routerDomain[12] = BigInt(ethers.solidityPackedKeccak256(["address"], [await router.getAddress()])) % BN128_R;
+      await expect(registry.verifyAndRecordWithSelector(selected, transferId, pA, pB, pC, routerDomain, vaspDid))
+        .to.be.revertedWithCustomError(registry, "WrongContract");
+      const tampered = [...pubSignals]; tampered[15] += 1n;
+      await expect(registry.verifyAndRecordWithSelector(selected, transferId, pA, pB, pC, tampered, vaspDid))
+        .to.be.revertedWithCustomError(registry, "ProofVerificationFailed");
+      expect(await registry.isVerified(transferId)).to.equal(false);
+    }
+    const tx = await registry.verifyAndRecordWithSelector(
+      selector,
       transferId,
       pA,
       pB,
@@ -266,6 +298,22 @@ describe("E2E: Prove -> Submit On-Chain -> Verify", function () {
     // 5. Verify on-chain state
     // ================================================================
     expect(await registry.isVerified(transferId)).to.equal(true);
+
+    const retained = await registry.proofs(transferId);
+    const nextTransfer = ethers.id("e2e-transfer-after-swap");
+    const nextHash = (BigInt(ethers.solidityPackedKeccak256(["bytes32"], [nextTransfer])) % BN128_R).toString();
+    const nextInput = { ...circuitInput, transfer_id_hash: nextHash,
+      credential_nullifier: pH([BigInt(credentialCommitment), BigInt(nextHash)]) };
+    const next = await snarkjs.groth16.fullProve(nextInput, WASM_PATH, ZKEY_PATH);
+    const nextProof = next.proof as { pi_a: string[]; pi_b: string[][]; pi_c: string[] };
+    await registry.verifyAndRecord(nextTransfer,
+      [BigInt(nextProof.pi_a[0]), BigInt(nextProof.pi_a[1])],
+      [[BigInt(nextProof.pi_b[0][1]), BigInt(nextProof.pi_b[0][0])],
+        [BigInt(nextProof.pi_b[1][1]), BigInt(nextProof.pi_b[1][0])]],
+      [BigInt(nextProof.pi_c[0]), BigInt(nextProof.pi_c[1])],
+      next.publicSignals.map((value: string) => BigInt(value)), vaspDid);
+    expect(await registry.isVerified(nextTransfer)).to.equal(true);
+    expect(await registry.proofs(transferId)).to.deep.equal(retained);
 
     // Verify replay protection — submitting same proof for the same transfer should fail
     await expect(

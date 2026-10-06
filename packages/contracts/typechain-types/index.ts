@@ -24,8 +24,6 @@ export type { SafeCast } from "./@openzeppelin/contracts/utils/math/SafeCast";
 export { SafeCast__factory } from "./factories/@openzeppelin/contracts/utils/math/SafeCast__factory";
 export type { Pausable } from "./@openzeppelin/contracts/utils/Pausable";
 export { Pausable__factory } from "./factories/@openzeppelin/contracts/utils/Pausable__factory";
-export type { ReentrancyGuard } from "./@openzeppelin/contracts/utils/ReentrancyGuard";
-export { ReentrancyGuard__factory } from "./factories/@openzeppelin/contracts/utils/ReentrancyGuard__factory";
 export type { Groth16VerifierBLS } from "./contracts/bench/Groth16VerifierBLS";
 export { Groth16VerifierBLS__factory } from "./factories/contracts/bench/Groth16VerifierBLS__factory";
 export type { ComplianceRegistry } from "./contracts/ComplianceRegistry";

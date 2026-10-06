@@ -38,6 +38,14 @@ The development registry coordinates proof acceptance with other contracts. Its 
 
 Successful acceptance records the proof and consumes a nullifier. Read-only cryptographic verification in an SDK is a different operation. A recorded proof is not itself evidence of successful transfer settlement.
 
+## Legacy verifier rotation in source
+
+Each scheme/version selector binds permanently to one verifier address and runtime code hash. Registration, changing the default and retirement require separate timelocks. Emergency disable takes effect immediately, including during retirement grace. These controls use the legacy 16-signal Groth16 interface; another proof system requires a reviewed adapter.
+
+After a default swap, an in-flight statement can use `verifyAndRecordWithSelector` for at most 24 hours, subject to its own expiry and all current-state checks. The old declared transfer timestamp must precede cutover. Router retirement adds its own 24-hour limit; the earlier deadline governs. A retired verifier cannot remain the default. Both submission paths share records and nullifiers, and the domain continues to bind to the registry address.
+
+The recorded Sepolia manifest has no router address and does not gain these source changes in place. See the [decommissioning runbook](https://github.com/repfigit/clearproof/blob/main/docs/VERIFIER_DECOMMISSIONING.md) for the initial migration, delayed calls, recovery and historical shutdown evidence.
+
 ## VASPRegistry
 
 Stores registered VASPs, authorized submitting wallets, jurisdictions, discovery endpoints and the issuer Merkle root. Registration and directory metadata must be interpreted under an explicit trust policy; they do not independently establish licensing or factual credential validity.

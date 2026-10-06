@@ -16,21 +16,21 @@ documentation recommendations. GitHub #89 and Linear AIF-89 are separate work.
 | Shared release and publication catalogue | Homepage and docs consume one status/catalogue; future/paused articles not promoted; live links work | Done; production docs/site share 0.7.0 and published catalogue |
 | Documentation accuracy and presentation | Reconciled roadmap/agent guidance, proper Markdown, technical sitemap/metadata, maintained web README | Done; #91/web #12 merged and deployed with browser acceptance |
 | Two onboarding paths | Small synthetic evidence inspection with tamper case; reproducible complete pilot with preflight/recovery; current SDK example first | Pending |
-| Backlog reconciliation | Source/test evidence for every open Linear/GitHub item; delivered work closed and remaining criteria retained | In progress; seven of the original twelve issues closed with evidence |
+| Backlog reconciliation | Source/test evidence for every open Linear/GitHub item; delivered work closed and remaining criteria retained | In progress; eight of the original twelve issues closed with evidence |
 | Artifact isolation (GitHub #85) | Explicit test bundles required; incomplete supplied bundles fail; local ambient artifacts ignored | Done; #91 merged and fresh-bundle CI passed; GitHub issue closed |
 | Dependency cleanup (GitHub #86) | Unused drivers removed; locked install and relevant Python tests pass; storage guidance accurate | Done; #91 merged, locked install and full remote CI passed; GitHub issue closed |
 | Proving execution (GitHub #87) | Correct service scope; durable bounded jobs, privacy-safe input/output, retries/cancellation/concurrency/freshness tests | Done; #94 merged after full exact-head CI and approval, GitHub issue closed |
 | Native proving benchmark (GitHub #88) | Equivalent current-profile benchmark; measured backend decision; pinned optional backend if justified | Done; #95 merged after final-head CI and active approval; GitHub issue closed and native deployment guidance verified live |
 | Canonical constants (GitHub #89) | Structured profile source, generated runtime constants, drift gate and cross-runtime compatibility tests | Done; #93 merged after full current-head CI and approval; GitHub issue closed |
 | Operational preflight and software scale | Scoped authenticated readiness checks, bounded cryptographic execution, paginated persisted inventories and measured limits | Pending |
-| Legacy configuration/parity and migration issues | AIF-158/89 hardened with compatibility; AIF-119/100 reconciled; AIF-67/99/65 remaining acceptance explicitly verified | In progress; AIF-158 merged and closed; AIF-119 closed; AIF-89 input-derived parity implemented, CI/review pending |
+| Legacy configuration/parity and migration issues | AIF-158/89 hardened with compatibility; AIF-119/100 reconciled; AIF-67/99/65 remaining acceptance explicitly verified | In progress; AIF-158 merged and closed; AIF-119 closed; AIF-89 merged and closed; AIF-100 governed lifecycle implemented, CI/review pending |
 | External evaluation and adoption | Evaluation/feedback entry point and sample report; permitted real operator/counterparty evaluation with retained measurements | Pending; external access not yet established |
 | Production assurance | Existing F1–F5 start conditions preserved; independently reviewed artifacts, audits and live interoperability cannot be inferred from local tests | External gates remain open |
 
 ## Verified tracker reconciliation
 
-- Original issue inventory: GitHub #85, #86, #87, #88 and #89, and Linear AIF-119 and
-  AIF-158 are closed. Linear AIF-100/99/89/67/65 remain open;
+- Original issue inventory: GitHub #85, #86, #87, #88 and #89, and Linear AIF-119,
+  AIF-158 and AIF-89 are closed. Linear AIF-100/99/67/65 remain open;
   their original acceptance criteria still apply.
 
 - **AIF-119: Done.** Seven-argument router fixtures are already on public main
@@ -238,3 +238,44 @@ actual external evidence; local tests cannot establish those prerequisites.
   repository secret metadata contain no signer. Deployment-environment lookup
   is unresolved. Live benchmarks still require verified account access and
   funding; real operator evaluation remains open.
+
+- October 5: AIF-100 is In Review under PR #97. Permanent selector/address/runtime-hash
+  bindings reject pending or historical overwrite. Registration, delayed default
+  selection and retirement are separate operations; delay changes are delayed and
+  retain an immutable deployment floor. Former registry defaults have a bounded
+  24-hour explicit-selector path, retaining domain/current-state checks and shared
+  nullifiers. Emergency disable terminates grace immediately. The restartable
+  replacement script resumes both timelocks without duplicate deployment. Real
+  development proofs pass through a swap, retirement grace and a new default;
+  wrong domains and tampered statements are rejected. Full contract validation:
+  166 passed with normal bytecode, and 166 passed at 100% measured Solidity
+  statement/branch/function/line coverage. TypeScript checks pass. Documentation:
+  115 tests at 100% measured app coverage and a production build pass. Repository
+  and public contract guidance describe historical Sepolia's missing router and
+  required one-time migration; no remote migration or historical shutdown is
+  claimed. Full remote CI, review and merge remain before tracker closure.
+- October 5: current Clearproof and contracts checkouts contain only `.env.example`
+  templates. The web, Vercel docs and separate Clearproof Hermes environment files
+  have no deployer-key or RPC settings. GitHub exposes Preview and Production
+  environments; the workflow's sanctions-relay environment is not present.
+  Read-only checks of the historical deployer return zero balances on Base,
+  Arbitrum and Optimism Sepolia. Ethereum Sepolia RPC reads did not succeed,
+  so its funding remains unverified. Existing account access is still unresolved;
+  no transactions were sent and no evaluation partner exists yet.
+
+- October 5: #96 merged as `e12aa27` after all 23 checks passed on its final
+  revision `cae630d`, including fresh development artifacts, PostgreSQL,
+  native proofs, complete EVM acceptance and aggregate coverage. The approving
+  review is on that exact revision. AIF-89 is verified Done in Linear with its acceptance evidence retained
+  and agent-ready removed. AIF-100 is In Review under PR #97 and is rebased onto the parity
+  merge; its refreshed CI and review remain required.
+
+- October 5: the parity merge's production docs deployment
+  `dpl_8tHQFNvijD9WTShPMRfMYkoGG9qd` is Ready from exact revision `e12aa27`,
+  with the docs.clearproof.world alias and live deployment-page checks verified.
+  AIF-100's rebased PR #97 received an approval on `de6066b`. Its operational
+  JavaScript gate exposed old deployment-script mocks that lacked the new ABI
+  and assumed immediate selection. Updated both-delay, retry, incompatible-ABI
+  and failure-path checks: all 181 passed, with 100% coverage of 699 statements,
+  274 branches and 51 functions across 12 operational modules. This follow-up
+  changes tests and this log only; refreshed full CI remains required.
