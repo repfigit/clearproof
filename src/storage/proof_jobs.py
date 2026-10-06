@@ -120,7 +120,7 @@ class ProofJobQueue:
             if principal.tenant_id != row["tenant_id"] or principal.actor_id != row["actor_id"]:
                 raise ValueError("scope")
             request = value["input"]
-            if type(request) is not dict:
+            if type(request) is not dict or type(value["expiry_limit"]) is not int:
                 raise ValueError("shape")
         except (KeyError, ValueError, TypeError):
             raise RecordIntegrityError("Stored job scope is inconsistent") from None
@@ -196,13 +196,17 @@ class ProofJobQueue:
                 if previous["actor_id"] != principal.actor_id:
                     raise ProofJobError("job_idempotency_conflict")
                 snapshot = self._snapshot(previous)
-                if snapshot.expires_at != expires_at or not hmac.compare_digest(
+                if self._open(previous, "request")["expiry_limit"] != expires_at or not hmac.compare_digest(
                     canonical_bytes(snapshot.request), encoded
                 ):
                     raise ProofJobError("job_idempotency_conflict")
                 return snapshot
-            if not now < expires_at <= now + 300:
+            if expires_at <= now:
                 raise ProofJobError("invalid_job_expiry")
+            # The target supplies an absolute upper bound. PostgreSQL owns the
+            # admitted lifetime, so host clock skew can only shorten that bound.
+            expiry_limit = expires_at
+            expires_at = min(expiry_limit, now + 300)
             await self._admit(cur, control, principal.tenant_id)
             job = secrets.token_hex(32)
             seal = self._cipher.seal(
@@ -210,7 +214,7 @@ class ProofJobQueue:
                 "proof-job-request",
                 job,
                 1,
-                {"principal": principal.model_dump(mode="json"), "input": request},
+                {"principal": principal.model_dump(mode="json"), "input": request, "expiry_limit": expiry_limit},
             )
             await cur.execute(
                 """

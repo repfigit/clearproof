@@ -243,10 +243,29 @@ async def test_invalid_requests_reject_before_storage(queue, bad):
         await enqueue(queue, request=bad)
 
 
-@pytest.mark.parametrize("offset", [-1, 0, 301])
+@pytest.mark.parametrize("offset", [-1, 0])
 async def test_invalid_expiry_rejects(queue, offset):
     with pytest.raises(ProofJobError, match="invalid_job_expiry"):
         await enqueue(queue, expires_at=int(time.time()) + offset)
+
+
+@pytest.mark.parametrize("offset", [1, 60, 300, 301, 3600])
+async def test_database_clock_caps_lifetime_and_idempotency_keeps_original_limit(queue, monkeypatch, offset):
+    now = int(time.time())
+
+    async def database_clock(cur):
+        return now
+
+    monkeypatch.setattr(queue, "_clock", database_clock)
+    limit = now + offset
+    admitted = await enqueue(queue, expires_at=limit)
+    assert admitted.created_at == now
+    assert admitted.expires_at == min(limit, now + 300)
+    now += 1
+    repeated = await enqueue(queue, expires_at=limit)
+    assert repeated.job_id == admitted.job_id and repeated.expires_at == admitted.expires_at
+    with pytest.raises(ProofJobError, match="idempotency_conflict"):
+        await enqueue(queue, expires_at=limit + 1)
 
 
 @pytest.mark.parametrize("bad", [None, "", "a" * 63, "g" * 64])
@@ -278,18 +297,20 @@ async def test_invalid_completions_cannot_update_a_lease(queue):
     assert await queue.heartbeat(claim) == "proving"
 
 
-@pytest.mark.parametrize("attack", ["scope", "input", "missing", "principal"])
+@pytest.mark.parametrize("attack", ["scope", "input", "missing", "principal", "expiry"])
 async def test_authenticated_but_invalid_stored_payload_scope_is_rejected(queue, db, attack):
     job = await enqueue(queue)
-    value = {"principal": principal().model_dump(mode="json"), "input": PRIVATE_INPUT}
+    value = {"principal": principal().model_dump(mode="json"), "input": PRIVATE_INPUT, "expiry_limit": job.expires_at}
     if attack == "scope":
         value["principal"]["tenant_id"] = "other-tenant"
     elif attack == "input":
         value["input"] = []
     elif attack == "missing":
         del value["principal"]
-    else:
+    elif attack == "principal":
         value["principal"]["roles"] = ["unknown-role"]
+    else:
+        value["expiry_limit"] = "invalid"
     sealed = cipher().seal("tenant-a", "proof-job-request", job.job_id, 1, value)
     await sql(
         db,

@@ -84,6 +84,27 @@ async def test_admission_read_cancel_retry_and_opaque_ownership(api):
     assert await queue.claim() is None
 
 
+async def test_admission_accepts_api_clock_ahead_of_database_without_extending_deadline(api, monkeypatch):
+    client, app, who, body, _ = api
+    target = app.state.pilot_proving_targets[(who.tenant_id, body["target_id"])]
+    database_now = target.deadline - 301
+
+    async def database_clock(self, cur):
+        return database_now
+
+    monkeypatch.setattr(ProofJobQueue, "_clock", database_clock)
+    response = await client.post("/pilot/proof/jobs", json=body)
+    assert response.status_code == 202
+    job = response.json()
+    assert job["created_at"] == database_now
+    assert job["expires_at"] == database_now + 300 < target.deadline
+    database_now += 2
+    repeated = await client.post("/pilot/proof/jobs", json=body)
+    assert repeated.status_code == 202
+    assert repeated.json()["job_id"] == job["job_id"]
+    assert repeated.json()["expires_at"] == job["expires_at"]
+
+
 async def test_running_cancellation_acknowledgement_and_completion_conflicts(api):
     client, _, _, body, queue = api
     job = (await client.post("/pilot/proof/jobs", json=body)).json()["job_id"]

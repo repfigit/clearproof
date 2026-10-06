@@ -113,7 +113,10 @@ cleanup, or the fenced lease expires after a worker failure.
 
 Jobs keep their original exclusive deadline: at most five minutes after the
 verification context, bounded by transfer and root approval expiry. Proof and
-credential lifetimes may impose an earlier effective cutoff. Retrying never
+credential lifetimes may impose an earlier effective cutoff. Admission also caps
+the lifetime at five minutes after PostgreSQL's clock, without extending the
+target's absolute deadline. Repeated admission retains the first cutoff even
+when API and database clocks differ. Retrying never
 extends this deadline. There are at most three claims per job, with exponential
 backoff for transient prover/worker failures. Invalid current state and changed
 configuration fail without automatic retry; a manual retry still requires fresh

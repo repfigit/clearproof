@@ -160,3 +160,14 @@ actual external evidence; local tests cannot establish those prerequisites.
   new prequeue-upgrade test passed against PostgreSQL, preserving retained
   encrypted evidence and proving the upgraded queue usable. Exact-revision full
   regression is being repeated with the optional CLI acceptance enabled.
+
+- October 5: the exact-revision repeat at `9647bde` passed: 2,950 tests,
+  two optional skips and 100% measured Python branch coverage. All ordinary
+  remote CI checks passed for that revision. Review then identified that a
+  target deadline ahead of PostgreSQL's clock could reject admission. The queue
+  now caps the admitted expiry against the database clock and retains the
+  original absolute limit encrypted for stable idempotency. Clock-skew,
+  shortened-deadline and repeat-admission regression checks pass against real
+  PostgreSQL. The focused queue/API/worker and actual-proof suite passed all
+  83 tests with 100% coverage of the queue and service. Updated full regression,
+  remote CI and approval remain required before #87 can close.
