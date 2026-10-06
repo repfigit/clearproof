@@ -39,6 +39,8 @@ def setup(tmp_path, monkeypatch):
 
     execute = Mock(side_effect=run)
     monkeypatch.setattr(runner.subprocess, "run", execute)
+    preflight = Mock()
+    monkeypatch.setattr(runner, "check_prerequisites", preflight)
     return SimpleNamespace(
         binaries=binaries,
         artifacts=artifacts,
@@ -47,6 +49,7 @@ def setup(tmp_path, monkeypatch):
         execute=execute,
         commands=commands,
         run=run,
+        preflight=preflight,
     )
 
 
@@ -110,6 +113,29 @@ def test_existing_output_is_not_reused(setup):
         runner.main()
     assert marker.read_text() == "preserve"
     setup.execute.assert_not_called()
+    setup.preflight.assert_not_called()
+
+
+def test_preflight_does_not_create_output_or_start_services(setup, monkeypatch, capsys):
+    import json
+
+    monkeypatch.setattr(sys, "argv", [*sys.argv, "--preflight"])
+    assert runner.main() == 0
+    setup.preflight.assert_called_once_with(setup.artifacts)
+    setup.execute.assert_not_called()
+    assert not setup.output.exists()
+    report = json.loads(capsys.readouterr().out)
+    assert report["services_started"] is False
+    assert report["production_eligible"] is False
+    assert report["authorization_consumed"] is False
+
+
+def test_failed_preflight_does_not_allocate_output_or_services(setup):
+    setup.preflight.side_effect = RuntimeError("Synthetic artifact failure")
+    with pytest.raises(RuntimeError, match="Synthetic artifact"):
+        runner.main()
+    setup.execute.assert_not_called()
+    assert not setup.output.exists()
 
 
 def test_overlong_socket_directory_fails_before_initdb(setup, monkeypatch):
@@ -162,7 +188,13 @@ def test_failed_stop_only_overrides_child_status_when_cluster_may_remain(setup, 
         assert runner.main() == 7
 
 
-def test_executable_entry_preserves_success_status(setup):
+def test_executable_entry_preserves_success_status(setup, monkeypatch):
+    from scripts import test_pilot_mirror
+
+    is_file = Path.is_file
+    monkeypatch.setattr(Path, "is_file", lambda path: path.name == "index.js" or is_file(path))
+    monkeypatch.setattr(runner.importlib.util, "find_spec", lambda name: object())
+    monkeypatch.setattr(test_pilot_mirror, "check_doctor", Mock())
     with pytest.raises(SystemExit) as result:
         runpy.run_path(runner.__file__, run_name="__main__")
     assert result.value.code == 0

@@ -16,6 +16,40 @@ export const metadata = {
 npm install @clearproof/proof@0.7.0
 ```
 
+## Current pilot: read-only inspection
+
+```typescript
+import { inspectCurrentProof } from '@clearproof/proof';
+
+// Exact JSON bytes from a protected input file: target_id, credential_id,
+// proof_json and the eight public_signals of pilot-transfer-v3.
+async function inspect(origin: string, token: string, input: Uint8Array) {
+  const report = await inspectCurrentProof(origin, token, input);
+  return {
+    paired: report.cryptographic_valid,
+    artifactManifest: report.manifest_digest,
+    consumed: report.authorization_consumed, // always false on this path
+  };
+}
+```
+
+The operator configures the API target, current roots, policy, artifacts and tenant. The bearer principal needs `proof:inspect` and `evidence:decrypt`; input cannot select another tenant or replace trust. The client checks the returned schema and profile. Pairing and current-state checks happen on the selected server; this client is not an independent local verifier. A successful inspection does not consume authorization or establish counterparty acceptance.
+
+Use the [complete local pilot](/docs/quickstart#complete-local-pilot) to exercise generation, encrypted storage, observation and historical review with synthetic data. The [quick verification example](/docs/quickstart#quick-verification-example) requires only Node and uses an explicitly historical legacy fixture.
+
+## Pilot functions
+
+| Function | Purpose |
+| --- | --- |
+| `inspectCurrentProof` | Read-only inspection of a `pilot-transfer-v3` proof through the authenticated API |
+| `authorizeCurrentProof` | Request consumption of one authorization; returns the receipt |
+| `createObservation`, `readObservation`, `listObservations`, `reportObservationCohort` | Non-authorizing observations and cohort reports |
+| `requestReport`, `reportEndpoint` | Authenticated report requests |
+| `canonicalBytes`, `recordDigest` | Canonical encoding and domain-separated digests, matching the Python implementation |
+| `walletOwnershipSigningMessage` | Build the exact EIP-191 message for the wallet ownership challenge |
+
+These use server-selected trust: the API owns current roots, policy and consumption. The client validates response shape and profile (`pilot-transfer-v3`) but does not independently establish current state.
+
 ## Legacy proof API
 
 ```typescript
@@ -31,20 +65,7 @@ async function evaluate(input: ComplianceInput, wasm: string, zkey: string, vkey
 
 The caller supplies compatible artifacts. The SDK maps camelCase fields to Circom signal names; it does not create issuer or sanctions witnesses for you. Field encodings, amount units and public-signal ordering must match the exact proof version.
 
-`verified.valid` describes cryptographic verification. `isCompliant` and `sarReviewFlag` interpret circuit outputs and are only reported for a valid proof (`isCompliant` is `false` and `sarReviewFlag` is `null` otherwise; `rejectionReasons` explains why); they do not establish full registry acceptance, current policy authorization or legal compliance. Additional trust, freshness, revocation, domain and replay checks remain necessary.
-
-## Pilot functions
-
-| Function | Purpose |
-| --- | --- |
-| `inspectCurrentProof` | Read-only inspection of a `pilot-transfer-v3` proof through the authenticated API |
-| `authorizeCurrentProof` | Request consumption of one authorization; returns the receipt |
-| `createObservation`, `readObservation`, `listObservations`, `reportObservationCohort` | Non-authorizing observations and cohort reports |
-| `requestReport`, `reportEndpoint` | Authenticated report requests |
-| `canonicalBytes`, `recordDigest` | Canonical encoding and domain-separated digests, matching the Python implementation |
-| `walletOwnershipSigningMessage` | Build the exact EIP-191 message for the wallet ownership challenge |
-
-These use server-selected trust: the API owns current roots, policy and consumption. The client validates response shape and profile (`pilot-transfer-v3`) but does not independently establish current state.
+`verified.proofValid` is the Groth16 pairing result. `verified.valid` additionally requires the public thresholds to match the verifier's jurisdiction table. `isCompliant` and `sarReviewFlag` interpret circuit outputs only when `valid` is true (`isCompliant` is `false` and `sarReviewFlag` is `null` otherwise; `rejectionReasons` explains why). Expected jurisdiction, current registry acceptance, policy authorization, freshness, revocation, domain and replay checks remain separate. None establishes legal compliance.
 
 ## Discovery
 

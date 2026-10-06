@@ -1,5 +1,8 @@
 # Retain a local pilot acceptance run
 
+For a Node-only real-proof example or preflight and recovery guidance, start with
+[the two onboarding paths](onboarding.md).
+
 This command runs the real PostgreSQL/development-EVM acceptance suite and retains
 its synthetic outputs. It is a source-checkout workflow, not a production service
 or proof of clean-environment onboarding. The suite creates and drops isolated

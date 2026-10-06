@@ -219,6 +219,7 @@ jobs:
           tests/unit/test_sanctions_sources.py
           tests/unit/test_checkpoint_runner.py
           tests/unit/test_pilot_local_runner.py
+          tests/unit/test_pilot_preflight.py
           tests/unit/test_pilot_mirror_reports.py
           tests/unit/test_pilot_mirror_runner.py
           tests/unit/test_development_setup.py
@@ -254,6 +255,9 @@ jobs:
           node-version: 24
           cache: npm
       - run: npm ci
+      - run: npm run build --workspace=@clearproof/proof
+      - name: Inspect the real historical proof and reject a tampered statement
+        run: node scripts/inspect_example.mjs
       - run: npm run test:scripts:coverage
       - run: npm run test:contract-scripts:coverage
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1

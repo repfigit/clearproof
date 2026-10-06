@@ -181,11 +181,23 @@ describe('development demo CLI', () => {
     const manifest = load('MANIFEST.json');
     expect(manifest.devKeysOnly).toBe(true);
     expect(manifest.warning).toContain('NOT valid for production');
+    expect(manifest.toolchain).toEqual({ circom: 'not-established', snarkjs: 'not-established', ptau: 'not-established' });
+    expect(fs.statSync(destination).mode & 0o777).toBe(0o700);
     expect(manifest.artifacts).toEqual(Object.fromEntries([
       ['wasm_sha256', 'compliance.wasm'], ['zkey_sha256', 'compliance_final.zkey'],
       ['vkey_sha256', 'verification_key.json'],
     ].map(([key, name]) => [key, createHash('sha256').update(`synthetic ${name}`).digest('hex')])));
     expect(exit).toHaveBeenCalledExactlyOnceWith(0);
+  });
+  it('preserves an existing export rather than replacing its evidence', async () => {
+    clients.verifyProof.mockResolvedValue({ valid: true, isCompliant: true, sarReviewFlag: false });
+    const destination = path.join(directory, 'existing-export');
+    fs.mkdirSync(destination);
+    const retained = path.join(destination, 'proof.json');
+    fs.writeFileSync(retained, 'retained evidence');
+    await expect(demo(['--export', destination])).rejects.toThrow(/EEXIST/);
+    expect(fs.readFileSync(retained, 'utf8')).toBe('retained evidence');
+    expect(exit).not.toHaveBeenCalled();
   });
   it('prints a failed result and exits unsuccessfully for unexpected public signals', async () => {
     clients.generateProof.mockResolvedValue({ ...generated, publicSignals: Array(17).fill('0') });
