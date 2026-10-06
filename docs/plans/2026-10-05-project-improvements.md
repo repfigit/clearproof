@@ -15,14 +15,14 @@ documentation recommendations. GitHub #89 and Linear AIF-89 are separate work.
 | Website dependencies and maintenance | Patched framework, dependency audit disposition, lint/build/browser/link CI, deployed verification | Done; web #12 merged, production Ready and live checks passed |
 | Shared release and publication catalogue | Homepage and docs consume one status/catalogue; future/paused articles not promoted; live links work | Done; production docs/site share 0.7.0 and published catalogue |
 | Documentation accuracy and presentation | Reconciled roadmap/agent guidance, proper Markdown, technical sitemap/metadata, maintained web README | Done; #91/web #12 merged and deployed with browser acceptance |
-| Two onboarding paths | Small synthetic evidence inspection with tamper case; reproducible complete pilot with preflight/recovery; current SDK example first | Done in #98 after all 23 exact-head checks and approval; production deployment verification pending |
+| Two onboarding paths | Small synthetic evidence inspection with tamper case; reproducible complete pilot with preflight/recovery; current SDK example first | Done; #98 merged after 23 exact-head checks and exact approval, with production docs Ready and live guidance verified |
 | Backlog reconciliation | Source/test evidence for every open Linear/GitHub item; delivered work closed and remaining criteria retained | In progress; nine of the original twelve issues closed with evidence |
 | Artifact isolation (GitHub #85) | Explicit test bundles required; incomplete supplied bundles fail; local ambient artifacts ignored | Done; #91 merged and fresh-bundle CI passed; GitHub issue closed |
 | Dependency cleanup (GitHub #86) | Unused drivers removed; locked install and relevant Python tests pass; storage guidance accurate | Done; #91 merged, locked install and full remote CI passed; GitHub issue closed |
 | Proving execution (GitHub #87) | Correct service scope; durable bounded jobs, privacy-safe input/output, retries/cancellation/concurrency/freshness tests | Done; #94 merged after full exact-head CI and approval, GitHub issue closed |
 | Native proving benchmark (GitHub #88) | Equivalent current-profile benchmark; measured backend decision; pinned optional backend if justified | Done; #95 merged after final-head CI and active approval; GitHub issue closed and native deployment guidance verified live |
 | Canonical constants (GitHub #89) | Structured profile source, generated runtime constants, drift gate and cross-runtime compatibility tests | Done; #93 merged after full current-head CI and approval; GitHub issue closed |
-| Operational preflight and software scale | Scoped authenticated readiness checks, bounded cryptographic execution, paginated persisted inventories and measured limits | Local acceptance preflight and authenticated target configuration readiness implemented; readiness CI/review and remaining scale work pending |
+| Operational preflight and software scale | Scoped authenticated readiness checks, bounded cryptographic execution, paginated persisted inventories and measured limits | Readiness #99 merged and deployed; pairing #100 and persisted/paged inventory changes are awaiting their final acceptance, CI and review |
 | Legacy configuration/parity and migration issues | AIF-158/89 hardened with compatibility; AIF-119/100 reconciled; AIF-67/99/65 remaining acceptance explicitly verified | In progress; AIF-158/119/89/100 merged or reconciled and closed; AIF-67/99/65 remain open |
 | External evaluation and adoption | Evaluation/feedback entry point and sample report; permitted real operator/counterparty evaluation with retained measurements | Pending; external access not yet established |
 | Production assurance | Existing F1–F5 start conditions preserved; independently reviewed artifacts, audits and live interoperability cannot be inferred from local tests | External gates remain open |
@@ -357,3 +357,42 @@ actual external evidence; local tests cannot establish those prerequisites.
   full Python aggregate coverage and normal/coverage contract verification. Its
   exact-revision production documentation deployment is building. Readiness #99
   is rebased onto this merge and will run the complete main-targeted CI workflow.
+
+- October 6: readiness #99 merged as `9dc5ec5` after all 23 latest exact-head
+  checks passed and active approval covered unchanged production source.
+  Production docs `dpl_FFGYwdP3kLgaavYs2WaUMgeKJmTw` are Ready from that
+  exact merge; live API and deployment guidance passed. Pairing #100 is rebased
+  onto this main and running fresh exact-head checks; its older approval is not
+  treated as approval of new production source.
+- October 6: encrypted enrollment inventory is maintained atomically on issuance,
+  discovered in private 64-entry pages, and migrated by explicit validated admin
+  backfill. Encrypted count heads detect incomplete indexes. Larger issuance
+  sources use authenticated 128-entry pages; existing sources up to 256 leaves
+  preserve their format/digest. A real accepted-profile proof from 258 enrolled
+  leaves and a 32-sibling witness independently verified; deleting a source page
+  prevents preparation. Initial broader PostgreSQL regression: 338 passed.
+  A synthetic scan benchmark found 1,024 entries took about 17 seconds to build
+  a root on the measured host. The construction guard is consequently 1,024
+  scanned records across all configured issuers per refresh, retaining the
+  30-second transaction timeout. Final measurements/checks, review, merge and
+  hosted verification remain required; this is not a production capacity claim.
+
+- October 6: final inventory acceptance: 104 passed, with 100% statement/branch
+  coverage across inventory, issuance source and tree construction. The shared
+  registrar budget counts expired/revoked entries and rolls back partial roots;
+  real PostgreSQL API/backfill, audience limit, missing-head and exact retry
+  cases passed. Final three-sample root medians: 1.041 / 4.319 / 8.401 / 16.730 s
+  at 64 / 256 / 512 / 1,024 entries; first 64-entry pages remain 0.72–0.77 s.
+  Receipts, source hashes, reproducible commands and exclusions are committed
+  under `docs/benchmarks/2026-10-06-pilot-enrollment-inventory.*`. Documentation
+  checks (115) and content checks (25), plus production docs build, passed.
+  Updated full regression, remote CI, approval, merge and hosted guidance
+  verification remain required.
+
+- October 6: updated full inventory/storage/queue/wallet/publication regression:
+  355 passed. Another 32 route, real proving-job and paged-source persistence
+  checks passed, including corrupted-page rollback and safe page reuse. The
+  two focused suites together exercise every statement and branch in all eight
+  changed runtime modules. Benchmark source hashes match the implementation.
+  Ruff/format, diff checks and REUSE pass. Remote full CI/review, merge and
+  production-hosted guidance verification remain outstanding.

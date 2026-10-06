@@ -11,6 +11,7 @@ from src.protocol.root_snapshot import RootSnapshot, RootTrustStore, SignedRootS
 from src.prover.generated_signals import ISSUER_LEAF_DOMAIN_TAG
 from src.registry.pilot_tree import ISSUANCE_TREE_DEPTH, ISSUER_TREE_DEPTH, MAX_TREE_DEPTH, PilotTree
 from src.registry.poseidon import poseidon_hash
+from src.services.issuance_source import MAX_ISSUANCE_ENTRIES, PAGE_DOMAIN, issuance_source_domain
 from src.services.issuance_tree import IssuanceTreeContext, build_issuance_tree
 from src.services.root_publication import persist_approved_root, root_record_id
 from src.storage.database import Database
@@ -89,7 +90,7 @@ class PilotRegistrar:
             if (aggregate.revision if aggregate else 0) != expected_revision:
                 raise RecordConflict("Registrar expected head revision differs")
 
-            async def approve(kind, issuer, root, source, domain, depth):
+            async def approve(kind, issuer, root, source, domain, depth, pages=()):
                 source_digest = record_digest(domain, source)
                 snapshot = RootSnapshot(
                     **base, tree_depth=depth, kind=kind, issuer_did=issuer, root=root, source_digest=source_digest
@@ -107,6 +108,13 @@ class PilotRegistrar:
                 signed = sign_root(snapshot, self._signer)
                 # Signature scope and predecessor checks happen before commit.
                 await persist_approved_root(tx, signed, self._trust, now=now)
+                for page in pages:
+                    digest = record_digest(PAGE_DOMAIN, page)
+                    previous_page = await tx.get("root-source", digest)
+                    if previous_page is None:
+                        await tx.put("root-source", digest, page)
+                    elif previous_page != page:
+                        raise RecordConflict("Issuance source page collision or inconsistent record")
                 existing = await tx.get("root-source", source_digest)
                 if existing is None:
                     await tx.put("root-source", source_digest, source)
@@ -115,6 +123,7 @@ class PilotRegistrar:
                 return signed
 
             leaves, issuer_sources = [], []
+            scan_budget = MAX_ISSUANCE_ENTRIES
             for issuer in self._issuers:
                 candidate = await build_issuance_tree(
                     tx,
@@ -123,14 +132,17 @@ class PilotRegistrar:
                     registry_address=self._registry_address,
                     now=now,
                     depth=self._issuance_depth,
+                    scan_limit=scan_budget,
                 )
+                scan_budget -= candidate.scanned_enrollments
                 signed = await approve(
                     "issuance-root",
                     issuer,
                     candidate.tree.root,
                     candidate.source,
-                    "clearproof/issuance-source/v1",
+                    issuance_source_domain(candidate.source),
                     self._issuance_depth,
+                    pages=candidate.pages,
                 )
                 issuer_id = hashlib.sha256(issuer.encode("ascii")).hexdigest()
                 leaf = str(poseidon_hash([ISSUER_LEAF_DOMAIN_TAG, *digest_limbs(issuer), int(candidate.tree.root)]))

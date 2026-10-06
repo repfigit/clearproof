@@ -1,6 +1,7 @@
 """Durable enrollment acceptance, prior to authenticated issuance-root publication."""
 
 from src.auth.principal import Principal
+from src.protocol.canonical import record_digest
 from src.protocol.credential import PilotCredential
 from src.protocol.enrollment import EnrollmentConsent
 from src.protocol.transfer import Epoch, Hex32, OpaqueId, Record
@@ -21,6 +22,38 @@ class EnrollmentIntegrityError(ValueError):
     """Persisted enrollment identity or commitment is inconsistent."""
 
 
+def enrollment_scope(consent: EnrollmentConsent) -> str:
+    return enrollment_audience(
+        consent.credential.tenant_id, consent.credential.issuer_did, consent.chain_id, consent.registry_address
+    )
+
+
+def enrollment_audience(tenant_id: str, issuer_did: str, chain_id: int, registry_address: str) -> str:
+    return record_digest(
+        "clearproof/enrollment-audience/v1",
+        dict(tenant_id=tenant_id, issuer_did=issuer_did, chain_id=chain_id, registry_address=registry_address),
+    )
+
+
+def validate_retained_enrollment(tenant_id: str, credential_id: str, stored: dict) -> EnrollmentConsent:
+    """Authenticate immutable enrollment even when it is now expired or revoked."""
+    consent = EnrollmentConsent.model_validate(stored["consent"])
+    credential = consent.credential
+    if (
+        credential.tenant_id != tenant_id
+        or credential.credential_nonce != credential_id
+        or credential.commitment != stored["credential_commitment"]
+    ):
+        raise EnrollmentIntegrityError("Enrollment identity or commitment failed")
+    consent.verify_wallet_signature(stored["signature"])
+    if (
+        type(stored["accepted_at"]) is not int
+        or not credential.issued_at <= stored["accepted_at"] < consent.consent_expires_at
+    ):
+        raise EnrollmentIntegrityError("Enrollment acceptance is outside signed consent validity")
+    return consent
+
+
 async def load_unrevoked_enrollment(
     tx: PilotTransaction, credential_id: str, *, chain_id: int, registry_address: str, now: int
 ) -> PilotCredential:
@@ -36,21 +69,10 @@ async def load_unrevoked_enrollment(
     credential = consent.credential
     if type(chain_id) is not int or (consent.chain_id, consent.registry_address) != (chain_id, registry_address):
         raise EnrollmentIneligible("Enrollment audience mismatch")
-    if (
-        credential.tenant_id != tx.tenant_id
-        or credential.credential_nonce != credential_id
-        or credential.commitment != stored["credential_commitment"]
-    ):
-        raise EnrollmentIntegrityError("Enrollment identity or commitment failed")
     # Recheck durable evidence, rather than trusting that every record writer
     # passed through the enrollment service. Consent expiry limits acceptance,
     # not the lifetime of an already accepted credential.
-    consent.verify_wallet_signature(stored["signature"])
-    if (
-        type(stored["accepted_at"]) is not int
-        or not credential.issued_at <= stored["accepted_at"] < consent.consent_expires_at
-    ):
-        raise EnrollmentIntegrityError("Enrollment acceptance is outside signed consent validity")
+    validate_retained_enrollment(tx.tenant_id, credential_id, stored)
     if (
         type(now) is not int
         or now < stored["accepted_at"]
@@ -112,6 +134,7 @@ class EnrollmentService:
                     "accepted_at": now,
                 },
             )
+            await tx.index_enrollment(credential.credential_nonce, enrollment_scope(consent))
             return {"credential_id": credential.credential_nonce, "status": "awaiting-root-publication"}
 
         return await self._store.run_idempotent("issue-credential", idempotency_key, request, persist)

@@ -1,0 +1,104 @@
+{
+  "schema_version": "clearproof-inventory-benchmark-v1",
+  "synthetic_only": true,
+  "python": "3.12.13",
+  "platform": "Linux-7.0.0-38-generic-x86_64-with-glibc2.43",
+  "postgresql": "18.6 (Ubuntu 18.6-0ubuntu0.26.04.1)",
+  "affinity": [
+    0,
+    1,
+    2,
+    3
+  ],
+  "software_guard": 1024,
+  "source_sha256": {
+    "src/storage/pilot.py": "dad35ee0688c07b2a1ebb060613e2269bbdcfd88dd27d349fe2dd31103dc80a1",
+    "src/services/enrollment_inventory.py": "ff5e16c0994fa4913dd4e74cd62731eacc8ab67f4d82d9671eb6f5ceb0810877",
+    "src/services/issuance_tree.py": "cd3a41558c943d771be23215cb2b02528dba9e2639c7b2f1641040968aa6fa47",
+    "src/services/issuance_source.py": "91c474cdc90052a4f91becc280005bf22d413eb89fc07e649be179ca2d599650",
+    "src/registry/pilot_tree.py": "289b3ea9b152af4484a89bd2e9205534d1e5974f93980fa7d36ab6795ff647ae"
+  },
+  "measurements": [
+    {
+      "enrollments": 64,
+      "samples": 3,
+      "first_page_seconds": [
+        0.7546872470120434,
+        0.7584590839978773,
+        0.7194256749935448
+      ],
+      "root_build_seconds": [
+        1.1294314170081634,
+        1.0283085610135458,
+        1.0408533409936354
+      ],
+      "first_page_median_seconds": 0.7546872470120434,
+      "root_build_median_seconds": 1.0408533409936354,
+      "source_pages": 0,
+      "tree_depth": 32
+    },
+    {
+      "enrollments": 256,
+      "samples": 3,
+      "first_page_seconds": [
+        0.6645669350109529,
+        0.7220376810000744,
+        0.7243007849901915
+      ],
+      "root_build_seconds": [
+        4.149183000990888,
+        4.3193183570110705,
+        4.429202977014938
+      ],
+      "first_page_median_seconds": 0.7220376810000744,
+      "root_build_median_seconds": 4.3193183570110705,
+      "source_pages": 0,
+      "tree_depth": 32
+    },
+    {
+      "enrollments": 512,
+      "samples": 3,
+      "first_page_seconds": [
+        0.7650981360056903,
+        0.7404355529870372,
+        0.7268623679992743
+      ],
+      "root_build_seconds": [
+        8.534855784993852,
+        8.367424077005126,
+        8.400736242998391
+      ],
+      "first_page_median_seconds": 0.7404355529870372,
+      "root_build_median_seconds": 8.400736242998391,
+      "source_pages": 4,
+      "tree_depth": 32
+    },
+    {
+      "enrollments": 1024,
+      "samples": 3,
+      "first_page_seconds": [
+        0.8243667740025558,
+        0.7676725820056163,
+        0.694838131981669
+      ],
+      "root_build_seconds": [
+        17.305880701023852,
+        15.563619366002968,
+        16.73017543097376
+      ],
+      "first_page_median_seconds": 0.7676725820056163,
+      "root_build_median_seconds": 16.73017543097376,
+      "source_pages": 8,
+      "tree_depth": 32
+    }
+  ],
+  "excludes": [
+    "HTTP/authentication",
+    "concurrent tenants",
+    "chain/provider calls",
+    "proof generation",
+    "registrar signing/persistence",
+    "service throughput",
+    "production SLA"
+  ]
+}

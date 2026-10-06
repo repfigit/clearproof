@@ -573,6 +573,11 @@ async def test_durable_revocation_scope_retry_and_proving_precondition(db, monke
     bad["credential_commitment"] = changed_credential.commitment
     async with PilotStore(db, cipher(), principal).transaction() as tx:
         await tx.put("credential", "b" * 64, bad)
+        # A faulted internal writer can index invalid evidence. An authentic
+        # inventory count must not replace retained signature verification.
+        from src.services.enrollment import enrollment_scope
+
+        await tx.index_enrollment("b" * 64, enrollment_scope(changed_consent))
         with pytest.raises(EnrollmentError):
             await load_unrevoked_enrollment(tx, "b" * 64, chain_id=31337, registry_address="0x" + "1" * 40, now=140)
         with pytest.raises(EnrollmentError):
@@ -602,7 +607,7 @@ async def test_durable_revocation_scope_retry_and_proving_precondition(db, monke
                 await load_unrevoked_enrollment(tx, nonce, chain_id=31337, registry_address="0x" + "1" * 40, now=201)
 
 
-async def test_tenant_keyset_scan_and_issuance_capacity_fail_without_truncation(db):
+async def test_tenant_keyset_scan_and_unindexed_issuance_fail_without_truncation(db):
     from src.services.issuance_tree import build_issuance_tree
 
     principal = Principal(
@@ -618,7 +623,7 @@ async def test_tenant_keyset_scan_and_issuance_capacity_fail_without_truncation(
         ids = await tx.record_ids("credential")
         assert len(ids) == 256 and ids[0] == "id-0000" and ids[-1] == "id-0255"
         assert await tx.record_ids("credential", after=ids[-1]) == ["id-0256"]
-        with pytest.raises(ValueError, match="capacity"):
+        with pytest.raises(ValueError, match="inventory is incomplete"):
             await build_issuance_tree(
                 tx, issuer_did="did:web:issuer.example", chain_id=31337, registry_address="0x" + "1" * 40, now=120
             )
