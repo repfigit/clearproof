@@ -24,7 +24,7 @@ try {
   }
   const altered = [...signals];
   // Mutate the legacy public registry domain, keeping the original proof.
-  altered[14] = String(BigInt(altered[14]) + 1n);
+  altered[12] = String(BigInt(altered[12]) + 1n);
   const tampered = await verifyProof(proof, altered, fileURLToPath(vkey));
   if (tampered.proofValid) throw new Error('Tampered statement unexpectedly paired');
   console.log(JSON.stringify({

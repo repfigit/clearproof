@@ -47,6 +47,8 @@ bash scripts/build_native_prover.sh /tmp/clearproof-native-build
 It checks out upstream rapidsnark at
 `81eddf1a536d26497b237c0b8a04fe90baf7e439`, verifies its two needed submodule
 revisions, builds SHA-pinned GMP 6.3.0 and retains the source/license notices.
+The download also tries a [GNU-listed mirror](https://www.gnu.org/prep/ftp.en.html)
+before the upstream hosts; every source still requires the identical pinned SHA.
 The receipt records the actual binary SHA256, compiler and assembler. GCC 15
 compatibility uses GNU17 for GMP configure tests and a forced `cstdint` include;
 the arithmetic sources are unchanged. Compiler, CPU and build paths can change

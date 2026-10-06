@@ -11,6 +11,8 @@ import tempfile
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
+# Direct script invocation must resolve this checkout, including the scripts namespace.
+sys.path.insert(0, str(ROOT))
 
 
 def check_prerequisites(artifacts: Path) -> None:

@@ -27,7 +27,7 @@ test('pairs the baseline and mutates the domain without altering the original st
   expect(error).not.toHaveBeenCalled();
   const [original, altered] = verify.mock.calls;
   expect(original[0]).toEqual(altered[0]);
-  expect(altered[1][14]).toBe(String(BigInt(original[1][14]) + 1n));
+  expect(altered[1][12]).toBe(String(BigInt(original[1][12]) + 1n));
   expect(altered[1].filter((v, i) => v !== original[1][i])).toHaveLength(1);
   expect(original[2]).toMatch(/tests\/vectors\/compliance\/verification_key.json$/);
   const report = JSON.parse(log.mock.calls[0][0]);

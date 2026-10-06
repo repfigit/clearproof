@@ -314,3 +314,16 @@ actual external evidence; local tests cannot establish those prerequisites.
   secret names. This metadata check does not locate the expected funded account;
   signer access remains unresolved. No testnet transaction was sent, and there
   is no real evaluation partner yet.
+
+- October 5: onboarding PR #98 review caught a mislabeled tamper coordinate:
+  legacy signal 14 is the nullifier; the registry domain is signal 12. Corrected
+  both the example and its test, then repeated actual pairing/tamper acceptance.
+  Direct preflight now resolves this checkout's scripts namespace explicitly;
+  the documented invocation passes with `PYTHONPATH` removed. Orchestration
+  remains 60 passing checks at 100%, and JavaScript remains 44 passing at 100%.
+  The remote development gate stopped at the native source download because
+  all three upstream GMP hosts timed out. An additional GNU-listed mirror
+  supplies the same SHA-pinned archive. A fresh full source build passed and
+  produced the same observed native binary SHA256 as the previously verified
+  build; no source pin, arithmetic, setup key or compiled artifact changed.
+  Updated full CI and approving review remain required.
