@@ -4,6 +4,7 @@ export const DOCUMENTATION_PAGES = [
   { path: '/docs', title: 'Introduction', description: 'Clearproof components, intended evaluation workflows and current interoperability limits.' },
   { path: '/docs/status', title: 'Project status', description: 'Published release, implemented pilot capabilities, software capacity and open adoption and assurance gates.' },
   { path: '/docs/quickstart', title: 'Quick start', description: 'Install Clearproof and evaluate synthetic evidence or the complete local pilot with development artifacts.' },
+  { path: '/docs/evaluate', title: 'Evaluate Clearproof', description: 'Choose a synthetic evaluation path, record reproducibility and evidence-review outcomes, and share useful feedback.' },
   { path: '/docs/architecture', title: 'Architecture', description: 'How authenticated inputs, proofs, policy, encrypted information and authorization fit together.' },
   { path: '/docs/system-diagram', title: 'System diagram', description: 'The pilot transfer workflow and its separate proof, authorization and observation state tracks.' },
   { path: '/docs/circuits', title: 'Circuits', description: 'The current eight-signal pilot-transfer-v3 circuit, tree depths, public bindings and development setup.' },

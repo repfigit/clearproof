@@ -1,0 +1,47 @@
+export const metadata = {
+  "title": "Evaluate Clearproof",
+  "description": "Choose a synthetic evaluation path, record reproducibility and evidence-review outcomes, and share useful feedback.",
+  "alternates": {
+    "canonical": "/docs/evaluate"
+  }
+};
+
+# Evaluate Clearproof
+
+Use a synthetic workflow to decide whether Clearproof's evidence is useful for your review task. Start with the smaller example or run the complete pilot, then record what worked, what failed and what remains unknown.
+
+## Choose a path
+
+| Path | What you can assess | Setup |
+| --- | --- | --- |
+| [Quick verification example](/docs/quickstart#quick-verification-example) | Pair a historical legacy proof, reproduce its expected policy rejection and reject tampered public data; no authorization | Git and Node; no database, Circom, signer or testnet funds |
+| [Complete local pilot](/docs/quickstart#complete-local-pilot) | Exercise the current eight-signal workflow, signed decisions, encrypted exports and independent inspection with local simulated sources | Python, Node, Circom and an owned disposable PostgreSQL/EVM setup |
+
+Use [project status](/docs/status) to check the currently published profile and operating limits. For either path, retain your exact source revision, package versions, commands and artifact digests. Keep failed or incomplete attempts visible. A script that exits successfully is an example completion, not proof that another institution accepts the result.
+
+## Define the review before running it
+
+Choose a task such as detecting a stale source, explaining a policy rejection or reconstructing a recorded decision. Identify the reviewer and the evidence they should need. If you compare an existing workflow, use the same cases and task for both.
+
+Include successful, tampered, missing and stale evidence. Decide expected labels before examining results. Separate cryptographic validity, source authenticity, policy outcome and authorization consumption; a valid proof can still be rejected. Record errors and manual intervention alongside complete and incomplete outcomes.
+
+## Record the result
+
+Copy the [report template](https://github.com/repfigit/clearproof/blob/main/docs/evaluation/report-template.md). Record:
+
+- Attempts, completed attempts, failures and incomplete attempts, with a denominator.
+- Installation time, active review time and wall-clock time separately. Mark unmeasured values as unknown.
+- Expected versus observed outcomes for each case, and which sources or authorities you trusted.
+- Any manual steps, evidence the reviewer could not recover, and the next decision the result supports.
+
+The [synthetic sample report](https://github.com/repfigit/clearproof/blob/main/docs/evaluation/example-synthetic-report.md) records an internal local run. Its sources are simulators; it does not represent an external operator or counterparty. The run did not establish a clean environment or retain review-time measurements. Those gaps remain visible in the sample.
+
+## Return useful feedback
+
+For a completed or incomplete evaluation, open the [evaluation feedback form](https://github.com/repfigit/clearproof/issues/new?template=evaluation.yml), review the synthetic summary and submit it yourself. No report is submitted by visiting this page or running an example. For a reproducible defect, use the [bug reporting path](/docs/report-issues); for discussion, use [GitHub Discussions](https://github.com/repfigit/clearproof/discussions).
+
+Public feedback must use synthetic data. Exclude personal data, decrypted envelopes, database URLs, keys and real customer records. Security findings use the [private reporting channel](/docs/security).
+
+## What remains to be evaluated
+
+No real evaluation partner is established. Internal reproduction cannot establish live interoperability, independent assurance, an active customer, repeat use or willingness to pay. A permitted operator/counterparty evaluation must record those observations separately. Site visits, stars and outbound clicks are discovery signals rather than successful adoption.
