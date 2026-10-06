@@ -29,24 +29,31 @@ export interface VerifierRouterInterface extends Interface {
       | "ADMIN_ROLE"
       | "DEFAULT_ADMIN_ROLE"
       | "EMERGENCY_ROLE"
+      | "RETIREMENT_GRACE"
       | "activateVerifier"
       | "completeRetirement"
+      | "completeTimelockUpdate"
       | "disableVerifier"
       | "getRoleAdmin"
       | "getVerifier"
       | "grantRole"
       | "hasRole"
       | "isVerifierActive"
+      | "isVerifierResolvable"
       | "minTimelock"
       | "pause"
       | "paused"
+      | "pendingCodeHashes"
       | "pendingRegistrations"
       | "pendingRetirements"
+      | "pendingTimelock"
       | "registerVerifier"
       | "renounceRole"
       | "revokeRole"
       | "scheduleRetirement"
       | "supportsInterface"
+      | "timelockFloor"
+      | "timelockUpdateAfter"
       | "timelocks"
       | "unpause"
       | "updateTimelock"
@@ -57,9 +64,11 @@ export interface VerifierRouterInterface extends Interface {
   getEvent(
     nameOrSignatureOrTopic:
       | "Paused"
+      | "RetirementCompleted"
       | "RoleAdminChanged"
       | "RoleGranted"
       | "RoleRevoked"
+      | "TimelockUpdateScheduled"
       | "TimelockUpdated"
       | "Unpaused"
       | "VerifierActivated"
@@ -81,12 +90,20 @@ export interface VerifierRouterInterface extends Interface {
     values?: undefined
   ): string;
   encodeFunctionData(
+    functionFragment: "RETIREMENT_GRACE",
+    values?: undefined
+  ): string;
+  encodeFunctionData(
     functionFragment: "activateVerifier",
     values: [BytesLike, string]
   ): string;
   encodeFunctionData(
     functionFragment: "completeRetirement",
     values: [BytesLike]
+  ): string;
+  encodeFunctionData(
+    functionFragment: "completeTimelockUpdate",
+    values?: undefined
   ): string;
   encodeFunctionData(
     functionFragment: "disableVerifier",
@@ -113,11 +130,19 @@ export interface VerifierRouterInterface extends Interface {
     values: [BytesLike]
   ): string;
   encodeFunctionData(
+    functionFragment: "isVerifierResolvable",
+    values: [BytesLike]
+  ): string;
+  encodeFunctionData(
     functionFragment: "minTimelock",
     values?: undefined
   ): string;
   encodeFunctionData(functionFragment: "pause", values?: undefined): string;
   encodeFunctionData(functionFragment: "paused", values?: undefined): string;
+  encodeFunctionData(
+    functionFragment: "pendingCodeHashes",
+    values: [BytesLike]
+  ): string;
   encodeFunctionData(
     functionFragment: "pendingRegistrations",
     values: [BytesLike]
@@ -125,6 +150,10 @@ export interface VerifierRouterInterface extends Interface {
   encodeFunctionData(
     functionFragment: "pendingRetirements",
     values: [BytesLike]
+  ): string;
+  encodeFunctionData(
+    functionFragment: "pendingTimelock",
+    values?: undefined
   ): string;
   encodeFunctionData(
     functionFragment: "registerVerifier",
@@ -145,6 +174,14 @@ export interface VerifierRouterInterface extends Interface {
   encodeFunctionData(
     functionFragment: "supportsInterface",
     values: [BytesLike]
+  ): string;
+  encodeFunctionData(
+    functionFragment: "timelockFloor",
+    values?: undefined
+  ): string;
+  encodeFunctionData(
+    functionFragment: "timelockUpdateAfter",
+    values?: undefined
   ): string;
   encodeFunctionData(
     functionFragment: "timelocks",
@@ -180,11 +217,19 @@ export interface VerifierRouterInterface extends Interface {
     data: BytesLike
   ): Result;
   decodeFunctionResult(
+    functionFragment: "RETIREMENT_GRACE",
+    data: BytesLike
+  ): Result;
+  decodeFunctionResult(
     functionFragment: "activateVerifier",
     data: BytesLike
   ): Result;
   decodeFunctionResult(
     functionFragment: "completeRetirement",
+    data: BytesLike
+  ): Result;
+  decodeFunctionResult(
+    functionFragment: "completeTimelockUpdate",
     data: BytesLike
   ): Result;
   decodeFunctionResult(
@@ -206,17 +251,29 @@ export interface VerifierRouterInterface extends Interface {
     data: BytesLike
   ): Result;
   decodeFunctionResult(
+    functionFragment: "isVerifierResolvable",
+    data: BytesLike
+  ): Result;
+  decodeFunctionResult(
     functionFragment: "minTimelock",
     data: BytesLike
   ): Result;
   decodeFunctionResult(functionFragment: "pause", data: BytesLike): Result;
   decodeFunctionResult(functionFragment: "paused", data: BytesLike): Result;
   decodeFunctionResult(
+    functionFragment: "pendingCodeHashes",
+    data: BytesLike
+  ): Result;
+  decodeFunctionResult(
     functionFragment: "pendingRegistrations",
     data: BytesLike
   ): Result;
   decodeFunctionResult(
     functionFragment: "pendingRetirements",
+    data: BytesLike
+  ): Result;
+  decodeFunctionResult(
+    functionFragment: "pendingTimelock",
     data: BytesLike
   ): Result;
   decodeFunctionResult(
@@ -234,6 +291,14 @@ export interface VerifierRouterInterface extends Interface {
   ): Result;
   decodeFunctionResult(
     functionFragment: "supportsInterface",
+    data: BytesLike
+  ): Result;
+  decodeFunctionResult(
+    functionFragment: "timelockFloor",
+    data: BytesLike
+  ): Result;
+  decodeFunctionResult(
+    functionFragment: "timelockUpdateAfter",
     data: BytesLike
   ): Result;
   decodeFunctionResult(functionFragment: "timelocks", data: BytesLike): Result;
@@ -254,6 +319,19 @@ export namespace PausedEvent {
   export type OutputTuple = [account: string];
   export interface OutputObject {
     account: string;
+  }
+  export type Event = TypedContractEvent<InputTuple, OutputTuple, OutputObject>;
+  export type Filter = TypedDeferredTopicFilter<Event>;
+  export type Log = TypedEventLog<Event>;
+  export type LogDescription = TypedLogDescription<Event>;
+}
+
+export namespace RetirementCompletedEvent {
+  export type InputTuple = [selector: BytesLike, graceEndsAt: BigNumberish];
+  export type OutputTuple = [selector: string, graceEndsAt: bigint];
+  export interface OutputObject {
+    selector: string;
+    graceEndsAt: bigint;
   }
   export type Event = TypedContractEvent<InputTuple, OutputTuple, OutputObject>;
   export type Filter = TypedDeferredTopicFilter<Event>;
@@ -312,6 +390,22 @@ export namespace RoleRevokedEvent {
     role: string;
     account: string;
     sender: string;
+  }
+  export type Event = TypedContractEvent<InputTuple, OutputTuple, OutputObject>;
+  export type Filter = TypedDeferredTopicFilter<Event>;
+  export type Log = TypedEventLog<Event>;
+  export type LogDescription = TypedLogDescription<Event>;
+}
+
+export namespace TimelockUpdateScheduledEvent {
+  export type InputTuple = [
+    newTimelock: BigNumberish,
+    executeAfter: BigNumberish
+  ];
+  export type OutputTuple = [newTimelock: bigint, executeAfter: bigint];
+  export interface OutputObject {
+    newTimelock: bigint;
+    executeAfter: bigint;
   }
   export type Event = TypedContractEvent<InputTuple, OutputTuple, OutputObject>;
   export type Filter = TypedDeferredTopicFilter<Event>;
@@ -456,6 +550,8 @@ export interface VerifierRouter extends BaseContract {
 
   EMERGENCY_ROLE: TypedContractMethod<[], [string], "view">;
 
+  RETIREMENT_GRACE: TypedContractMethod<[], [bigint], "view">;
+
   activateVerifier: TypedContractMethod<
     [selector: BytesLike, name: string],
     [void],
@@ -467,6 +563,8 @@ export interface VerifierRouter extends BaseContract {
     [void],
     "nonpayable"
   >;
+
+  completeTimelockUpdate: TypedContractMethod<[], [void], "nonpayable">;
 
   disableVerifier: TypedContractMethod<
     [selector: BytesLike],
@@ -496,11 +594,19 @@ export interface VerifierRouter extends BaseContract {
     "view"
   >;
 
+  isVerifierResolvable: TypedContractMethod<
+    [selector: BytesLike],
+    [boolean],
+    "view"
+  >;
+
   minTimelock: TypedContractMethod<[], [bigint], "view">;
 
   pause: TypedContractMethod<[], [void], "nonpayable">;
 
   paused: TypedContractMethod<[], [boolean], "view">;
+
+  pendingCodeHashes: TypedContractMethod<[arg0: BytesLike], [string], "view">;
 
   pendingRegistrations: TypedContractMethod<
     [arg0: BytesLike],
@@ -509,6 +615,8 @@ export interface VerifierRouter extends BaseContract {
   >;
 
   pendingRetirements: TypedContractMethod<[arg0: BytesLike], [boolean], "view">;
+
+  pendingTimelock: TypedContractMethod<[], [bigint], "view">;
 
   registerVerifier: TypedContractMethod<
     [selector: BytesLike, verifier: AddressLike, name: string],
@@ -540,6 +648,10 @@ export interface VerifierRouter extends BaseContract {
     "view"
   >;
 
+  timelockFloor: TypedContractMethod<[], [bigint], "view">;
+
+  timelockUpdateAfter: TypedContractMethod<[], [bigint], "view">;
+
   timelocks: TypedContractMethod<[arg0: BytesLike], [bigint], "view">;
 
   unpause: TypedContractMethod<[], [void], "nonpayable">;
@@ -553,12 +665,15 @@ export interface VerifierRouter extends BaseContract {
   verifiers: TypedContractMethod<
     [arg0: BytesLike],
     [
-      [string, bigint, bigint, boolean, string] & {
+      [string, bigint, bigint, boolean, string, string, bigint, bigint] & {
         verifier: string;
         registeredAt: bigint;
         disabledAt: bigint;
         active: boolean;
         name: string;
+        codeHash: string;
+        retiredAt: bigint;
+        graceEndsAt: bigint;
       }
     ],
     "view"
@@ -590,6 +705,9 @@ export interface VerifierRouter extends BaseContract {
     nameOrSignature: "EMERGENCY_ROLE"
   ): TypedContractMethod<[], [string], "view">;
   getFunction(
+    nameOrSignature: "RETIREMENT_GRACE"
+  ): TypedContractMethod<[], [bigint], "view">;
+  getFunction(
     nameOrSignature: "activateVerifier"
   ): TypedContractMethod<
     [selector: BytesLike, name: string],
@@ -599,6 +717,9 @@ export interface VerifierRouter extends BaseContract {
   getFunction(
     nameOrSignature: "completeRetirement"
   ): TypedContractMethod<[selector: BytesLike], [void], "nonpayable">;
+  getFunction(
+    nameOrSignature: "completeTimelockUpdate"
+  ): TypedContractMethod<[], [void], "nonpayable">;
   getFunction(
     nameOrSignature: "disableVerifier"
   ): TypedContractMethod<[selector: BytesLike], [void], "nonpayable">;
@@ -626,6 +747,9 @@ export interface VerifierRouter extends BaseContract {
     nameOrSignature: "isVerifierActive"
   ): TypedContractMethod<[selector: BytesLike], [boolean], "view">;
   getFunction(
+    nameOrSignature: "isVerifierResolvable"
+  ): TypedContractMethod<[selector: BytesLike], [boolean], "view">;
+  getFunction(
     nameOrSignature: "minTimelock"
   ): TypedContractMethod<[], [bigint], "view">;
   getFunction(
@@ -635,11 +759,17 @@ export interface VerifierRouter extends BaseContract {
     nameOrSignature: "paused"
   ): TypedContractMethod<[], [boolean], "view">;
   getFunction(
+    nameOrSignature: "pendingCodeHashes"
+  ): TypedContractMethod<[arg0: BytesLike], [string], "view">;
+  getFunction(
     nameOrSignature: "pendingRegistrations"
   ): TypedContractMethod<[arg0: BytesLike], [string], "view">;
   getFunction(
     nameOrSignature: "pendingRetirements"
   ): TypedContractMethod<[arg0: BytesLike], [boolean], "view">;
+  getFunction(
+    nameOrSignature: "pendingTimelock"
+  ): TypedContractMethod<[], [bigint], "view">;
   getFunction(
     nameOrSignature: "registerVerifier"
   ): TypedContractMethod<
@@ -668,6 +798,12 @@ export interface VerifierRouter extends BaseContract {
     nameOrSignature: "supportsInterface"
   ): TypedContractMethod<[interfaceId: BytesLike], [boolean], "view">;
   getFunction(
+    nameOrSignature: "timelockFloor"
+  ): TypedContractMethod<[], [bigint], "view">;
+  getFunction(
+    nameOrSignature: "timelockUpdateAfter"
+  ): TypedContractMethod<[], [bigint], "view">;
+  getFunction(
     nameOrSignature: "timelocks"
   ): TypedContractMethod<[arg0: BytesLike], [bigint], "view">;
   getFunction(
@@ -681,12 +817,15 @@ export interface VerifierRouter extends BaseContract {
   ): TypedContractMethod<
     [arg0: BytesLike],
     [
-      [string, bigint, bigint, boolean, string] & {
+      [string, bigint, bigint, boolean, string, string, bigint, bigint] & {
         verifier: string;
         registeredAt: bigint;
         disabledAt: bigint;
         active: boolean;
         name: string;
+        codeHash: string;
+        retiredAt: bigint;
+        graceEndsAt: bigint;
       }
     ],
     "view"
@@ -713,6 +852,13 @@ export interface VerifierRouter extends BaseContract {
     PausedEvent.OutputObject
   >;
   getEvent(
+    key: "RetirementCompleted"
+  ): TypedContractEvent<
+    RetirementCompletedEvent.InputTuple,
+    RetirementCompletedEvent.OutputTuple,
+    RetirementCompletedEvent.OutputObject
+  >;
+  getEvent(
     key: "RoleAdminChanged"
   ): TypedContractEvent<
     RoleAdminChangedEvent.InputTuple,
@@ -732,6 +878,13 @@ export interface VerifierRouter extends BaseContract {
     RoleRevokedEvent.InputTuple,
     RoleRevokedEvent.OutputTuple,
     RoleRevokedEvent.OutputObject
+  >;
+  getEvent(
+    key: "TimelockUpdateScheduled"
+  ): TypedContractEvent<
+    TimelockUpdateScheduledEvent.InputTuple,
+    TimelockUpdateScheduledEvent.OutputTuple,
+    TimelockUpdateScheduledEvent.OutputObject
   >;
   getEvent(
     key: "TimelockUpdated"
@@ -788,6 +941,17 @@ export interface VerifierRouter extends BaseContract {
       PausedEvent.OutputObject
     >;
 
+    "RetirementCompleted(bytes32,uint256)": TypedContractEvent<
+      RetirementCompletedEvent.InputTuple,
+      RetirementCompletedEvent.OutputTuple,
+      RetirementCompletedEvent.OutputObject
+    >;
+    RetirementCompleted: TypedContractEvent<
+      RetirementCompletedEvent.InputTuple,
+      RetirementCompletedEvent.OutputTuple,
+      RetirementCompletedEvent.OutputObject
+    >;
+
     "RoleAdminChanged(bytes32,bytes32,bytes32)": TypedContractEvent<
       RoleAdminChangedEvent.InputTuple,
       RoleAdminChangedEvent.OutputTuple,
@@ -819,6 +983,17 @@ export interface VerifierRouter extends BaseContract {
       RoleRevokedEvent.InputTuple,
       RoleRevokedEvent.OutputTuple,
       RoleRevokedEvent.OutputObject
+    >;
+
+    "TimelockUpdateScheduled(uint256,uint256)": TypedContractEvent<
+      TimelockUpdateScheduledEvent.InputTuple,
+      TimelockUpdateScheduledEvent.OutputTuple,
+      TimelockUpdateScheduledEvent.OutputObject
+    >;
+    TimelockUpdateScheduled: TypedContractEvent<
+      TimelockUpdateScheduledEvent.InputTuple,
+      TimelockUpdateScheduledEvent.OutputTuple,
+      TimelockUpdateScheduledEvent.OutputObject
     >;
 
     "TimelockUpdated(uint256)": TypedContractEvent<

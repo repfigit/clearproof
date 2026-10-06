@@ -50,10 +50,6 @@ declare module "hardhat/types/runtime" {
       signerOrOptions?: ethers.Signer | FactoryOptions
     ): Promise<Contracts.Pausable__factory>;
     getContractFactory(
-      name: "ReentrancyGuard",
-      signerOrOptions?: ethers.Signer | FactoryOptions
-    ): Promise<Contracts.ReentrancyGuard__factory>;
-    getContractFactory(
       name: "Groth16VerifierBLS",
       signerOrOptions?: ethers.Signer | FactoryOptions
     ): Promise<Contracts.Groth16VerifierBLS__factory>;
@@ -160,11 +156,6 @@ declare module "hardhat/types/runtime" {
       signer?: ethers.Signer
     ): Promise<Contracts.Pausable>;
     getContractAt(
-      name: "ReentrancyGuard",
-      address: string | ethers.Addressable,
-      signer?: ethers.Signer
-    ): Promise<Contracts.ReentrancyGuard>;
-    getContractAt(
       name: "Groth16VerifierBLS",
       address: string | ethers.Addressable,
       signer?: ethers.Signer
@@ -277,10 +268,6 @@ declare module "hardhat/types/runtime" {
       signerOrOptions?: ethers.Signer | DeployContractOptions
     ): Promise<Contracts.Pausable>;
     deployContract(
-      name: "ReentrancyGuard",
-      signerOrOptions?: ethers.Signer | DeployContractOptions
-    ): Promise<Contracts.ReentrancyGuard>;
-    deployContract(
       name: "Groth16VerifierBLS",
       signerOrOptions?: ethers.Signer | DeployContractOptions
     ): Promise<Contracts.Groth16VerifierBLS>;
@@ -386,11 +373,6 @@ declare module "hardhat/types/runtime" {
       args: any[],
       signerOrOptions?: ethers.Signer | DeployContractOptions
     ): Promise<Contracts.Pausable>;
-    deployContract(
-      name: "ReentrancyGuard",
-      args: any[],
-      signerOrOptions?: ethers.Signer | DeployContractOptions
-    ): Promise<Contracts.ReentrancyGuard>;
     deployContract(
       name: "Groth16VerifierBLS",
       args: any[],

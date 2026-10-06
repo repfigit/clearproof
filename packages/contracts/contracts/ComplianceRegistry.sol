@@ -39,6 +39,10 @@ contract ComplianceRegistry is AccessControl, Pausable {
     error ThresholdMismatch();
     error ThresholdsNotOrdered();
     error VerifierSelectorNotSet();
+    error VerifierUnavailable();
+    error SelectionAlreadyPending();
+    error SelectionNotReady();
+    error SelectorGraceExpired();
 
     bytes32 public constant REVOKER_ROLE = keccak256("REVOKER_ROLE");
     bytes32 public constant THRESHOLD_ADMIN_ROLE = keccak256("THRESHOLD_ADMIN_ROLE");
@@ -63,7 +67,15 @@ contract ComplianceRegistry is AccessControl, Pausable {
     event JurisdictionThresholdsSet(uint16 indexed jurisdictionCode, uint64 tier2, uint64 tier3, uint64 tier4);
     event JurisdictionCodeMismatch(bytes32 indexed transferId, uint256 claimedJurisdictionCode, uint256 expectedJurisdictionCode);
 
-    VerifierRouter public verifierRouter;
+    VerifierRouter public immutable verifierRouter;
+    uint256 public immutable verifierSelectionDelay;
+    bytes32 public pendingVerifierSelector;
+    uint256 public verifierSelectionAfter;
+    mapping(bytes32 => uint256) public previousSelectorUntil;
+    mapping(bytes32 => uint256) public previousSelectorCutoff;
+    event VerifierSelectionScheduled(bytes32 indexed selector, uint256 executeAfter);
+    event VerifierSelectionCancelled(bytes32 indexed selector);
+    event VerifierSelectionActivated(bytes32 indexed previousSelector, bytes32 indexed selector, uint256 previousUntil);
     bytes32 public verifierSelector;
     VASPRegistry public immutable vaspRegistry;
     SanctionsOracle public immutable sanctionsOracle;
@@ -106,6 +118,7 @@ contract ComplianceRegistry is AccessControl, Pausable {
         if (_sanctionsOracle == address(0)) revert ZeroOracle();
 
         verifierRouter = VerifierRouter(_verifierRouter);
+        verifierSelectionDelay = verifierRouter.minTimelock();
         verifierSelector = _verifierSelector;
         vaspRegistry = VASPRegistry(_vaspRegistry);
         sanctionsOracle = SanctionsOracle(_sanctionsOracle);
@@ -119,10 +132,39 @@ contract ComplianceRegistry is AccessControl, Pausable {
         _setJurisdictionThresholds(DEFAULT_JURISDICTION_KEY, defaultTier2, defaultTier3, defaultTier4);
     }
 
-    /// @notice Set the verifier selector to use
-    /// @param _verifierSelector The selector for the verifier to use
-    function setVerifierSelector(bytes32 _verifierSelector) external onlyRole(DEFAULT_ADMIN_ROLE) {
-        verifierSelector = _verifierSelector;
+    /// @notice Schedule a new default. Existing callers must separately activate it.
+    function setVerifierSelector(bytes32 selector) external onlyRole(DEFAULT_ADMIN_ROLE) {
+        if (pendingVerifierSelector != bytes32(0)) revert SelectionAlreadyPending();
+        if (selector == bytes32(0)) revert VerifierSelectorNotSet();
+        if (selector == verifierSelector || !verifierRouter.isVerifierActive(selector)) revert VerifierUnavailable();
+        pendingVerifierSelector = selector;
+        // Capture the greater of the reviewed deployment delay and current delay.
+        uint256 delay = verifierRouter.minTimelock();
+        if (delay < verifierSelectionDelay) delay = verifierSelectionDelay;
+        verifierSelectionAfter = block.timestamp + delay;
+        emit VerifierSelectionScheduled(selector, verifierSelectionAfter);
+    }
+
+    function cancelVerifierSelection() external onlyRole(DEFAULT_ADMIN_ROLE) {
+        if (pendingVerifierSelector == bytes32(0)) revert VerifierSelectorNotSet();
+        emit VerifierSelectionCancelled(pendingVerifierSelector);
+        delete pendingVerifierSelector;
+        delete verifierSelectionAfter;
+    }
+
+    function activateVerifierSelector() external onlyRole(DEFAULT_ADMIN_ROLE) {
+        bytes32 selector = pendingVerifierSelector;
+        if (selector == bytes32(0)) revert VerifierSelectorNotSet();
+        if (block.timestamp < verifierSelectionAfter) revert SelectionNotReady();
+        if (!verifierRouter.isVerifierActive(selector)) revert VerifierUnavailable();
+        bytes32 previous = verifierSelector;
+        uint256 until = block.timestamp + verifierRouter.RETIREMENT_GRACE();
+        previousSelectorUntil[previous] = until;
+        previousSelectorCutoff[previous] = block.timestamp;
+        verifierSelector = selector;
+        delete pendingVerifierSelector;
+        delete verifierSelectionAfter;
+        emit VerifierSelectionActivated(previous, selector, until);
     }
 
     /// @notice Register or update the thresholds accepted for a jurisdiction.
@@ -189,6 +231,38 @@ contract ComplianceRegistry is AccessControl, Pausable {
         uint[16] calldata _pubSignals,
         bytes32 vaspDidHash
     ) external whenNotPaused returns (bool) {
+        return _verifyAndRecord(verifierSelector, transferId, _pA, _pB, _pC, _pubSignals, vaspDidHash);
+    }
+
+    /// @notice Submit an in-flight proof against a former default within grace.
+    /// Domain, roots, thresholds, sender, revocation and nullifiers stay identical.
+    function verifyAndRecordWithSelector(
+        bytes32 selector,
+        bytes32 transferId,
+        uint[2] calldata _pA,
+        uint[2][2] calldata _pB,
+        uint[2] calldata _pC,
+        uint[16] calldata _pubSignals,
+        bytes32 vaspDidHash
+    ) external whenNotPaused returns (bool) {
+        if (selector != verifierSelector) {
+            uint256 until = previousSelectorUntil[selector];
+            if (until == 0 || block.timestamp > until || _pubSignals[5] > previousSelectorCutoff[selector]) {
+                revert SelectorGraceExpired();
+            }
+        }
+        return _verifyAndRecord(selector, transferId, _pA, _pB, _pC, _pubSignals, vaspDidHash);
+    }
+
+    function _verifyAndRecord(
+        bytes32 selector,
+        bytes32 transferId,
+        uint[2] calldata _pA,
+        uint[2][2] calldata _pB,
+        uint[2] calldata _pC,
+        uint[16] calldata _pubSignals,
+        bytes32 vaspDidHash
+    ) internal returns (bool) {
         // Replay prevention
         if (proofs[transferId].timestamp != 0) revert TransferAlreadyRecorded();
 
@@ -236,9 +310,11 @@ contract ComplianceRegistry is AccessControl, Pausable {
         if (usedNullifiers[nullifier]) revert ProofAlreadyUsed();
 
         // C-1: Cryptographic verification — revert on invalid proof
-        if (verifierSelector == bytes32(0)) revert VerifierSelectorNotSet();
+        if (selector == bytes32(0)) revert VerifierSelectorNotSet();
+        // A retired verifier is never accepted as the default.
+        if (selector == verifierSelector && !verifierRouter.isVerifierActive(selector)) revert VerifierUnavailable();
         
-        bool valid = verifierRouter.verifyProof(verifierSelector, _pA, _pB, _pC, _pubSignals);
+        bool valid = verifierRouter.verifyProof(selector, _pA, _pB, _pC, _pubSignals);
         if (!valid) revert ProofVerificationFailed();
 
         // Record

@@ -72,8 +72,7 @@ describe("Legacy jurisdiction observations", function () {
           transfer, [1n, 2n], [[1n, 2n], [3n, 4n]], [1n, 2n], signals, did,
         )).to.be.revertedWithCustomError(registry, "NotRegisteredVASPWallet");
         await unchanged();
-        await registry.setVerifierSelector(ethers.ZeroHash);
-        await expect(submit()).to.be.revertedWithCustomError(registry, "VerifierSelectorNotSet");
+        await expect(registry.setVerifierSelector(ethers.ZeroHash)).to.be.revertedWithCustomError(registry, "VerifierSelectorNotSet");
         await unchanged();
         const actualVerifier = await (await ethers.getContractFactory("Groth16Verifier")).deploy();
         const actualSelector = ethers.id("actual-pairing-rejection");
@@ -81,6 +80,8 @@ describe("Legacy jurisdiction observations", function () {
         await time.increase(2);
         await router.activateVerifier(actualSelector, "Actual pairing verifier");
         await registry.setVerifierSelector(actualSelector);
+        await time.increase(2);
+        await registry.activateVerifierSelector();
         await expect(submit()).to.be.revertedWith("Pairing: ecpairing failed");
         await unchanged();
         // Infinity points have canonical encodings but do not satisfy this key.
@@ -89,6 +90,8 @@ describe("Legacy jurisdiction observations", function () {
         )).to.be.revertedWithCustomError(registry, "ProofVerificationFailed");
         await unchanged();
         await registry.setVerifierSelector(selector);
+        await time.increase(2);
+        await registry.activateVerifierSelector();
       }
       const tx = registry.connect(vaspWallet).verifyAndRecord(
         transfer, [1n, 2n], [[1n, 2n], [3n, 4n]], [1n, 2n], signals, did,

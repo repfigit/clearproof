@@ -3,16 +3,11 @@
 // https://clearproof.world | https://docs.clearproof.world
 // LEGACY: 16-signal `compliance.circom` demo/parity path, not pilot-transfer-v3.
 // Never treat proofs, roots or records accepted here as current pilot authorization.
-// Kept at this path for the published @clearproof/contracts artifact layout; see
-// packages/contracts/AGENTS.md ("Legacy contracts") and docs/internal/CIRCUIT_SIGNALS.md.
 pragma solidity ^0.8.24;
 
 import "@openzeppelin/contracts/access/AccessControl.sol";
 import "@openzeppelin/contracts/utils/Pausable.sol";
-import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 
-/// @dev Interface for the Groth16 verifier with 16 public signals.
-/// The concrete Groth16Verifier.sol will be regenerated after circuit recompilation.
 interface IGroth16Verifier {
     function verifyProof(
         uint[2] calldata _pA,
@@ -22,145 +17,127 @@ interface IGroth16Verifier {
     ) external view returns (bool);
 }
 
-contract VerifierRouter is AccessControl, Pausable, ReentrancyGuard {
-    // Custom errors
+/// @notice Permanent scheme/version bindings for the legacy Groth16 interface.
+/// A different proof-system ABI requires a separately reviewed adapter/router.
+contract VerifierRouter is AccessControl, Pausable {
     error ZeroAddress();
+    error InvalidSelector();
+    error InvalidTimelock();
+    error VerifierNotContract();
+    error VerifierCodeChanged();
+    error SelectorAlreadyReserved();
     error VerifierNotFound();
     error VerifierAlreadyDisabled();
+    error VerifierAlreadyRetiring();
     error Unauthorized();
-    
+
     bytes32 public constant ADMIN_ROLE = keccak256("ADMIN_ROLE");
     bytes32 public constant EMERGENCY_ROLE = keccak256("EMERGENCY_ROLE");
-    
-    // Minimum timelock period (in seconds)
+    uint256 public constant RETIREMENT_GRACE = 1 days;
+    uint256 public immutable timelockFloor;
     uint256 public minTimelock;
-    
+    uint256 public pendingTimelock;
+    uint256 public timelockUpdateAfter;
+
     struct VerifierInfo {
-        address verifier;           // Address of the verifier contract
-        uint256 registeredAt;       // Timestamp when verifier was registered
-        uint256 disabledAt;         // Timestamp when verifier was disabled (0 if active)
-        bool active;                // Whether the verifier is currently active
-        string name;                // Human-readable name for the verifier
+        address verifier;
+        uint256 registeredAt;
+        uint256 disabledAt; // Emergency disable only; never grants a grace period.
+        bool active;       // Eligible for a new default selection.
+        string name;
+        bytes32 codeHash;
+        uint256 retiredAt;
+        uint256 graceEndsAt;
     }
-    
-    // Mapping from selector to verifier info
+
     mapping(bytes32 => VerifierInfo) public verifiers;
-    
-    // Timelock for verifier registration and retirement
+    // Registration and retirement cannot overlap: selectors are reserved once.
     mapping(bytes32 => uint256) public timelocks;
     mapping(bytes32 => address) public pendingRegistrations;
     mapping(bytes32 => bool) public pendingRetirements;
-    
-    // Event declarations
+    mapping(bytes32 => bytes32) public pendingCodeHashes;
+
     event VerifierRegistered(bytes32 indexed selector, address verifier, string name, uint256 timelock);
     event VerifierActivated(bytes32 indexed selector, address verifier);
     event VerifierDisabled(bytes32 indexed selector, address verifier);
     event VerifierRetired(bytes32 indexed selector, address verifier);
+    event RetirementCompleted(bytes32 indexed selector, uint256 graceEndsAt);
+    event TimelockUpdateScheduled(uint256 newTimelock, uint256 executeAfter);
     event TimelockUpdated(uint256 newTimelock);
-    
+
     constructor(uint256 _minTimelock) {
+        if (_minTimelock == 0) revert InvalidTimelock();
         _grantRole(DEFAULT_ADMIN_ROLE, msg.sender);
         _grantRole(ADMIN_ROLE, msg.sender);
         _grantRole(EMERGENCY_ROLE, msg.sender);
+        timelockFloor = _minTimelock;
         minTimelock = _minTimelock;
     }
-    
-    /// @notice Register a new verifier with a selector
-    /// @param selector Unique identifier for the verifier (e.g., keccak256("groth16-bn254-v1"))
-    /// @param verifier Address of the verifier contract
-    /// @param name Human-readable name for the verifier
-    function registerVerifier(bytes32 selector, address verifier, string memory name) 
-        external 
-        onlyRole(ADMIN_ROLE)
-    {
+
+    /// @notice Reserve a scheme/version selector, e.g. keccak256("groth16-bn254-v2").
+    /// Neither pending nor activated bindings can ever be overwritten or reused.
+    function registerVerifier(bytes32 selector, address verifier, string memory name) external onlyRole(ADMIN_ROLE) {
+        if (selector == bytes32(0)) revert InvalidSelector();
         if (verifier == address(0)) revert ZeroAddress();
-        
-        // Set timelock for the registration
+        if (verifier.code.length == 0) revert VerifierNotContract();
+        if (verifiers[selector].verifier != address(0) || pendingRegistrations[selector] != address(0)) {
+            revert SelectorAlreadyReserved();
+        }
         timelocks[selector] = block.timestamp + minTimelock;
         pendingRegistrations[selector] = verifier;
-        
+        pendingCodeHashes[selector] = verifier.codehash;
         emit VerifierRegistered(selector, verifier, name, timelocks[selector]);
     }
-    
-    /// @notice Activate a verifier after the timelock period
-    /// @param selector Unique identifier for the verifier
-    function activateVerifier(bytes32 selector, string memory name) 
-        external 
-        onlyRole(ADMIN_ROLE)
-    {
-        if (block.timestamp < timelocks[selector]) revert Unauthorized();
-        if (pendingRegistrations[selector] == address(0)) revert VerifierNotFound();
-        
+
+    function activateVerifier(bytes32 selector, string memory name) external onlyRole(ADMIN_ROLE) {
         address verifier = pendingRegistrations[selector];
-        
+        if (verifier == address(0)) revert VerifierNotFound();
+        if (block.timestamp < timelocks[selector]) revert Unauthorized();
+        bytes32 codeHash = pendingCodeHashes[selector];
+        if (verifier.codehash != codeHash) revert VerifierCodeChanged();
         verifiers[selector] = VerifierInfo({
-            verifier: verifier,
-            registeredAt: block.timestamp,
-            disabledAt: 0,
-            active: true,
-            name: name
+            verifier: verifier, registeredAt: block.timestamp, disabledAt: 0,
+            active: true, name: name, codeHash: codeHash, retiredAt: 0, graceEndsAt: 0
         });
-        
         delete pendingRegistrations[selector];
+        delete pendingCodeHashes[selector];
         delete timelocks[selector];
-        
         emit VerifierActivated(selector, verifier);
     }
-    
-    /// @notice Disable a verifier immediately (emergency kill switch)
-    /// @param selector Unique identifier for the verifier
-    function disableVerifier(bytes32 selector) 
-        external 
-        onlyRole(EMERGENCY_ROLE)
-    {
-        if (verifiers[selector].verifier == address(0)) revert VerifierNotFound();
-        if (!verifiers[selector].active) revert VerifierAlreadyDisabled();
-        
-        verifiers[selector].active = false;
-        verifiers[selector].disabledAt = block.timestamp;
-        
-        emit VerifierDisabled(selector, verifiers[selector].verifier);
+
+    /// @notice Immediately reject all proofs, including those within retirement grace.
+    function disableVerifier(bytes32 selector) external onlyRole(EMERGENCY_ROLE) {
+        VerifierInfo storage info = verifiers[selector];
+        if (info.verifier == address(0)) revert VerifierNotFound();
+        if (info.disabledAt != 0) revert VerifierAlreadyDisabled();
+        info.active = false;
+        info.disabledAt = block.timestamp;
+        emit VerifierDisabled(selector, info.verifier);
     }
-    
-    /// @notice Schedule retirement of a verifier with timelock
-    /// @param selector Unique identifier for the verifier
-    function scheduleRetirement(bytes32 selector) 
-        external 
-        onlyRole(ADMIN_ROLE)
-    {
-        if (verifiers[selector].verifier == address(0)) revert VerifierNotFound();
-        
-        // Set timelock for retirement
+
+    function scheduleRetirement(bytes32 selector) external onlyRole(ADMIN_ROLE) {
+        VerifierInfo storage info = verifiers[selector];
+        if (info.verifier == address(0)) revert VerifierNotFound();
+        if (!info.active) revert VerifierAlreadyDisabled();
+        if (pendingRetirements[selector]) revert VerifierAlreadyRetiring();
         timelocks[selector] = block.timestamp + minTimelock;
         pendingRetirements[selector] = true;
-        
-        emit VerifierRetired(selector, verifiers[selector].verifier);
+        emit VerifierRetired(selector, info.verifier);
     }
-    
-    /// @notice Complete retirement of a verifier after timelock
-    /// @param selector Unique identifier for the verifier
-    function completeRetirement(bytes32 selector) 
-        external 
-        onlyRole(ADMIN_ROLE)
-    {
-        if (block.timestamp < timelocks[selector]) revert Unauthorized();
+
+    function completeRetirement(bytes32 selector) external onlyRole(ADMIN_ROLE) {
         if (!pendingRetirements[selector]) revert VerifierNotFound();
-        
-        // Disable the verifier
-        verifiers[selector].active = false;
-        verifiers[selector].disabledAt = block.timestamp;
-        
+        if (block.timestamp < timelocks[selector]) revert Unauthorized();
+        VerifierInfo storage info = verifiers[selector];
+        if (info.disabledAt != 0) revert VerifierAlreadyDisabled();
+        info.active = false;
+        info.retiredAt = block.timestamp;
+        info.graceEndsAt = block.timestamp + RETIREMENT_GRACE;
         delete pendingRetirements[selector];
         delete timelocks[selector];
+        emit RetirementCompleted(selector, info.graceEndsAt);
     }
-    
-    /// @notice Verify a proof using the specified verifier
-    /// @param selector Unique identifier for the verifier
-    /// @param _pA First parameter for proof verification
-    /// @param _pB Second parameter for proof verification
-    /// @param _pC Third parameter for proof verification
-    /// @param _pubSignals Array of public signals
-    /// @return Whether the proof is valid
+
     function verifyProof(
         bytes32 selector,
         uint[2] calldata _pA,
@@ -168,44 +145,47 @@ contract VerifierRouter is AccessControl, Pausable, ReentrancyGuard {
         uint[2] calldata _pC,
         uint[16] calldata _pubSignals
     ) external view whenNotPaused returns (bool) {
-        VerifierInfo memory info = verifiers[selector];
+        VerifierInfo storage info = verifiers[selector];
         if (info.verifier == address(0)) revert VerifierNotFound();
-        if (!info.active) revert VerifierAlreadyDisabled();
-        
+        if (!isVerifierResolvable(selector)) revert VerifierAlreadyDisabled();
+        if (info.verifier.codehash != info.codeHash) revert VerifierCodeChanged();
+        // Grace accepts the old declared transfer-time cutoff, not new transfers.
+        // This does not independently attest the wall-clock time of proof creation.
+        if (!info.active && _pubSignals[5] > info.retiredAt) revert VerifierAlreadyDisabled();
         return IGroth16Verifier(info.verifier).verifyProof(_pA, _pB, _pC, _pubSignals);
     }
-    
-    /// @notice Get the address of a verifier
-    /// @param selector Unique identifier for the verifier
-    /// @return Address of the verifier contract
+
+    /// @notice Historical addresses remain discoverable after all acceptance ends.
     function getVerifier(bytes32 selector) external view returns (address) {
         return verifiers[selector].verifier;
     }
-    
-    /// @notice Check if a verifier is active
-    /// @param selector Unique identifier for the verifier
-    /// @return Whether the verifier is active
+
     function isVerifierActive(bytes32 selector) external view returns (bool) {
         return verifiers[selector].active;
     }
-    
-    /// @notice Update the timelock period
-    /// @param newTimelock New timelock period in seconds
-    function updateTimelock(uint256 newTimelock) 
-        external 
-        onlyRole(ADMIN_ROLE)
-    {
-        minTimelock = newTimelock;
-        emit TimelockUpdated(newTimelock);
+
+    function isVerifierResolvable(bytes32 selector) public view returns (bool) {
+        VerifierInfo storage info = verifiers[selector];
+        return info.verifier != address(0) && info.disabledAt == 0 &&
+            (info.active || (info.graceEndsAt != 0 && block.timestamp <= info.graceEndsAt));
     }
-    
-    /// @notice Pause the router (emergency stop)
-    function pause() external onlyRole(EMERGENCY_ROLE) {
-        _pause();
+
+    /// @notice Schedule a delay change; the constructor floor can never be lowered.
+    function updateTimelock(uint256 newTimelock) external onlyRole(ADMIN_ROLE) {
+        if (newTimelock < timelockFloor) revert InvalidTimelock();
+        pendingTimelock = newTimelock;
+        timelockUpdateAfter = block.timestamp + minTimelock;
+        emit TimelockUpdateScheduled(newTimelock, timelockUpdateAfter);
     }
-    
-    /// @notice Unpause the router
-    function unpause() external onlyRole(ADMIN_ROLE) {
-        _unpause();
+
+    function completeTimelockUpdate() external onlyRole(ADMIN_ROLE) {
+        if (timelockUpdateAfter == 0 || block.timestamp < timelockUpdateAfter) revert Unauthorized();
+        minTimelock = pendingTimelock;
+        delete pendingTimelock;
+        delete timelockUpdateAfter;
+        emit TimelockUpdated(minTimelock);
     }
+
+    function pause() external onlyRole(EMERGENCY_ROLE) { _pause(); }
+    function unpause() external onlyRole(ADMIN_ROLE) { _unpause(); }
 }

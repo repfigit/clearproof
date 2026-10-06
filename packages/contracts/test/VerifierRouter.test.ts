@@ -92,7 +92,14 @@ describe("VerifierRouter", function () {
     await time.setNextBlockTimestamp(ready);
     await router.completeRetirement(selector);
     expect(await router.isVerifierActive(selector)).to.equal(false);
-    expect((await router.verifiers(selector)).disabledAt).to.equal(ready);
+    expect((await router.verifiers(selector)).disabledAt).to.equal(0);
+    expect((await router.verifiers(selector)).retiredAt).to.equal(ready);
+    expect(await router.isVerifierResolvable(selector)).to.equal(true);
+    expect(await router.verifyProof(selector, pA, pB, pC, signals)).to.equal(false);
+    const end = (await router.verifiers(selector)).graceEndsAt;
+    await time.increaseTo(end + 1n);
+    expect(await router.isVerifierResolvable(selector)).to.equal(false);
+    expect(await router.getVerifier(selector)).to.equal(await verifier.getAddress());
     expect(await router.pendingRetirements(selector)).to.equal(false);
     expect(await router.timelocks(selector)).to.equal(0);
     await expect(router.completeRetirement(selector)).to.be.revertedWithCustomError(router, "VerifierNotFound");
@@ -103,12 +110,18 @@ describe("VerifierRouter", function () {
     const verifier = await deployGroth16Verifier();
     await router.registerVerifier(selector, await verifier.getAddress(), "First");
     const original = await router.timelocks(selector);
-    await expect(router.updateTimelock(60)).to.emit(router, "TimelockUpdated").withArgs(60);
-    expect(await router.minTimelock()).to.equal(60);
+    await expect(router.updateTimelock(60)).to.be.revertedWithCustomError(router, "InvalidTimelock");
+    await expect(router.updateTimelock(172800)).to.emit(router, "TimelockUpdateScheduled");
+    expect(await router.minTimelock()).to.equal(86400);
+    await expect(router.completeTimelockUpdate()).to.be.revertedWithCustomError(router, "Unauthorized");
+    await time.increaseTo(await router.timelockUpdateAfter());
+    await expect(router.completeTimelockUpdate()).to.emit(router, "TimelockUpdated").withArgs(172800);
+    expect(await router.minTimelock()).to.equal(172800);
+    await expect(router.completeTimelockUpdate()).to.be.revertedWithCustomError(router, "Unauthorized");
     expect(await router.timelocks(selector)).to.equal(original);
     const next = ethers.id("second-synthetic-verifier");
     await router.registerVerifier(next, await verifier.getAddress(), "Second");
-    expect(await router.timelocks(next)).to.equal(BigInt(await time.latest()) + 60n);
+    expect(await router.timelocks(next)).to.equal(BigInt(await time.latest()) + 172800n);
   });
 
   it("separates emergency pause authority from administrative recovery", async function () {
@@ -122,6 +135,7 @@ describe("VerifierRouter", function () {
       () => router.connect(other).scheduleRetirement(selector),
       () => router.connect(other).completeRetirement(selector),
       () => router.connect(other).updateTimelock(0),
+      () => router.connect(other).completeTimelockUpdate(),
       () => router.connect(other).unpause(),
     ]) {
       await expect(call()).to.be.revertedWithCustomError(router, "AccessControlUnauthorizedAccount")

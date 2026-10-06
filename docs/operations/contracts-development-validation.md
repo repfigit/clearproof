@@ -97,3 +97,18 @@ root publication must still follow the project's relay procedure. The gas benchm
 is restricted to the ephemeral `hardhat` network and uses real contract dependencies
 and the current constructor. It makes no production gas or deployment assurance
 claim. Development validation must not be taken as authorization to deploy remotely.
+
+## Legacy verifier replacement and retirement
+
+`scripts/redeploy-verifier.ts` resumes both registration and default-selection
+timelocks without deploying another verifier on retry. Activation of a router
+binding does not change the registry default: `setVerifierSelector` schedules
+the swap and `activateVerifierSelector` completes it after the recorded deadline.
+The script refuses older deployed ABIs and records the former default's grace
+deadline. Its retirement is a separate authorized action.
+
+The actual-proof E2E exercises two verifiers with the same fresh development key,
+a delayed swap, old-version retirement grace, tampered-signal rejection and a
+subsequent new-default proof. It makes no cross-profile migration claim. See
+[the decommissioning runbook](../VERIFIER_DECOMMISSIONING.md) for the bounded
+24-hour drain window and historical Sepolia addresses.

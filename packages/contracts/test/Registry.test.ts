@@ -482,9 +482,7 @@ describe("ComplianceRegistry (extended)", function () {
     }
     expect(await registry.verifierSelector()).to.equal(original);
     expect(await registry.paused()).to.equal(false);
-    await registry.setVerifierSelector(replacement);
-    expect(await registry.verifierSelector()).to.equal(replacement);
-    await registry.setVerifierSelector(original);
+    await expect(registry.setVerifierSelector(replacement)).to.be.revertedWithCustomError(registry, "VerifierUnavailable");
     expect(await registry.verifierSelector()).to.equal(original);
   });
 
