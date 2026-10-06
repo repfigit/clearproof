@@ -2,7 +2,7 @@
 export const PROJECT_STATUS = Object.freeze({
   schemaVersion: 1,
   checkedAt: '2026-10-06',
-  npmVersion: '0.6.0',
+  npmVersion: '0.7.0',
   sourceVersion: '0.7.0',
   proofProfile: 'pilot-transfer-v3',
   stage: 'Development pilot. The workflow runs locally with synthetic data, real proofs, a disposable database and a test chain. No customer deployment is established.',
