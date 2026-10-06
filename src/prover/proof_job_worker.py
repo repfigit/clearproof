@@ -13,6 +13,7 @@ from contextlib import suppress
 from fastapi import HTTPException
 
 from src.prover.pilot_prover import PilotProvingError
+from src.prover.pilot_verifier import PairingCapacityExceeded
 from src.services.proof_jobs import ProofJobService
 from src.storage.proof_jobs import LeaseLost, ProofJobError
 
@@ -53,6 +54,10 @@ class ProofJobWorker:
             else:
                 work.result()
                 completed = True
+        except PairingCapacityExceeded:
+            # Existing transient interruption state preserves bounded queue
+            # retries; local saturation is not invalid customer evidence.
+            error = "worker_interrupted"
         except PilotProvingError:
             error = "prover_failed"
         except ProofJobError as exc:

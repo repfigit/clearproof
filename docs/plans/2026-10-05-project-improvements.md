@@ -15,8 +15,7 @@ documentation recommendations. GitHub #89 and Linear AIF-89 are separate work.
 | Website dependencies and maintenance | Patched framework, dependency audit disposition, lint/build/browser/link CI, deployed verification | Done; web #12 merged, production Ready and live checks passed |
 | Shared release and publication catalogue | Homepage and docs consume one status/catalogue; future/paused articles not promoted; live links work | Done; production docs/site share 0.7.0 and published catalogue |
 | Documentation accuracy and presentation | Reconciled roadmap/agent guidance, proper Markdown, technical sitemap/metadata, maintained web README | Done; #91/web #12 merged and deployed with browser acceptance |
-| Two onboarding paths | Small synthetic evidence inspection with tamper case; reproducible complete pilot with preflight/recovery; current SDK example first | Done in #98 after all 23 exact-head checks and approval; production deployment verification pending |
-| Backlog reconciliation | Source/test evidence for every open Linear/GitHub item; delivered work closed and remaining criteria retained | In progress; nine of the original twelve issues closed with evidence |
+| Two onboarding paths | Small synthetic evidence inspection with tamper case; reproducible complete pilot with preflight/recovery; current SDK example first | Done; #98 merged after 23 exact-head checks and exact approval, with production docs Ready and live guidance verified || Backlog reconciliation | Source/test evidence for every open Linear/GitHub item; delivered work closed and remaining criteria retained | In progress; nine of the original twelve issues closed with evidence |
 | Artifact isolation (GitHub #85) | Explicit test bundles required; incomplete supplied bundles fail; local ambient artifacts ignored | Done; #91 merged and fresh-bundle CI passed; GitHub issue closed |
 | Dependency cleanup (GitHub #86) | Unused drivers removed; locked install and relevant Python tests pass; storage guidance accurate | Done; #91 merged, locked install and full remote CI passed; GitHub issue closed |
 | Proving execution (GitHub #87) | Correct service scope; durable bounded jobs, privacy-safe input/output, retries/cancellation/concurrency/freshness tests | Done; #94 merged after full exact-head CI and approval, GitHub issue closed |
@@ -357,3 +356,29 @@ actual external evidence; local tests cannot establish those prerequisites.
   full Python aggregate coverage and normal/coverage contract verification. Its
   exact-revision production documentation deployment is building. Readiness #99
   is rebased onto this merge and will run the complete main-targeted CI workflow.
+- October 5: onboarding #98 merged as `54492bf` after all 23 checks passed on
+  `4e01fff` and an approving review covered that exact revision. Production docs
+  `dpl_Ff9mj3ekcsuhx9rBfCfwGCpaYbiV` are Ready from this exact merge;
+  docs.clearproof.world serves both onboarding paths and the current SDK example.
+  Readiness #99 is rebased and retargeted onto main, with the evaluation-time
+  valuation review finding corrected and complete CI running.
+- October 5: process-shared pairing admission now limits all verifier instances
+  to two active children per Python process, rejects saturation without a new
+  process or waiting queue, and retains slots through repeated cancellation and
+  reaping. Pilot inspection/evaluation/observation/authorization report retryable
+  503, and durable workers preserve bounded retries. Runtime/HTTP checks: 124
+  initially passed at 100% verifier coverage; worker tests: 24 passed at 100%.
+  Actual current-profile positive/tampered pairing and two concurrent real
+  pairings passed. Eighteen warmup/measured synthetic pairings on four cores
+  accepted: two-child median request time 0.249 s and maximum sampled aggregate
+  child RSS 152.0 MiB. This is pairing-only evidence, not service capacity or an
+  SLA. Persisted/incremental inventories and further scale work remain open.
+
+- October 5: pairing saturation was exercised through real PostgreSQL and the
+  current authorization service with actual proofs. HTTP 503 creates no new
+  record, receipt or nullifier consumption, and the same idempotency key can
+  subsequently succeed. All 73 authorization/HTTP checks passed with 100%
+  authorization-route coverage. Documentation: 115 checks and a production
+  build passed; content: 25 checks and build passed. Full CI, approval and
+  hosted guidance verification remain required for this change.
+- October 5: readiness #99 merged as `9dc5ec5` after all 23 latest exact-head checks passed and active approval covered unchanged production source. Production docs `dpl_FFGYwdP3kLgaavYs2WaUMgeKJmTw` are Ready from that exact merge; live API and deployment guidance passed. Pairing #100 is rebased onto this merge; its only conflict was the progress ledger. Updated exact-head CI and review verification remain required.

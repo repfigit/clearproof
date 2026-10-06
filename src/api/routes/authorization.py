@@ -10,6 +10,7 @@ from src.policy.fact_approval import FactTrustStore
 from src.protocol.decision_attestation import DecisionSigner
 from src.protocol.information_approval import InformationTrustStore
 from src.protocol.transfer import OpaqueId
+from src.prover.pilot_verifier import PairingCapacityExceeded
 from src.sar.pilot_envelope import RecipientTrustStore
 from src.services.authorization_input import SealedAuthorizationInformation
 from src.services.enrollment import EnrollmentNotFound
@@ -86,6 +87,10 @@ async def authorize_proof(request: Request, principal: Principal = Depends(Tenan
             idempotency_key=body.idempotency_key,
             now=inspection_time(),
         )
+    except PairingCapacityExceeded:
+        raise HTTPException(
+            status_code=503, detail="Pilot pairing capacity is temporarily unavailable", headers={"Retry-After": "1"}
+        ) from None
     except (RecordConflict, ReplayConflict):
         raise HTTPException(status_code=409, detail="Authorization request or consumption conflict") from None
     except EnrollmentNotFound:

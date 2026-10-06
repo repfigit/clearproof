@@ -2353,6 +2353,24 @@ async def test_durable_current_inspection_real_pairing_and_revocation(db, monkey
                 assert set(report) == {"schema_version", "scope", "assurance", "receipt"}
                 return report["receipt"]
 
+            # Saturation is transient and must leave no consumption or receipt.
+            from src.prover.pilot_verifier import _PAIRING_SLOTS, PAIRING_PROCESS_LIMIT
+
+            async with db.connection() as conn:
+                before_busy = (await (await conn.execute("SELECT count(*) FROM pilot_records")).fetchone())[0]
+            for _ in range(PAIRING_PROCESS_LIMIT):
+                assert _PAIRING_SLOTS.acquire(blocking=False)
+            try:
+                busy = await invoke_authorization({"idempotency_key": "consume-once"})
+                assert busy.status_code == 503 and busy.headers["Retry-After"] == "1"
+                assert "receipt" not in busy.json()
+            finally:
+                for _ in range(PAIRING_PROCESS_LIMIT):
+                    _PAIRING_SLOTS.release()
+            async with db.connection() as conn:
+                assert (await (await conn.execute("SELECT count(*) FROM pilot_records")).fetchone())[0] == before_busy
+                assert (await (await conn.execute("SELECT count(*) FROM pilot_consumptions")).fetchone())[0] == 0
+
             # Different request keys compete for the same real proof nullifier.
             contenders = ("consume-once", "competing-spend")
             results = await asyncio.gather(

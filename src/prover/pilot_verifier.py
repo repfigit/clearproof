@@ -15,6 +15,7 @@ import re
 import signal
 import stat
 import tempfile
+import threading
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Annotated, Literal
@@ -33,6 +34,35 @@ G2 = tuple[tuple[Coordinate, Coordinate], tuple[Coordinate, Coordinate], tuple[L
 
 class ProofInspectionError(ValueError):
     """Bounded validation/runtime failure; diagnostics contain no input values."""
+
+
+class PairingCapacityExceeded(ProofInspectionError):
+    """Transient local saturation; it says nothing about proof validity."""
+
+
+# Shared across every verifier and event loop in this Python process. No waiting
+# queue holds private inputs or a tenant transaction while all slots are occupied.
+PAIRING_PROCESS_LIMIT = 2
+_PAIRING_SLOTS = threading.BoundedSemaphore(PAIRING_PROCESS_LIMIT)
+
+
+async def _reap(proc) -> None:
+    if proc.returncode is not None:
+        return
+    try:
+        os.killpg(proc.pid, signal.SIGKILL)
+    except ProcessLookupError:
+        pass
+    cleanup = asyncio.create_task(proc.wait())
+    cancelled = False
+    while not cleanup.done():
+        try:
+            await asyncio.shield(cleanup)
+        except asyncio.CancelledError:
+            cancelled = True
+    cleanup.result()
+    if cancelled:
+        raise asyncio.CancelledError
 
 
 class PilotProof(Record):
@@ -154,46 +184,51 @@ class PilotPairingVerifier:
                 "proof": proof.model_dump(mode="json"),
             }
         ).encode("ascii")
-        proc = None
-        with tempfile.TemporaryDirectory(prefix="clearproof-pairing-") as directory:
-            script = Path(directory) / "runtime.cjs"
-            script.write_bytes(self.bundle + b"\n" + _RUNNER.encode("ascii"))
-            try:
-                creation = asyncio.create_task(
-                    asyncio.create_subprocess_exec(
-                        str(self.node),
-                        "--max-old-space-size=256",
-                        str(script),
-                        stdin=asyncio.subprocess.PIPE,
-                        stdout=asyncio.subprocess.PIPE,
-                        stderr=asyncio.subprocess.DEVNULL,
-                        env={"LANG": "C", "TZ": "UTC"},
-                        cwd=directory,
-                        start_new_session=True,
-                    )
-                )
+        if not _PAIRING_SLOTS.acquire(blocking=False):
+            raise PairingCapacityExceeded("pairing_capacity_exceeded")
+        try:
+            proc = None
+            with tempfile.TemporaryDirectory(prefix="clearproof-pairing-") as directory:
+                script = Path(directory) / "runtime.cjs"
+                script.write_bytes(self.bundle + b"\n" + _RUNNER.encode("ascii"))
                 try:
-                    proc = await asyncio.shield(creation)
-                except asyncio.CancelledError:
-                    # Retain ownership even if cancellation races process creation.
-                    proc = await creation
-                    raise
-                # The pinned runtime is trusted; its wrapper emits exactly one byte.
-                stdout, _ = await asyncio.wait_for(proc.communicate(payload), timeout=timeout)
-                if proc.returncode != 0 or stdout not in (b"0", b"1"):
-                    raise ProofInspectionError("pairing_runtime_failed")
-                return PairingInspection(
-                    stdout == b"1", self.artifacts.manifest.digest, self.artifacts.manifest.proof_profile
-                )
-            except asyncio.TimeoutError:
-                raise ProofInspectionError("pairing_timeout") from None
-            except OSError:
-                raise ProofInspectionError("pairing_runtime_unavailable") from None
-            finally:
-                # Timeout and task cancellation both reap the owned process group.
-                if proc is not None and proc.returncode is None:
-                    try:
-                        os.killpg(proc.pid, signal.SIGKILL)
-                    except ProcessLookupError:
-                        pass
-                    await proc.wait()
+                    creation = asyncio.create_task(
+                        asyncio.create_subprocess_exec(
+                            str(self.node),
+                            "--max-old-space-size=256",
+                            str(script),
+                            stdin=asyncio.subprocess.PIPE,
+                            stdout=asyncio.subprocess.PIPE,
+                            stderr=asyncio.subprocess.DEVNULL,
+                            env={"LANG": "C", "TZ": "UTC"},
+                            cwd=directory,
+                            start_new_session=True,
+                        )
+                    )
+                    cancelled = False
+                    while not creation.done():
+                        try:
+                            await asyncio.shield(creation)
+                        except asyncio.CancelledError:
+                            cancelled = True
+                    proc = creation.result()
+                    if cancelled:
+                        raise asyncio.CancelledError
+                    # The pinned runtime is trusted; its wrapper emits exactly one byte.
+                    stdout, _ = await asyncio.wait_for(proc.communicate(payload), timeout=timeout)
+                    if proc.returncode != 0 or stdout not in (b"0", b"1"):
+                        raise ProofInspectionError("pairing_runtime_failed")
+                    return PairingInspection(
+                        stdout == b"1", self.artifacts.manifest.digest, self.artifacts.manifest.proof_profile
+                    )
+                except asyncio.TimeoutError:
+                    raise ProofInspectionError("pairing_timeout") from None
+                except OSError:
+                    raise ProofInspectionError("pairing_runtime_unavailable") from None
+                finally:
+                    # Keep the capacity slot through owned-process cleanup, even
+                    # when a caller cancels repeatedly during creation or reaping.
+                    if proc is not None:
+                        await _reap(proc)
+        finally:
+            _PAIRING_SLOTS.release()

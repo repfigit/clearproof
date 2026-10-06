@@ -53,6 +53,14 @@ exact-byte signatures, transfer binding and bounded retention.
 | Uncertain publication send or noncanonical chain observation | Retain the original intent/hash and use the [publication runbook](../internal/PILOT_PUBLICATION_JOURNAL.md). Observation alone cannot authorize resend. Explicit same-byte recovery has fresh checks and a three-attempt total cap; fee/nonce replacement is unsupported. |
 | Export/history rejection | Check exact binding, retained keys, manifest/runtime pins, source/status/timing evidence and selected review clock. Keep contradicted and indeterminate distinct; never convert decryption success into historical support. |
 
+Current pairing saturation is a transient HTTP 503 with `Retry-After: 1`, not a
+negative proof decision. Back off while retaining the same observation or
+authorization idempotency key. Two pairing slots are shared by all targets in
+one Python process and held through child cleanup; API replicas multiply this
+limit. Apply separate HTTP admission and container limits. See the
+[measured pairing capacity](../benchmarks/2026-10-05-pilot-pairing.md) for actual
+synthetic timings, memory scope, reproduction and deployment arithmetic.
+
 ## Measurements and privacy
 
 Predeclare cohort membership and baseline labels. Keep observed/missing counts,

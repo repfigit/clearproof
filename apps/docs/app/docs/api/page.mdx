@@ -38,6 +38,8 @@ Protected routes require the configured authentication. Pilot routes also requir
 
 Proving jobs require explicit `proof:generate`, `policy:read` and `evidence:decrypt` roles, PostgreSQL and an independently configured worker. The API does not start a prover. Queue limits apply across workers; a full queue returns `429` with `Retry-After`. A running cancellation keeps its slot until cleanup is acknowledged. Completed results are rechecked against current enrollment, policy, approved roots and time before retrieval; completion never consumes authorization. See the [proving jobs runbook](https://github.com/repfigit/clearproof/blob/main/docs/operations/pilot-proving-jobs.md) for configuration, retry and recovery.
 
+Current pilot pairing is capped at two active Node processes per Python process, shared across targets. Saturation returns `503` with `Retry-After: 1` from inspection, evaluation, observation and authorization; it makes no proof-validity decision. Retry observations/authorizations with the same idempotency key after backoff. Slots remain occupied through runtime cleanup. Multiple API workers multiply this local cap; the server/proxy must separately bound incoming requests. The [measured pairing capacity](https://github.com/repfigit/clearproof/blob/main/docs/benchmarks/2026-10-05-pilot-pairing.md) is synthetic pairing-only evidence, separate from proving and end-to-end service capacity.
+
 ## Wallet ownership extension
 
 | Route | Purpose |
