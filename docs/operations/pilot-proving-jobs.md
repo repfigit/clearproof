@@ -188,3 +188,10 @@ Integration suites require `DATABASE_URL`; real proving also requires
 memory-only proving acceptance, and CI's full PostgreSQL/artifact suite runs the
 job acceptance. Ordinary transport tests explicitly use synthetic backend
 descriptors and are not evidence of valid cryptographic proofs.
+
+Current-state pairing uses the process-shared two-child budget described in
+[measured pairing capacity](../benchmarks/2026-10-05-pilot-pairing.md). If that
+budget is saturated during preparation or result checking, the worker treats it
+as a retryable interruption within the existing deadline/three-claim limit. It
+does not classify saturation as invalid customer evidence. This separate pairing
+budget does not replace the PostgreSQL proving-job limit.

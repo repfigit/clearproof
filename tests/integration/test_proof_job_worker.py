@@ -7,6 +7,7 @@ from types import SimpleNamespace
 import pytest
 
 from src.prover.pilot_prover import PilotProvingError
+from src.prover.pilot_verifier import PairingCapacityExceeded
 from src.prover.proof_job_worker import ProofJobWorker
 from src.storage.proof_jobs import ProofJobError
 from tests.integration.test_proof_job_queue import db as db
@@ -35,6 +36,7 @@ async def test_successful_job_handoff_and_empty_worker(queue):
 @pytest.mark.parametrize(
     "failure,error,retry",
     [
+        (PairingCapacityExceeded("pairing_capacity_exceeded"), "worker_interrupted", True),
         (PilotProvingError("private-detail"), "prover_failed", True),
         (ProofJobError("configuration_changed"), "configuration_changed", False),
         (ProofJobError("proving_target_not_found"), "current_state_rejected", False),

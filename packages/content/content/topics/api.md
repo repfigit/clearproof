@@ -41,6 +41,8 @@ Proving jobs require explicit `proof:generate`, `policy:read` and `evidence:decr
 
 Inventory discovery requires exact issuer scope, `credential:issue` and `evidence:decrypt`. It returns at most 64 opaque credential IDs and current eligibility flags, with an `after` cursor; it does not publish roots or consume authorization. The issuer and cursor belong in the private request body. Legacy records require explicit admin backfill. Sources above 256 leaves are retained as authenticated encrypted pages; the current issuance circuit remains depth 32. The 1,024-record construction guard is not an operating capacity claim. See the [inventory and backfill runbook](https://github.com/repfigit/clearproof/blob/main/docs/operations/pilot-enrollment-inventory.md).
 
+Current pilot pairing is capped at two active Node processes per Python process, shared across targets. Saturation returns `503` with `Retry-After: 1` from inspection, evaluation, observation and authorization; it makes no proof-validity decision. Retry observations/authorizations with the same idempotency key after backoff. Slots remain occupied through runtime cleanup. Multiple API workers multiply this local cap; the server/proxy must separately bound incoming requests. The [measured pairing capacity](https://github.com/repfigit/clearproof/blob/main/docs/benchmarks/2026-10-05-pilot-pairing.md) is synthetic pairing-only evidence, separate from proving and end-to-end service capacity.
+
 ## Wallet ownership extension
 
 | Route | Purpose |

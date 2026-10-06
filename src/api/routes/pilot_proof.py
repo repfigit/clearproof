@@ -11,7 +11,7 @@ from src.auth.principal import Principal, TenantPrincipalDependency
 from src.policy.fact_approval import FactTrustStore
 from src.protocol.transfer import Hex32, OpaqueId, Record
 from src.prover.pilot_artifacts import strict_json
-from src.prover.pilot_verifier import PilotPairingVerifier, PilotProof, public_signals
+from src.prover.pilot_verifier import PairingCapacityExceeded, PilotPairingVerifier, PilotProof, public_signals
 from src.services.enrollment import EnrollmentNotFound
 from src.services.observation_report import (
     ObservationCohort,
@@ -107,6 +107,10 @@ async def inspect_proof(request: Request, principal: Principal = Depends(TenantP
     service, target, body, proof, signals = await prepare_inspection(request, principal, InspectionBody)
     try:
         result = await service.inspect(body.credential_id, proof, signals, now=inspection_time())
+    except PairingCapacityExceeded:
+        raise HTTPException(
+            status_code=503, detail="Pilot pairing capacity is temporarily unavailable", headers={"Retry-After": "1"}
+        ) from None
     except EnrollmentNotFound:
         raise HTTPException(status_code=404, detail="Pilot enrollment is unavailable") from None
     except (ValueError, TypeError, RuntimeError):
@@ -136,6 +140,10 @@ async def evaluate_proof(request: Request, principal: Principal = Depends(Tenant
             fact_trust=target.fact_trust,
             now=inspection_time(),
         )
+    except PairingCapacityExceeded:
+        raise HTTPException(
+            status_code=503, detail="Pilot pairing capacity is temporarily unavailable", headers={"Retry-After": "1"}
+        ) from None
     except EnrollmentNotFound:
         raise HTTPException(status_code=404, detail="Pilot enrollment is unavailable") from None
     except (ValueError, TypeError, RuntimeError):
@@ -171,6 +179,10 @@ async def observe_proof(request: Request, principal: Principal = Depends(TenantP
         )
     except RecordConflict:
         raise HTTPException(status_code=409, detail="Observation request or idempotency conflict") from None
+    except PairingCapacityExceeded:
+        raise HTTPException(
+            status_code=503, detail="Pilot pairing capacity is temporarily unavailable", headers={"Retry-After": "1"}
+        ) from None
     except EnrollmentNotFound:
         raise HTTPException(status_code=404, detail="Pilot enrollment is unavailable") from None
     except (ValueError, TypeError, RuntimeError):

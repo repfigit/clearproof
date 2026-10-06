@@ -435,3 +435,33 @@ actual external evidence; local tests cannot establish those prerequisites.
   checks pass. Website #18 passed lint, 22 unit checks, build/typecheck and eight
   browser checks. Its promotion depends on the hosted evaluation route becoming
   available. These checks establish the entry workflow, not an external trial.
+
+
+- October 5: process-shared pairing admission now limits all verifier instances
+  to two active children per Python process, rejects saturation without a new
+  process or waiting queue, and retains slots through repeated cancellation and
+  reaping. Pilot inspection/evaluation/observation/authorization report retryable
+  503, and durable workers preserve bounded retries. Runtime/HTTP checks: 124
+  initially passed at 100% verifier coverage; worker tests: 24 passed at 100%.
+  Actual current-profile positive/tampered pairing and two concurrent real
+  pairings passed. Eighteen warmup/measured synthetic pairings on four cores
+  accepted: two-child median request time 0.249 s and maximum sampled aggregate
+  child RSS 152.0 MiB. This is pairing-only evidence, not service capacity or an
+  SLA. Persisted/incremental inventories and further scale work remain open.
+
+- October 5: pairing saturation was exercised through real PostgreSQL and the
+  current authorization service with actual proofs. HTTP 503 creates no new
+  record, receipt or nullifier consumption, and the same idempotency key can
+  subsequently succeed. All 73 authorization/HTTP checks passed with 100%
+  authorization-route coverage. Documentation: 115 checks and a production
+  build passed; content: 25 checks and build passed. Full CI, approval and
+  hosted guidance verification remain required for this change.
+
+- October 6: the integration branch combines pairing #100, inventory/release
+  #101 and evaluation #102 without changing their runtime implementations. API
+  guidance retains both limits and removes a duplicate proving paragraph. The
+  original pairing/inventory approvals reference older production revisions, so
+  this combined source will receive fresh complete CI and review before merge.
+  Existing PRs retain their evidence and will be superseded only after the new
+  integration PR is established. Real testnet measurements, the wallet-profile
+  decision and external evaluation/production assurance gates remain open.
