@@ -36,7 +36,7 @@ const ZERO_SUBTREE = [
 ];
 
 /**
- * Hardcoded test input that produces a valid proof under the current circuit
+ * Hardcoded test input that produces a valid proof under the legacy circuit
  * hashing scheme (regenerated 2026-05-21 after the sanctions-leaf domain-hash
  * fix; values verified against circomlibjs Poseidon):
  *
@@ -119,7 +119,7 @@ const DEMO_INPUT: ComplianceInput = {
 };
 
 export const demoCommand = new Command('demo')
-  .description('Run a 60-second demo: generate + verify a ZK compliance proof')
+  .description('Generate and verify a synthetic legacy development proof')
   .option(
     '--artifacts <dir>',
     'Path to circuit artifacts directory',
@@ -183,7 +183,7 @@ export const demoCommand = new Command('demo')
     // --- Optional: export parity test vector ---
     if (opts.export) {
       const outDir = path.resolve(opts.export);
-      fs.mkdirSync(outDir, { recursive: true });
+      fs.mkdirSync(outDir, { mode: 0o700 });
 
       const sha256 = (p: string) =>
         crypto.createHash('sha256').update(fs.readFileSync(p)).digest('hex');
@@ -210,16 +210,16 @@ export const demoCommand = new Command('demo')
         curve: 'bn128',
         devKeysOnly: true,
         warning:
-          'Generated from a single-party dev trusted setup. NOT valid for production.',
+          'Synthetic example with caller-supplied artifacts. NOT valid for production.',
         artifacts: {
           wasm_sha256: sha256(wasmPath),
           zkey_sha256: sha256(zkeyPath),
           vkey_sha256: sha256(vkeyPath),
         },
         toolchain: {
-          circom: '2.2.2',
-          snarkjs: '0.7.6',
-          ptau: 'powersOfTau28_hez_final_18 (sha256-verified Hermez)',
+          circom: 'not-established',
+          snarkjs: 'not-established',
+          ptau: 'not-established',
         },
       };
       fs.writeFileSync(

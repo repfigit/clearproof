@@ -2,6 +2,7 @@
 
 import asyncio
 import os
+import sys
 import uuid
 
 import psycopg
@@ -3025,7 +3026,7 @@ async def test_durable_current_inspection_real_pairing_and_revocation(db, monkey
             await db.close()
             offline = subprocess.run(
                 [
-                    str(Path(__file__).parents[2] / ".venv/bin/python"),
+                    sys.executable,
                     "-m",
                     "tests.offline_history_fixture",
                 ],
@@ -3112,7 +3113,7 @@ async def test_durable_current_inspection_real_pairing_and_revocation(db, monkey
                 "--verified-at",
                 str(history_args["verified_at"]),
             ]
-            python = str(Path(__file__).parents[2] / ".venv/bin/python")
+            python = sys.executable
 
             def run_history_cli(prefix, key=reviewer_private.hex()):
                 return subprocess.run(prefix + cli_args, input=key + "\n", capture_output=True, text=True, timeout=30)

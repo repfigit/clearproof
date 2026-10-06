@@ -33,6 +33,11 @@ gates. Local simulation is not evidence of customer adoption or live interoperab
 
 ## Start from a source checkout
 
+Start with [the two onboarding paths](docs/operations/onboarding.md): a Node-only
+real-proof inspection with a tamper case, or the complete current pilot with
+preflight and recovery. The quick example uses a historical legacy development
+fixture whose threshold policy deliberately rejects it.
+
 Install the host prerequisites documented in the
 [local acceptance guide](docs/operations/local-pilot-acceptance.md), then:
 
@@ -41,8 +46,13 @@ npm exec --yes --package=npm@11.9.0 -- npm ci
 uv sync --frozen --extra dev --python 3.12
 npm run build
 
+# Download and verify the pinned powers-of-tau file using the linked guide.
 # Both output directories must be new. These keys are development-only.
-.venv/bin/python scripts/test_development_circuits.py /absolute/new-development-artifacts
+.venv/bin/python scripts/test_development_circuits.py /absolute/new-development-artifacts \
+  --prepared-ptau /absolute/ppot_0080_17.ptau
+.venv/bin/python scripts/test_pilot_local.py \
+  /absolute/new-development-artifacts/pilot /absolute/new-pilot-run \
+  --postgres-bin /usr/lib/postgresql/18/bin --preflight
 .venv/bin/python scripts/test_pilot_local.py \
   /absolute/new-development-artifacts/pilot \
   /absolute/new-pilot-run \

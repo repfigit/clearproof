@@ -36,7 +36,11 @@ test "$(git -C "$output/depends/json" rev-parse HEAD)" = 350ff4f7ced7c4117eae2fb
     cd "$output"
     # GCC 15 defaults to GNU23; upstream GMP's configure tests require GNU17.
     # The pinned script verifies GMP 6.3.0's source SHA before extraction.
-    sed 's/^NPROC=8$/NPROC=1/' build_gmp.sh | CFLAGS='-O2 -std=gnu17' bash -s -- host
+    # Additional GNU-listed mirror; the original sources remain fallbacks.
+    # https://www.gnu.org/prep/ftp.en.html
+    sed -e 's/^NPROC=8$/NPROC=1/' \
+        -e '/GMP_MIRRORS=(/a\        "https://mirror.csclub.uwaterloo.ca/gnu/gmp/${GMP_ARCHIVE}"' \
+        build_gmp.sh | CFLAGS='-O2 -std=gnu17' bash -s -- host
     # Upstream can exit successfully after a failed configure; require outputs.
     test -s depends/gmp/package/lib/libgmp.a
     test -s depends/gmp/package/include/gmp.h

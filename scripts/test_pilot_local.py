@@ -2,6 +2,8 @@
 """Run synthetic pilot acceptance with an owned PostgreSQL cluster and local EVM."""
 
 import argparse
+import importlib.util
+import json
 import os
 import subprocess
 import sys
@@ -9,6 +11,36 @@ import tempfile
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
+# Direct script invocation must resolve this checkout, including the scripts namespace.
+sys.path.insert(0, str(ROOT))
+
+
+def check_prerequisites(artifacts: Path) -> None:
+    """Read-only preflight before allocating either owned service or output."""
+    if sys.version_info < (3, 11):
+        raise RuntimeError("Python 3.11 or newer is required")
+    for module in ("pytest", "pytest_asyncio", "psycopg", "cryptography", "web3"):
+        if importlib.util.find_spec(module) is None:
+            raise RuntimeError("Install the locked Python development dependencies")
+    if not (ROOT / "packages/cli/dist/index.js").is_file():
+        raise RuntimeError("Build the CLI and its dependencies before local acceptance")
+    result = subprocess.run(
+        [
+            "node",
+            "-e",
+            "const [major, minor] = process.versions.node.split('.').map(Number);"
+            "if (major < 22 || (major === 22 && minor < 12)) process.exit(1);"
+            "require.resolve('hardhat', {paths: ['./packages/contracts']});",
+        ],
+        cwd=ROOT,
+        capture_output=True,
+        timeout=10,
+    )
+    if result.returncode:
+        raise RuntimeError("Node 22.12+ and the locked Hardhat installation are required")
+    from scripts.test_pilot_mirror import check_doctor
+
+    check_doctor(artifacts)
 
 
 def main():
@@ -16,6 +48,9 @@ def main():
     parser.add_argument("artifacts", type=Path, help="Inspected unapproved pilot artifacts")
     parser.add_argument("output", type=Path, help="New private run directory")
     parser.add_argument("--postgres-bin", required=True, type=Path, help="PostgreSQL 18 bin directory")
+    parser.add_argument(
+        "--preflight", action="store_true", help="Check setup without starting services or creating output"
+    )
     args = parser.parse_args()
     binaries = {name: args.postgres_bin.resolve() / name for name in ("initdb", "pg_ctl", "createdb")}
     if any(not p.is_file() or not os.access(p, os.X_OK) for p in binaries.values()):
@@ -25,6 +60,25 @@ def main():
     if not version.startswith("initdb (PostgreSQL) 18."):
         parser.error("This local acceptance setup requires PostgreSQL 18")
     output = args.output.absolute()
+    if output.exists():
+        raise FileExistsError("Choose a new private run directory; existing output is never reused")
+    check_prerequisites(artifacts)
+    if args.preflight:
+        print(
+            json.dumps(
+                {
+                    "schema_version": "clearproof-local-preflight-v1",
+                    "scope": "local-synthetic-acceptance-setup",
+                    "status": "development_unapproved",
+                    "checks": ["python_dependencies", "node_hardhat", "built_cli", "postgres_18", "artifact_doctor"],
+                    "services_started": False,
+                    "authorization_consumed": False,
+                    "production_eligible": False,
+                },
+                sort_keys=True,
+            )
+        )
+        return 0
     output.mkdir(mode=0o700, exist_ok=False)
     data = output / "postgres"
     # The temporary socket directory is private and kept short independently of the output path.
