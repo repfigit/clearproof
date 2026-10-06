@@ -11,9 +11,9 @@ maintains its own version line in this file.
 
 ## [Unreleased]
 
-## [0.7.0] - 2026-10-05
+## [0.7.0] - 2026-10-06
 
-All five packages move to 0.7.0. Pre-production: nothing is independently audited, and keys remain development-only. The pilot contract ABIs and events change, so existing `PilotCurrentRegistry` / `PilotRootCheckpoint` deployments do not match this release.
+All five packages move to 0.7.0. Pre-production: nothing is independently audited, and keys remain development-only. The pilot contract ABIs and events change, so existing `PilotCurrentRegistry` / `PilotRootCheckpoint` deployments do not match this release. The legacy `VerifierRouter` / `ComplianceRegistry` also change: existing legacy deployments need the replacement command rather than an in-place upgrade.
 
 ### Breaking
 
@@ -21,9 +21,18 @@ All five packages move to 0.7.0. Pre-production: nothing is independently audite
 - **Node ≥20** for `@clearproof/proof` and **Node ≥22.12** for `@clearproof/cli` (its `commander` 15 and `chalk` 6 dependencies require it; Node 20 is end-of-life). Packages declare `exports` maps, so deep imports of `dist/*` are no longer supported.
 - **Pilot contracts:** `PilotCurrentRegistry` and `PilotRootCheckpoint` change events, add pause and two-step admin, and the checkpoint stores a publisher epoch. A zero admin reverts with `AccessControlInvalidDefaultAdmin`.
 - **Python API / bridges (source checkout):** `DOMAIN_CONTRACT_HASH` written as bare hex needs a `0x` prefix; the gRPC TRISA server rejects unsealed envelopes and requires a `transfer_handler`.
+- **API startup requires `HKDF_SALT`.** A missing or empty salt now blocks startup instead of warning and falling back to the historical default. Exactly `ALLOW_INSECURE_HKDF_SALT=1` allows that default for disposable local tests and demos only. To keep retained legacy (v1) ciphertext readable, configure the salt it was written with; changing the salt does not migrate ciphertext. See `docs/operations/legacy-encryption-migration.md`.
+- **Legacy verifier governance (`VerifierRouter`, `ComplianceRegistry`):**
+  - `setVerifierSelector` now only schedules a default change. `activateVerifierSelector` applies it after the timelock, and `cancelVerifierSelection` withdraws it.
+  - `updateTimelock` now schedules, and `completeTimelockUpdate` applies.
+  - Selectors are reserved permanently, and runtime code is pinned (`VerifierCodeChanged`).
+  - Registration and retirement are both delayed. A retired former default stays usable for 24 hours (`RETIREMENT_GRACE`) through `verifyAndRecordWithSelector`, with the same domain, root, threshold, sender, revocation, expiry and replay checks. `disableVerifier` remains an immediate emergency stop.
+  - Scripts that expected an immediate swap must use the new two-step calls.
 
 ### Security
 
+- **Explicit HKDF salt** for legacy PII key derivation (see Breaking). Configured salts keep their existing UTF-8 byte encoding, and compatibility tests confirm historical ciphertext still decrypts under the original salt.
+- **Legacy verifier swaps and retirement are timelocked and code-pinned** (see Breaking), so a compromised or hurried admin can't silently rebind a selector or cut off older proofs at once.
 - **Legacy `/proof/generate` binds the proof to the credential holder.** The request wallet and jurisdiction must match the credential (403 otherwise), and the stored record uses the credential's wallet. Unknown issuers return 422 instead of 500, and the issuer registry is injectable through `app.state.issuer_registry`.
 - **Legacy `/proof/verify` rejects non-compliant, expired and stale-root proofs** (`not_compliant`, `proof_expired`, `sanctions_root_stale`, `issuer_root_stale`), and validates signal count and format before running snarkjs (400 on malformed input).
 - **Idempotency keys are scoped to the authenticated principal and a request fingerprint**; nullifier collisions fail before proving. Optional `transfer_nonce` lets identical transfers coexist.
@@ -36,6 +45,27 @@ All five packages move to 0.7.0. Pre-production: nothing is independently audite
 - Pilot sanctions-root pipeline: `scripts/build_pilot_sanctions_tree.py` (with `--verify` for auditors) and human-confirmed `scripts/publish_pilot_sanctions_head.py`, plus `make build-pilot-sanctions-tree` / `verify-pilot-sanctions-tree` / `publish-pilot-sanctions-head`.
 - Static cross-layer signal-contract tests (`tests/unit/test_pilot_signal_contract.py`, `packages/proof/test/signal-order.test.ts`).
 - CI `lint` job (ruff check + format), Dependabot, pre-commit config, Python 3.11 test run.
+- **Durable pilot proving jobs.** `POST /pilot/proof/jobs` returns `202` after encrypted admission to PostgreSQL. `GET /pilot/proof/jobs/{job_id}`, `POST .../cancel` and `POST .../retry` act on jobs the caller owns.
+  - A separately supervised Linux worker (`uv run python -m src.prover.proof_job_worker`) does the proving. The API process never starts proving subprocesses.
+  - Jobs have global and per-tenant admission limits, fenced 30-second leases, bounded attempts and their original deadlines.
+  - The worker rechecks enrollment, policy and approved roots before proving and again before publishing. Retrieval withholds results that are no longer current.
+  - Generating a proof never consumes an authorization.
+  - Targets come from operator code named by `PILOT_PROVING_FACTORY`. See `docs/operations/pilot-proving-jobs.md`. The legacy synchronous `POST /proof/generate` is unchanged.
+- **Optional pinned native prover (Linux).** `select_pilot_backend` uses an operator-pinned binary from `CLEARPROOF_RAPIDSNARK_BIN`, or one found on `PATH`, and falls back to the JavaScript prover when no binary or pin is available.
+  - On the development benchmark it measured a 1.05 s median prove time versus 4.91 s for snarkjs on the same four cores.
+  - Invalid configuration or invalid native results fail closed.
+  - Private intermediates stay in anonymous memory, and child processes are sandboxed (no core dumps, parent-death signal, CPU and file-size limits).
+  - `scripts/build_native_prover.sh` is a source-pinned build recipe. See `docs/operations/pilot-native-proving.md`.
+- **Pilot readiness checks.** `GET /pilot/readiness/{capability}/{target_id}` requires `usage:read` and reports whether the caller's own tenant target is ready: database reachability and migration history, an active-key round trip, and profile, trust, freshness and artifact availability. It is read-only; it never proves, repairs or decrypts retained data. See `docs/operations/pilot-readiness.md`.
+- **Bounded pilot operations.**
+  - Each Python process allows two pairing processes at once; saturation returns a retryable error.
+  - Enrollment inventories are paginated and maintained atomically: `POST /pilot/credential/list` for bounded live discovery, and `POST /pilot/credential/backfill` to index retained enrollments page by page.
+  - Root refresh scans up to 1,024 enrollments.
+- **Canonical pilot signal schema.** `specs/pilot-signals-v3.json` is now the single source of truth for signal order, indices, tree depths and Poseidon tags. `scripts/generate_signal_constants.py` generates the Python, SDK (`generated-signals.ts`), Solidity (`generated/PilotSignalConstants.sol`) and Circom `main` declarations, plus `@clearproof/circuits`' `pilot-profile.json`. CI rejects drift with `--check`. The compiled R1CS is byte-identical to the previous hand-maintained sources.
+- **`@clearproof/content`** exports `PROJECT_STATUS`, the shared release, profile, assurance and capacity facts. The docs site serves them at `/api/content/project`.
+- **Onboarding and evaluation:**
+  - a quick real-proof inspection with a tamper case (`node scripts/inspect_example.mjs`) next to the full local pilot with preflight (`docs/operations/onboarding.md`);
+  - an evaluation guide, a voluntary synthetic-feedback form, a report template and an internal sample report (`docs/operations/evaluating-clearproof.md`).
 - Developer Certificate of Origin enforcement: the required `dco` check (`scripts/check_dco.sh`) rejects pull-request commits without a `Signed-off-by` matching the author (bots exempt).
 
 ### Changed
@@ -44,11 +74,15 @@ All five packages move to 0.7.0. Pre-production: nothing is independently audite
 - `DOMAIN_CONTRACT_HASH` / `DOMAIN_CHAIN_ID` are parsed as full field elements (decimal or `0x` hex) instead of being truncated; bare hex without `0x` is rejected.
 - CI: actions pinned by SHA, least-privilege permissions, concurrency, caching and job timeouts; `uv sync --locked`; duplicated test runs removed. The sanctions relay moved to `sanctions-relay.yml` and only relays a root merged to main.
 - `make relay-sanctions` no longer rebuilds the tree (`make refresh-and-relay-sanctions` does both); `make benchmark` removed.
+- **Development CI rebuilds the legacy parity vector from its input** and compares all 16 derived signals against the fixture before checking pairing (the "UNAPPROVED development circuits" job, gated by the required `circuits` check). Legacy E2E tests now need an explicitly supplied fresh artifact bundle; local `artifacts/` are ignored, and empty or incomplete bundles fail.
+- `clearproof demo` is described as a synthetic legacy development proof. It creates its output directory with mode `0700`, and its manifest no longer claims a toolchain it didn't establish.
+- The documentation site renders Markdown as CommonMark/GFM with raw HTML disabled, and adds canonical per-page metadata and a full technical sitemap.
 - Dependencies:
   - `@clearproof/content` moves to `js-yaml` 5 (named `load` import; it ships its own types, so `@types/js-yaml` is gone).
   - `@clearproof/cli` moves to `commander` 15 and `chalk` 6.
-  - The docs site moves to React 19.3 and Next 15.5.27.
+  - The docs site moves to React 19.3 and Next 15.5.27. A root `postcss` 8.5.29 override replaces Next 15's vulnerable transitive pin, which clears the high-severity PostCSS audit finding without the Next 16 migration.
   - Development tooling moves to `vitest` / `@vitest/coverage-v8` 5, `turbo` 2.11, `dotenv` 18 and `@types/node` 26.
+  - The unused Python drivers `asyncpg` and `aiosqlite` are removed.
   - Python dependencies get patch and minor updates: `fastapi` 0.142 (adds `opentelemetry-api` as a transitive dependency), `cryptography` 50.0.2, `grpcio` 1.84 and `ruff` 0.16.10. `abnf` stays pinned at 2.6.0 for SIWE 4.4.0 compatibility.
   - GitHub Actions move to current major versions, still pinned by SHA.
 
