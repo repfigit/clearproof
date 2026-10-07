@@ -88,7 +88,7 @@ and wait its selection delay. Emergency authority never bypasses a swap delay.
 The committed `packages/contracts/deployments/sepolia.json` records chain
 11155111, the July 20 Apache verifier replacement, and these older addresses:
 
-| Component | Previous address | Recorded current legacy address |
+| Component | Previous address | July 20, 2026 address |
 | --- | --- | --- |
 | Verifier | `0x8ab9F1d446967BdE39bfE81B681E727EdcdF76Da` | `0x6F8e6f64C5601Eb25716f45C78c9B7C9c0bde8EA` |
 | Registry | `0xD038f2C6Ea7b414356Dc74C317cAE35Bc1c2b78a` | `0x941F7f188843279C03D1960821B4332A40e806F7` |

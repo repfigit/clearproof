@@ -8,7 +8,9 @@ Solidity smart contracts for on-chain ZK compliance proof verification and regis
 npm install @clearproof/contracts
 ```
 
-## Deployed Contracts (Sepolia Testnet)
+## Historical Sepolia deployment (July 20, 2026)
+
+These addresses are the legacy 16-signal deployment in `deployments/sepolia.json`. They are not the 0.7.2 contracts, and the pilot contracts have no committed deployment. This registry was constructed without a `VerifierRouter`, so `scripts/redeploy-verifier.ts` does not apply. See `docs/VERIFIER_DECOMMISSIONING.md`.
 
 | Contract | Address |
 |----------|---------|
@@ -18,7 +20,7 @@ npm install @clearproof/contracts
 | ComplianceRegistry | `0x941F7f188843279C03D1960821B4332A40e806F7` |
 | SanctionsRootRelay | `0x911d8244F3b63a40040862dB0CC285A753036F87` |
 
-> Verifier and ComplianceRegistry addresses were replaced on 2026-07-20 (Apache-2.0 verifier, ADR 0001). Previous addresses are in `deployments/sepolia.json` under `previous`. That record has no `VerifierRouter`, so the current `scripts/redeploy-verifier.ts` flow does not apply to it. See `docs/VERIFIER_DECOMMISSIONING.md`.
+> On July 20, 2026 the verifier and ComplianceRegistry were replaced with the Apache-2.0 verifier (ADR 0001). The addresses that replacement retired are under `previous` in the same file.
 
 ## Development
 

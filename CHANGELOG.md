@@ -13,6 +13,7 @@ maintains its own version line in this file.
 
 ### Changed
 
+- The July 20, 2026 Sepolia manifest is labeled as a historical legacy deployment. It is not a deployment of the 0.7.2 contracts.
 - Release versions must match. Until 1.0.0 the workspace packages, the Python project, direct `@clearproof/*` dependency ranges, and `PROJECT_STATUS.npmVersion` and `sourceVersion` are one version. `tests/unit/test_release_versions.py` rejects a mismatch.
 
 ## [0.7.2] - 2026-10-07
