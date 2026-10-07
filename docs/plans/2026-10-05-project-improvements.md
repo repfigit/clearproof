@@ -536,3 +536,33 @@ transaction or external evaluation is claimed.
   links. All 14 linked documentation URLs, robots/sitemap and shared release
   status passed the live check. The user's website branch remains unchanged.
   These entry points do not establish an external evaluation or adoption.
+
+- October 7: release follow-up for the three items left after `v0.7.0`.
+  - **Content status.** Tag `v0.7.0` packed `@clearproof/content` with
+    `PROJECT_STATUS.npmVersion` `0.6.0`. `main` already said `0.7.0` after #106,
+    and `docs.clearproof.world/api/content/project` returned `npmVersion` `0.7.0`.
+    npm `latest` for all five packages was `0.7.0`. Checkout version moves to
+    `0.7.1` with `sourceVersion` `0.7.1` and `npmVersion` left at the verified
+    `0.7.0` until that publish is confirmed. The `0.7.0` tarball itself cannot
+    be rewritten.
+  - **Pilot redeploy.** Not performed. `packages/contracts/deployments/sepolia.json`
+    is the only committed deployment. It records the July 20, 2026 legacy
+    verifier, registry, oracle, VASP registry and relay. It has no pilot
+    registry, pilot checkpoint or `VerifierRouter`. `scripts/redeploy-verifier.ts`
+    requires that router and does not apply. `packages/contracts/AGENTS.md`
+    states that the pilot contracts are not deployed. This environment has no
+    `DEPLOYER_PRIVATE_KEY`, the repository has no Actions secrets, and the
+    public Sepolia RPCs tried from here returned 403, 401 or an authentication
+    error, so live bytecode was not re-read. A new deployment remains a
+    separate authorized action.
+  - **AIF-99, AIF-65 and AIF-67.** Acceptance is unchanged and the issues stay
+    Backlog. AIF-99 still needs live Base, Arbitrum and Optimism receipts from
+    a funded signer. AIF-65 still needs the Sepolia BLS verifier deployment
+    before ADR 0002 can leave DRAFT. AIF-67's wallet-ownership flow remains a
+    staged witness outside the accepted credential preimage and
+    `pilot-transfer-v3`; its circuit integration stays behind that curve
+    decision. No testnet transaction was sent.
+  - **External evaluation and production assurance.** F1–F5 still have no
+    start condition: no permitted operator or counterparty, no independent
+    audit, and no approved production setup. Those gates stay open. This
+    follow-up does not treat local tests or the npm publish as that evidence.

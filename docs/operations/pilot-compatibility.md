@@ -1,6 +1,6 @@
 # Pilot compatibility matrix
 
-The Python project and the published npm packages are version 0.7.0. Software
+The Python project in this checkout is version 0.7.1. The verified npm packages are version 0.7.0. Software
 versions, discovery versions, proof profiles and envelope versions are separate
 identifiers: discovery documents remain profile 0.4.0, and artifact manifests
 are `clearproof-artifact-manifest-v1` with proof profile `pilot-transfer-v3`.

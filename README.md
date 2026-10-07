@@ -6,8 +6,8 @@ retained evidence for controlled evaluation by stablecoin processors and custodi
 A valid proof establishes its encoded statement; it does not establish legal
 compliance, source truth, counterparty acceptance or settlement by itself.
 
-**Status checked October 6, 2026:** the main GitHub repository is **public**.
-Published npm packages and the source checkout are at **0.7.0** and include the local pilot and the current `pilot-transfer-v3` profile. Current circuits and
+**Status checked October 7, 2026:** the main GitHub repository is **public**.
+Verified npm packages are at **0.7.0**. This source checkout is **0.7.1** and includes the local pilot and the current `pilot-transfer-v3` profile. Current circuits and
 contracts have not completed independent audits, and generated proving keys are
 explicitly unapproved development artifacts.
 
