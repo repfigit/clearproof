@@ -1,6 +1,6 @@
 {
   "name": "@clearproof/cli",
-  "version": "0.7.1",
+  "version": "0.7.2",
   "description": "CLI for generating and verifying ZK compliance proofs",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -35,8 +35,8 @@
     "test:coverage": "vitest run --coverage --coverage.include=\"src/**/*.ts\" --coverage.reporter=text --coverage.reporter=json-summary --coverage.reporter=lcov --coverage.thresholds.lines=100 --coverage.thresholds.branches=100 --coverage.thresholds.functions=100 --coverage.thresholds.statements=100"
   },
   "dependencies": {
-    "@clearproof/content": "^0.7.1",
-    "@clearproof/proof": "^0.7.1",
+    "@clearproof/content": "^0.7.2",
+    "@clearproof/proof": "^0.7.2",
     "chalk": "^6.0.1",
     "commander": "^15.0.0"
   },

@@ -1,6 +1,6 @@
 {
   "name": "@clearproof/docs",
-  "version": "0.7.1",
+  "version": "0.7.2",
   "private": true,
   "scripts": {
     "dev": "next dev",
@@ -11,7 +11,7 @@
     "test:e2e": "playwright test"
   },
   "dependencies": {
-    "@clearproof/content": "^0.7.1",
+    "@clearproof/content": "^0.7.2",
     "@vercel/analytics": "^2.0.1",
     "next": "^15.5.27",
     "nextra": "^4.6.1",

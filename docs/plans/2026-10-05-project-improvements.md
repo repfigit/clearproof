@@ -547,6 +547,8 @@ transaction or external evaluation is claimed.
     be rewritten. Release `v0.7.1` at `98eaab8` published all five packages.
     The content tarball packs `npmVersion` `0.7.0` and `sourceVersion` `0.7.1`.
     The source checkout then records the verified npm release `0.7.1`.
+    Release `0.7.2` publishes `npmVersion` and `sourceVersion` as `0.7.2`,
+    the same number as the package version. The older tarballs stay as published.
   - **Pilot redeploy.** Not performed. `packages/contracts/deployments/sepolia.json`
     is the only committed deployment. It records the July 20, 2026 legacy
     verifier, registry, oracle, VASP registry and relay. It has no pilot

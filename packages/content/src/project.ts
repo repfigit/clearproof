@@ -1,9 +1,9 @@
-/** Public release facts. Update only after publication has been verified. */
+/** Public release facts. Both version fields are this package's version. */
 export const PROJECT_STATUS = Object.freeze({
   schemaVersion: 1,
   checkedAt: '2026-10-07',
-  npmVersion: '0.7.1',
-  sourceVersion: '0.7.1',
+  npmVersion: '0.7.2',
+  sourceVersion: '0.7.2',
   proofProfile: 'pilot-transfer-v3',
   stage: 'Development pilot. The workflow runs locally with synthetic data, real proofs, a disposable database and a test chain. No customer deployment is established.',
   assurance: 'Circuits and contracts have not been independently audited. Proving keys are development-only.',
