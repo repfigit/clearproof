@@ -1,4 +1,4 @@
-/** Public release facts. Both version fields are this package's version. */
+/** Public release facts. Both fields are this package's version; the release-version test rejects any other value. */
 export const PROJECT_STATUS = Object.freeze({
   schemaVersion: 1,
   checkedAt: '2026-10-07',

@@ -12,6 +12,11 @@ A document without credentials can still contain private business information.
 
 Before publishing:
 
+- Ship one version. Until 1.0.0 the Python project, every workspace package,
+  and `PROJECT_STATUS.npmVersion` and `sourceVersion` are the same version
+  string, and the published package reports that version. Do not publish a
+  status field from an older release. `tests/unit/test_release_versions.py`
+  checks the source tree. An already published tarball cannot be replaced.
 - Verify capability claims against the source revision and released package or
   deployed service being described. Distinguish plans from available features.
 - Check destinations, examples and citations. Preserve the limits of each proof,
