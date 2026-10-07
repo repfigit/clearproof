@@ -132,6 +132,7 @@ Range checks (252-bit on sanctions keys, 64-bit on amounts, 16-bit on jurisdicti
 - **Never import `src.api.main`** in tests without first setting `PII_MASTER_KEY`, `AUTH_MODE`, and `API_KEY` env vars — module import triggers the key check.
 - **Never let tests require real circuit compilation.** The `mock_prover` fixture and deterministic public signals in `tests/conftest.py` are the single source of truth for happy-path proofs.
 - **Compliance tests** (`tests/compliance/`) are policy-readable regulatory scenarios — keep them thin on crypto and thick on intent.
+- **Release versions must match.** Until 1.0.0 the root package, every workspace package, the Python project, both lockfiles, direct `@clearproof/*` dependency ranges, and `PROJECT_STATUS.npmVersion` and `sourceVersion` are one version. Publish that version. Do not leave `npmVersion` pointing at an older release inside the package being published. `tests/unit/test_release_versions.py` rejects a mismatch. Already published tarballs stay as they are.
 
 ## CI
 

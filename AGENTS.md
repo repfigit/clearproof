@@ -61,6 +61,7 @@ clearproof/
 - Do not edit generated pb2/pb2_grpc files in `src/protocol/bridges/`
 - Never skip sanctions oracle relay after root update — all chains must be consistent
 - Production proving keys must come from documented multi-party ceremony
+- Release versions must match until 1.0.0: workspace packages, the Python project, lockfiles, direct `@clearproof/*` ranges, and `PROJECT_STATUS.npmVersion` and `sourceVersion` are one version. Publish that version in the package. `tests/unit/test_release_versions.py` enforces it. Do not record a corrected `npmVersion` only after the tarball is immutable.
 
 ## COMMANDS
 ```bash

@@ -11,6 +11,10 @@ maintains its own version line in this file.
 
 ## [Unreleased]
 
+### Changed
+
+- Release versions must match. Until 1.0.0 the workspace packages, the Python project, direct `@clearproof/*` dependency ranges, and `PROJECT_STATUS.npmVersion` and `sourceVersion` are one version. `tests/unit/test_release_versions.py` rejects a mismatch.
+
 ## [0.7.2] - 2026-10-07
 
 Patch release. Circuits, contracts and the `pilot-transfer-v3` profile are unchanged.
