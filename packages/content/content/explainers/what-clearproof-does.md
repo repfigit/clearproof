@@ -43,7 +43,7 @@ The public source on `main` implements a local adoption pilot:
 - Recipient-encrypted historical exports and offline review under independently
   configured proof, policy, source, decision, status and timing authorities.
 
-The npm packages at 0.7.1 include the TypeScript SDK, CLI, content, contract
+The npm packages at 0.7.2 include the TypeScript SDK, CLI, content, contract
 sources and circuit sources. The Python API and acceptance tooling are in the
 same checkout and are not published to PyPI.
 
@@ -68,7 +68,7 @@ documentation:
 
 ## What is available to install
 
-Public npm packages are at **0.7.1** and include the local pilot and
+Public npm packages are at **0.7.2** and include the local pilot and
 `pilot-transfer-v3`. `@clearproof/circuits` publishes circuit sources only, so
 proof generation still requires compatible WASM and proving-key files compiled
 locally. Those development keys are unapproved. The full evaluation path is a

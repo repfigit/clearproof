@@ -11,6 +11,14 @@ maintains its own version line in this file.
 
 ## [Unreleased]
 
+## [0.7.2] - 2026-10-07
+
+Patch release. Circuits, contracts and the `pilot-transfer-v3` profile are unchanged.
+
+### Fixed
+
+- `@clearproof/content` reports `npmVersion` and `sourceVersion` as this package's version, `0.7.2`. The published `0.7.1` tarball still contains `npmVersion` `0.7.0`, and the published `0.7.0` tarball still contains `npmVersion` `0.6.0`. npm does not allow those tarballs to be replaced.
+
 ## [0.7.1] - 2026-10-07
 
 Patch release. Circuits, contracts and the `pilot-transfer-v3` profile are unchanged.
@@ -201,7 +209,8 @@ First npm release since 0.3.0. It publishes `@clearproof/proof`, `@clearproof/co
 
 - Storage tests skip cleanly when `DATABASE_URL` is unset.
 
-[Unreleased]: https://github.com/repfigit/clearproof/compare/v0.7.1...HEAD
+[Unreleased]: https://github.com/repfigit/clearproof/compare/v0.7.2...HEAD
+[0.7.2]: https://github.com/repfigit/clearproof/compare/v0.7.1...v0.7.2
 [0.7.1]: https://github.com/repfigit/clearproof/compare/v0.7.0...v0.7.1
 [0.7.0]: https://github.com/repfigit/clearproof/compare/v0.6.0...v0.7.0
 [0.6.0]: https://github.com/repfigit/clearproof/compare/v0.5.0...v0.6.0
