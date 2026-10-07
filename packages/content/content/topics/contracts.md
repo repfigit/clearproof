@@ -15,9 +15,9 @@ The project includes two sets of EVM contracts. The **pilot contracts** verify a
 
 **PilotCurrentRegistry** publishes tenant checkpoints (revisioned heads for issuance, issuers, sanctions, credential, policy, valuation, participants and authorization) and statement bindings from one assigned publisher per tenant. `inspect` is a read-only call that checks a proof against a published statement, including the chain ID, the registry's own address and the expiry. It then mirrors receipts that PostgreSQL has already consumed. It cannot create an authorization, and it cannot detect a publisher that lies about private records. See the [registry trust boundary](https://github.com/repfigit/clearproof/blob/main/docs/internal/PILOT_CURRENT_REGISTRY.md).
 
-## Legacy contracts: recorded Sepolia deployments
+## Legacy contracts: historical Sepolia deployment (July 20, 2026)
 
-The July 20, 2026 manifest records these addresses for the legacy demo profile. Bytecode was present at all five on September 5, 2026. This check does not establish equivalence between every current source change and deployed bytecode.
+The July 20, 2026 manifest in `packages/contracts/deployments/sepolia.json` is a historical record of the legacy 16-signal demo. It is not a 0.7.2 deployment. The deployed registry has no `VerifierRouter`, and the current contract source is not applied to these addresses. Bytecode was present at all five on September 5, 2026.
 
 | Contract | Sepolia address |
 | --- | --- |

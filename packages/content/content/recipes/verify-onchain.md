@@ -9,14 +9,14 @@ estimated-time: 3 min
 
 # Verify a Proof On-Chain
 
-Submit a compliance proof to the ComplianceRegistry contract on Sepolia testnet. The contract performs 14 checks including Groth16 verification, sanctions root validation, and nullifier uniqueness.
+Submit a compliance proof to a ComplianceRegistry deployed from the current source. `packages/contracts/deployments/sepolia.json` is the July 20, 2026 historical record and does not match this script. The contract performs 14 checks including Groth16 verification, sanctions root validation, and nullifier uniqueness.
 
 ## 1. Set environment variables
 
 ```bash:run
 export SEPOLIA_RPC_URL="https://rpc.sepolia.org"
 export DEPLOYER_PRIVATE_KEY="YOUR_VASP_WALLET_PRIVATE_KEY"
-export COMPLIANCE_REGISTRY="YOUR_COMPLIANCE_REGISTRY_ADDRESS" # optional if deployments/sepolia.json exists
+export COMPLIANCE_REGISTRY="YOUR_COMPLIANCE_REGISTRY_ADDRESS" # a registry deployed from current source; do not use the July 20 historical record
 export PROOF_PATH="$PWD/../../artifacts/latest_proof.json"
 export TRANSFER_ID="recipe-transfer-001"
 export VASP_DID="did:web:vasp.example.com"
