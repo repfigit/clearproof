@@ -17,7 +17,7 @@ Patch release. Circuits, contracts and the `pilot-transfer-v3` profile are uncha
 
 ### Fixed
 
-- `@clearproof/content@0.7.0` was packed from tag `v0.7.0` before the registry check, so its `PROJECT_STATUS.npmVersion` still said `0.6.0`. This release packs the verified npm release `0.7.0`. `sourceVersion` for this checkout is `0.7.1`.
+- `@clearproof/content@0.7.0` was packed from tag `v0.7.0` before the registry check, so its `PROJECT_STATUS.npmVersion` still said `0.6.0`. This release packs the verified npm release `0.7.0`. `sourceVersion` for this checkout is `0.7.1`. The npm registry listed all five packages at `0.7.1` on October 7, 2026. The packed content tarball keeps `npmVersion` `0.7.0`; the source checkout records `0.7.1` after that check.
 
 ### Deployment
 

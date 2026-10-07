@@ -5,7 +5,7 @@ The next bounded delivery is governed by the [adoption pilot implementation plan
 ## Current Status (2026-10-07)
 
 - The local adoption pilot (M0–M5, CP-001–CP-018) was merged to `main` on September 7, 2026 (PR #27). The current proof profile is `pilot-transfer-v3` (PR #49, September 25, 2026): eight public signals and production tree depths of 32/20/20 (ADR 0011).
-- Verified public npm packages are 0.7.0, checked October 6, 2026. This source checkout, including the Python project, is 0.7.1. `@clearproof/circuits` is source-only: no compiled WASM, proving key, or verification key. PyPI publishing stays off until the `PUBLISH_PYPI` repository variable is set.
+- Verified public npm packages are 0.7.1, checked October 7, 2026. This source checkout, including the Python project, is 0.7.1. `@clearproof/circuits` is source-only: no compiled WASM, proving key, or verification key. PyPI publishing stays off until the `PUBLISH_PYPI` repository variable is set.
 - Nothing is independently audited. Proving keys are development-only.
 - Follow-on gates F1–F5 (external credentials, re-screening, trusted distribution, live paid pilot, production authorization) are all open. None has met its start condition.
 - The Phase 0–5 checklists below predate the pilot and have not been reconciled item by item. For implemented capability, trust the plan's execution log and the README.
