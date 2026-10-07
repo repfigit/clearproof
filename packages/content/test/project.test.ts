@@ -14,7 +14,7 @@ describe('public project status', () => {
 
   it('separates the registry-verified release from the source checkout version', () => {
     const pkg = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8'));
-    const release = JSON.parse(readFileSync(new URL('../../../docs/releases/2026-10-06-npm.json', import.meta.url), 'utf8'));
+    const release = JSON.parse(readFileSync(new URL('../../../docs/releases/2026-10-07-npm.json', import.meta.url), 'utf8'));
     expect(PROJECT_STATUS.npmVersion).toBe(release.npmVersion);
     expect(PROJECT_STATUS.checkedAt).toBe(release.checkedAt);
     expect(release.packages).toHaveLength(5);

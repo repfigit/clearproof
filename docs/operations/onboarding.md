@@ -20,7 +20,7 @@ The source script reads only the existing public fixture under
 through the real SDK, and changes the registry-domain signal for a second
 pairing check. It generates no new proof or keys, reads no environment secrets,
 contacts no service and writes no files. This script is available in the source
-checkout; it is not a new command in the published 0.7.0 CLI.
+checkout; it is not a new command in the published 0.7.1 CLI.
 
 Expected: `cryptographic_valid: true`, `policy_accepted: false`,
 `rejection_reasons: ["threshold_mismatch"]`, `tampered_pairing_rejected: true`,
