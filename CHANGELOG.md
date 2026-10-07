@@ -11,6 +11,18 @@ maintains its own version line in this file.
 
 ## [Unreleased]
 
+## [0.7.1] - 2026-10-07
+
+Patch release. Circuits, contracts and the `pilot-transfer-v3` profile are unchanged.
+
+### Fixed
+
+- `@clearproof/content@0.7.0` was packed from tag `v0.7.0` before the registry check, so its `PROJECT_STATUS.npmVersion` still said `0.6.0`. This release packs the verified npm release `0.7.0`. `sourceVersion` for this checkout is `0.7.1`.
+
+### Deployment
+
+- No contracts are deployed. The only committed deployment remains `packages/contracts/deployments/sepolia.json` from July 20, 2026. That record has legacy verifier, registry, oracle, VASP registry and relay addresses. It has no `PilotCurrentRegistry`, `PilotRootCheckpoint` or `VerifierRouter`, so `scripts/redeploy-verifier.ts` does not apply to it. A later deployment needs an authorized funded signer. This environment has no `DEPLOYER_PRIVATE_KEY` and no repository secret for one.
+
 ## [0.7.0] - 2026-10-06
 
 All five packages move to 0.7.0. Pre-production: nothing is independently audited, and keys remain development-only. The pilot contract ABIs and events change, so existing `PilotCurrentRegistry` / `PilotRootCheckpoint` deployments do not match this release. The legacy `VerifierRouter` / `ComplianceRegistry` also change: existing legacy deployments need the replacement command rather than an in-place upgrade.
@@ -189,7 +201,8 @@ First npm release since 0.3.0. It publishes `@clearproof/proof`, `@clearproof/co
 
 - Storage tests skip cleanly when `DATABASE_URL` is unset.
 
-[Unreleased]: https://github.com/repfigit/clearproof/compare/v0.7.0...HEAD
+[Unreleased]: https://github.com/repfigit/clearproof/compare/v0.7.1...HEAD
+[0.7.1]: https://github.com/repfigit/clearproof/compare/v0.7.0...v0.7.1
 [0.7.0]: https://github.com/repfigit/clearproof/compare/v0.6.0...v0.7.0
 [0.6.0]: https://github.com/repfigit/clearproof/compare/v0.5.0...v0.6.0
 [0.5.0]: https://github.com/repfigit/clearproof/compare/v0.4.0...v0.5.0

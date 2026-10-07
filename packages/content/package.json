@@ -1,6 +1,6 @@
 {
   "name": "@clearproof/content",
-  "version": "0.7.0",
+  "version": "0.7.1",
   "description": "Single source of truth for all clearproof developer-facing content",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",

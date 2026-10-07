@@ -1,6 +1,6 @@
 {
   "name": "@clearproof/circuits",
-  "version": "0.7.0",
+  "version": "0.7.1",
   "description": "Circom source for the clearproof proof profiles (pilot-transfer-v3 and the legacy demo circuit). Source only: no compiled artifacts or proving keys.",
   "license": "Apache-2.0",
   "main": "index.js",
