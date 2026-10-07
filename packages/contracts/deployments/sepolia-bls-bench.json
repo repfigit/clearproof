@@ -1,0 +1,11 @@
+{
+  "contract": "Groth16VerifierBLS",
+  "address": "0x76C2A87cd054a29642439ceCF2096bD62F17c090",
+  "network": "sepolia",
+  "chainId": "11155111",
+  "deployedAt": "2026-10-07T23:49:49.739Z",
+  "deployer": "0x6e42dA3124edd6FFE164a8b9611d8FaCF8107E92",
+  "deployGas": "9210308",
+  "verifyGasEstimate": "358753",
+  "note": "ADR 0002 confirmation deploy. DEV trusted setup — not production."
+}

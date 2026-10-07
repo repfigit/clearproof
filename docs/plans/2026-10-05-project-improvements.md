@@ -506,9 +506,8 @@ actual external evidence; local tests cannot establish those prerequisites.
 
 - AIF-99: access to the existing funded testnet signer and actual Base,
   Arbitrum and Optimism receipts, rollup data fees and dated ETH/USD comparisons.
-- AIF-65: funded Sepolia signer, verifier-only deployment and valid/tampered
-  on-chain receipt; ADR 0002 remains DRAFT until the required evidence exists.
-- AIF-67: resolve the original curve/profile staging dependency and integrate
+- AIF-65: Sepolia confirmation is recorded in `packages/contracts/deployments/sepolia-bls-bench.json`. ADR 0002 is DECIDED for Option B. Poseidon re-parameterization, infinity-point rejection, and the ceremony-runbook update remain.
+- AIF-67: the curve decision now exists. Integrate
   wallet ownership into the credential preimage and supported composed proof.
   The current standalone extension witness does not satisfy that acceptance.
 - External evaluation: a permitted real operator/counterparty and retained

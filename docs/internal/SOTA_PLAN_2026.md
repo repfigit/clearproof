@@ -41,13 +41,13 @@ The core architecture (Groth16 on BN254, sorted-Merkle gap proofs, domain-bound 
 - [ ] Migration path: encrypt v2 only after cutoff; retire v1 keyring for new envelopes
 **Done when:** Two clearproof instances exchange envelopes with no shared secret; envelope format versioned; rotation drill documented.
 
-### 2. BLS12-381 migration ADR — **DRAFTED 2026-07-23** (`docs/adr/0002-bls12381-migration.md`)
+### 2. BLS12-381 migration ADR — **DECIDED 2026-10-07** (`docs/adr/0002-bls12381-migration.md`)
 **Problem:** BN254 offers ~100-bit security. Regulated buyers will ask. EIP-2537 precompiles are live on mainnet since Pectra (2025-05-07) — the migration path exists today, not "someday."
 **Research basis:** Pectra activated epoch 364032; a pairing-precompile consensus bug (infinity-point handling) was found in the Pectra audit competition — pin client versions. L2 precompile availability is uneven.
 **Actions:**
 - [x] Write ADR 0002 — recommends Option B (BLS12-381 on L1 at the single production ceremony, BN254 retained for L2 pilots)
 - [x] Gas benchmark (done 2026-07-23, Prague EVM): **BLS12-381 363,588 vs BN128 341,504 gas = +6.5%** — well inside tolerance. Bonus finding: circomlib Poseidon constants are curve-bound (opt algorithm, BN254-derived constants); production BLS migration must regenerate curve-correct Poseidon parameters.
-- [x] Chain matrix (done 2026-07-24): `scripts/check_eip2537.mjs` — **all 10 target networks have EIP-2537** (incl. base, arbitrum, optimism, polygon). Single-curve deployment viable everywhere; recommendation upgraded from "L1-only" to "all chains". Remaining: operator-gated Sepolia confirmation deploy (needs `DEPLOYER_PRIVATE_KEY`)
+- [x] Chain matrix (done 2026-07-24): `scripts/check_eip2537.mjs` — **all 10 target networks have EIP-2537** (incl. base, arbitrum, optimism, polygon). Single-curve deployment viable everywhere; recommendation upgraded from "L1-only" to "all chains". Sepolia confirmation completed 2026-10-07: `Groth16VerifierBLS` at `0x76C2A87cd054a29642439ceCF2096bD62F17c090`, `verifyProof` estimate 358,753 gas. Development setup only.
 - [ ] Survey target-chain precompile availability matrix (L1, Arbitrum, Base, OP, Polygon) (ADR Open Task 2)
 - [ ] If migrating: fold into the production MPC ceremony (one ceremony, new curve) — do NOT run two ceremonies
 **Done when:** ADR merged with gas data and chain matrix; decision recorded before ceremony planning starts.

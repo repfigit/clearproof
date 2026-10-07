@@ -1,6 +1,6 @@
 # ADR 0002: Groth16 Curve Migration — BN254 vs BLS12-381
 
-- **Status:** DRAFT — gas benchmark and chain matrix COMPLETE (see below); remaining: Sepolia confirmation deploy (operator-gated)
+- **Status:** DECIDED (2026-10-07) — Option B, BLS12-381 on all target chains. The Sepolia confirmation is recorded below. Poseidon re-parameterization, infinity-point rejection, and the ceremony-runbook update are still open. The deployed verifier uses the development trusted setup and is not a production deployment.
 - **Date:** 2026-07-24
 - **Deciders:** clearproof maintainers
 - **Related:** ADR 0001 (verifier licensing), `docs/internal/CEREMONY_RUNBOOK.md`, `docs/internal/SOTA_PLAN_2026.md` item #2
@@ -162,16 +162,30 @@ Rationale: measured gas penalty is +6.5%, the security margin doubles
 template is in code we already own post-ADR-0001, and the Poseidon
 re-parameterization is mechanical thanks to the clean-room generator.
 
-**Conditions status:** gas benchmark ✓ (+6.5%), chain matrix ✓ (all chains).
-One confirmation remains — a live Sepolia deploy of `Groth16VerifierBLS.sol`
-(operator-gated: needs `DEPLOYER_PRIVATE_KEY`). The Poseidon finding adds
-circuit work but no fundamental obstacle.
+**Conditions status:** gas benchmark ✓ (+6.5% locally), chain matrix ✓ (all chains),
+Sepolia confirmation ✓ (2026-10-07). The Poseidon finding adds circuit work
+but no fundamental obstacle.
 
-## Open Tasks (blocking "DECIDED" status)
+## Sepolia confirmation (2026-10-07)
+
+`packages/contracts/scripts/deploy-verifier-bls.ts` deployed
+`Groth16VerifierBLS` to chain 11155111. The receipt is
+`packages/contracts/deployments/sepolia-bls-bench.json`.
+
+| Field | Value |
+| --- | --- |
+| Address | `0x76C2A87cd054a29642439ceCF2096bD62F17c090` |
+| Deployer | `0x6e42dA3124edd6FFE164a8b9611d8FaCF8107E92` |
+| Deployed | 2026-10-07T23:49:49.739Z |
+| Deploy gas | 9,210,308 |
+| `verifyProof` estimateGas | 358,753 |
+
+A separate read of that address accepted the committed BLS vector and rejected the tampered proof. The estimate is 358,753 gas, 5.0% above the committed BN128 figure of 341,504 and 4,835 gas below the local BLS figure of 363,588. Both comparisons sit inside the ±15% band. This contract is the development setup named in `tests/vectors/compliance-bls/MANIFEST.json`. It does not replace the July 20, 2026 legacy deployment and it is not the pilot verifier.
+
+## Open Tasks
 
 1. ~~**Empirical gas benchmark.**~~ **DONE 2026-07-23** — +6.5% vs BN128.
-2. ~~**Chain matrix.**~~ **DONE 2026-07-24** — all 10 networks PRESENT.
-   Remaining: live Sepolia confirmation deploy (operator with deployer key).
+2. ~~**Chain matrix and Sepolia confirmation.**~~ **DONE 2026-10-07** — all 10 networks PRESENT; live Sepolia receipt recorded above.
 3. **Poseidon parameter regeneration.** Run
    `scripts/generate_poseidon_constants.py` against the BLS12-381 scalar
    field, patch the circuit's Poseidon instantiation to curve-correct
