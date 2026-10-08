@@ -105,7 +105,8 @@ contract Groth16VerifierBLS {
     function _isCanonicalFp(bytes calldata limb) internal pure returns (bool) {
         uint256 hi = uint256(bytes32(limb[0:32]));
         uint256 lo = uint256(bytes32(limb[32:64]));
-        return hi < Q_HI || (hi == Q_HI && lo < Q_LO);
+        if (hi != Q_HI) return hi < Q_HI;
+        return lo < Q_LO;
     }
 
     /// @dev vk_x = IC0 + sum(pubSignals[i] * IC[i+1]) via the G1MSM precompile.

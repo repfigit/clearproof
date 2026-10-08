@@ -200,7 +200,7 @@ A separate read of that address accepted the committed BLS vector and rejected t
    G1MSM reduces scalars mod r, so the earlier template accepted `s + r` in
    place of `s`. The Sepolia contract recorded above predates these checks and
    still accepts `s + r`; it remains a gas benchmark only. Local
-   `verifyProof` gas with the checks is 367,866 (+7.7% over BN128).
+   `verifyProof` gas with the checks is 367,877 (+7.7% over BN128).
 5. ~~Update `CEREMONY_RUNBOOK.md` with the chosen curve before any ceremony
    announcement.~~ **DONE 2026-10-08.** The runbook targets BLS12-381, makes
    a pinned multi-party BLS12-381 phase-1 file and task 3 pre-ceremony gates,
