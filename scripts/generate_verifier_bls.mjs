@@ -35,6 +35,9 @@ if (vk.nPublic !== nPublic) {
 const Q = BigInt('0x1a0111ea397fe69a4b1ba7b6434bacd764774b84f38512bf6730d2a0f6b0f6241eabfffeb153ffffb9feffffffffaaab');
 const Q_HI = Q >> 256n;
 const Q_LO = Q & ((1n << 256n) - 1n);
+// BLS12-381 scalar field order r. G1MSM reduces scalars mod r, so the
+// contract must reject s >= r or s and s + r would verify the same proof.
+const R = BigInt('0x73eda753299d7d483339d80809a1d80553bda402fffe5bfeffffffff00000001');
 
 // Encode an Fp element as a 64-byte big-endian limb (EIP-2537 encoding).
 const fp = (v) => BigInt(v).toString(16).padStart(128, '0');
@@ -102,7 +105,14 @@ contract Groth16VerifierBLS {
     uint256 internal constant Q_HI = ${Q_HI};
     uint256 internal constant Q_LO = ${Q_LO};
 
+    /// The order r of the scalar field. Public signals must be < r.
+    uint256 internal constant SNARK_SCALAR_FIELD = ${R};
+
     uint256 internal constant N_PUBLIC = ${nPublic};
+
+    error PublicSignalExceedsScalarField();
+    error ProofPointAtInfinity();
+    error ProofPointNotCanonical();
 
     // Verification key (EIP-2537 encodings)
     bytes constant ALPHA = ${alpha};
@@ -112,7 +122,7 @@ contract Groth16VerifierBLS {
 ${icConstants}
 
     /// @notice Verify a Groth16 proof over BLS12-381.
-    /// @param _proof 576-byte proof: pA (G1, 128B) || pB (G2, 256B) || pC (G1, 128B)
+    /// @param _proof 512-byte proof: pA (G1, 128B) || pB (G2, 256B) || pC (G1, 128B)
     /// @param _pubSignals public signals (each < BLS12-381 scalar field r)
     function verifyProof(
         bytes calldata _proof,
@@ -120,10 +130,38 @@ ${icConstants}
     ) external view returns (bool) {
         require(_proof.length == 512, "Proof must be 512 bytes (G1 || G2 || G1)");
         require(_pubSignals.length == N_PUBLIC, "Wrong public signal count");
+        for (uint256 i = 0; i < N_PUBLIC; i++) {
+            if (_pubSignals[i] >= SNARK_SCALAR_FIELD) revert PublicSignalExceedsScalarField();
+        }
+        // EIP-2537 encodes infinity as all-zero bytes and the pairing precompile
+        // accepts it, so reject it here (ADR 0002 defense in depth).
+        if (_isZero(_proof[0:128]) || _isZero(_proof[128:384]) || _isZero(_proof[384:512])) {
+            revert ProofPointAtInfinity();
+        }
+        // The precompiles never see A's original y, only q - y, so check it here.
+        if (!_isCanonicalFp(_proof[64:128])) revert ProofPointNotCanonical();
 
         bytes memory vkX = _computeVkX(_pubSignals);
         bytes memory negA = _negateG1(_proof[0:128]);
         return _pairingCheck(negA, _proof[128:384], vkX, _proof[384:512]);
+    }
+
+    function _isZero(bytes calldata data) internal pure returns (bool zero) {
+        assembly {
+            let acc := 0
+            for { let i := 0 } lt(i, data.length) { i := add(i, 32) } {
+                acc := or(acc, calldataload(add(data.offset, i)))
+            }
+            zero := iszero(acc)
+        }
+    }
+
+    /// @dev True if a 64-byte EIP-2537 Fp limb encodes a value < q.
+    function _isCanonicalFp(bytes calldata limb) internal pure returns (bool) {
+        uint256 hi = uint256(bytes32(limb[0:32]));
+        uint256 lo = uint256(bytes32(limb[32:64]));
+        if (hi != Q_HI) return hi < Q_HI;
+        return lo < Q_LO;
     }
 
     /// @dev vk_x = IC0 + sum(pubSignals[i] * IC[i+1]) via the G1MSM precompile.

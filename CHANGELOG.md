@@ -11,7 +11,13 @@ maintains its own version line in this file.
 
 ## [Unreleased]
 
+### Fixed
+
+- `Groth16VerifierBLS` (the ADR 0002 benchmark verifier) rejects public signals at or above the BLS12-381 scalar field order, proof points at infinity, and a non-canonical y on A. The earlier template accepted `s + r` in place of a signal `s`. The Sepolia benchmark deployment at `0x76C2A87cd054a29642439ceCF2096bD62F17c090` predates the fix.
+
 ### Changed
+
+- `CEREMONY_RUNBOOK.md` targets BLS12-381. A pinned multi-party BLS12-381 phase-1 file and the Poseidon re-parameterization are pre-ceremony gates, and the verifier is exported with `scripts/generate_verifier_bls.mjs`.
 
 - The July 20, 2026 Sepolia manifest is labeled as a historical legacy deployment. It is not a deployment of the 0.7.2 contracts.
 - ADR 0002 is DECIDED for BLS12-381 after the Sepolia confirmation of `Groth16VerifierBLS` at `0x76C2A87cd054a29642439ceCF2096bD62F17c090`. That verifier is a development benchmark, not a production deployment.

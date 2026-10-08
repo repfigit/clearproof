@@ -34,7 +34,14 @@ contract Groth16VerifierBLS {
     uint256 internal constant Q_HI = 34565483545414906068789196026815425751;
     uint256 internal constant Q_LO = 45442060874369865957053122457065728162598490762543039060009208264153100167851;
 
+    /// The order r of the scalar field. Public signals must be < r.
+    uint256 internal constant SNARK_SCALAR_FIELD = 52435875175126190479447740508185965837690552500527637822603658699938581184513;
+
     uint256 internal constant N_PUBLIC = 16;
+
+    error PublicSignalExceedsScalarField();
+    error ProofPointAtInfinity();
+    error ProofPointNotCanonical();
 
     // Verification key (EIP-2537 encodings)
     bytes constant ALPHA = hex"0000000000000000000000000000000007052ac25c8174d68c3ccf74a9a5aa45fcab0a85cbd744e92e49c74b309f6ba1dd514aa40c487d82e67f68312fd59baf000000000000000000000000000000000e47efdfb3aa439ddf7227dbefa230a24305cb3f1e6153363069e1ed0dd2c223ae78834227d6679a0d075304afbd667e";
@@ -60,7 +67,7 @@ contract Groth16VerifierBLS {
     bytes constant IC16 = hex"000000000000000000000000000000000e7d2f3424d49642a3aa383209d3ebf24fc08c9de6830557f8ec19e663f9db8f64205eb5ef79739a508e9991f9b56dd20000000000000000000000000000000008f89dfb735c2e849f234046630ba1f02f3634f39a3f661a9b93fd20782ae744bbbc9d705cd26929c4293fdb992bd548";
 
     /// @notice Verify a Groth16 proof over BLS12-381.
-    /// @param _proof 576-byte proof: pA (G1, 128B) || pB (G2, 256B) || pC (G1, 128B)
+    /// @param _proof 512-byte proof: pA (G1, 128B) || pB (G2, 256B) || pC (G1, 128B)
     /// @param _pubSignals public signals (each < BLS12-381 scalar field r)
     function verifyProof(
         bytes calldata _proof,
@@ -68,10 +75,38 @@ contract Groth16VerifierBLS {
     ) external view returns (bool) {
         require(_proof.length == 512, "Proof must be 512 bytes (G1 || G2 || G1)");
         require(_pubSignals.length == N_PUBLIC, "Wrong public signal count");
+        for (uint256 i = 0; i < N_PUBLIC; i++) {
+            if (_pubSignals[i] >= SNARK_SCALAR_FIELD) revert PublicSignalExceedsScalarField();
+        }
+        // EIP-2537 encodes infinity as all-zero bytes and the pairing precompile
+        // accepts it, so reject it here (ADR 0002 defense in depth).
+        if (_isZero(_proof[0:128]) || _isZero(_proof[128:384]) || _isZero(_proof[384:512])) {
+            revert ProofPointAtInfinity();
+        }
+        // The precompiles never see A's original y, only q - y, so check it here.
+        if (!_isCanonicalFp(_proof[64:128])) revert ProofPointNotCanonical();
 
         bytes memory vkX = _computeVkX(_pubSignals);
         bytes memory negA = _negateG1(_proof[0:128]);
         return _pairingCheck(negA, _proof[128:384], vkX, _proof[384:512]);
+    }
+
+    function _isZero(bytes calldata data) internal pure returns (bool zero) {
+        assembly {
+            let acc := 0
+            for { let i := 0 } lt(i, data.length) { i := add(i, 32) } {
+                acc := or(acc, calldataload(add(data.offset, i)))
+            }
+            zero := iszero(acc)
+        }
+    }
+
+    /// @dev True if a 64-byte EIP-2537 Fp limb encodes a value < q.
+    function _isCanonicalFp(bytes calldata limb) internal pure returns (bool) {
+        uint256 hi = uint256(bytes32(limb[0:32]));
+        uint256 lo = uint256(bytes32(limb[32:64]));
+        if (hi != Q_HI) return hi < Q_HI;
+        return lo < Q_LO;
     }
 
     /// @dev vk_x = IC0 + sum(pubSignals[i] * IC[i+1]) via the G1MSM precompile.
