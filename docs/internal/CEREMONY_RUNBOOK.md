@@ -1,8 +1,9 @@
 # Production Trusted Setup Ceremony Runbook
 
 **Status:** Planned — prerequisite for any production deployment (see ROADMAP "Security assurance").
-**Scope:** Phase 2 (circuit-specific) MPC ceremony for the `compliance` circuit. Phase 1 reuses the audited Hermez/iden3 perpetual powers-of-tau (sha256-pinned in `scripts/compile_circuits.sh`), which is already an MPC artifact with hundreds of independent contributions — do NOT regenerate it.
-**Companion docs:** `CIRCUIT_TRUSTED_SETUP.md` (background), `../adr/0001-groth16-verifier-licensing.md` (must be resolved before the verifier is regenerated here).
+**Curve:** BLS12-381 (ADR 0002, DECIDED 2026-10-07). The ceremony is not run on BN254. Every key, verifier and test vector it produces is BLS12-381, and the verifier runs on the EIP-2537 precompiles (Prague or later).
+**Scope:** Phase 2 (circuit-specific) MPC ceremony for the `compliance` circuit. Phase 1 must be a multi-party BLS12-381 powers-of-tau. The Hermez/iden3 file pinned in `scripts/compile_circuits.sh` (`powersOfTau28_hez_final_18.ptau`) is BN254 and cannot be used. No BLS12-381 phase-1 file is pinned yet; choosing one is a pre-ceremony gate (§3).
+**Companion docs:** `CIRCUIT_TRUSTED_SETUP.md` (background, BN254 dev commands), `../adr/0001-groth16-verifier-licensing.md` (resolved: clearproof-owned verifier generators, never the snarkjs exporter), `../adr/0002-bls12381-migration.md` (curve decision and its open tasks).
 
 ---
 
@@ -25,9 +26,13 @@ Groth16 requires a circuit-specific structured reference string. If **all** cere
 
 ## 3. Pre-Ceremony Checklist
 
-- [ ] Circuit code frozen and tagged (`circuits/` + `circomlib` version pinned); R1CS hash published
-- [ ] Toolchain pinned and published: circom version, snarkjs version, ptau URL + sha256
-- [ ] ADR 0001 (verifier licensing) decision recorded — the verifier generated in §6 ships its license
+- [ ] Circuit code frozen and tagged (`circuits/` + `circomlib` version pinned), compiled with `--prime bls12381`; R1CS hash published
+- [ ] Poseidon re-parameterized for the BLS12-381 scalar field (ADR 0002 open task 3) and every committed vector regenerated. Do not run the ceremony over circomlib's BN254-derived constants reduced mod the BLS12-381 scalar field.
+- [ ] BLS12-381 phase-1 powers-of-tau chosen: multi-party, at least 2^k for the frozen R1CS, public transcript. Pin its URL + sha256 and check it with `snarkjs powersoftau verify`. A single-party file such as the one behind `tests/vectors/compliance-bls/` is not acceptable.
+- [ ] Toolchain pinned and published: circom version, snarkjs version, phase-1 ptau URL + sha256
+- [x] ADR 0001 (verifier licensing) resolved — §6 uses the clearproof-owned generator, never `snarkjs zkey export solidityverifier`
+- [x] ADR 0002 verifier boundary checks in `scripts/generate_verifier_bls.mjs`: public signals below the scalar field order, no point at infinity for A, B or C, canonical y for A
+- [ ] Every target chain supports EIP-2537 (ADR 0002 chain matrix) and the generated verifier passes `packages/contracts/test/Groth16VerifierBLS.bench.ts` on a Prague EVM
 - [ ] Contributor instructions sent; each contributor confirms hardware/OS and air-gap/entropy plan
 - [ ] Transcript repository (public git repo) initialized: `ceremony/compliance-phase2/`
 
@@ -36,8 +41,8 @@ Groth16 requires a circuit-specific structured reference string. If **all** cere
 Coordinator starts with:
 
 ```bash
-circom circuits/compliance.circom --r1cs --wasm --sym -l node_modules -o build
-snarkjs groth16 setup build/compliance.r1cs artifacts/pot18_final.ptau compliance_0000.zkey
+circom circuits/compliance.circom --prime bls12381 --r1cs --wasm --sym -l node_modules -o build
+snarkjs groth16 setup build/compliance.r1cs artifacts/pot_bls12381_final.ptau compliance_0000.zkey
 sha256sum compliance_0000.zkey   # recorded in transcript
 ```
 
@@ -46,7 +51,7 @@ Then, sequentially, contributor *i* receives `compliance_{i-1}.zkey`:
 ```bash
 # 1. Verify the previous state (must match the coordinator's published hash)
 sha256sum compliance_{i-1}.zkey
-snarkjs zkey verify build/compliance.r1cs artifacts/pot18_final.ptau compliance_{i-1}.zkey
+snarkjs zkey verify build/compliance.r1cs artifacts/pot_bls12381_final.ptau compliance_{i-1}.zkey
 
 # 2. Contribute — entropy generated locally, never transmitted, destroyed after
 snarkjs zkey contribute compliance_{i-1}.zkey compliance_{i}.zkey \
@@ -78,7 +83,8 @@ Each contributor publishes a signed statement (e.g., GPG-clearsigned markdown) i
 - Input zkey sha256:  <hash of compliance_{i-1}.zkey>
 - Output zkey sha256: <hash of compliance_{i}.zkey>
 - snarkjs contribution hash: <hash printed by zkey contribute>
-- Toolchain: circom <ver>, snarkjs <ver>, ptau powersOfTau28_hez_final_18
+- Curve: BLS12-381
+- Toolchain: circom <ver> (--prime bls12381), snarkjs <ver>, phase-1 ptau <name> sha256 <hash>
 - Environment: <OS/hardware>, entropy source: <e.g., /dev/urandom + keyboard + dice>
 - Statement: "I generated my entropy independently, contributed exactly once,
   did not share it with any party, and securely destroyed it and all local
@@ -98,19 +104,21 @@ snarkjs zkey beacon compliance_N.zkey compliance_final.zkey \
     <beacon-hash-hex> 10 --name="Final beacon"
 
 # Verify the whole chain
-snarkjs zkey verify build/compliance.r1cs artifacts/pot18_final.ptau compliance_final.zkey
+snarkjs zkey verify build/compliance.r1cs artifacts/pot_bls12381_final.ptau compliance_final.zkey
 
-# Export production artifacts
-snarkjs zkey export verificationkey compliance_final.zkey verification_key.json
-snarkjs zkey export solidityverifier compliance_final.zkey Groth16Verifier.sol  # see ADR 0001
+# Export production artifacts (the key must report "curve": "bls12381")
+snarkjs zkey export verificationkey compliance_final.zkey verification_key_bls.json
+node scripts/generate_verifier_bls.mjs verification_key_bls.json Groth16VerifierBLS.sol
 ```
+
+`artifacts/pot_bls12381_final.ptau` stands for the phase-1 file pinned in §3. Never use `snarkjs zkey export solidityverifier` (ADR 0001).
 
 Then:
 
 - [ ] Publish `compliance_final.zkey` hash + full transcript + attestations
 - [ ] Tag the repo; commit production `verification_key.json` and verifier contract (per repo policy: production artifacts only from documented ceremony)
 - [ ] Update README Assurance Status (trusted setup: dev → MPC ceremony, link transcript)
-- [ ] Regenerate `tests/vectors/compliance/` against the new key and bump the dev/prod key split (dev vector stays on dev keys; add a production-vkey parity vector)
+- [ ] Regenerate the BLS12-381 vectors against the new key and bump the dev/prod key split (dev vector stays on dev keys; add a production-vkey parity vector)
 - [ ] Schedule independent third-party verification of the transcript (one audit-firm pass)
 
 ## 7. Abort/Restart Conditions

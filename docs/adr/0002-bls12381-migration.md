@@ -1,6 +1,6 @@
 # ADR 0002: Groth16 Curve Migration — BN254 vs BLS12-381
 
-- **Status:** DECIDED (2026-10-07) — Option B, BLS12-381 on all target chains. The Sepolia confirmation is recorded below. Poseidon re-parameterization, infinity-point rejection, and the ceremony-runbook update are still open. The deployed verifier uses the development trusted setup and is not a production deployment.
+- **Status:** DECIDED (2026-10-07) — Option B, BLS12-381 on all target chains. The Sepolia confirmation is recorded below. Verifier boundary checks and the ceremony-runbook update landed 2026-10-08. Poseidon re-parameterization is still open. The deployed verifier uses the development trusted setup and is not a production deployment.
 - **Date:** 2026-07-24
 - **Deciders:** clearproof maintainers
 - **Related:** ADR 0001 (verifier licensing), `docs/internal/CEREMONY_RUNBOOK.md`, `docs/internal/SOTA_PLAN_2026.md` item #2
@@ -191,9 +191,20 @@ A separate read of that address accepted the committed BLS vector and rejected t
    field, patch the circuit's Poseidon instantiation to curve-correct
    parameters (do NOT ship the accidental BN254-constants-mod-BLS variant),
    and regenerate all committed test vectors.
-4. **Infinity-point rejection** checks in the new verifier template.
-5. Update `CEREMONY_RUNBOOK.md` with the chosen curve before any ceremony
-   announcement.
+4. ~~**Infinity-point rejection** checks in the new verifier template.~~
+   **DONE 2026-10-08.** `scripts/generate_verifier_bls.mjs` now reverts on a
+   point at infinity in A, B or C (`ProofPointAtInfinity`), a public signal
+   at or above the scalar field order r (`PublicSignalExceedsScalarField`),
+   and a non-canonical y on A, which the precompiles only see negated
+   (`ProofPointNotCanonical`). The signal check closes a malleability gap:
+   G1MSM reduces scalars mod r, so the earlier template accepted `s + r` in
+   place of `s`. The Sepolia contract recorded above predates these checks and
+   still accepts `s + r`; it remains a gas benchmark only. Local
+   `verifyProof` gas with the checks is 367,866 (+7.7% over BN128).
+5. ~~Update `CEREMONY_RUNBOOK.md` with the chosen curve before any ceremony
+   announcement.~~ **DONE 2026-10-08.** The runbook targets BLS12-381, makes
+   a pinned multi-party BLS12-381 phase-1 file and task 3 pre-ceremony gates,
+   and exports the verifier through the clearproof generator.
 
 ## Consequences
 

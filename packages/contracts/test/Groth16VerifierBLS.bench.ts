@@ -22,6 +22,8 @@ const BN_ARTIFACTS = `${REPO_ROOT}/tests/vectors/compliance`;
 const Q = BigInt(
   "0x1a0111ea397fe69a4b1ba7b6434bacd764774b84f38512bf6730d2a0f6b0f6241eabfffeb153ffffb9feffffffffaaab"
 );
+// BLS12-381 scalar field r (public signals must be < r)
+const R = BigInt("0x73eda753299d7d483339d80809a1d80553bda402fffe5bfeffffffff00000001");
 
 function fp(v: string | bigint): string {
   return BigInt(v).toString(16).padStart(128, "0");
@@ -81,6 +83,46 @@ describe("Groth16VerifierBLS (BLS12-381 / EIP-2537) gas benchmark", function () 
         .to.be.revertedWith("Wrong public signal count");
     }
     expect(await verifier.verifyProof(proofBytes, pubSignals)).to.equal(true);
+  });
+
+  it("rejects public signals outside the scalar field, including s + r", async function () {
+    const proof = JSON.parse(fs.readFileSync(`${BLS_ARTIFACTS}/proof_bls.json`, "utf-8"));
+    const pubSignals: string[] = JSON.parse(fs.readFileSync(`${BLS_ARTIFACTS}/public_bls.json`, "utf-8"));
+    const proofBytes = encodeBlsProof(proof);
+    const verifier = await (await hre.ethers.getContractFactory("Groth16VerifierBLS")).deploy();
+    for (const index of [0, pubSignals.length - 1]) {
+      for (const value of [R, R + BigInt(pubSignals[index])]) {
+        const malformed = [...pubSignals];
+        malformed[index] = value.toString();
+        await expect(verifier.verifyProof(proofBytes, malformed))
+          .to.be.revertedWithCustomError(verifier, "PublicSignalExceedsScalarField");
+      }
+    }
+    expect(await verifier.verifyProof(proofBytes, pubSignals)).to.equal(true);
+  });
+
+  it("rejects A, B or C encoded as the point at infinity", async function () {
+    const proof = JSON.parse(fs.readFileSync(`${BLS_ARTIFACTS}/proof_bls.json`, "utf-8"));
+    const pubSignals: string[] = JSON.parse(fs.readFileSync(`${BLS_ARTIFACTS}/public_bls.json`, "utf-8"));
+    const hex = encodeBlsProof(proof).slice(2);
+    const verifier = await (await hre.ethers.getContractFactory("Groth16VerifierBLS")).deploy();
+    for (const [start, end] of [[0, 128], [128, 384], [384, 512]]) {
+      const malformed = "0x" + hex.slice(0, start * 2) + "00".repeat(end - start) + hex.slice(end * 2);
+      await expect(verifier.verifyProof(malformed, pubSignals))
+        .to.be.revertedWithCustomError(verifier, "ProofPointAtInfinity");
+    }
+  });
+
+  it("rejects a non-canonical y coordinate on A before negating it", async function () {
+    const proof = JSON.parse(fs.readFileSync(`${BLS_ARTIFACTS}/proof_bls.json`, "utf-8"));
+    const pubSignals: string[] = JSON.parse(fs.readFileSync(`${BLS_ARTIFACTS}/public_bls.json`, "utf-8"));
+    const verifier = await (await hre.ethers.getContractFactory("Groth16VerifierBLS")).deploy();
+    for (const y of [Q, BigInt(proof.pi_a[1]) + Q]) {
+      const malformed = JSON.parse(JSON.stringify(proof));
+      malformed.pi_a[1] = y.toString();
+      await expect(verifier.verifyProof(encodeBlsProof(malformed), pubSignals))
+        .to.be.revertedWithCustomError(verifier, "ProofPointNotCanonical");
+    }
   });
 
   it("rejects a tampered BLS12-381 proof", async function () {
