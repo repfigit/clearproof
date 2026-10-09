@@ -1,0 +1,3 @@
+
+# AIF-99: GPL fflonk verifier is generated locally and must not be committed
+contracts/bench/local/

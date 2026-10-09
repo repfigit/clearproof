@@ -1,0 +1,97 @@
+{
+  "purpose": "AIF-99 live L2 verify cost: Groth16 vs fflonk",
+  "network": "optimism-sepolia",
+  "chain_id": 11155420,
+  "measured_at": "2026-10-09T00:44:00.988Z",
+  "deployer": "0x6e42dA3124edd6FFE164a8b9611d8FaCF8107E92",
+  "eth_usd": {
+    "usd": 2478.525,
+    "source": "coinbase ETH-USD spot",
+    "as_of": "2026-10-09T00:43:50.989Z"
+  },
+  "fee_snapshot": {
+    "gas_price_wei": "1000250",
+    "max_fee_per_gas_wei": "1000500",
+    "base_fee_per_gas_wei": "250",
+    "block_number": 49852045
+  },
+  "vectors": {
+    "groth16": "tests/vectors/compliance (committed)",
+    "fflonk": "build/fflonk_calldata.txt (AIF-86 local build; GPL verifier not committed)"
+  },
+  "notes": [
+    "fflonk verifier is snarkjs GPL three export; source kept gitignored under contracts/bench/local/",
+    "verifyProof is a view function sent as a transaction so the receipt includes rollup L1/DA fees",
+    "l1_fee_wei is OP-Stack (Base/Optimism); gas_used_for_l1 is Arbitrum Nitro"
+  ],
+  "groth16": {
+    "address": "0xD2E419C913F2f3aA661DB422A295026F5A1CB71c",
+    "deploy_tx": "0x929f3e5636c8708d1cc4752d9610e612cb669d9faa14f3a949cd22eb9916f707",
+    "deploy_gas": "1148830",
+    "verify_tx": "0x9192b29571b3e3ac6c14f38b250e3f190719765eb12a55584de1abd93adb28c8",
+    "verify_gas_used": "338201",
+    "verify_ok": true,
+    "estimate_gas": "342052",
+    "l1_fee_wei": "1822",
+    "gas_used_for_l1": null,
+    "effective_gas_price_wei": "1000250",
+    "tx_fee_wei": "338285550250",
+    "signed_tx_bytes": 0,
+    "calldata_bytes": 772,
+    "receipt_fee_fields": {
+      "l1Fee": "1822",
+      "l1GasUsed": "7228",
+      "l1GasPrice": "19",
+      "l1BaseFeeScalar": "7600",
+      "l1BlobBaseFee": "2",
+      "l1BlobBaseFeeScalar": "862000",
+      "blobGasUsed": "180400",
+      "daFootprintGasScalar": "400",
+      "effectiveGasPrice": "1000250",
+      "gasUsed": "338201"
+    }
+  },
+  "fflonk": {
+    "address": "0xFf14ef1021D081DD2A536a2cf8066F5334340919",
+    "deploy_tx": "0x00d678fc49eb295fe9f1283794963459b81f47d43a8c7a255c7a1c86f4ae123c",
+    "deploy_gas": "4156740",
+    "verify_tx": "0x4fedccd0f91ef06aa9a898c77f115ae8cfe287cdb04370977fdbef9bce674566",
+    "verify_gas_used": "232646",
+    "verify_ok": true,
+    "estimate_gas": "235660",
+    "l1_fee_wei": "3601",
+    "gas_used_for_l1": null,
+    "effective_gas_price_wei": "1000250",
+    "tx_fee_wei": "232704161500",
+    "signed_tx_bytes": 0,
+    "calldata_bytes": 1284,
+    "receipt_fee_fields": {
+      "l1Fee": "3601",
+      "l1GasUsed": "14281",
+      "l1GasPrice": "19",
+      "l1BaseFeeScalar": "7600",
+      "l1BlobBaseFee": "2",
+      "l1BlobBaseFeeScalar": "862000",
+      "blobGasUsed": "356800",
+      "daFootprintGasScalar": "400",
+      "effectiveGasPrice": "1000250",
+      "gasUsed": "232646"
+    }
+  },
+  "usd": {
+    "eth_price": 2478.525,
+    "groth16": {
+      "execution_fee_usd": 0.0008384491934333813,
+      "l1_fee_usd": 4.5158725500000005e-12,
+      "total_usd": 0.0008384491979492539
+    },
+    "fflonk": {
+      "execution_fee_usd": 0.0005767630818817875,
+      "l1_fee_usd": 8.925168525e-12,
+      "total_usd": 0.000576763090806956
+    },
+    "ratio_fflonk_over_groth16": 0.6878927098000085,
+    "execution_gas_ratio": 0.6878927028601335,
+    "l1_fee_ratio": 1.9763995609220637
+  }
+}

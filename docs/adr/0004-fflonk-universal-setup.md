@@ -2,9 +2,9 @@
 
 ## Status
 
-Proposed (2026-07-31)
+Proposed (2026-07-31; L2 measurement updated 2026-10-08)
 
-Supersedes the go/no-go framing of [ADR 0003](0003-proof-system.md) but not its conclusion about Noir/UltraHonk, which stands.
+Supersedes the go/no-go framing of [ADR 0003](0003-proof-system.md) but not its conclusion about Noir/UltraHonk, which stands. AIF-99 live L2 receipts confirm the gas ranking at current Sepolia fee floors; the ADR stays Proposed until the proving-latency / product question is answered.
 
 ## Context
 
@@ -73,7 +73,7 @@ Two constraints shape the answer, and neither is cryptographic:
 Concretely, in priority order:
 
 1. **Answer the latency question** with the product owner. It is the only real blocker to a decision.
-2. **Measure L2 gas before committing either way.** fflonk's proof is 3× larger in calldata (768 B vs 256 B), and on L2s calldata dominates. This could reverse the gas conclusion for an L2-first deployment. Currently unmeasured.
+2. ~~**Measure L2 gas before committing either way.**~~ **DONE 2026-10-08 (AIF-99).** Live receipts on Base / Arbitrum / Optimism Sepolia keep fflonk at **~0.69×** Groth16 total cost at current floor fees (same as L1 execution ratio). fflonk L1/DA fee is ~2× Groth16's but ≪1% of total. High-fee OP Mainnet crossover (~1.7 gwei L1 base fee) from `FFLONK_L2_COST_MODEL.md` remains a sensitivity case, not the measured testnet regime. Receipts: `packages/contracts/deployments/*-sepolia-l2-verify-cost.json`.
 3. **If fflonk is chosen**, budget the Apache-2.0 fflonk verifier re-implementation as a first-class project with its own audit, and re-pin CI to `powersOfTau28_hez_final_19.ptau` (2^18 is silently insufficient — see the benchmark).
 4. **Adopt a versioned verifier registry regardless of the outcome.** A router mapping `(scheme, jurisdiction) → vkey` behind a timelock, with a kill switch, makes any future proof-system or rule change a governed configuration change rather than a redeploy that strands every proof bound to the retired `domain_contract_hash`. RISC Zero's [version-management-design](https://github.com/risc0/risc0-ethereum/blob/main/contracts/version-management-design.md) is the reference implementation. **This is worth doing on its own merits and is not contingent on the fflonk decision.**
 

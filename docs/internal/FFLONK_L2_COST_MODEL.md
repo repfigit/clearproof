@@ -4,6 +4,11 @@
 > The current proof-system decision remains Groth16; no production migration
 > follows from this model. The original L1 exploration is preserved separately
 > in [FFLONK_BENCHMARK.md](FFLONK_BENCHMARK.md).
+>
+> **Update 2026-10-08:** live Base / Arbitrum / Optimism Sepolia receipts now
+> exist under `packages/contracts/deployments/*-sepolia-l2-verify-cost.json`
+> (AIF-99). They confirm ~0.69× at floor fees. This model remains the high-fee
+> sensitivity analysis (OP Mainnet crossover ~1.7 gwei).
 
 # fflonk vs Groth16 — L2 Verification Cost
 
