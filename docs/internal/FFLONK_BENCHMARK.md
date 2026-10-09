@@ -106,8 +106,10 @@ Scale of the problem: our Apache Groth16 verifier is ~300 lines against a shared
 ## L2 live receipts (AIF-99 — 2026-10-08)
 
 Live `verifyProof` transactions on Base Sepolia, Arbitrum Sepolia and Optimism
-Sepolia. Script: `packages/contracts/scripts/measure-l2-verify-cost.ts`.
+Sepolia. Script: `packages/contracts/scripts/ops/measure-l2-verify-cost.ts`.
 Receipts: `packages/contracts/deployments/{base,arbitrum,optimism}-sepolia-l2-verify-cost.json`.
+Ceremony / fflonk cutover path: see the **Panel path note (2026-10-08)** in
+[`docs/adr/0004-fflonk-universal-setup.md`](../adr/0004-fflonk-universal-setup.md).
 
 | Chain | System | `gasUsed` | Calldata | `l1Fee` (wei) | Exec fee (USD) | L1 fee (USD) | Total (USD) | vs G16 |
 |---|---|---:|---:|---:|---:|---:|---:|---:|

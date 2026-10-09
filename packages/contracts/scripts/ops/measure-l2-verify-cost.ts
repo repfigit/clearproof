@@ -8,22 +8,22 @@
  * contracts/bench/local/ (gitignored). Never commit that Solidity file.
  *
  * Usage:
- *   npx hardhat run scripts/measure-l2-verify-cost.ts --network base-sepolia
- *   npx hardhat run scripts/measure-l2-verify-cost.ts --network arbitrum-sepolia
- *   npx hardhat run scripts/measure-l2-verify-cost.ts --network optimism-sepolia
+ *   npx hardhat run scripts/ops/measure-l2-verify-cost.ts --network base-sepolia
+ *   npx hardhat run scripts/ops/measure-l2-verify-cost.ts --network arbitrum-sepolia
+ *   npx hardhat run scripts/ops/measure-l2-verify-cost.ts --network optimism-sepolia
  */
 import { ethers, network } from "hardhat";
 import * as fs from "fs";
 import * as path from "path";
 
-const REPO_ROOT = path.resolve(__dirname, "../../..");
+const REPO_ROOT = path.resolve(__dirname, "../../../..");
 const G16_VECTOR = path.join(REPO_ROOT, "tests/vectors/compliance");
 const FFLONK_BUILD = path.join(REPO_ROOT, "build");
 const FFLONK_ARTIFACT = path.join(
   __dirname,
-  "../artifacts/contracts/bench/local/FflonkVerifier.sol/FflonkVerifier.json",
+  "../../artifacts/contracts/bench/local/FflonkVerifier.sol/FflonkVerifier.json",
 );
-const OUT_DIR = path.join(__dirname, "../deployments");
+const OUT_DIR = path.join(__dirname, "../../deployments");
 
 type SystemResult = {
   address: string;
@@ -148,16 +148,12 @@ async function measureSystem(
 
   // Signed envelope size (what OP Stack FastLZ-compresses)
   try {
-    const rawTx = await ethers.provider.send("eth_getRawTransactionByHash", [receipt.hash]);
+    const rawTx: unknown = await ethers.provider.send("eth_getRawTransactionByHash", [receipt.hash]);
     if (typeof rawTx === "string" && rawTx.startsWith("0x")) {
       result.signed_tx_bytes = (rawTx.length - 2) / 2;
     }
   } catch {
-    const fullTx = await ethers.provider.getTransaction(receipt.hash);
-    const serialized = fullTx?.serialized ?? (fullTx as any)?.raw;
-    if (typeof serialized === "string") {
-      result.signed_tx_bytes = (serialized.length - 2) / 2;
-    }
+    // Public L2 RPCs often omit eth_getRawTransactionByHash; calldata size is enough for DA delta.
   }
 
   console.log(`  verify ok=${ok} gasUsed=${result.verify_gas_used} estimate=${result.estimate_gas}`);
@@ -235,13 +231,14 @@ async function main() {
         contract.verifyProof.staticCall(pA, pB, pC, g16Public, callOpts),
       );
       if (!ok) throw new Error("Groth16: committed vector rejected on-chain");
-      const estimate = await withCallRetry("groth16 estimateGas", () =>
+      const estimate: bigint = await withCallRetry("groth16 estimateGas", () =>
         contract.verifyProof.estimateGas(pA, pB, pC, g16Public, callOpts),
       );
       const calldata = contract.interface.encodeFunctionData("verifyProof", [pA, pB, pC, g16Public]);
       // Send as a real tx so the receipt includes L1/DA fees.
-      const tx = await contract.verifyProof.populateTransaction(pA, pB, pC, g16Public).then((req) =>
-        deployer.sendTransaction({ ...req, gasLimit: estimate + 50_000n }),
+      const estimateGas = estimate as bigint;
+      const tx = await contract.verifyProof.populateTransaction(pA, pB, pC, g16Public).then((req: Record<string, unknown>) =>
+        deployer.sendTransaction({ ...req, gasLimit: estimateGas + 50_000n }),
       );
       return { tx, estimate, calldata, ok: true };
     },
@@ -268,16 +265,19 @@ async function main() {
         contract.verifyProof.staticCall(fflonk.proof, fflonk.pubSignals, callOpts),
       );
       if (!ok) throw new Error("fflonk: build vector rejected on-chain");
-      const estimate = await withCallRetry("fflonk estimateGas", () =>
+      const estimate: bigint = await withCallRetry("fflonk estimateGas", () =>
         contract.verifyProof.estimateGas(fflonk.proof, fflonk.pubSignals, callOpts),
       );
       const calldata = contract.interface.encodeFunctionData("verifyProof", [
         fflonk.proof,
         fflonk.pubSignals,
       ]);
+      const estimateGas = estimate as bigint;
       const tx = await contract.verifyProof
         .populateTransaction(fflonk.proof, fflonk.pubSignals)
-        .then((req: any) => deployer.sendTransaction({ ...req, gasLimit: estimate + 100_000n }));
+        .then((req: Record<string, unknown>) =>
+          deployer.sendTransaction({ ...req, gasLimit: estimateGas + 100_000n }),
+        );
       return { tx, estimate, calldata, ok: true };
     },
   );

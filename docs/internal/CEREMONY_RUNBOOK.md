@@ -2,6 +2,7 @@
 
 **Status:** Planned — prerequisite for any production deployment (see ROADMAP "Security assurance").
 **Curve:** BLS12-381 (ADR 0002, DECIDED 2026-10-07). The ceremony is not run on BN254. Every key, verifier and test vector it produces is BLS12-381, and the verifier runs on the EIP-2537 precompiles (Prague or later).
+**Scheduling:** Do **not** announce or run this ceremony until the sequenced gates in ADR 0004's **Panel path note (2026-10-08)** are met (circuit freeze including Poseidon-for-BLS and wallet-ownership batch; product choice of Groth16 ceremony vs fflonk). AIF-99 closed the L2 gas objection at floor fees; it did not authorize a ceremony date.
 **Scope:** Phase 2 (circuit-specific) MPC ceremony for the `compliance` circuit. Phase 1 must be a multi-party BLS12-381 powers-of-tau. The Hermez/iden3 file pinned in `scripts/compile_circuits.sh` (`powersOfTau28_hez_final_18.ptau`) is BN254 and cannot be used. No BLS12-381 phase-1 file is pinned yet; choosing one is a pre-ceremony gate (§3).
 **Companion docs:** `CIRCUIT_TRUSTED_SETUP.md` (background, BN254 dev commands), `../adr/0001-groth16-verifier-licensing.md` (resolved: clearproof-owned verifier generators, never the snarkjs exporter), `../adr/0002-bls12381-migration.md` (curve decision and its open tasks).
 

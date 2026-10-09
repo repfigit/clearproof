@@ -2,9 +2,9 @@
 
 ## Status
 
-Proposed (2026-07-31; L2 measurement updated 2026-10-08)
+Proposed (2026-07-31; L2 measurement 2026-10-08; **panel path note 2026-10-08**)
 
-Supersedes the go/no-go framing of [ADR 0003](0003-proof-system.md) but not its conclusion about Noir/UltraHonk, which stands. AIF-99 live L2 receipts confirm the gas ranking at current Sepolia fee floors; the ADR stays Proposed until the proving-latency / product question is answered.
+Supersedes the go/no-go framing of [ADR 0003](0003-proof-system.md) but not its conclusion about Noir/UltraHonk, which stands. AIF-99 live L2 receipts confirm the gas ranking at current Sepolia fee floors. This ADR is **not Accepted**. The sequenced path below is the working decision until a production cutover chooses fflonk or a Groth16 ceremony.
 
 ## Context
 
@@ -22,7 +22,26 @@ Full measurements: [`docs/internal/FFLONK_BENCHMARK.md`](../internal/FFLONK_BENC
 
 ## Decision
 
-**No decision yet — this ADR is Proposed, not Accepted.** The benchmark resolves the question ADR 0003 was designed to answer, and inverts its expected direction, but it surfaces a new binding constraint that is a product call rather than an engineering one.
+**No production cutover yet — this ADR is Proposed, not Accepted.** The L1/L2 gas questions are answered in fflonk's favour at current fee floors. The remaining blockers are proving latency, the Apache fflonk verifier rewrite, and circuit freeze timing. See **Panel path note (2026-10-08)** below for the agreed sequence.
+
+### Panel path note (2026-10-08)
+
+An expert panel (ZK protocol, Travel Rule compliance, VASP product/ops, licensing/security) reviewed ADR 0002 (BLS DECIDED), ADR 0004 (fflonk Proposed), and the AIF-99 live L2 receipts. **All four recommended a sequenced path (not “ceremony now” and not “ship snarkjs fflonk now”).**
+
+**Working path**
+
+1. **Keep piloting on Apache Groth16** with development keys. Do not schedule a production MPC ceremony yet. Do not commit or deploy the snarkjs GPL fflonk verifier.
+2. **Freeze the proving surface before any irreversible trust event:** Poseidon re-parameterization for BLS12-381 (ADR 0002 open task 3), wallet-ownership circuit batch ([AIF-67](https://linear.app/ammon-tech/issue/AIF-67)), locked `pilot-transfer-v3` signals and tree depths.
+3. **In parallel (evidence, not cutover):** measure fflonk on *pilot-transfer-v3* (not only the legacy 16-signal spike); scope and budget an Apache-2.0 fflonk verifier rewrite + audit; write an explicit BN254-vs-BLS answer for any fflonk production path.
+4. **Then choose once:**
+   - **fflonk** if prove SLA is acceptable as async jobs, the Apache verifier is ready, and L2 verify economics still hold; or
+   - **one batched BLS12-381 Groth16 ceremony** over the frozen circuit set if prove latency/UX wins or the fflonk rewrite slips past a hard ship date.
+
+**What AIF-99 closed:** at Base / Arbitrum / Optimism Sepolia fee floors, fflonk remains ~0.69× Groth16 total cost. Larger calldata does not invert the ranking today. High-fee OP Mainnet sensitivity (~1.7 gwei L1 base fee) in [`FFLONK_L2_COST_MODEL.md`](../internal/FFLONK_L2_COST_MODEL.md) remains a caveat, not the measured regime.
+
+**Split the panel did not resolve (product call):** ops prefers Groth16 until a paid pilot and circuit freeze (37s prove is the deal-breaker without async jobs); compliance prefers avoiding a ceremony lock while AMLR Art. 40(2)(b) ownership guidance can still move through mid-2027. The sequence above holds both positions without spending the ceremony early or shipping GPL verify code.
+
+This note does **not** Accept this ADR. It records the path constraint for engineering and ceremony planning.
 
 ### The gas question is settled, in fflonk's favour
 
@@ -68,14 +87,15 @@ Two constraints shape the answer, and neither is cryptographic:
 
 ## Recommendation
 
-**Do not schedule the MPC ceremony yet.** The benchmark has removed the reason to believe the ceremony is unavoidable, and a ceremony is the single most expensive, least reversible item on the roadmap. Deciding it before the proving-latency question is answered would be committing in the wrong order.
+Follow the **Panel path note (2026-10-08)** above. In short: do not schedule the MPC ceremony yet; do not ship GPL fflonk; freeze circuits and gather fflonk evidence; then choose once.
 
 Concretely, in priority order:
 
-1. **Answer the latency question** with the product owner. It is the only real blocker to a decision.
-2. ~~**Measure L2 gas before committing either way.**~~ **DONE 2026-10-08 (AIF-99).** Live receipts on Base / Arbitrum / Optimism Sepolia keep fflonk at **~0.69×** Groth16 total cost at current floor fees (same as L1 execution ratio). fflonk L1/DA fee is ~2× Groth16's but ≪1% of total. High-fee OP Mainnet crossover (~1.7 gwei L1 base fee) from `FFLONK_L2_COST_MODEL.md` remains a sensitivity case, not the measured testnet regime. Receipts: `packages/contracts/deployments/*-sepolia-l2-verify-cost.json`.
-3. **If fflonk is chosen**, budget the Apache-2.0 fflonk verifier re-implementation as a first-class project with its own audit, and re-pin CI to `powersOfTau28_hez_final_19.ptau` (2^18 is silently insufficient — see the benchmark).
-4. **Adopt a versioned verifier registry regardless of the outcome.** A router mapping `(scheme, jurisdiction) → vkey` behind a timelock, with a kill switch, makes any future proof-system or rule change a governed configuration change rather than a redeploy that strands every proof bound to the retired `domain_contract_hash`. RISC Zero's [version-management-design](https://github.com/risc0/risc0-ethereum/blob/main/contracts/version-management-design.md) is the reference implementation. **This is worth doing on its own merits and is not contingent on the fflonk decision.**
+1. **Answer the latency / async-job product question.** It remains the human blocker between fflonk and a Groth16 ceremony.
+2. ~~**Measure L2 gas before committing either way.**~~ **DONE 2026-10-08 (AIF-99).** Live receipts keep fflonk at **~0.69×** Groth16 total cost at current Sepolia fee floors. Receipts: `packages/contracts/deployments/*-sepolia-l2-verify-cost.json`. Script: `packages/contracts/scripts/ops/measure-l2-verify-cost.ts`.
+3. **Circuit freeze + parallel fflonk evidence** (Poseidon-for-BLS, AIF-67 batch, pilot-v3 fflonk measure, Apache verifier scope) — see panel note.
+4. **If fflonk is chosen**, budget the Apache-2.0 fflonk verifier re-implementation as a first-class project with its own audit, and re-pin CI to `powersOfTau28_hez_final_19.ptau` (2^18 is silently insufficient — see the benchmark).
+5. **Adopt a versioned verifier registry regardless of the outcome.** A router mapping `(scheme, jurisdiction) → vkey` behind a timelock, with a kill switch, makes any future proof-system or rule change a governed configuration change rather than a redeploy that strands every proof bound to the retired `domain_contract_hash`. RISC Zero's [version-management-design](https://github.com/risc0/risc0-ethereum/blob/main/contracts/version-management-design.md) is the reference implementation. **This is worth doing on its own merits and is not contingent on the fflonk decision.**
 
 ## Consequences
 
@@ -100,4 +120,5 @@ Concretely, in priority order:
 - [ADR 0001](0001-groth16-verifier-licensing.md) — why the verifier is Apache-2.0 and not the GPL snarkjs template
 - [ADR 0002](0002-bls12381-migration.md) — BLS12-381 migration, unmeasured in combination with this
 - [ADR 0003](0003-proof-system.md) — Noir/UltraHonk evaluation; its conclusion stands, its framing is superseded
-- AIF-86 (this spike), AIF-89 (parity vector regeneration — blocked on this decision)
+- AIF-86 (this spike), AIF-89 (parity vector regeneration — blocked on this decision), AIF-99 (L2 live receipts — closed 2026-10-08)
+- Panel path note in this ADR (2026-10-08) — sequenced path; ADR remains Proposed

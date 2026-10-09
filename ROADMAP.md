@@ -152,7 +152,7 @@ Exit gate:
 Goal: make the platform defensible to security, legal, and compliance teams.
 
 - [ ] External audit of circuits, contracts, API auth, encryption, key handling, and protocol bridges
-- [ ] Production trusted setup or documented MPC ceremony for circuit artifacts — **on hold pending ADR 0004.** A benchmark (AIF-86) found that fflonk runs on the existing Circom source with **no phase-2 ceremony at all** and verifies **32% cheaper** than Groth16 (232,646 vs 341,467 gas). The cost is 20× slower proving (37 s vs 1.8 s), which is a product decision, not a cryptographic one. Do not schedule or fund a ceremony until that decision is made — it is the most expensive and least reversible item on this roadmap, and the benchmark removed the reason to believe it is unavoidable. See `docs/adr/0004-fflonk-universal-setup.md`.
+- [ ] Production trusted setup or documented MPC ceremony for circuit artifacts — **on hold pending ADR 0004.** A benchmark (AIF-86) found that fflonk runs on the existing Circom source with **no phase-2 ceremony at all** and verifies **32% cheaper** than Groth16 (232,646 vs 341,467 gas). AIF-99 live L2 Sepolia receipts keep that ranking (~0.69×) at floor fees. The cost is 20× slower proving (37 s vs 1.8 s), which is a product decision, not a cryptographic one. **Panel path note (2026-10-08):** do not schedule a ceremony yet; do not ship GPL fflonk; freeze circuits (Poseidon-for-BLS + wallet-ownership batch) and gather Apache-fflonk evidence; then choose once. See `docs/adr/0004-fflonk-universal-setup.md` § Panel path note.
 - [ ] Signed build pipeline for circuits, verification keys, contracts, sanctions trees, and root updates
 - [ ] WORM-style append-only audit log with tamper evidence, retention controls, export, and external anchoring
 - [ ] HSM/KMS support for platform keys, tenant keys, signing keys, and oracle operator keys
@@ -165,7 +165,7 @@ Current progress:
 - [x] Circuit signal specification and trusted setup notes exist
 - [x] Security docs identify production key and HKDF requirements
 - [ ] External audit has not started
-- [ ] Production trusted setup has not started — deliberately. Held pending the fflonk/Groth16 decision in ADR 0004; a ceremony may not be needed at all.
+- [ ] Production trusted setup has not started — deliberately. Held to the ADR 0004 panel sequenced path (2026-10-08); a ceremony may not be needed if fflonk is chosen after circuit freeze and Apache verifier work.
 - [ ] WORM audit log and HSM/KMS support have not started
 
 Exit gate:
