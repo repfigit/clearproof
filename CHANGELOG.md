@@ -11,6 +11,11 @@ maintains its own version line in this file.
 
 ## [Unreleased]
 
+### Added
+
+- Live AIF-99 L2 verify-cost receipts for Groth16 vs fflonk on Base Sepolia, Arbitrum Sepolia and Optimism Sepolia (`packages/contracts/scripts/ops/measure-l2-verify-cost.ts`, `deployments/*-sepolia-l2-verify-cost.json`). At current testnet fee floors fflonk remains ~0.69× Groth16 total cost; L1/DA fee is ~2× but negligible as a share of total.
+- ADR 0004 **Panel path note (2026-10-08):** sequenced path — no production ceremony yet, no GPL fflonk ship; freeze circuits and gather fflonk evidence, then choose once. Cross-linked from `CEREMONY_RUNBOOK.md` and `FFLONK_BENCHMARK.md`.
+
 ### Fixed
 
 - `Groth16VerifierBLS` (the ADR 0002 benchmark verifier) rejects public signals at or above the BLS12-381 scalar field order, proof points at infinity, and a non-canonical y on A. The earlier template accepted `s + r` in place of a signal `s`. The Sepolia benchmark deployment at `0x76C2A87cd054a29642439ceCF2096bD62F17c090` predates the fix.

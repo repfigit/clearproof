@@ -103,12 +103,45 @@ Scale of the problem: our Apache Groth16 verifier is ~300 lines against a shared
 
 19,015 bytes is comfortably under the EIP-170 limit of 24,576, so fflonk deploys as a single contract with room to spare. Deploy costs 4.16 M gas versus 1.16 M — a one-time cost per chain, irrelevant next to per-proof economics, but worth knowing for the 10-chain deployment matrix.
 
+## L2 live receipts (AIF-99 — 2026-10-08)
+
+Live `verifyProof` transactions on Base Sepolia, Arbitrum Sepolia and Optimism
+Sepolia. Script: `packages/contracts/scripts/ops/measure-l2-verify-cost.ts`.
+Receipts: `packages/contracts/deployments/{base,arbitrum,optimism}-sepolia-l2-verify-cost.json`.
+Ceremony / fflonk cutover path: see the **Panel path note (2026-10-08)** in
+[`docs/adr/0004-fflonk-universal-setup.md`](../adr/0004-fflonk-universal-setup.md).
+
+| Chain | System | `gasUsed` | Calldata | `l1Fee` (wei) | Exec fee (USD) | L1 fee (USD) | Total (USD) | vs G16 |
+|---|---|---:|---:|---:|---:|---:|---:|---:|
+| Base Sepolia | Groth16 | 338,201 | 772 B | 763 | $0.00503 | ~$0 | $0.00503 | — |
+| Base Sepolia | fflonk | 232,646 | 1,284 B | 1,508 | $0.00346 | ~$0 | $0.00346 | **0.69×** |
+| OP Sepolia | Groth16 | 338,201 | 772 B | 1,822 | $0.00084 | ~$0 | $0.00084 | — |
+| OP Sepolia | fflonk | 232,646 | 1,284 B | 3,601 | $0.00058 | ~$0 | $0.00058 | **0.69×** |
+| Arb Sepolia | Groth16 | 338,201 | 772 B | `gasUsedForL1=0` | $0.0659 | $0 | $0.0659 | — |
+| Arb Sepolia | fflonk | 232,646 | 1,284 B | `gasUsedForL1=0` | $0.0454 | $0 | $0.0454 | **0.69×** |
+
+ETH/USD ≈ $2,477–$2,479 (Coinbase spot at measurement). OP Stack receipts also
+expose `l1BlobBaseFee=2` wei and non-zero `l1BlobBaseFeeScalar` — i.e. post-4844
+blob pricing is active; absolute DA cost is still negligible at these testnet
+fee floors. fflonk's L1 fee is ~1.98× Groth16's on Base and OP (matches the
+larger calldata), but DA is ≪1% of total cost, so the ranking does not invert.
+
+Arbitrum Sepolia reported `gasUsedForL1=0` for both systems (Nitro field on the
+receipt). Execution-gas ranking is unchanged; absolute DA was not separately
+billable on that testnet snapshot.
+
+**Conclusion for ADR 0004:** at current L2 testnet fee regimes, fflonk remains
+~0.69× Groth16 total cost — the same ratio as L1 execution gas. The August
+modeled warning still stands for high L1 base-fee regimes (see
+`FFLONK_L2_COST_MODEL.md`: OP Mainnet crossover ~1.7 gwei). Live receipts close
+the "unmeasured on L2" gap; they do not by themselves accept ADR 0004.
+
 ## What this does not measure
 
 - **BLS12-381.** ADR 0002 recommends BLS12-381 at the production ceremony. fflonk was measured on BN254 only. If both migrations were pursued they interact, and that combination is unmeasured.
-- **L2 gas.** All figures are L1-equivalent on a Prague-target local node. On L2s calldata dominates, and fflonk's 3× larger proof (768 B vs 256 B) would erode or reverse its advantage. **This flips the conclusion for an L2-first deployment and needs measuring before any L2 commitment.**
 - **Recursive/aggregated verification**, which would change the calculus for both.
 - **A native fflonk prover.** None is known to exist; the 20× figure is snarkjs-to-snarkjs and therefore *flattering* to fflonk relative to a rapidsnark-backed Groth16 deployment.
+- **Mainnet L2 fees under congestion.** Receipts are Sepolia testnets at floor fees; use `FFLONK_L2_COST_MODEL.md` for high-fee regime sensitivity.
 
 ## Reproduction
 
