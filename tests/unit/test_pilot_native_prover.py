@@ -526,12 +526,27 @@ async def test_native_child_dies_when_its_worker_is_sigkilled(bundle):
         worker.stdin.close()
         pid = await wait_pid(pidfile)
         assert running(pid)
-        worker.send_signal(signal.SIGKILL)
-        worker.wait(timeout=5)
+        # The worker may exit between checks on loaded CI runners; sending a
+        # signal or waiting on an already-reaped PID raises ProcessLookupError,
+        # which is the test's desired end state (the child is already dead).
+        try:
+            worker.send_signal(signal.SIGKILL)
+        except ProcessLookupError:
+            pass
+        try:
+            worker.wait(timeout=5)
+        except ProcessLookupError:
+            pass
         async with asyncio.timeout(5):
             while running(pid):
                 await asyncio.sleep(0.01)
     finally:
         if worker.poll() is None:
-            worker.kill()
-            worker.wait(timeout=5)
+            try:
+                worker.kill()
+            except ProcessLookupError:
+                pass
+            try:
+                worker.wait(timeout=5)
+            except ProcessLookupError:
+                pass
