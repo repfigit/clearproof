@@ -39,7 +39,7 @@
     "test:coverage": "vitest run --coverage --coverage.include=\"src/**/*.ts\" --coverage.reporter=text --coverage.reporter=json-summary --coverage.reporter=lcov --coverage.thresholds.lines=100 --coverage.thresholds.branches=100 --coverage.thresholds.functions=100 --coverage.thresholds.statements=100"
   },
   "dependencies": {
-    "js-yaml": "^5.4.2"
+    "js-yaml": "^5.4.3"
   },
   "devDependencies": {
     "@vitest/coverage-v8": "^5.0.3",

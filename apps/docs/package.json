@@ -22,8 +22,8 @@
     "remark-gfm": "^4.0.1"
   },
   "devDependencies": {
-    "@playwright/test": "^1.63.0",
-    "@types/node": "^26.6.4",
+    "@playwright/test": "^1.64.0",
+    "@types/node": "^26.6.5",
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.3.0",
     "@vitest/coverage-v8": "^5.0.3",
