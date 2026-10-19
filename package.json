@@ -41,8 +41,8 @@
     "postcss": "8.5.29"
   },
   "devDependencies": {
-    "@vitest/coverage-v8": "^5.0.3",
-    "turbo": "^2.11.7",
+    "@vitest/coverage-v8": "^5.0.5",
+    "turbo": "^2.11.8",
     "vitest": "^5.0.3"
   }
 }
