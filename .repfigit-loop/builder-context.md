@@ -35,6 +35,7 @@
 
 - AIF-67 — 2026-07-28 — status: escalated — stuck after 3 repair cycles; NG-1 backward-compat conflict + ADR 0002 staging question require product decision
 - AIF-87 — 2026-10-28 — status: escalated (light cron) — gate misclassified 4-AC security issue as TIER-1; AC regex misses 'Done when' bullets, title lacks deep terms; also AGENT_IDENTITY unset in cron prompt (no bot account in workspace) + AIF-67 fold-in decision unresolved. Did not claim; deep cron/human owns. See traces/20261028-build-aif87-misroute.json
+- AIF-87 — 2026-10-28 — status: escalated (light cron, duplicate fire 07:05Z) — gate re-fired on same misrouted issue ~87 min after first escalation; Linear state unchanged (In Progress, unassigned, agent-ready+Feature). AGENT_IDENTITY still unset in cron prompt. Same stop conditions apply; no action taken.
 - AIF-86 — 2026-07-31 — fflonk benchmark: 32% cheaper verification, no ceremony, 20x slower proving
 - AIF-122 — 2026-08-05 — status: failed — Linear API unreachable, cannot claim issue
 - AIF-122 — 2026-08-05 — status: failed — wrong-repo (string-utils doesn't exist in clearproof); gate script error; missing AGENT_IDENTITY
@@ -42,6 +43,11 @@
 - general — 2026-08-05 — status: failed — wrong-repo (AIF-123 nh-muni-watch, AIF-32/34/33 ai-factory-pyd); all 4 unassigned agent-ready issues belong to other repos; skipped all
 - AIF-124 — 2026-08-05 — status: failed — gate script error (REPO_DIR not set in cron)
 - DIRTY-TREE-7b3f316 — 2026-10-28 — status: blocked-dirty-tree — paths: .repfigit-loop/builder-context.md (modified by light cron AIF-87 escalation entry; known recurring per gotchas)
+- DIRTY-TREE-7b3f316 — 2026-10-28 — status: blocked-dirty-tree — paths: .repfigit-loop/builder-context.md (dirty-tree skip, signature 7b3f316 clearproof, near-silent skip per step 0.2)
+- DIRTY-TREE-7b3f316 — 2026-10-28 — status: blocked-dirty-tree — paths: .repfigit-loop/builder-context.md (dirty-tree skip, signature 7b3f316 clearproof, near-silent skip per step 0.2; 3rd fire)
+- DIRTY-TREE-7b3f316 — 2026-10-28 — status: blocked-dirty-tree — paths: .repfigit-loop/builder-context.md (dirty-tree skip, signature 7b3f316 clearproof, near-silent skip per step 0.2; 4th fire)
+- DIRTY-TREE-7b3f316 — 2026-10-28 — status: blocked-dirty-tree — paths: .repfigit-loop/builder-context.md (dirty-tree skip, signature 7b3f316 clearproof, near-silent skip per step 0.2; 5th fire)
+- DIRTY-TREE-7b3f316 — 2026-10-28 — status: blocked-dirty-tree — outcome: blocked, failureCategory: scope-conflict, notes: "dirty-tree skip, signature 7b3f316 clearproof; standard cron also reports 0 matched tier=standard for AIF-87 (6th fire)"
 
 ## AIF-128 — 2026-08-06 — Wrong-repo skip: SKILL.md/fleet.yaml not in clearproof
 
@@ -59,4 +65,4 @@
 
 - Architecture: AIF-145 references `app.maintenance.detect_and_resolve_contradictions`, `app.auth.bind_workspace_claim`, `tests/test_contradiction_detection.py`, and CI at `github.com/repfigit/memory-gateway` — these are memory-gateway (Python app), not clearproof (ZK circuits + Solidity).
 - Patterns: Wrong-repo issues: comment with reason, unassign, move to Backlog, keep `agent-ready`. Do NOT add `blocked`.
-- Gotchas: Linear issue was already In Progress (started 2026-08-17 00:01:05) — possibly claimed by another builder or manually moved. Unassigned it and moved back to Backlog so the correct builder can pick it up.
+- Gotchas: Linear issue was already In Progress (started 2026-08-17 00:01:05) — possibly claimed by another builder or manually moved. Unassigned it and moved back to Backlog so the correct builder can pick it up.- DIRTY-TREE-7b3f316 — 2026-10-28 — status: blocked-dirty-tree — paths: .repfigit-loop/builder-context.md (dirty-tree skip, signature 7b3f316 clearproof, near-silent skip per step 0.2)
