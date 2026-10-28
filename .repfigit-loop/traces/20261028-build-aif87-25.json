@@ -1,0 +1,12 @@
+{
+  "skill": "repfigit-build",
+  "ranAt": "2026-10-28T16:35:00Z",
+  "outcome": "no-work",
+  "issueId": "AIF-87",
+  "prNumber": 0,
+  "failureCategory": "ambiguous-spec",
+  "humanInterventions": 0,
+  "toolCalls": 5,
+  "verdictCycles": 0,
+  "notes": "25th light-cron fire on AIF-87; same deep-tier security misroute + AGENT_IDENTITY unset; no claim, no Linear comment (escalated 20+ already). Linear state unchanged since 14th fire."
+}
