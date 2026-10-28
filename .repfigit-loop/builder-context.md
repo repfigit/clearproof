@@ -49,6 +49,7 @@
 - DIRTY-TREE-7b3f316 — 2026-10-28 — status: blocked-dirty-tree — paths: .repfigit-loop/builder-context.md (dirty-tree skip, signature 7b3f316 clearproof, near-silent skip per step 0.2; 5th fire)
 - DIRTY-TREE-7b3f316 — 2026-10-28 — status: blocked-dirty-tree — outcome: blocked, failureCategory: scope-conflict, notes: "dirty-tree skip, signature 7b3f316 clearproof; standard cron also reports 0 matched tier=standard for AIF-87 (6th fire)"
 - AIF-87 — 2026-10-28 — status: no-work (light cron) — gate re-fired TIER-1 on AIF-87 (7th fire); reconfirmed via get_issue it is deep-tier security (6 Do + 4 Done-when; SIWE/EIP-7702/ERC-1271/ERC-6492/storage/circuits) — gate AC-count regex misroutes. AGENT_IDENTITY still unset; AIF-67 fold-in unresolved. Did not claim. Also committed accumulated uncommitted builder-context entries (commits 35ce178) to break the 7b3f316 dirty-tree skip loop; tree now clean. No re-comment on Linear (already escalated; noise).
+- AIF-87 — 2026-10-28 — status: no-work (light cron) — gate re-fired TIER-1 on AIF-87 (8th fire); Linear state unchanged (In Progress, unassigned, agent-ready+Feature, High). Title itself names SIWE + EIP-7702 = deep-tier security, not TIER-1 docs/config/typo. AGENT_IDENTITY still unset in cron prompt → cooperative lock unavailable. Did not claim; no Linear comment (already escalated).
 
 ## AIF-128 — 2026-08-06 — Wrong-repo skip: SKILL.md/fleet.yaml not in clearproof
 
