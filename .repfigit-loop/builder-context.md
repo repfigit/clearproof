@@ -34,12 +34,14 @@
 ## Retry log
 
 - AIF-67 — 2026-07-28 — status: escalated — stuck after 3 repair cycles; NG-1 backward-compat conflict + ADR 0002 staging question require product decision
+- AIF-87 — 2026-10-28 — status: escalated (light cron) — gate misclassified 4-AC security issue as TIER-1; AC regex misses 'Done when' bullets, title lacks deep terms; also AGENT_IDENTITY unset in cron prompt (no bot account in workspace) + AIF-67 fold-in decision unresolved. Did not claim; deep cron/human owns. See traces/20261028-build-aif87-misroute.json
 - AIF-86 — 2026-07-31 — fflonk benchmark: 32% cheaper verification, no ceremony, 20x slower proving
 - AIF-122 — 2026-08-05 — status: failed — Linear API unreachable, cannot claim issue
 - AIF-122 — 2026-08-05 — status: failed — wrong-repo (string-utils doesn't exist in clearproof); gate script error; missing AGENT_IDENTITY
 - general — 2026-08-05 — status: failed — Linear MCP tools unavailable; cannot list issues or claim work; pass aborted at step 2 (pick)
 - general — 2026-08-05 — status: failed — wrong-repo (AIF-123 nh-muni-watch, AIF-32/34/33 ai-factory-pyd); all 4 unassigned agent-ready issues belong to other repos; skipped all
 - AIF-124 — 2026-08-05 — status: failed — gate script error (REPO_DIR not set in cron)
+- DIRTY-TREE-7b3f316 — 2026-10-28 — status: blocked-dirty-tree — paths: .repfigit-loop/builder-context.md (modified by light cron AIF-87 escalation entry; known recurring per gotchas)
 
 ## AIF-128 — 2026-08-06 — Wrong-repo skip: SKILL.md/fleet.yaml not in clearproof
 
