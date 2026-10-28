@@ -1,0 +1,12 @@
+{
+  "skill": "repfigit-build",
+  "ranAt": "2026-10-28T12:40:00Z",
+  "outcome": "no-work",
+  "issueId": "AIF-87",
+  "prNumber": 0,
+  "failureCategory": "ci-missing",
+  "humanInterventions": 0,
+  "toolCalls": 4,
+  "verdictCycles": 0,
+  "notes": "18th light-cron fire on AIF-87; gate misroutes deep-tier security (SIWE/EIP-7702) to TIER-1; AGENT_IDENTITY unset in cron prompt (hard stop per Runtime Context). No claim; no Linear comment (escalated 15x). Linear state unchanged since 14th fire."
+}
