@@ -1,0 +1,12 @@
+{
+  "skill": "repfigit-build",
+  "ranAt": "2026-10-29T12:00:00Z",
+  "outcome": "no-work",
+  "issueId": "AIF-87",
+  "prNumber": 0,
+  "failureCategory": "none",
+  "humanInterventions": 0,
+  "toolCalls": 3,
+  "verdictCycles": 0,
+  "notes": "standard cron fire 54: gate fetched AIF-87 but 0 matched tier=standard (correctly filtered as deep-tier security: SIWE/EIP-7702 in title, 6 Do + 4 Done-when). No WORK: or WARN: lines. AGENT_IDENTITY unset in cron prompt. No repair PRs."
+}
