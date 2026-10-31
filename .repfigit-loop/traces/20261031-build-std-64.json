@@ -1,12 +1,12 @@
 {
   "skill": "repfigit-build",
-  "ranAt": "2026-10-31T07:01:00Z",
+  "ranAt": "2026-10-31T07:01:00-04:00",
   "outcome": "no-work",
   "issueId": null,
   "prNumber": 0,
   "failureCategory": "none",
   "humanInterventions": 0,
-  "toolCalls": 5,
+  "toolCalls": 4,
   "verdictCycles": 0,
-  "notes": "standard cron fire 64: gate fetched AIF-87 but 0 matched tier=standard (correctly filtered as deep-tier security: SIWE/EIP-7702 in title, 6 Do + 4 Done-when). AGENT_IDENTITY unset in cron prompt. No WORK: or WARN: lines. Dirty tree signature 7b3f316 (known recurring). No claim; no Linear comment (escalated 28+ already — pure noise)."
+  "notes": "standard cron 64th fire: gate fetched AIF-87 but 0 matched tier=standard (deep-tier security correctly filtered). No WORK/WARN in gate output. AGENT_IDENTITY unset. No repair PRs. No action taken."
 }
