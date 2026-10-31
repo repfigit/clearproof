@@ -1,0 +1,12 @@
+{
+  "skill": "repfigit-build",
+  "ranAt": "2026-10-31T16:01:41Z",
+  "outcome": "no-work",
+  "issueId": "AIF-87",
+  "prNumber": 0,
+  "failureCategory": "none",
+  "humanInterventions": 0,
+  "toolCalls": 6,
+  "verdictCycles": 0,
+  "notes": "Standard cron fire 67: gate fetched AIF-87 but 0 matched tier=standard (deep-tier security: SIWE/EIP-7702 in title, 6 Do + 4 Done-when). Two hard stops: (1) AGENT_IDENTITY unset; (2) AIF-87 is deep-tier, not TIER-2. No repair PRs. No claim."
+}
