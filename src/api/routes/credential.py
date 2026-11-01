@@ -7,15 +7,21 @@ GET  /credential/{credential_id}    — Retrieve credential status (not full dat
 """
 
 import logging
+import os
 import time
 from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, Field
 
 from src.api.dependencies import get_credential_registry
 from src.api.middleware.auth import JWTAuthDependency
+from src.auth.principal import Principal, TenantPrincipalDependency
 from src.registry.credential_registry import CredentialRegistry, zkKYCCredential
+from src.services.enrollment import EnrollmentIneligible, EnrollmentIntegrityError, EnrollmentNotFound
+from src.services.wallet_ownership import WalletOwnershipError, WalletOwnershipService
+from src.storage.keyring import load_keyring
+from src.storage.pilot_cipher import RecordCipher
 
 logger = logging.getLogger(__name__)
 
@@ -43,6 +49,15 @@ class CredentialIssueRequest(BaseModel):
         gt=0,
         description="Credential TTL in seconds (default: 1 year)",
     )
+    wallet_ownership_attestation_id: Optional[str] = Field(
+        None,
+        description=(
+            "Optional wallet-ownership attestation identifier (from POST /wallet/ownership/verify). "
+            "When present, the attestation must currently be active and belong to subject_wallet; "
+            "the issued credential then records wallet_ownership_verified=true. Evidence-based "
+            "proof-level commitments remain governed by the staged wallet-ownership profile."
+        ),
+    )
 
 
 class CredentialIssueResponse(BaseModel):
@@ -56,6 +71,25 @@ class CredentialIssueResponse(BaseModel):
     kyc_tier: str
     issued_at: int
     expires_at: int
+    wallet_ownership_verified: bool = False
+    wallet_ownership_attestation_id: Optional[str] = None
+
+
+def _wallet_ownership_service(request: Request, principal: Principal) -> WalletOwnershipService:
+    """Build the wallet-ownership service in this request's tenant scope (fail closed)."""
+    db = getattr(request.app.state, "db", None)
+    if db is None or not db.is_ready:
+        raise HTTPException(status_code=503, detail="Wallet evidence database unavailable")
+    try:
+        return WalletOwnershipService(
+            db,
+            RecordCipher(load_keyring()),
+            principal,
+            chain_id=int(os.environ["PILOT_CHAIN_ID"]),
+            registry_address=os.environ["PILOT_REGISTRY_ADDRESS"],
+        )
+    except (KeyError, ValueError, RuntimeError) as exc:
+        raise HTTPException(status_code=503, detail="Wallet evidence configuration unavailable") from exc
 
 
 class CredentialRevokeRequest(BaseModel):
@@ -94,7 +128,9 @@ class CredentialStatusResponse(BaseModel):
 @router.post("/issue", response_model=CredentialIssueResponse, summary="Issue zkKYC credential")
 async def issue_credential(
     request: CredentialIssueRequest,
+    http: Request,
     _auth: dict = Depends(JWTAuthDependency),
+    principal: Principal = Depends(TenantPrincipalDependency),
     _registry: CredentialRegistry = Depends(get_credential_registry),
 ):
     """
@@ -102,9 +138,35 @@ async def issue_credential(
 
     The returned commitment is a Poseidon hash of the credential fields,
     suitable for inclusion in Merkle trees and ZK circuit inputs.
+
+    When wallet_ownership_attestation_id is supplied, the wallet-ownership
+    attestation must currently be active (unexpired, unrevoked, no delegation
+    review) and must belong to subject_wallet; the issued credential then
+    carries wallet_ownership_verified=true with the attestation identifier
+    recorded. The Poseidon commitment is unchanged: the legacy credential
+    preimage has no circuit counterpart for this field, and evidence-level
+    commitments live in the staged wallet-ownership extension profile.
     """
     now = int(time.time())
     expires_at = now + request.expires_in_seconds
+
+    if request.wallet_ownership_attestation_id is not None:
+        service = _wallet_ownership_service(http, principal)
+        try:
+            await service.assert_active(
+                request.wallet_ownership_attestation_id,
+                subject_wallet=request.subject_wallet,
+                now=now,
+            )
+        except WalletOwnershipError as exc:
+            raise HTTPException(
+                status_code=422,
+                detail=f"Wallet ownership attestation is not eligible: {exc}",
+            ) from exc
+        except (EnrollmentNotFound, EnrollmentIntegrityError, EnrollmentIneligible) as exc:
+            raise HTTPException(
+                status_code=422, detail="Wallet ownership attestation enrollment is not eligible"
+            ) from exc
 
     credential = zkKYCCredential(
         issuer_did=request.issuer_did,
@@ -114,11 +176,17 @@ async def issue_credential(
         sanctions_clear=True,
         issued_at=now,
         expires_at=expires_at,
+        wallet_ownership_verified=request.wallet_ownership_attestation_id is not None,
+        wallet_ownership_attestation_id=request.wallet_ownership_attestation_id,
     )
 
     commitment = await _registry.issue(credential)
 
-    logger.info("Credential issued: id=%s", credential.credential_id)
+    logger.info(
+        "Credential issued: id=%s wallet_ownership_verified=%s",
+        credential.credential_id,
+        credential.wallet_ownership_verified,
+    )
 
     return CredentialIssueResponse(
         credential_id=credential.credential_id,
@@ -129,6 +197,8 @@ async def issue_credential(
         kyc_tier=credential.kyc_tier,
         issued_at=credential.issued_at,
         expires_at=credential.expires_at,
+        wallet_ownership_verified=credential.wallet_ownership_verified,
+        wallet_ownership_attestation_id=credential.wallet_ownership_attestation_id,
     )
 
 

@@ -32,7 +32,11 @@ administrator override. PostgreSQL, encryption keys, `PILOT_CHAIN_ID` and
 
 ## Signing helper
 
-`@clearproof/proof` exports `walletOwnershipSigningMessage`:
+`@clearproof/proof` exports `walletOwnershipSigningMessage`. When the challenge
+is a `clearproof-wallet-challenge-v2` record (returned when `PILOT_SIWE_DOMAIN`
+is configured server-side), the helper returns the exact EIP-4361 (SIWE)
+message; otherwise it returns the legacy canonical v1 text. Both are signed
+with EIP-191 `personal_sign` by the wallet.
 
 ```typescript
 import { walletOwnershipSigningMessage } from '@clearproof/proof';
@@ -46,16 +50,57 @@ const message = walletOwnershipSigningMessage(response.challenge, {
   chainId,
   registryAddress,
 });
-const signature = await signer.signMessage(message); // EIP-191 signer supplied by the wallet
+const signature = await signer.signMessage(message); // signer supplied by the wallet
 ```
 
 Never populate the expected context by copying fields from an untrusted challenge.
 The helper returns text; it never receives a private key or submits a transaction.
-Its message matches the Python server byte for byte through a shared test vector.
+Its message matches the Python server byte for byte through shared test vectors
+(`tests/vectors/wallet-ownership/challenge.json` and `challenge-v2.json`).
 Message preparation tolerates 30 seconds of client clock skew in either direction;
 server verification still enforces the exact five-minute interval without tolerance.
-Only canonical 65-byte, low-s signatures with recovery values 27/28 are supported.
-Contract wallets/EIP-1271 are not supported by this profile.
+Only canonical 65-byte, low-s signatures with recovery values 27/28 are supported
+on the EOA path; contract wallets use ERC-1271/ERC-6492 (below).
+
+## SIWE profile (v2), delegation and smart accounts
+
+When `PILOT_SIWE_DOMAIN` is configured, challenges are `clearproof-wallet-challenge-v2`
+records whose message is a deterministic EIP-4361 SIWE message: the SIWE fields
+(domain, nonce, chain-id, issued-at, expiration-time, resources) make the signed
+text itself a supervisor-readable record. The subject address is rendered with its
+EIP-55 checksum in the message; protocol records keep lowercase hex.
+
+When `WALLET_OWNERSHIP_RPC_URL` is configured, verification records the
+EIP-7702 delegation status of the subject wallet at verification time
+(`eth_getCode`, strict `0xef0100` indicator parsing). A delegated or
+malformed-indicator wallet does not silently pass: the attestation keeps the
+evidence but eligibility (status/extension) pauses with a review flag until the
+delegation is resolved. Status and extension evaluations re-check delegation at
+most once per `WALLET_OWNERSHIP_DELEGATION_RECHECK_SECONDS` (default 3600);
+`POST /wallet/ownership/delegation-check` forces an immediate check for external
+schedulers. If no RPC is configured, the check is recorded as not performed —
+the attestation states what was and was not verified.
+
+Contract wallets (and EIP-7702-delegated EOAs) are verified through
+ERC-1271 `isValidSignature` over the EIP-191 prehash of the SIWE message, or
+ERC-6492 for counterfactual (not-yet-deployed) accounts. The attestation
+records the method (`eoa`, `erc-1271`, `erc-6492`). Non-EOA attestations are
+not re-verified with ecrecover on later reads; the standing code/delegation
+re-check is the deliberate cheap check.
+
+`GET /wallet/ownership/evidence/{attestation_id}` returns a supervisor-readable
+export: subject address, verification method mapped to the EBA/GL/2024/11
+Annex I §VIII ¶83(d) limb, the exact signed message, signature, timestamps,
+delegation status with the full re-check history, and credential linkage. The
+export is evidence of the verification event, not a legal opinion.
+
+`POST /credential/issue` accepts an optional `wallet_ownership_attestation_id`:
+when present, the attestation must currently be active and belong to
+`subject_wallet`, and the issued credential records
+`wallet_ownership_verified=true` with the attestation binding. The legacy
+Poseidon preimage is unchanged (no circuit counterpart field); proof-level
+commitments remain governed by the staged wallet-ownership extension profile
+(`wallet_ownership_credential.circom`, ceremony-gated per ADR 0002).
 
 ## Lifetime, replay and retention
 
