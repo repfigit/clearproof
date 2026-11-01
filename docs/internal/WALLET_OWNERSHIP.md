@@ -90,9 +90,13 @@ re-check is the deliberate cheap check.
 
 `GET /wallet/ownership/evidence/{attestation_id}` returns a supervisor-readable
 export: subject address, verification method mapped to the EBA/GL/2024/11
-Annex I §VIII ¶83(d) limb, the exact signed message, signature, timestamps,
-delegation status with the full re-check history, and credential linkage. The
-export is evidence of the verification event, not a legal opinion.
+Travel Rule Guidelines verification methods (section 4.8.4, paragraph 83,
+items a)-e; the ¶83(d) message-signing limb for EOA signatures, the ¶83(e)
+"other suitable technical means" catch-all for ERC-1271/6492 — our
+interpretation, flagged as such in the export), the exact signed message,
+signature, timestamps, delegation status with the full re-check history, and
+credential linkage. The export is evidence of the verification event, not a
+legal opinion.
 
 `POST /credential/issue` accepts an optional `wallet_ownership_attestation_id`:
 when present, the attestation must currently be active and belong to
