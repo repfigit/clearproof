@@ -268,9 +268,7 @@ def test_v2_signature_binds_exact_context(challenge_v2):
         with pytest.raises(WalletOwnershipError):
             candidate.verify_signature(signature)
     # Timestamps move together (TTL is exact), shifting both SIWE time fields.
-    shifted = WalletChallengeV2.model_validate(
-        {**value.model_dump(), "timestamp": 1101, "expires_at": 1401}
-    )
+    shifted = WalletChallengeV2.model_validate({**value.model_dump(), "timestamp": 1101, "expires_at": 1401})
     with pytest.raises(WalletOwnershipError):
         shifted.verify_signature(signature)
     other = WalletChallengeV2.model_validate(
@@ -316,9 +314,7 @@ def test_v2_attestation_binds_challenge_delegation_and_ttl(challenge_v2):
     assert attestation.challenge == value
     unknown = {"checked": True, "extra": "x"}
     with pytest.raises(ValueError, match="Invalid delegation status record"):
-        WalletAttestationV2.model_validate(
-            {**attestation.model_dump(), "delegation": unknown}
-        )
+        WalletAttestationV2.model_validate({**attestation.model_dump(), "delegation": unknown})
     missing_checked = {**delegation, "checked": "yes"}
     with pytest.raises(ValueError, match="Invalid delegation status record"):
         WalletAttestationV2.model_validate({**attestation.model_dump(), "delegation": missing_checked})

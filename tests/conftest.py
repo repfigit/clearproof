@@ -22,6 +22,12 @@ os.environ.setdefault("PII_MASTER_KEY", "a" * 64)
 os.environ.setdefault("HKDF_SALT", "synthetic-test-deployment-salt-001")
 os.environ.setdefault("AUTH_MODE", "api-key")
 os.environ.setdefault("API_KEY", "test-api-key-for-integration")
+os.environ.setdefault("API_KEY_TENANT_ID", "test-tenant")
+os.environ.setdefault("API_KEY_ACTOR_ID", "test-actor")
+os.environ.setdefault(
+    "API_KEY_ROLES",
+    "credential:issue,credential:revoke,proof:generate,proof:inspect,evidence:export",
+)
 
 from src.protocol.compliance_proof import ComplianceProof
 from src.protocol.hybrid_payload import HybridPayload

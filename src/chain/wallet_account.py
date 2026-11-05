@@ -295,9 +295,7 @@ async def verify_signature(w3: Any, address: str, digest: bytes, signature: str)
 
     code = await account_code(w3, normalized)
     if code == "0x":
-        raise EoaVerificationRequired(
-            f"{normalized} has no account code; caller must verify via ecrecover (EOA path)"
-        )
+        raise EoaVerificationRequired(f"{normalized} has no account code; caller must verify via ecrecover (EOA path)")
     call_data = _encode_is_valid_signature_call(digest_bytes, signature_bytes)
     valid = await _call_is_valid_signature(w3, normalized, call_data, "erc-1271")
     return valid, "erc-1271"

@@ -20,6 +20,12 @@ from httpx import ASGITransport, AsyncClient
 os.environ.setdefault("PII_MASTER_KEY", "a" * 64)
 os.environ.setdefault("AUTH_MODE", "api-key")
 os.environ.setdefault("API_KEY", "test-api-key-for-integration")
+os.environ.setdefault("API_KEY_TENANT_ID", "test-tenant")
+os.environ.setdefault("API_KEY_ACTOR_ID", "test-actor")
+os.environ.setdefault(
+    "API_KEY_ROLES",
+    "credential:issue,credential:revoke,proof:generate,proof:inspect,evidence:export",
+)
 
 from src.api.dependencies import get_credential_registry  # noqa: E402
 from src.api.main import app  # noqa: E402
