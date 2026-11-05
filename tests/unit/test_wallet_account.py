@@ -282,7 +282,6 @@ def test_normalize_helpers_reject_malformed_values():
 
 
 def test_parse_erc6492_rejects_empty_inner_signature():
-    inner = ""
     contract = CONTRACT
     data = "0x" + "ff" * 10
     data_bytes = bytes.fromhex(data[2:])
