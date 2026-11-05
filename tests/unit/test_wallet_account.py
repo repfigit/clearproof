@@ -267,6 +267,8 @@ def test_normalize_helpers_reject_malformed_values():
     from src.chain import wallet_account as module
 
     with pytest.raises(ValueError):
+        module._normalize_hex(123, "label")  # type: ignore[arg-type]
+    with pytest.raises(ValueError):
         module._normalize_address(123)  # type: ignore[arg-type]
     with pytest.raises(ValueError):
         module._normalize_address("0x" + "gg" * 20)

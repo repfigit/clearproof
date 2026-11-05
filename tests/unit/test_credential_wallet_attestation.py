@@ -82,6 +82,29 @@ async def test_issue_rejects_ineligible_attestation(api, error, status):
     assert response.status_code == status
 
 
+async def test_wallet_service_unavailable_when_database_missing(monkeypatch):
+    monkeypatch.setenv("PII_MASTER_KEY", "ab" * 32)
+    monkeypatch.setenv("PILOT_CHAIN_ID", "31337")
+    monkeypatch.setenv("PILOT_REGISTRY_ADDRESS", "0x" + "1" * 40)
+    principal = Principal(tenant_id="t", actor_id="a", roles=("credential:issue",), issuer_dids=())
+    app = FastAPI()
+    app.include_router(routes.router)
+    app.dependency_overrides[TenantPrincipalDependency] = lambda: principal
+    app.dependency_overrides[JWTAuthDependency] = lambda: {"sub": "test"}
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://test") as client:
+        response = await client.post(
+            "/credential/issue",
+            json={
+                "issuer_did": "did:web:issuer.example",
+                "subject_wallet": "0x" + "11" * 20,
+                "jurisdiction": "US",
+                "kyc_tier": "retail",
+                "wallet_ownership_attestation_id": "cd" * 32,
+            },
+        )
+        assert response.status_code == 503
+
+
 async def test_wallet_service_config_unavailable(monkeypatch):
     monkeypatch.setenv("PII_MASTER_KEY", "ab" * 32)
     monkeypatch.delenv("PILOT_CHAIN_ID", raising=False)

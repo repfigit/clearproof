@@ -183,6 +183,28 @@ def test_delegation_history_rejects_non_list():
         export_evidence(v2_attestation(), delegation_history={"checked_at": 2000})
 
 
+def test_delegation_history_normalizes_delegate_and_reason_types():
+    exported = export_evidence(
+        v2_attestation(),
+        delegation_history=[
+            {"checked_at": 2000, "delegated": True, "delegate": "0x" + "3" * 40, "reason": "malformed indicator"},
+            {"checked_at": 1000, "delegated": False},
+        ],
+    )
+    assert exported["delegation"]["status"]["delegate"] == "0x" + "3" * 40
+    with pytest.raises(ValueError, match="boolean delegated"):
+        export_evidence(v2_attestation(), delegation_history=[{"checked_at": 2000, "delegated": "yes"}])
+    with pytest.raises(ValueError, match="string or null delegate"):
+        export_evidence(v2_attestation(), delegation_history=[{"checked_at": 2000, "delegated": True, "delegate": 1}])
+
+
+def test_v1_method_defaults_to_eoa_when_omitted():
+    attestation = v1_attestation()
+    attestation.pop("verification_method", None)
+    exported = export_evidence(attestation)
+    assert exported["eba_limb"]["paragraph"] == "83(d)"
+
+
 def test_non_dict_attestation_and_credential_ref_fail_closed():
     with pytest.raises(ValueError, match="must be an object"):
         export_evidence("attestation")

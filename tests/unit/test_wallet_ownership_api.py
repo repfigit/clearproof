@@ -48,6 +48,51 @@ async def test_wallet_service_unavailable_without_database(principal, monkeypatc
         assert (await client.post("/wallet/ownership/challenge", json={"credential_id": "ab" * 32})).status_code == 503
 
 
+async def test_evidence_export_omits_message_for_v1_format(api):
+    api.service.delegation_evidence = AsyncMock(
+        return_value={
+            "attestation_record": {
+                "schema_version": "clearproof-wallet-attestation-v1",
+                "attestation_id": "cd" * 32,
+                "challenge": {
+                    "schema_version": "clearproof-wallet-challenge-v1",
+                    "tenant_id": "tenant-a",
+                    "actor_id": "actor-a",
+                    "credential": {
+                        "schema_version": "clearproof-credential-v1",
+                        "tenant_id": "tenant-a",
+                        "credential_nonce": "ab" * 32,
+                        "issuer_did": "did:web:issuer.example",
+                        "subject_wallet": "0x" + "11" * 20,
+                        "holder_commitment": "1",
+                        "jurisdiction": "DE",
+                        "kyc_tier": 2,
+                        "sanctions_clear": True,
+                        "issued_at": 1,
+                        "expires_at": 999,
+                    },
+                    "chain_id": 31337,
+                    "registry_address": "0x" + "1" * 40,
+                    "nonce": "cd" * 32,
+                    "timestamp": 100,
+                    "expires_at": 400,
+                },
+                "signature": "0x" + "45" * 65,
+                "issued_at": 120,
+                "expires_at": 86400,
+            },
+            "rechecks": [],
+            "credential_nonce": "ab" * 32,
+            "subject_wallet": "0x" + "11" * 20,
+            "message_format": "clearproof-canonical-v1",
+            "message": "Clearproof wallet ownership verification v1\n{}",
+        }
+    )
+    response = await api.client.get("/wallet/ownership/evidence/" + "cd" * 32)
+    assert response.status_code == 200
+    assert "challenge_message" not in response.json()
+
+
 async def test_delegation_check_and_evidence_export(api):
     api.service.recheck_delegation = AsyncMock(return_value={"delegated": False})
     api.service.delegation_evidence = AsyncMock(
@@ -128,3 +173,18 @@ def test_account_probe_with_rpc(monkeypatch):
     monkeypatch.setattr(routes, "wallet_chain", lambda _module: SimpleNamespace())
     assert routes.account_probe() is not None
     assert routes.chain_verifier() is not None
+
+
+@pytest.mark.asyncio
+async def test_account_probe_delegation_helper(monkeypatch):
+    monkeypatch.setenv("WALLET_OWNERSHIP_RPC_URL", "http://127.0.0.1:8545")
+    monkeypatch.setattr(routes, "wallet_chain", lambda _module: SimpleNamespace())
+
+    async def fake_account_code(_w3, _address):
+        return "0xef0100" + "22" * 20 + "000000"
+
+    monkeypatch.setattr("src.chain.wallet_account.account_code", fake_account_code)
+    probe = routes.account_probe()
+    result = await probe("0x" + "11" * 20)
+    assert result["delegated"] is True
+    assert result["has_code"] is True

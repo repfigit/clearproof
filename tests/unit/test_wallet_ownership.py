@@ -284,6 +284,63 @@ def test_v2_signature_binds_exact_context(challenge_v2):
         value.verify_signature(wrong)
 
 
+def test_siwe_message_and_iso_helpers_reject_invalid_input():
+    from src.protocol import wallet_ownership as module
+
+    with pytest.raises(ValueError, match="Invalid SIWE timestamp"):
+        module._iso(-1)
+    with pytest.raises(ValueError, match="Invalid SIWE domain"):
+        module.siwe_message(
+            domain="bad\nexample.com",
+            address="0x" + "1" * 40,
+            chain_id=1,
+            nonce="n" * 64,
+            issued_at=1,
+            expiration_time=2,
+            resource="urn:clearproof:credential:ab",
+        )
+
+
+def test_v2_challenge_and_attestation_validator_branches(wallet_enrollment):
+    from src.protocol.wallet_ownership import WalletAttestationV2, WalletChallengeV2
+
+    wallet, consent, principal = wallet_enrollment
+    base = {
+        "tenant_id": principal.tenant_id,
+        "actor_id": principal.actor_id,
+        "credential": consent.credential,
+        "chain_id": consent.chain_id,
+        "registry_address": consent.registry_address,
+        "nonce": "cd" * 32,
+        "timestamp": 1100,
+        "expires_at": 1400,
+        "siwe_domain": "issuer.example",
+        "siwe_resource": f"urn:clearproof:credential:{consent.credential.credential_nonce}",
+    }
+    with pytest.raises(ValueError):
+        WalletChallengeV2.model_validate({**base, "expires_at": 1500})
+    with pytest.raises(ValueError):
+        WalletChallengeV2.model_validate({**base, "nonce": "0" * 64})
+    with pytest.raises(ValueError):
+        WalletChallengeV2.model_validate({**base, "timestamp": consent.credential.expires_at})
+    challenge = WalletChallengeV2.model_validate(base)
+    attestation = WalletAttestationV2(
+        attestation_id=challenge.nonce,
+        challenge=challenge,
+        signature="0x" + "45" * 65,
+        issued_at=1200,
+        expires_at=87600,
+        delegation={"checked": True, "delegated": False, "delegate": None, "checked_at": 1200, "reason": None},
+    )
+    assert attestation.digest_scalar.isdigit()
+    with pytest.raises(ValueError):
+        WalletAttestationV2.model_validate({**attestation.model_dump(), "attestation_id": "ef" * 32})
+    with pytest.raises(ValueError):
+        WalletAttestationV2.model_validate(
+            {**attestation.model_dump(), "method": "erc-1271", "signature": "0x" + "45" * 65}
+        )
+
+
 def test_v2_signature_rejects_malleated_and_misformed(challenge_v2):
     from src.protocol.wallet_ownership import WalletChallengeV2
 
