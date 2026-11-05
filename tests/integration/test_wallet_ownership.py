@@ -408,9 +408,7 @@ async def test_siwe_v2_lifecycle_with_delegation_probe_and_recheck(db, enrolled)
         account_probe=probe,
         delegation_recheck_seconds=1,
     )
-    challenge = await service.challenge(
-        consent.credential.credential_nonce, now=1100, siwe_domain="issuer.example"
-    )
+    challenge = await service.challenge(consent.credential.credential_nonce, now=1100, siwe_domain="issuer.example")
     from src.protocol.wallet_ownership import WalletChallengeV2
 
     assert isinstance(challenge, WalletChallengeV2)
@@ -418,7 +416,8 @@ async def test_siwe_v2_lifecycle_with_delegation_probe_and_recheck(db, enrolled)
     attestation = await service.verify(challenge.nonce, signature, now=1200)
     assert attestation.delegation["delegated"] is True
     status = await service.status(attestation.attestation_id, now=1201)
-    assert status["delegation_review"].startswith("wallet delegated")
+    assert status["wallet_ownership_verified"] is False
+    assert "delegated" in (status["reason"] or "")
     recheck = await service.recheck_delegation(attestation.attestation_id, now=1203)
     assert recheck["delegation"]["checked"] is True
     assert len(recheck["history"]) >= 2
@@ -442,9 +441,7 @@ async def test_siwe_v2_smart_account_uses_chain_verifier(db, enrolled):
         account_probe=probe,
         chain_verifier=verifier,
     )
-    challenge = await service.challenge(
-        consent.credential.credential_nonce, now=1100, siwe_domain="issuer.example"
-    )
+    challenge = await service.challenge(consent.credential.credential_nonce, now=1100, siwe_domain="issuer.example")
     attestation = await service.verify(challenge.nonce, "0x" + "ab" * 120, now=1200)
     assert attestation.method == "erc-1271"
 
@@ -463,9 +460,7 @@ async def test_delegation_probe_failures_are_recorded_not_guessed(db, enrolled):
         registry_address=consent.registry_address,
         account_probe=broken_probe,
     )
-    challenge = await service.challenge(
-        consent.credential.credential_nonce, now=1100, siwe_domain="issuer.example"
-    )
+    challenge = await service.challenge(consent.credential.credential_nonce, now=1100, siwe_domain="issuer.example")
     attestation = await service.verify(challenge.nonce, sign(wallet, challenge), now=1200)
     assert attestation.delegation["checked"] is False
     assert "failed" in (attestation.delegation.get("reason") or "")

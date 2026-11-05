@@ -241,7 +241,6 @@ class WalletOwnershipService:
             credential = await self._credential(tx, challenge.credential.credential_nonce, evaluated_at)
             if credential != challenge.credential:
                 raise WalletOwnershipError("Challenge credential changed")
-            challenge.verify_signature(signature)
             now = self._time(now)
             if not challenge.timestamp <= now < min(challenge.expires_at, credential.expires_at):
                 raise WalletOwnershipError("Wallet challenge or credential expired during verification")
@@ -284,6 +283,7 @@ class WalletOwnershipService:
                     delegation=self._delegation_status(probe),
                 )
             else:
+                challenge.verify_signature(signature)
                 attestation = WalletAttestation(
                     attestation_id=nonce,
                     challenge=challenge,

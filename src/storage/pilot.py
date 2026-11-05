@@ -29,6 +29,7 @@ _WRITE_ROLES = {
     "wallet-quota": "credential:issue",
     "wallet-attestation": "credential:issue",
     "wallet-extension": "credential:issue",
+    "wallet-delegation-log": "credential:issue",
     "wallet-revocation": "credential:revoke",
     "credential": "credential:issue",
     "issuance-root": "credential:issue",
