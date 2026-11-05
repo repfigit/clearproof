@@ -259,6 +259,37 @@ async def test_verify_signature_validates_inputs():
         await verify_signature(w3, "0x123", DIGEST, "0x" + "45" * 65)  # bad address
     with pytest.raises(ValueError):
         await verify_signature(w3, ADDRESS, DIGEST, "0x454")  # odd-length signature
+    with pytest.raises(ValueError):
+        await verify_signature(w3, ADDRESS, "not-bytes", "0x" + "45" * 65)
+
+
+def test_normalize_helpers_reject_malformed_values():
+    from src.chain import wallet_account as module
+
+    with pytest.raises(ValueError):
+        module._normalize_address(123)  # type: ignore[arg-type]
+    with pytest.raises(ValueError):
+        module._normalize_address("0x" + "gg" * 20)
+    assert module.delegation_indicator("not-hex") == {
+        "delegated": False,
+        "delegate": None,
+        "indicator_malformed": False,
+    }
+    with pytest.raises(ValueError):
+        module._encode_is_valid_signature_call(b"\x01" * 31, b"\x02" * 65)
+    with pytest.raises(ValueError):
+        module._encode_is_valid_signature_call(DIGEST, b"")
+
+
+def test_parse_erc6492_rejects_empty_inner_signature():
+    inner = ""
+    contract = CONTRACT
+    data = "0x" + "ff" * 10
+    data_bytes = bytes.fromhex(data[2:])
+    length_hex = len(data_bytes).to_bytes(32, "big").hex()
+    payload = contract[2:] + data_bytes.hex() + length_hex + ERC_6492_MAGIC_SUFFIX[2:]
+    with pytest.raises(ValueError):
+        parse_erc6492("0x" + payload)
 
 
 def test_magic_constant_matches_expected_value():
