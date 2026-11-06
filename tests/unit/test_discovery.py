@@ -424,6 +424,48 @@ async def test_public_cache_clear_forces_key_refetch(monkeypatch):
     assert fetch.await_count == 2
 
 
+async def test_fetch_document_maps_http_404_to_unsupported(monkeypatch):
+    import ssl
+    from unittest.mock import AsyncMock
+
+    from src.protocol.discovery_transport import DiscoveryUnsupported, EgressPolicy, fetch_document, parse_target
+
+    target = parse_target("did:web:beneficiary.example")
+    policy = EgressPolicy()
+    resolver = AsyncMock(return_value=("127.0.0.1",))
+
+    class FakeResponse:
+        status = 404
+        headers = []
+
+        async def aiter_stream(self):
+            if False:
+                yield b""
+
+    class FakeStream:
+        async def __aenter__(self):
+            return FakeResponse()
+
+        async def __aexit__(self, *_args):
+            return False
+
+    class FakePool:
+        def stream(self, *_args, **_kwargs):
+            return FakeStream()
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *_args):
+            return False
+
+    monkeypatch.setattr("src.protocol.discovery_transport.httpcore.AsyncConnectionPool", lambda **_kwargs: FakePool())
+    context = ssl.create_default_context()
+    context.minimum_version = ssl.TLSVersion.TLSv1_2
+    with pytest.raises(DiscoveryUnsupported, match="404"):
+        await fetch_document(target, policy, resolver, timeout=1.0, ssl_context=context)
+
+
 async def test_system_resolver_deduplicates_addresses_in_answer_order(monkeypatch):
     import socket
 

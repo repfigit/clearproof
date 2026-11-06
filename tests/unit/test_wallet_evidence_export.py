@@ -2,7 +2,7 @@
 
 import pytest
 
-from src.services.wallet_evidence_export import eba_limb_for, export_evidence
+from src.services.wallet_evidence_export import _credential_section, eba_limb_for, export_evidence
 
 LIMB_D_QUOTE = (
     "requesting the customer to digitally sign a specific message into the account and wallet software with the "
@@ -270,6 +270,12 @@ def test_export_credential_reference_without_linkage_keys():
         credential.pop(key)
     exported = export_evidence(attestation, credential_ref={"record_id": "cb" * 32})
     assert exported["credential"] == {"reference": {"record_id": "cb" * 32}}
+
+
+def test_credential_section_skips_non_object_credential_payload():
+    assert _credential_section({"credential": []}, {"record_id": "cb" * 32}) == {
+        "reference": {"record_id": "cb" * 32}
+    }
 
 
 def test_export_delegation_recorded_status_from_attestation():
