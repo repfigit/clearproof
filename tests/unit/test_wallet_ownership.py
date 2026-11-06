@@ -321,6 +321,9 @@ def test_v2_challenge_and_attestation_validator_branches(wallet_enrollment):
         WalletChallengeV2.model_validate({**base, "expires_at": 1500})
     with pytest.raises(ValueError):
         WalletChallengeV2.model_validate({**base, "nonce": "0" * 64})
+    before_issue = consent.credential.issued_at - 1
+    with pytest.raises(ValueError, match="Credential is not current at challenge issuance"):
+        WalletChallengeV2.model_validate({**base, "timestamp": before_issue, "expires_at": before_issue + 300})
     with pytest.raises(ValueError):
         WalletChallengeV2.model_validate({**base, "timestamp": consent.credential.expires_at})
     challenge = WalletChallengeV2.model_validate(base)
@@ -341,6 +344,14 @@ def test_v2_challenge_and_attestation_validator_branches(wallet_enrollment):
         )
 
 
+def test_v2_signature_reraises_wallet_ownership_errors(challenge_v2):
+    from src.protocol.wallet_ownership import WalletChallengeV2, WalletOwnershipError
+
+    value, signature = challenge_v2
+    with pytest.raises(WalletOwnershipError, match="Invalid wallet ownership signature"):
+        value.verify_signature("0x" + "ab" * 64)
+
+
 def test_v2_signature_rejects_malleated_and_misformed(challenge_v2):
     from src.protocol.wallet_ownership import WalletChallengeV2
 
@@ -353,6 +364,21 @@ def test_v2_signature_rejects_malleated_and_misformed(challenge_v2):
             value.verify_signature(invalid)
     with pytest.raises(ValueError, match="Invalid SIWE domain"):
         WalletChallengeV2.model_validate({**value.model_dump(), "siwe_domain": "bad\nexample"})
+
+
+def test_v2_attestation_rejects_issued_outside_challenge_window(challenge_v2):
+    from src.protocol.wallet_ownership import WalletAttestationV2
+
+    value, signature = challenge_v2
+    with pytest.raises(ValueError, match="outside the challenge validity interval"):
+        WalletAttestationV2(
+            attestation_id=value.nonce,
+            challenge=value,
+            signature=signature,
+            issued_at=value.timestamp - 1,
+            expires_at=value.timestamp - 1 + 86400,
+            delegation={"checked": True, "delegated": False, "delegate": None, "checked_at": 1200, "reason": None},
+        )
 
 
 def test_v2_attestation_binds_challenge_delegation_and_ttl(challenge_v2):

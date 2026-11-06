@@ -148,6 +148,13 @@ async def test_probe_delegation_records_failures_and_malformed_results(wallet_en
     assert malformed["has_code"] is True
 
 
+def test_delegation_log_entry_helpers():
+    assert WalletOwnershipService._delegation_log_entries(None) == []
+    assert WalletOwnershipService._delegation_log_entries({"entries": [{"checked": True}]}) == [{"checked": True}]
+    assert WalletOwnershipService._delegation_log_entries({"entries": "bad"}) == []
+    assert WalletOwnershipService._delegation_log_payload([{"checked": False}]) == {"entries": [{"checked": False}]}
+
+
 def test_delegation_review_branches():
     review = WalletOwnershipService._delegation_review({"delegated": True, "delegate": "0x" + "1" * 40})
     assert review.startswith("wallet delegated")
@@ -186,9 +193,7 @@ async def test_recheck_delegation_paths(wallet_enrollment, challenge_v2):
     refreshed = await service._recheck_delegation(tx, attestation, 1300)
     assert len(refreshed["history"]) == 1
     assert refreshed["history"][0]["checked_at"] == 1300
-    assert tx.storage[("wallet-delegation-log", attestation.attestation_id)] == {
-        "entries": refreshed["history"]
-    }
+    assert tx.storage[("wallet-delegation-log", attestation.attestation_id)] == {"entries": refreshed["history"]}
 
     attestation_v1 = SimpleNamespace(
         delegation=attestation.delegation,
@@ -310,6 +315,13 @@ async def test_active_delegation_review_and_public_helpers(wallet_enrollment, ch
 
     with pytest.raises(WalletDelegationReview, match="delegation review required"):
         await service.assert_active(attestation.attestation_id, now=1250)
+
+    with patch.object(
+        service,
+        "_recheck_delegation",
+        AsyncMock(return_value={"delegation": None, "history": []}),
+    ):
+        assert await service.assert_active(attestation.attestation_id, now=1250) == attestation
 
     attestation_safe = _v2_attestation(challenge_v2, method="erc-1271", signature="0x" + "ab" * 120)
     storage[("wallet-attestation", attestation_safe.attestation_id)] = attestation_safe.model_dump(mode="json")
