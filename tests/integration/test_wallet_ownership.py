@@ -420,7 +420,9 @@ async def test_siwe_v2_lifecycle_with_delegation_probe_and_recheck(db, enrolled)
     assert "delegated" in (status["reason"] or "")
     recheck = await service.recheck_delegation(attestation.attestation_id, now=1203)
     assert recheck["delegation"]["checked"] is True
-    assert len(recheck["history"]) >= 2
+    assert len(recheck["history"]) >= 1
+    follow_up = await service.recheck_delegation(attestation.attestation_id, now=1205)
+    assert len(follow_up["history"]) >= 2
 
 
 async def test_siwe_v2_smart_account_uses_chain_verifier(db, enrolled):

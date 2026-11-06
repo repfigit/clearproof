@@ -176,6 +176,20 @@ def test_account_probe_with_rpc(monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_chain_verifier_calls_on_chain_helper(monkeypatch):
+    monkeypatch.setenv("WALLET_OWNERSHIP_RPC_URL", "http://127.0.0.1:8545")
+    monkeypatch.setattr(routes, "wallet_chain", lambda _module: SimpleNamespace())
+
+    async def fake_verify(_w3, _address, _digest, _signature):
+        return True, "erc-1271"
+
+    monkeypatch.setattr("src.chain.wallet_account.verify_signature", fake_verify)
+    verify = routes.chain_verifier()
+    valid, method = await verify("0x" + "11" * 20, "hello", "0x" + "ab" * 64)
+    assert (valid, method) == (True, "erc-1271")
+
+
+@pytest.mark.asyncio
 async def test_account_probe_delegation_helper(monkeypatch):
     monkeypatch.setenv("WALLET_OWNERSHIP_RPC_URL", "http://127.0.0.1:8545")
     monkeypatch.setattr(routes, "wallet_chain", lambda _module: SimpleNamespace())
