@@ -20,7 +20,7 @@ from src.protocol.discovery_profile import (
     parse_target,
     validate_document,
 )
-from src.protocol.discovery_transport import EgressPolicy, PinnedBackend
+from src.protocol.discovery_transport import EgressPolicy, PinnedBackend, _discovery_response_body
 
 FIXTURES = Path(__file__).resolve().parents[2] / "specs/fixtures"
 DOCUMENT = json.loads((FIXTURES / "discovery-0.4.0.json").read_text())
@@ -422,6 +422,32 @@ async def test_public_cache_clear_forces_key_refetch(monkeypatch):
     discovery.clear_discovery_cache()
     assert await discovery.resolve_hpke_public_key("beneficiary.example") == first
     assert fetch.await_count == 2
+
+
+async def test_discovery_response_body_maps_http_404_to_unsupported():
+    class FakeResponse:
+        status = 404
+        headers = []
+
+        async def aiter_stream(self):
+            if False:
+                yield b""
+
+    with pytest.raises(DiscoveryUnsupported, match="404"):
+        await _discovery_response_body(FakeResponse())
+
+
+async def test_discovery_response_body_returns_streamed_json_bytes():
+    document = b'{"clearproof_document_version": 1}'
+
+    class FakeResponse:
+        status = 200
+        headers = [(b"content-type", b"application/json"), (b"content-encoding", b"identity")]
+
+        async def aiter_stream(self):
+            yield document
+
+    assert await _discovery_response_body(FakeResponse()) == document
 
 
 async def test_fetch_document_maps_http_404_to_unsupported(monkeypatch):

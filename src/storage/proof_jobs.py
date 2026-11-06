@@ -86,10 +86,8 @@ class ProofJobQueue:
 
     @asynccontextmanager
     async def _transaction(self):
-        async with self._db.connection() as conn:
-            async with conn.transaction():
-                async with conn.cursor(row_factory=dict_row) as cur:
-                    yield cur
+        async with self._db.connection() as conn, conn.transaction(), conn.cursor(row_factory=dict_row) as cur:
+            yield cur
 
     async def _clock(self, cur):
         await cur.execute("SELECT floor(extract(epoch FROM clock_timestamp()))::bigint AS now")
