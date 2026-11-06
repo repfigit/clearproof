@@ -245,6 +245,7 @@ class PilotTransaction:
             "policy-activation",
             "wallet-quota",
             "enrollment-inventory",
+            "wallet-delegation-log",
         ):
             raise RecordConflict("Pilot record is immutable")
         revision = (row["revision"] if row else 0) + 1

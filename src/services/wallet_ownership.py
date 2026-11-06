@@ -176,6 +176,17 @@ class WalletOwnershipService:
         return {key: raw.get(key) for key in ("checked", "delegated", "delegate", "checked_at", "reason")}
 
     @staticmethod
+    def _delegation_log_entries(log: dict | None) -> list:
+        if not isinstance(log, dict):
+            return []
+        entries = log.get("entries")
+        return list(entries) if isinstance(entries, list) else []
+
+    @staticmethod
+    def _delegation_log_payload(entries: list) -> dict:
+        return {"entries": entries}
+
+    @staticmethod
     def _delegation_review(delegation: dict) -> str | None:
         """A delegated or malformed-indicator wallet must not silently pass."""
         if delegation.get("delegated") is True:
@@ -196,8 +207,8 @@ class WalletOwnershipService:
         """
         delegation = getattr(attestation, "delegation", None)
         current = dict(delegation) if isinstance(delegation, dict) else None
-        log = await tx.get("wallet-delegation-log", attestation.attestation_id)
-        entries = list(log) if log else []
+        log_record = await tx.read("wallet-delegation-log", attestation.attestation_id)
+        entries = self._delegation_log_entries(log_record.value if log_record else None)
         if entries:
             current = entries[-1]
         if current is None:
@@ -205,8 +216,13 @@ class WalletOwnershipService:
         if current.get("checked") and now - current.get("checked_at", 0) < self.delegation_recheck_seconds:
             return {"delegation": current, "history": entries}
         fresh = await self._probe_delegation(attestation.challenge.credential.subject_wallet, now=now)
-        entries.append(fresh)
-        await tx.put("wallet-delegation-log", attestation.attestation_id, entries)
+        entries.append(self._delegation_status(fresh))
+        await tx.put(
+            "wallet-delegation-log",
+            attestation.attestation_id,
+            self._delegation_log_payload(entries),
+            expected_revision=log_record.revision if log_record else None,
+        )
         return {"delegation": fresh, "history": entries}
 
     async def recheck_delegation(self, attestation_id: str, *, now: int | None = None) -> dict:
@@ -383,7 +399,7 @@ class WalletOwnershipService:
                 "initial_delegation": (
                     dict(attestation.delegation) if isinstance(attestation, WalletAttestationV2) else None
                 ),
-                "rechecks": list(log) if log else [],
+                "rechecks": self._delegation_log_entries(log),
                 "message": attestation.challenge.message(),
                 "message_format": (
                     "eip-4361" if isinstance(attestation.challenge, WalletChallengeV2) else "clearproof-canonical-v1"

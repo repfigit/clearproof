@@ -15,6 +15,7 @@ from src.protocol.wallet_ownership import (
     WalletOwnershipError,
 )
 from src.services.wallet_ownership import WalletDelegationReview, WalletOwnershipService
+from src.storage.pilot import RecordSnapshot
 
 
 @pytest.fixture
@@ -82,12 +83,23 @@ def _v2_attestation(challenge_v2, *, delegation=None, method="eoa", signature=No
 class _FakeTx:
     def __init__(self, storage=None):
         self.storage = storage if storage is not None else {}
+        self.revisions: dict[tuple[str, str], int] = {}
 
     async def get(self, kind, key):
         return self.storage.get((kind, key))
 
+    async def read(self, kind, key):
+        value = self.storage.get((kind, key))
+        if value is None:
+            return None
+        return RecordSnapshot(self.revisions.get((kind, key), 1), value)
+
     async def put(self, kind, key, value, expected_revision=None):
+        current = self.revisions.get((kind, key), 0)
+        if expected_revision is not None and expected_revision != current:
+            raise AssertionError("unexpected revision")
         self.storage[(kind, key)] = value
+        self.revisions[(kind, key)] = current + 1
 
 
 def test_invalid_delegation_recheck_interval(wallet_enrollment):
@@ -174,7 +186,9 @@ async def test_recheck_delegation_paths(wallet_enrollment, challenge_v2):
     refreshed = await service._recheck_delegation(tx, attestation, 1300)
     assert len(refreshed["history"]) == 1
     assert refreshed["history"][0]["checked_at"] == 1300
-    assert tx.storage[("wallet-delegation-log", attestation.attestation_id)] == refreshed["history"]
+    assert tx.storage[("wallet-delegation-log", attestation.attestation_id)] == {
+        "entries": refreshed["history"]
+    }
 
     attestation_v1 = SimpleNamespace(
         delegation=attestation.delegation,
@@ -276,7 +290,7 @@ async def test_active_delegation_review_and_public_helpers(wallet_enrollment, ch
     )
     storage = {
         ("wallet-attestation", attestation.attestation_id): attestation.model_dump(mode="json"),
-        ("wallet-delegation-log", attestation.attestation_id): [],
+        ("wallet-delegation-log", attestation.attestation_id): {"entries": []},
     }
 
     @asynccontextmanager

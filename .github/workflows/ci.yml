@@ -293,8 +293,6 @@ jobs:
           key: playwright-${{ runner.os }}-${{ steps.runner_os.outputs.version }}-${{ steps.playwright.outputs.version }}
       # System deps are not cached; install them before browsers so a restored
       # browser cache cannot skip ICU/WebKit libraries after a runner image bump.
-      - name: Install WebKit ICU dependency
-        run: sudo apt-get update && sudo apt-get install -y libicu74
       - run: npm exec --workspace=@clearproof/docs -- playwright install-deps chromium firefox webkit
       - run: npm exec --workspace=@clearproof/docs -- playwright install chromium firefox webkit
       - run: npm run build --workspace=@clearproof/content
