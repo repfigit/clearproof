@@ -352,6 +352,32 @@ def test_v2_signature_reraises_wallet_ownership_errors(challenge_v2):
         value.verify_signature("0x" + "ab" * 64)
 
 
+def test_v2_signature_rejects_siwe_binding_mismatch(challenge_v2, monkeypatch):
+    from siwe import SiweMessage
+
+    from src.protocol.wallet_ownership import WalletOwnershipError
+
+    value, signature = challenge_v2
+    parsed = SiweMessage.from_message(value.message())
+    parsed.nonce = "0" * 64
+    monkeypatch.setattr("src.protocol.wallet_ownership.SiweMessage.from_message", lambda _message: parsed)
+    with pytest.raises(WalletOwnershipError, match="Invalid wallet ownership signature"):
+        value.verify_signature(signature)
+
+
+def test_v2_signature_propagates_wallet_ownership_error(challenge_v2, monkeypatch):
+    from src.protocol.wallet_ownership import WalletOwnershipError
+
+    value, signature = challenge_v2
+
+    def inner_error(*_args, **_kwargs):
+        raise WalletOwnershipError("inner wallet error")
+
+    monkeypatch.setattr("src.protocol.wallet_ownership.Account.recover_message", inner_error)
+    with pytest.raises(WalletOwnershipError, match="inner wallet error"):
+        value.verify_signature(signature)
+
+
 def test_v2_signature_rejects_malleated_and_misformed(challenge_v2):
     from src.protocol.wallet_ownership import WalletChallengeV2
 

@@ -254,3 +254,26 @@ def test_eoa_signature_length_guard():
     attestation["signature"] = "0x" + "5e" * 64
     with pytest.raises(ValueError, match="65-byte"):
         export_evidence(attestation)
+
+
+def test_export_allows_missing_challenge_expires_at():
+    attestation = v1_attestation()
+    attestation["challenge"].pop("expires_at")
+    exported = export_evidence(attestation)
+    assert exported["challenge_expires_at"] is None
+
+
+def test_export_credential_reference_without_linkage_keys():
+    attestation = v1_attestation()
+    credential = attestation["challenge"]["credential"]
+    for key in ("credential_nonce", "issuer_did", "tenant_id"):
+        credential.pop(key)
+    exported = export_evidence(attestation, credential_ref={"record_id": "cb" * 32})
+    assert exported["credential"] == {"reference": {"record_id": "cb" * 32}}
+
+
+def test_export_delegation_recorded_status_from_attestation():
+    attestation = v2_attestation()
+    attestation["delegation_status"] = {"checked": True, "delegated": False, "delegate": None}
+    exported = export_evidence(attestation, delegation_history=[])
+    assert exported["delegation"]["recorded_status"] == attestation["delegation_status"]
