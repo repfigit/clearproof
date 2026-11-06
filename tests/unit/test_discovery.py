@@ -466,16 +466,12 @@ async def test_fetch_document_maps_http_404_to_unsupported(monkeypatch):
         async def aread(self, _limit=None):
             return b""
 
-    class FakeStream:
-        async def __aenter__(self):
-            return FakeResponse()
-
-        async def __aexit__(self, *_args):
-            return False
+        async def aclose(self):
+            return None
 
     class FakePool:
-        def stream(self, *_args, **_kwargs):
-            return FakeStream()
+        async def request(self, *_args, **_kwargs):
+            return FakeResponse()
 
         async def __aenter__(self):
             return self
@@ -508,16 +504,12 @@ async def test_fetch_document_returns_json_for_http_200(monkeypatch):
         async def aread(self, _limit=None):
             return json.dumps(document).encode()
 
-    class FakeStream:
-        async def __aenter__(self):
-            return FakeResponse()
-
-        async def __aexit__(self, *_args):
-            return False
+        async def aclose(self):
+            return None
 
     class FakePool:
-        def stream(self, *_args, **_kwargs):
-            return FakeStream()
+        async def request(self, *_args, **_kwargs):
+            return FakeResponse()
 
         async def __aenter__(self):
             return self

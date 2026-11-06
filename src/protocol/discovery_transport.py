@@ -149,13 +149,16 @@ async def fetch_document(
                 max_connections=1,
                 max_keepalive_connections=0,
             ) as pool:
-                async with pool.stream(
+                response = await pool.request(
                     "GET",
                     target.url,
                     headers={"Accept": "application/json", "Accept-Encoding": "identity"},
                     extensions={"timeout": dict.fromkeys(("connect", "read", "write", "pool"), timeout)},
-                ) as response:
+                )
+                try:
                     body = await _discovery_response_body(response)
+                finally:
+                    await response.aclose()
 
         def reject_constant(value):
             raise ValueError("Non-JSON numeric constant")
