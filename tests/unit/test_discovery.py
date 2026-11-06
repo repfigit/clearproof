@@ -20,7 +20,7 @@ from src.protocol.discovery_profile import (
     parse_target,
     validate_document,
 )
-from src.protocol.discovery_transport import EgressPolicy, PinnedBackend
+from src.protocol.discovery_transport import EgressPolicy, PinnedBackend, _discovery_response_body
 
 FIXTURES = Path(__file__).resolve().parents[2] / "specs/fixtures"
 DOCUMENT = json.loads((FIXTURES / "discovery-0.4.0.json").read_text())
@@ -422,6 +422,105 @@ async def test_public_cache_clear_forces_key_refetch(monkeypatch):
     discovery.clear_discovery_cache()
     assert await discovery.resolve_hpke_public_key("beneficiary.example") == first
     assert fetch.await_count == 2
+
+
+async def test_discovery_response_body_maps_http_404_to_unsupported():
+    class FakeResponse:
+        status = 404
+        headers = []
+
+        async def aread(self, _limit=None):
+            return b""
+
+    with pytest.raises(DiscoveryUnsupported, match="404"):
+        await _discovery_response_body(FakeResponse())
+
+
+async def test_discovery_response_body_returns_streamed_json_bytes():
+    document = b'{"clearproof_document_version": 1}'
+
+    class FakeResponse:
+        status = 200
+        headers = [(b"content-type", b"application/json"), (b"content-encoding", b"identity")]
+
+        async def aread(self, _limit=None):
+            return document
+
+    assert await _discovery_response_body(FakeResponse()) == document
+
+
+async def test_fetch_document_maps_http_404_to_unsupported(monkeypatch):
+    import ssl
+    from unittest.mock import AsyncMock
+
+    from src.protocol.discovery_transport import DiscoveryUnsupported, EgressPolicy, fetch_document, parse_target
+
+    target = parse_target("did:web:beneficiary.example")
+    policy = EgressPolicy()
+    resolver = AsyncMock(return_value=("127.0.0.1",))
+
+    class FakeResponse:
+        status = 404
+        headers = []
+
+        async def aread(self, _limit=None):
+            return b""
+
+        async def aclose(self):
+            return None
+
+    class FakePool:
+        async def request(self, *_args, **_kwargs):
+            return FakeResponse()
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *_args):
+            return False
+
+    monkeypatch.setattr("src.protocol.discovery_transport.httpcore.AsyncConnectionPool", lambda **_kwargs: FakePool())
+    context = ssl.create_default_context()
+    context.minimum_version = ssl.TLSVersion.TLSv1_2
+    with pytest.raises(DiscoveryUnsupported, match="404"):
+        await fetch_document(target, policy, resolver, timeout=1.0, ssl_context=context)
+
+
+async def test_fetch_document_returns_json_for_http_200(monkeypatch):
+    import ssl
+    from unittest.mock import AsyncMock
+
+    from src.protocol.discovery_transport import EgressPolicy, fetch_document, parse_target
+
+    target = parse_target("did:web:beneficiary.example")
+    policy = EgressPolicy()
+    resolver = AsyncMock(return_value=("127.0.0.1",))
+    document = {"clearproof_document_version": 1, "hpke_public_key": "a" * 64}
+
+    class FakeResponse:
+        status = 200
+        headers = [(b"content-type", b"application/json"), (b"content-encoding", b"identity")]
+
+        async def aread(self, _limit=None):
+            return json.dumps(document).encode()
+
+        async def aclose(self):
+            return None
+
+    class FakePool:
+        async def request(self, *_args, **_kwargs):
+            return FakeResponse()
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *_args):
+            return False
+
+    monkeypatch.setattr("src.protocol.discovery_transport.httpcore.AsyncConnectionPool", lambda **_kwargs: FakePool())
+    context = ssl.create_default_context()
+    context.minimum_version = ssl.TLSVersion.TLSv1_2
+    assert await fetch_document(target, policy, resolver, timeout=1.0, ssl_context=context) == document
 
 
 async def test_system_resolver_deduplicates_addresses_in_answer_order(monkeypatch):

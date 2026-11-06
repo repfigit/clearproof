@@ -283,13 +283,18 @@ jobs:
       - name: Resolve Playwright version
         id: playwright
         run: echo "version=$(node -p "require('@playwright/test/package.json').version")" >> "$GITHUB_OUTPUT"
+      - name: Resolve runner OS version
+        id: runner_os
+        run: echo "version=$(. /etc/os-release && echo "${VERSION_ID}")" >> "$GITHUB_OUTPUT"
       - name: Cache Playwright browsers
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ~/.cache/ms-playwright
-          key: playwright-${{ runner.os }}-${{ steps.playwright.outputs.version }}
-      # Always run: system dependencies are not cached, and cached browsers are skipped.
-      - run: npm exec --workspace=@clearproof/docs -- playwright install --with-deps chromium firefox webkit
+          key: playwright-${{ runner.os }}-${{ steps.runner_os.outputs.version }}-${{ steps.playwright.outputs.version }}
+      # System deps are not cached; install them before browsers so a restored
+      # browser cache cannot skip ICU/WebKit libraries after a runner image bump.
+      - run: npm exec --workspace=@clearproof/docs -- playwright install-deps chromium firefox webkit
+      - run: npm exec --workspace=@clearproof/docs -- playwright install chromium firefox webkit
       - run: npm run build --workspace=@clearproof/content
       - run: npm run build --workspace=@clearproof/docs
       - name: Production MDX pages, navigation and content APIs

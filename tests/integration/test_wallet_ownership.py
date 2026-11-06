@@ -393,6 +393,81 @@ async def test_revocation_cannot_precede_attestation_issuance(db, enrolled):
     assert (await service.revoke(challenge.nonce, now=1200))["revoked_at"] == 1200
 
 
+async def test_siwe_v2_lifecycle_with_delegation_probe_and_recheck(db, enrolled):
+    wallet, consent, principal, _ = enrolled
+
+    async def probe(_address: str) -> dict:
+        return {"delegated": True, "delegate": "0x" + "2" * 40, "indicator_malformed": False, "has_code": False}
+
+    service = WalletOwnershipService(
+        db,
+        cipher(),
+        principal,
+        chain_id=consent.chain_id,
+        registry_address=consent.registry_address,
+        account_probe=probe,
+        delegation_recheck_seconds=1,
+    )
+    challenge = await service.challenge(consent.credential.credential_nonce, now=1100, siwe_domain="issuer.example")
+    from src.protocol.wallet_ownership import WalletChallengeV2
+
+    assert isinstance(challenge, WalletChallengeV2)
+    signature = sign(wallet, challenge)
+    attestation = await service.verify(challenge.nonce, signature, now=1200)
+    assert attestation.delegation["delegated"] is True
+    status = await service.status(attestation.attestation_id, now=1201)
+    assert status["wallet_ownership_verified"] is False
+    assert "delegated" in (status["reason"] or "")
+    recheck = await service.recheck_delegation(attestation.attestation_id, now=1203)
+    assert recheck["delegation"]["checked"] is True
+    assert len(recheck["history"]) >= 1
+    follow_up = await service.recheck_delegation(attestation.attestation_id, now=1205)
+    assert len(follow_up["history"]) >= 2
+
+
+async def test_siwe_v2_smart_account_uses_chain_verifier(db, enrolled):
+    wallet, consent, principal, _ = enrolled
+
+    async def probe(_address: str) -> dict:
+        return {"delegated": False, "delegate": None, "indicator_malformed": False, "has_code": True}
+
+    async def verifier(_address: str, _message: str, _signature: str) -> tuple[bool, str]:
+        return True, "erc-1271"
+
+    service = WalletOwnershipService(
+        db,
+        cipher(),
+        principal,
+        chain_id=consent.chain_id,
+        registry_address=consent.registry_address,
+        account_probe=probe,
+        chain_verifier=verifier,
+    )
+    challenge = await service.challenge(consent.credential.credential_nonce, now=1100, siwe_domain="issuer.example")
+    attestation = await service.verify(challenge.nonce, "0x" + "ab" * 120, now=1200)
+    assert attestation.method == "erc-1271"
+
+
+async def test_delegation_probe_failures_are_recorded_not_guessed(db, enrolled):
+    wallet, consent, principal, _ = enrolled
+
+    async def broken_probe(_address: str) -> dict:
+        raise RuntimeError("rpc unavailable")
+
+    service = WalletOwnershipService(
+        db,
+        cipher(),
+        principal,
+        chain_id=consent.chain_id,
+        registry_address=consent.registry_address,
+        account_probe=broken_probe,
+    )
+    challenge = await service.challenge(consent.credential.credential_nonce, now=1100, siwe_domain="issuer.example")
+    attestation = await service.verify(challenge.nonce, sign(wallet, challenge), now=1200)
+    assert attestation.delegation["checked"] is False
+    assert "failed" in (attestation.delegation.get("reason") or "")
+
+
 async def test_extension_retry_rejects_conflicting_retained_fields(db, enrolled):
     from src.protocol.wallet_ownership import WalletCredentialExtension
 

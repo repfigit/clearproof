@@ -29,6 +29,7 @@ _WRITE_ROLES = {
     "wallet-quota": "credential:issue",
     "wallet-attestation": "credential:issue",
     "wallet-extension": "credential:issue",
+    "wallet-delegation-log": "credential:issue",
     "wallet-revocation": "credential:revoke",
     "credential": "credential:issue",
     "issuance-root": "credential:issue",
@@ -244,6 +245,7 @@ class PilotTransaction:
             "policy-activation",
             "wallet-quota",
             "enrollment-inventory",
+            "wallet-delegation-log",
         ):
             raise RecordConflict("Pilot record is immutable")
         revision = (row["revision"] if row else 0) + 1

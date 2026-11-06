@@ -12,7 +12,7 @@ in ``src/registry/poseidon.py`` (parity-tested against circomlibjs).
 from __future__ import annotations
 
 import uuid
-from typing import Literal
+from typing import Literal, Optional
 
 from pydantic import BaseModel, Field
 
@@ -53,6 +53,13 @@ class zkKYCCredential(BaseModel):
     issued_at: int  # Unix timestamp
     expires_at: int  # Unix timestamp
     revoked: bool = False
+    # Wallet-ownership evidence (AIF-87). Deliberately NOT part of _field_ints:
+    # the legacy preimage ordering in credential_validity.circom has no
+    # counterpart field, and changing the preimage would desync the Python
+    # model from the circuit. Proof-level commitments live in the staged
+    # wallet-ownership extension profile (WalletCredentialExtension).
+    wallet_ownership_verified: bool = False
+    wallet_ownership_attestation_id: Optional[str] = None
 
     # ------------------------------------------------------------------
     # Encode fields as integers for Poseidon hashing inside the circuit.

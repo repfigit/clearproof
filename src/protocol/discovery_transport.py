@@ -101,6 +101,24 @@ class PinnedBackend(httpcore.AsyncNetworkBackend):
         )
 
 
+async def _discovery_response_body(response) -> bytes:
+    if response.status == 404:
+        raise DiscoveryUnsupported("Discovery document returned HTTP 404")
+    if 300 <= response.status < 400:
+        raise DiscoveryInvalid("Discovery redirects are forbidden")
+    if response.status != 200:
+        raise DiscoveryUnavailable(f"Discovery service returned HTTP {response.status}")
+    headers = {key.lower(): value.lower() for key, value in response.headers}
+    if headers.get(b"content-type", b"").split(b";")[0].strip() != b"application/json":
+        raise DiscoveryInvalid("Discovery requires application/json")
+    if headers.get(b"content-encoding", b"identity") != b"identity":
+        raise DiscoveryInvalid("Compressed discovery responses are unsupported")
+    body = await response.aread()
+    if len(body) > MAX_DOCUMENT_BYTES:
+        raise DiscoveryInvalid("Discovery document exceeds 64 KiB")
+    return body
+
+
 async def fetch_document(
     target: DiscoveryTarget,
     policy: EgressPolicy,
@@ -131,28 +149,16 @@ async def fetch_document(
                 max_connections=1,
                 max_keepalive_connections=0,
             ) as pool:
-                async with pool.stream(
+                response = await pool.request(
                     "GET",
                     target.url,
                     headers={"Accept": "application/json", "Accept-Encoding": "identity"},
                     extensions={"timeout": dict.fromkeys(("connect", "read", "write", "pool"), timeout)},
-                ) as response:
-                    if response.status == 404:
-                        raise DiscoveryUnsupported("Discovery document returned HTTP 404")
-                    if 300 <= response.status < 400:
-                        raise DiscoveryInvalid("Discovery redirects are forbidden")
-                    if response.status != 200:
-                        raise DiscoveryUnavailable(f"Discovery service returned HTTP {response.status}")
-                    headers = {key.lower(): value.lower() for key, value in response.headers}
-                    if headers.get(b"content-type", b"").split(b";")[0].strip() != b"application/json":
-                        raise DiscoveryInvalid("Discovery requires application/json")
-                    if headers.get(b"content-encoding", b"identity") != b"identity":
-                        raise DiscoveryInvalid("Compressed discovery responses are unsupported")
-                    body = bytearray()
-                    async for chunk in response.aiter_stream():
-                        if len(body) + len(chunk) > MAX_DOCUMENT_BYTES:
-                            raise DiscoveryInvalid("Discovery document exceeds 64 KiB")
-                        body.extend(chunk)
+                )
+                try:
+                    body = await _discovery_response_body(response)
+                finally:
+                    await response.aclose()
 
         def reject_constant(value):
             raise ValueError("Non-JSON numeric constant")
