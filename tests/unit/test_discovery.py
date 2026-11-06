@@ -429,9 +429,8 @@ async def test_discovery_response_body_maps_http_404_to_unsupported():
         status = 404
         headers = []
 
-        async def aiter_stream(self):
-            if False:
-                yield b""
+        async def aread(self, _limit=None):
+            return b""
 
     with pytest.raises(DiscoveryUnsupported, match="404"):
         await _discovery_response_body(FakeResponse())
@@ -444,8 +443,8 @@ async def test_discovery_response_body_returns_streamed_json_bytes():
         status = 200
         headers = [(b"content-type", b"application/json"), (b"content-encoding", b"identity")]
 
-        async def aiter_stream(self):
-            yield document
+        async def aread(self, _limit=None):
+            return document
 
     assert await _discovery_response_body(FakeResponse()) == document
 
@@ -464,16 +463,19 @@ async def test_fetch_document_maps_http_404_to_unsupported(monkeypatch):
         status = 404
         headers = []
 
-        async def aiter_stream(self):
-            if False:
-                yield b""
+        async def aread(self, _limit=None):
+            return b""
 
-        async def aclose(self):
-            return None
+    class FakeStream:
+        async def __aenter__(self):
+            return FakeResponse()
+
+        async def __aexit__(self, *_args):
+            return False
 
     class FakePool:
-        async def request(self, *_args, **_kwargs):
-            return FakeResponse()
+        def stream(self, *_args, **_kwargs):
+            return FakeStream()
 
         async def __aenter__(self):
             return self
@@ -503,15 +505,19 @@ async def test_fetch_document_returns_json_for_http_200(monkeypatch):
         status = 200
         headers = [(b"content-type", b"application/json"), (b"content-encoding", b"identity")]
 
-        async def aiter_stream(self):
-            yield json.dumps(document).encode()
+        async def aread(self, _limit=None):
+            return json.dumps(document).encode()
 
-        async def aclose(self):
-            return None
+    class FakeStream:
+        async def __aenter__(self):
+            return FakeResponse()
+
+        async def __aexit__(self, *_args):
+            return False
 
     class FakePool:
-        async def request(self, *_args, **_kwargs):
-            return FakeResponse()
+        def stream(self, *_args, **_kwargs):
+            return FakeStream()
 
         async def __aenter__(self):
             return self

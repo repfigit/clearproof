@@ -113,12 +113,10 @@ async def _discovery_response_body(response) -> bytes:
         raise DiscoveryInvalid("Discovery requires application/json")
     if headers.get(b"content-encoding", b"identity") != b"identity":
         raise DiscoveryInvalid("Compressed discovery responses are unsupported")
-    body = bytearray()
-    async for chunk in response.aiter_stream():
-        if len(body) + len(chunk) > MAX_DOCUMENT_BYTES:
-            raise DiscoveryInvalid("Discovery document exceeds 64 KiB")
-        body.extend(chunk)
-    return bytes(body)
+    body = await response.aread(MAX_DOCUMENT_BYTES + 1)
+    if len(body) > MAX_DOCUMENT_BYTES:
+        raise DiscoveryInvalid("Discovery document exceeds 64 KiB")
+    return body
 
 
 async def fetch_document(
@@ -151,16 +149,13 @@ async def fetch_document(
                 max_connections=1,
                 max_keepalive_connections=0,
             ) as pool:
-                response = await pool.request(
+                async with pool.stream(
                     "GET",
                     target.url,
                     headers={"Accept": "application/json", "Accept-Encoding": "identity"},
                     extensions={"timeout": dict.fromkeys(("connect", "read", "write", "pool"), timeout)},
-                )
-                try:
+                ) as response:
                     body = await _discovery_response_body(response)
-                finally:
-                    await response.aclose()
 
         def reject_constant(value):
             raise ValueError("Non-JSON numeric constant")
