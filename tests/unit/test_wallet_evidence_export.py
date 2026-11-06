@@ -273,9 +273,7 @@ def test_export_credential_reference_without_linkage_keys():
 
 
 def test_credential_section_skips_non_object_credential_payload():
-    assert _credential_section({"credential": []}, {"record_id": "cb" * 32}) == {
-        "reference": {"record_id": "cb" * 32}
-    }
+    assert _credential_section({"credential": []}, {"record_id": "cb" * 32}) == {"reference": {"record_id": "cb" * 32}}
 
 
 def test_export_delegation_recorded_status_from_attestation():

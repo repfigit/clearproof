@@ -466,6 +466,47 @@ async def test_fetch_document_maps_http_404_to_unsupported(monkeypatch):
         await fetch_document(target, policy, resolver, timeout=1.0, ssl_context=context)
 
 
+async def test_fetch_document_returns_json_for_http_200(monkeypatch):
+    import ssl
+    from unittest.mock import AsyncMock
+
+    from src.protocol.discovery_transport import EgressPolicy, fetch_document, parse_target
+
+    target = parse_target("did:web:beneficiary.example")
+    policy = EgressPolicy()
+    resolver = AsyncMock(return_value=("127.0.0.1",))
+    document = {"clearproof_document_version": 1, "hpke_public_key": "a" * 64}
+
+    class FakeResponse:
+        status = 200
+        headers = [(b"content-type", b"application/json"), (b"content-encoding", b"identity")]
+
+        async def aiter_stream(self):
+            yield json.dumps(document).encode()
+
+    class FakeStream:
+        async def __aenter__(self):
+            return FakeResponse()
+
+        async def __aexit__(self, *_args):
+            return False
+
+    class FakePool:
+        def stream(self, *_args, **_kwargs):
+            return FakeStream()
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *_args):
+            return False
+
+    monkeypatch.setattr("src.protocol.discovery_transport.httpcore.AsyncConnectionPool", lambda **_kwargs: FakePool())
+    context = ssl.create_default_context()
+    context.minimum_version = ssl.TLSVersion.TLSv1_2
+    assert await fetch_document(target, policy, resolver, timeout=1.0, ssl_context=context) == document
+
+
 async def test_system_resolver_deduplicates_addresses_in_answer_order(monkeypatch):
     import socket
 
