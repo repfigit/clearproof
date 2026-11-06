@@ -345,7 +345,7 @@ def test_v2_challenge_and_attestation_validator_branches(wallet_enrollment):
 
 
 def test_v2_signature_reraises_wallet_ownership_errors(challenge_v2):
-    from src.protocol.wallet_ownership import WalletChallengeV2, WalletOwnershipError
+    from src.protocol.wallet_ownership import WalletOwnershipError
 
     value, signature = challenge_v2
     with pytest.raises(WalletOwnershipError, match="Invalid wallet ownership signature"):
