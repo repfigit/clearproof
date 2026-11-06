@@ -113,7 +113,7 @@ async def _discovery_response_body(response) -> bytes:
         raise DiscoveryInvalid("Discovery requires application/json")
     if headers.get(b"content-encoding", b"identity") != b"identity":
         raise DiscoveryInvalid("Compressed discovery responses are unsupported")
-    body = await response.aread(MAX_DOCUMENT_BYTES + 1)
+    body = await response.aread()
     if len(body) > MAX_DOCUMENT_BYTES:
         raise DiscoveryInvalid("Discovery document exceeds 64 KiB")
     return body
