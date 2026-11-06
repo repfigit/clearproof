@@ -142,7 +142,7 @@ class WalletOwnershipService:
             )
             return challenge
 
-    async def _probe_delegation(self, address: str) -> dict:
+    async def _probe_delegation(self, address: str, *, now: int | None = None) -> dict:
         """Run the delegation probe, returning a normalized RAW status record.
 
         The record carries an internal ``has_code`` flag for smart-account
@@ -151,7 +151,7 @@ class WalletOwnershipService:
         Probe absence or failure is recorded honestly (checked=False) rather
         than guessed: an unchecked wallet is a review state, not a pass.
         """
-        checked_at = self._time(None)
+        checked_at = self._time(now)
         if self.account_probe is None:
             return _delegation_record(False, None, None, checked_at, "delegation check not configured")
         try:
@@ -194,16 +194,17 @@ class WalletOwnershipService:
         evidence export reports. External schedulers can force an immediate
         check via recheck_delegation().
         """
-        current = dict(attestation.delegation) if hasattr(attestation, "delegation") else None
+        delegation = getattr(attestation, "delegation", None)
+        current = dict(delegation) if isinstance(delegation, dict) else None
         log = await tx.get("wallet-delegation-log", attestation.attestation_id)
-        entries = list(log.value) if log else []
+        entries = list(log) if log else []
         if entries:
             current = entries[-1]
         if current is None:
             return {"delegation": None, "history": entries}
         if current.get("checked") and now - current.get("checked_at", 0) < self.delegation_recheck_seconds:
             return {"delegation": current, "history": entries}
-        fresh = await self._probe_delegation(attestation.challenge.credential.subject_wallet)
+        fresh = await self._probe_delegation(attestation.challenge.credential.subject_wallet, now=now)
         entries.append(fresh)
         await tx.put("wallet-delegation-log", attestation.attestation_id, entries)
         return {"delegation": fresh, "history": entries}
@@ -245,7 +246,7 @@ class WalletOwnershipService:
             if not challenge.timestamp <= now < min(challenge.expires_at, credential.expires_at):
                 raise WalletOwnershipError("Wallet challenge or credential expired during verification")
             if isinstance(challenge, WalletChallengeV2):
-                probe = await self._probe_delegation(challenge.credential.subject_wallet)
+                probe = await self._probe_delegation(challenge.credential.subject_wallet, now=now)
                 method = "eoa"
                 is_contract_wallet = bool(probe.get("has_code"))
                 if is_contract_wallet:
@@ -382,7 +383,7 @@ class WalletOwnershipService:
                 "initial_delegation": (
                     dict(attestation.delegation) if isinstance(attestation, WalletAttestationV2) else None
                 ),
-                "rechecks": list(log.value) if log else [],
+                "rechecks": list(log) if log else [],
                 "message": attestation.challenge.message(),
                 "message_format": (
                     "eip-4361" if isinstance(attestation.challenge, WalletChallengeV2) else "clearproof-canonical-v1"

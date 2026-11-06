@@ -377,6 +377,8 @@ def test_v2_attestation_binds_challenge_delegation_and_ttl(challenge_v2):
         WalletAttestationV2.model_validate({**attestation.model_dump(), "delegation": missing_checked})
     with pytest.raises(ValueError, match="24-hour TTL"):
         WalletAttestationV2.model_validate({**attestation.model_dump(), "expires_at": 87601})
+    with pytest.raises(ValueError, match="65-byte EOA signature"):
+        WalletAttestationV2.model_validate({**attestation.model_dump(), "method": "erc-1271"})
 
 
 def test_load_helpers_round_trip_both_versions(challenge, challenge_v2):

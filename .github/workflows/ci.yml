@@ -289,6 +289,8 @@ jobs:
           path: ~/.cache/ms-playwright
           key: playwright-${{ runner.os }}-${{ steps.playwright.outputs.version }}
       # Always run: system dependencies are not cached, and cached browsers are skipped.
+      - name: Install WebKit ICU dependency
+        run: sudo apt-get update && sudo apt-get install -y libicu74
       - run: npm exec --workspace=@clearproof/docs -- playwright install --with-deps chromium firefox webkit
       - run: npm run build --workspace=@clearproof/content
       - run: npm run build --workspace=@clearproof/docs

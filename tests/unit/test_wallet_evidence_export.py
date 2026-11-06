@@ -210,3 +210,47 @@ def test_non_dict_attestation_and_credential_ref_fail_closed():
         export_evidence("attestation")
     with pytest.raises(ValueError, match="must be an object"):
         export_evidence(v1_attestation(), credential_ref=["cb" * 32])
+
+
+def test_require_str_and_int_validation():
+    attestation = v1_attestation()
+    attestation["challenge"]["credential"]["subject_wallet"] = ""
+    with pytest.raises(ValueError, match="subject_wallet"):
+        export_evidence(attestation)
+    attestation = v1_attestation()
+    attestation["issued_at"] = "1200"
+    with pytest.raises(ValueError, match="integer issued_at"):
+        export_evidence(attestation)
+
+
+def test_v2_non_string_verification_method_fails_closed():
+    attestation = v2_attestation()
+    attestation["verification_method"] = 83
+    with pytest.raises(ValueError, match="string verification method"):
+        export_evidence(attestation)
+
+
+def test_missing_challenge_or_credential_objects_fail_closed():
+    attestation = v1_attestation()
+    attestation.pop("challenge")
+    with pytest.raises(ValueError, match="challenge object"):
+        export_evidence(attestation)
+    attestation = v1_attestation()
+    attestation["challenge"].pop("credential")
+    with pytest.raises(ValueError, match="credential object"):
+        export_evidence(attestation)
+
+
+def test_credential_section_skips_missing_optional_fields():
+    attestation = v1_attestation()
+    attestation["challenge"]["credential"].pop("issuer_did")
+    exported = export_evidence(attestation, credential_ref={"record_id": "cb" * 32})
+    assert exported["credential"]["reference"] == {"record_id": "cb" * 32}
+    assert "issuer_did" not in exported["credential"]
+
+
+def test_eoa_signature_length_guard():
+    attestation = v2_attestation()
+    attestation["signature"] = "0x" + "5e" * 64
+    with pytest.raises(ValueError, match="65-byte"):
+        export_evidence(attestation)
