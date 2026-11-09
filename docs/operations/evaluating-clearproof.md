@@ -42,7 +42,10 @@ an activity, adoption or billing ledger.
 ## Start and share an evaluation
 
 The [public evaluation page](https://docs.clearproof.world/docs/evaluate) links
-both onboarding paths and the voluntary feedback form. Copy the
+both onboarding paths and the voluntary feedback form. Start with the
+[five-minute synthetic walkthrough](../evaluation/five-minute-walkthrough.md),
+then use the [expected-outcome test pack](../evaluation/expected-outcomes.md) for
+a predeclared set of current-profile cases. Copy the
 [report template](../evaluation/report-template.md) and compare it with the
 [internal synthetic sample](../evaluation/example-synthetic-report.md).
 The sample retains unmeasured values and simulator/clean-environment limits;
