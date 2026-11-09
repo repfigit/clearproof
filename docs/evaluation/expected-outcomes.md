@@ -1,8 +1,8 @@
 # Expected-outcome test pack
 
-A predeclared case list for the two evaluation tracks in the
-[grok bot handoff](https://github.com/repfigit/clearproof) — policy replay /
-observation (track A) and encrypted history review (track B).
+A predeclared case list for the two evaluation tracks in the November 2026
+evaluation review — policy replay / observation (track A) and encrypted history
+review (track B).
 
 Decide the expected label **before** running a case, then record the observed
 label and every difference. A matching label is not proof of correctness; a
