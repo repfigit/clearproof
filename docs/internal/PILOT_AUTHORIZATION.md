@@ -78,6 +78,11 @@ tenant and target name using its `seal` method; it holds only authenticated
 ciphertext, including bounded base64 chunks of the exact information bytes and
 its source-signed approval. Tenant and target name are authenticated encryption
 metadata. Do not put plaintext inputs in server configuration, logs or files.
+Set `PILOT_AUTHORIZATION_FACTORY` to an installed `module:callable` to provision
+these targets at startup; it follows the same contract as
+`PILOT_INSPECTION_FACTORY` and additionally requires every authority above to be
+present. An `AuthorizationTarget` is rejected as an inspection target and the
+reverse, so signing and recipient authority are loaded only for this route.
 The transient decrypted bytes are validated and re-encrypted for the beneficiary
 inside the authorization service. Input sealing establishes no source authority;
 the service still verifies the independent signature for new consumption.

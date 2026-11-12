@@ -26,6 +26,10 @@ os.environ.setdefault(
     "API_KEY_ROLES",
     "credential:issue,credential:revoke,proof:generate,proof:inspect,evidence:export",
 )
+os.environ.setdefault(
+    "API_KEY_ISSUER_DIDS",
+    "did:web:issuer.example.com,did:web:test-issuer.example.com",
+)
 
 from src.api.dependencies import get_credential_registry  # noqa: E402
 from src.api.main import app  # noqa: E402
@@ -193,6 +197,7 @@ def mock_registry():
     registry.get = MagicMock()
     registry.revoke = MagicMock()
     registry.get_commitment = MagicMock()
+    registry.tenant_of = MagicMock(return_value=os.environ["API_KEY_TENANT_ID"])
 
     # Override the dependency
     app.dependency_overrides[get_credential_registry] = lambda: registry
@@ -307,6 +312,7 @@ async def test_credential_revoke_success(client: AsyncClient, mock_registry, cap
     mock_cred = MagicMock()
     caplog.set_level(logging.INFO, logger="src.api.routes.credential")
     mock_cred.revoked = False
+    mock_cred.issuer_did = "did:web:issuer.example.com"
 
     mock_registry.get.return_value = mock_cred
     mock_registry.revoke.return_value = None
@@ -343,6 +349,7 @@ async def test_credential_revoke_already_revoked(client: AsyncClient, mock_regis
     """POST /credential/revoke for an already-revoked credential returns 400."""
     mock_cred = MagicMock()
     mock_cred.revoked = True
+    mock_cred.issuer_did = "did:web:issuer.example.com"
 
     mock_registry.get.return_value = mock_cred
     resp = await client.post(

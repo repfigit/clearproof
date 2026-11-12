@@ -164,3 +164,45 @@ async def test_operator_proving_factory_loads_before_serving_and_closes_on_failu
     assert loader.call_args.args[0] is database
     database.close.assert_awaited_once()
     assert app.state.db is None
+
+
+@pytest.mark.parametrize(
+    "variable,loader_name,attribute",
+    [
+        ("PILOT_INSPECTION_FACTORY", "load_inspection_targets", "pilot_inspection_targets"),
+        ("PILOT_AUTHORIZATION_FACTORY", "load_authorization_targets", "pilot_authorization_targets"),
+    ],
+)
+@pytest.mark.parametrize("failure", [False, True])
+async def test_operator_target_factories_load_before_serving_and_close_on_failure(
+    module, monkeypatch, variable, loader_name, attribute, failure
+):
+    monkeypatch.setenv("DATABASE_URL", "configured")
+    for name in ("PILOT_PROVING_FACTORY", "PILOT_INSPECTION_FACTORY", "PILOT_AUTHORIZATION_FACTORY"):
+        monkeypatch.delenv(name, raising=False)
+    monkeypatch.setenv(variable, "synthetic_operator:configure")
+    database = SimpleNamespace(connect=AsyncMock(), close=AsyncMock())
+    monkeypatch.setattr(module, "Database", Mock(return_value=database))
+    targets = {("synthetic-tenant", "synthetic-target"): object()}
+    loader = AsyncMock(return_value=targets)
+    if failure:
+        loader.side_effect = RuntimeError("Operator configuration could not be loaded")
+    monkeypatch.setattr(module, loader_name, loader)
+    other = "load_authorization_targets" if loader_name == "load_inspection_targets" else "load_inspection_targets"
+    unused = AsyncMock(side_effect=AssertionError("An unset factory must not be loaded"))
+    monkeypatch.setattr(module, other, unused)
+    app = module.create_app()
+
+    async def serve():
+        async with module.lifespan(app):
+            assert app.state.db is database and getattr(app.state, attribute) is targets
+
+    if failure:
+        with pytest.raises(RuntimeError, match="could not be loaded"):
+            await serve()
+    else:
+        await serve()
+    loader.assert_awaited_once()
+    assert loader.call_args.args[0] is database
+    unused.assert_not_awaited()
+    database.close.assert_awaited_once()
