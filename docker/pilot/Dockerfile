@@ -11,9 +11,11 @@
 # is not a deployment of the API and must not be exposed to a network or given
 # real customer data.
 
-FROM ghcr.io/astral-sh/uv:0.12.9 AS uv
+# linux/amd64 only: the pinned Circom release binary below is amd64. On arm64 hosts
+# Docker runs the image under emulation, which is slower but produces the same result.
+FROM --platform=linux/amd64 ghcr.io/astral-sh/uv:0.12.9 AS uv
 
-FROM node:24-bookworm
+FROM --platform=linux/amd64 node:24-bookworm
 
 ARG CIRCOM_VERSION=2.2.2
 ARG CIRCOM_SHA256=f3d8d1fdbc123779b80e210c909ee941d7a1e130c70365524646b48b8b0fe9d5

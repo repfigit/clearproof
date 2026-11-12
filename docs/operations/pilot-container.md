@@ -13,7 +13,9 @@ evidence of production readiness, an audit or customer adoption.
 
 ## Run
 
-Docker with the Compose plugin is the only host requirement.
+Docker with the Compose plugin is the only host requirement. The image is `linux/amd64` because the
+pinned Circom release binary is; on arm64 hosts (for example Apple Silicon) Docker
+runs it under emulation, which works but is noticeably slower.
 
 ```bash
 docker compose -f compose.pilot.yaml up --build

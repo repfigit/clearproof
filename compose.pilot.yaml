@@ -8,6 +8,8 @@
 # written to the `pilot-data` volume; see docs/operations/pilot-container.md.
 services:
   pilot:
+    # The pinned Circom binary is amd64; arm64 hosts run this under emulation.
+    platform: linux/amd64
     build:
       context: .
       dockerfile: docker/pilot/Dockerfile
