@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { ShellSession } from '../src/shell-session.js';
 
 const sessions: ShellSession[] = [];
@@ -66,7 +66,13 @@ describe('recipe shell session (real bash)', () => {
     await session.closed;
     const pid = Number(fs.readFileSync(pidFile, 'utf8'));
     expect(pid).toBeGreaterThan(1);
-    expect(() => process.kill(pid, 0)).toThrow();
+    // The killed process can stay in the process table as an unreaped zombie for a moment
+    // (kill(pid, 0) still succeeds on one), so wait until it is gone or defunct.
+    const stopped = (): boolean => {
+      try { process.kill(pid, 0); } catch { return true; }
+      try { return fs.readFileSync(`/proc/${pid}/stat`, 'utf8').split(') ').pop()!.startsWith('Z'); } catch { return false; }
+    };
+    await vi.waitFor(() => expect(stopped()).toBe(true), { timeout: 5000, interval: 25 });
     fs.rmSync(dir, { recursive: true });
   });
 
