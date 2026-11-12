@@ -61,6 +61,9 @@ make build-sanctions-tree
 make update-sanctions-oracle NETWORK=sepolia
 make relay-sanctions                                       # sync root across all deployed chains
 
+# Pilot contracts (testnets/local only; refuses mainnets; see packages/contracts/AGENTS.md)
+make deploy-pilot NETWORK=sepolia
+
 # Pilot sanctions tree → Kind.Sanctions head (human-confirmed, per deployment)
 uv run python scripts/build_pilot_sanctions_tree.py        # from artifacts/sanctions_tree.json
 uv run python scripts/build_pilot_sanctions_tree.py --verify

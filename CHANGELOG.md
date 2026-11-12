@@ -13,6 +13,7 @@ maintains its own version line in this file.
 
 ### Added
 
+- `packages/contracts/scripts/deploy-pilot.ts` (`make deploy-pilot NETWORK=<x>`): a restartable deploy script for `PilotGroth16Verifier`, `PilotCurrentRegistry` and `PilotRootCheckpoint`. It runs only on local Hardhat networks and networks marked `testnet: true` in `scripts/networks.ts`, with no mainnet override, because the verifier's keys are `development-unapproved`. Admin addresses are explicit, the verification key comes from a bundle matching an operator-supplied manifest digest, and a typed confirmation precedes any transaction. It writes `deployments/<network>-pilot.json` and, on a rerun, resumes or verifies that manifest against on-chain code instead of redeploying. No pilot deployment has been made or recorded.
 - Live AIF-99 L2 verify-cost receipts for Groth16 vs fflonk on Base Sepolia, Arbitrum Sepolia and Optimism Sepolia (`packages/contracts/scripts/ops/measure-l2-verify-cost.ts`, `deployments/*-sepolia-l2-verify-cost.json`). At current testnet fee floors fflonk remains ~0.69× Groth16 total cost; L1/DA fee is ~2× but negligible as a share of total.
 - ADR 0004 **Panel path note (2026-10-08):** sequenced path — no production ceremony yet, no GPL fflonk ship; freeze circuits and gather fflonk evidence, then choose once. Cross-linked from `CEREMONY_RUNBOOK.md` and `FFLONK_BENCHMARK.md`.
 

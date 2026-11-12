@@ -7,13 +7,21 @@ cli-topic: contracts
 
 # Smart Contracts
 
-The project includes two sets of EVM contracts. The **pilot contracts** verify and mirror current `pilot-transfer-v3` proofs; they exist in source and are tested locally, but are **not deployed** to any shared network. The **legacy contracts** serve the 16-signal demo profile; the Sepolia addresses below are historical testnet records of those. None of these contracts has been independently audited.
+The project includes two sets of EVM contracts. The **pilot contracts** verify and mirror current `pilot-transfer-v3` proofs; they exist in source and are tested locally, but are **not deployed** to any shared network. A testnet-only deploy script exists; no deployment made with it is recorded. The **legacy contracts** serve the 16-signal demo profile; the Sepolia addresses below are historical testnet records of those. None of these contracts has been independently audited.
 
 ## Pilot contracts (source, not deployed)
 
 **PilotGroth16Verifier** checks the eight-signal pilot proof against a verification key and artifact manifest digest fixed at construction. It reports `proofProfile` as `pilot-transfer-v3` and `assurance` as `development-unapproved`. Pairing alone does not reconstruct the transfer statement, check current state or consume a nullifier.
 
 **PilotCurrentRegistry** publishes tenant checkpoints (revisioned heads for issuance, issuers, sanctions, credential, policy, valuation, participants and authorization) and statement bindings from one assigned publisher per tenant. `inspect` is a read-only call that checks a proof against a published statement, including the chain ID, the registry's own address and the expiry. It then mirrors receipts that PostgreSQL has already consumed. It cannot create an authorization, and it cannot detect a publisher that lies about private records. See the [registry trust boundary](https://github.com/repfigit/clearproof/blob/main/docs/internal/PILOT_CURRENT_REGISTRY.md).
+
+**PilotRootCheckpoint** records current root approvals (signed snapshot digest, root, approval revision and validity) from one assigned publisher per tenant, independently of the registry.
+
+### Deploying the pilot contracts to a testnet
+
+`make deploy-pilot NETWORK=<name>` runs `packages/contracts/scripts/deploy-pilot.ts`, which deploys the three pilot contracts to a local Hardhat network or to a network listed as a testnet in `scripts/networks.ts`. It refuses every other network and has no override, because the verifier's keys are `development-unapproved`. The repository records no pilot deployment, and running the script does not make one audited or production-ready.
+
+The admin of each contract must be given explicitly; the deployer account is not used for a privileged role unless a local-only flag is set. The verification key comes from an artifact bundle whose manifest digest you supply as a reviewed pin. After a typed confirmation the script writes `packages/contracts/deployments/<network>-pilot.json` with the addresses, constructor arguments, transaction hashes, block numbers, runtime code hashes, proof profile, assurance value, key digests and git commit. Running it again resumes an interrupted deployment or checks the manifest against the chain; it does not redeploy recorded contracts or overwrite a manifest that does not match. Publishers are assigned afterwards by each admin with `setPublisher`. The variables are listed in the script header.
 
 ## Legacy contracts: historical Sepolia deployment (July 20, 2026)
 

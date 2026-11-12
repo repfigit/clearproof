@@ -1,4 +1,4 @@
-.PHONY: install dev lint format test test-unit test-integration test-compliance coverage build-sanctions-tree build-pilot-sanctions-tree verify-pilot-sanctions-tree publish-pilot-sanctions-head update-sanctions-oracle deploy relay-sanctions refresh-and-relay-sanctions regen-protobufs check-protobufs
+.PHONY: install dev lint format test test-unit test-integration test-compliance coverage build-sanctions-tree build-pilot-sanctions-tree verify-pilot-sanctions-tree publish-pilot-sanctions-head update-sanctions-oracle deploy deploy-pilot relay-sanctions refresh-and-relay-sanctions regen-protobufs check-protobufs
 
 RUFF_PATHS := src tests scripts
 
@@ -70,6 +70,14 @@ update-sanctions-oracle:
 # Usage: make deploy NETWORK=arbitrum-sepolia
 deploy:
 	cd packages/contracts && npx hardhat run scripts/deploy-multichain.ts --network $(NETWORK)
+
+# Pilot (pilot-transfer-v3) contracts: PilotGroth16Verifier, PilotCurrentRegistry, PilotRootCheckpoint.
+# Testnets and local Hardhat networks only; the script refuses every mainnet and has no override.
+# Restartable: rerun to resume or to verify deployments/<network>-pilot.json against the chain.
+# Usage: make deploy-pilot NETWORK=sepolia   (needs PILOT_REGISTRY_ADMIN, PILOT_CHECKPOINT_ADMIN,
+#          PILOT_ARTIFACTS_DIR and PILOT_MANIFEST_DIGEST, or PILOT_DEPLOY_CONFIG=<config.json>)
+deploy-pilot:
+	cd packages/contracts && npx hardhat run scripts/deploy-pilot.ts --network $(NETWORK)
 
 # Multi-chain sanctions relay — sync the existing artifacts/sanctions_tree.json root to all
 # deployed networks. Does not rebuild the tree.
