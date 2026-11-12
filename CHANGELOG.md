@@ -19,6 +19,7 @@ maintains its own version line in this file.
 
 ### Fixed
 
+- The legacy deploy scripts (`make deploy`, `deploy.ts`, `deploy-multichain.ts`) refuse any chain that is not a local Hardhat chain or a `testnet: true` entry of `networks.ts`. They previously would deploy the development-key legacy verifier to a mainnet with no check or prompt.
 - `Groth16VerifierBLS` (the ADR 0002 benchmark verifier) rejects public signals at or above the BLS12-381 scalar field order, proof points at infinity, and a non-canonical y on A. The earlier template accepted `s + r` in place of a signal `s`. The Sepolia benchmark deployment at `0x76C2A87cd054a29642439ceCF2096bD62F17c090` predates the fix.
 
 ### Changed
