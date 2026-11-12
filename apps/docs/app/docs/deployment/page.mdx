@@ -51,6 +51,35 @@ npm run build
 
 Contract checks run in `packages/contracts` with Hardhat. Real proofs additionally require Circom 2.2.2 and `2^17` powers-of-tau parameters; see [circuits](/docs/circuits). Test counts and latency depend on the checkout and environment.
 
+## Pilot contract deployment (testnets only)
+
+No pilot contract deployment is recorded in the repository. To make one on a testnet or a local Hardhat node:
+
+```bash
+make deploy-pilot NETWORK=sepolia
+```
+
+| Variable | Purpose |
+| --- | --- |
+| `PILOT_REGISTRY_ADMIN` | Default admin and pauser of `PilotCurrentRegistry`. Required; an explicit nonzero address |
+| `PILOT_CHECKPOINT_ADMIN` | Default admin and pauser of `PilotRootCheckpoint`. Required; an explicit nonzero address |
+| `PILOT_ARTIFACTS_DIR` | Artifact bundle containing `manifest.json` and the verification key it names |
+| `PILOT_MANIFEST_DIGEST` | The artifact manifest digest you reviewed: 64 lowercase hex characters. It is not read from the bundle |
+| `PILOT_DEPLOY_CONFIG` | Optional JSON file with `registryAdmin`, `checkpointAdmin`, `artifactsDir` and `manifestDigest`; environment variables take precedence |
+| `PILOT_ALLOW_DEPLOYER_ADMIN` | Exactly `1` lets unset admins default to the deployer on `hardhat`/`localhost` only; rejected on every other network |
+| `SKIP_CONFIRM` | Exactly `1` skips the typed `deploy` confirmation for scripted local use |
+| `DEPLOYER_PRIVATE_KEY` | Deployer account for a public testnet. Never commit it |
+
+The script accepts `hardhat` and `localhost` on chain 31337 and the networks marked `testnet: true` in `packages/contracts/scripts/networks.ts`, each on its listed chain ID. It refuses every mainnet and has no override: the verifier is built from `development-unapproved` keys, so a mainnet deployment is never correct today.
+
+It checks that the bundle's manifest matches your pin and that the key file matches the manifest, shows the plan, and asks you to type `deploy`. It then deploys `PilotGroth16Verifier`, `PilotCurrentRegistry` (pinned to that verifier's address and runtime code hash) and `PilotRootCheckpoint`, and re-reads the deployed contracts to confirm the profile, assurance value, manifest digest, key commitment, verifier pin and admins.
+
+The result is `packages/contracts/deployments/<network>-pilot.json`. It records the network, chain ID, deployer, admins, addresses, constructor arguments, deployment transaction hashes, block numbers, the keccak256 and SHA-256 of each contract's runtime code, the proof profile, the assurance value, the manifest digest, the verification key's SHA-256 and commitment, and the git commit. The SHA-256 runtime value is the pin that `scripts/publish_pilot_sanctions_head.py --runtime-sha256` expects.
+
+Run the same command again to resume an interrupted deployment or to verify a finished one. A recorded deployment transaction is finalized, not sent again; only missing contracts are deployed, and only by the same deployer at the same commit. If the manifest was written for different admins, a different key or another chain, or if on-chain code differs from the recorded hashes, the script stops and leaves the manifest unchanged.
+
+The script does not assign publishers, publish any head or submit source to a block explorer. Each admin assigns a publisher per tenant with `setPublisher`; a sanctions head is then published as described below.
+
 ## Sanctions operations
 
 For the pilot, a new sanctions root is published as a signed root snapshot that the authorization service must accept as the current head. For the legacy contracts, every intended chain must receive the corresponding oracle relay update. Confirm the actual configured targets and freshness; do not infer successful relay from a local tree rebuild.
