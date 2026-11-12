@@ -7,6 +7,12 @@ import { ShellSession } from '../shell-session.js';
 
 const STEP_TIMEOUT_MS = 60_000;
 
+/** Fenced code blocks in the recipe that --run does not execute (plain fences, not `bash:run`). */
+function manualBlockCount(body: string, runnableSteps: number): number {
+  const fences = body.split('\n').filter((line) => line.startsWith('```')).length;
+  return Math.max(0, Math.floor(fences / 2) - runnableSteps);
+}
+
 /** Ask one question. Resolves null when input closes without an answer, which is never consent. */
 function prompt(question: string): Promise<string | null> {
   // A new interface on input that has already ended would never emit 'close'.
@@ -79,6 +85,14 @@ export const recipesCommand = new Command('recipes')
     console.log('');
 
     let session: ShellSession | null = null;
+    // The shell runs in its own process group so a timeout can stop everything a step
+    // started. That also means Ctrl+C does not reach it, so stop it explicitly.
+    const interrupted = (signal: NodeJS.Signals) => {
+      session?.kill();
+      process.exit(signal === 'SIGINT' ? 130 : 143);
+    };
+    process.once('SIGINT', interrupted);
+    process.once('SIGTERM', interrupted);
     try {
       for (let i = 0; i < recipe.steps.length; i++) {
         const step = recipe.steps[i];
@@ -141,9 +155,17 @@ export const recipesCommand = new Command('recipes')
         console.log('');
       }
     } finally {
+      process.removeListener('SIGINT', interrupted);
+      process.removeListener('SIGTERM', interrupted);
       session?.close();
     }
 
-    console.log(chalk.bold.green('  Recipe complete.'));
+    const manual = manualBlockCount(recipe.body, recipe.steps.length);
+    if (manual > 0) {
+      console.log(chalk.bold.yellow(`  Runnable steps finished. This recipe is NOT complete: ${manual} command block(s) are manual and were not run.`));
+      console.log(chalk.dim(`  Read them with: clearproof recipes ${name}`));
+    } else {
+      console.log(chalk.bold.green('  Recipe complete.'));
+    }
     console.log('');
   });

@@ -76,6 +76,17 @@ describe('recipe shell session (real bash)', () => {
     fs.rmSync(dir, { recursive: true });
   });
 
+  it('kill() stops a running step and ends the session', async () => {
+    const session = open({ timeoutMs: 30_000 });
+    const result = session.run('sleep 30');
+    await new Promise((resolve) => setTimeout(resolve, 100));
+    session.kill();
+    expect(session.ended).toBe(true);
+    expect(await result).toMatchObject({ stopped: null, sessionEnded: true });
+    await session.closed;
+    session.kill();
+  });
+
   it('stops a step that exceeds the output limit on either stream', async () => {
     const out = await open({ maxOutput: 64 }).run('yes clearproof');
     expect(out).toMatchObject({ code: 126, stopped: 'output-limit', sessionEnded: true });

@@ -111,6 +111,12 @@ export class ShellSession {
     this.child.unref();
   }
 
+  /** Stop the shell and everything a step started. Used when the CLI itself is interrupted. */
+  kill(): void {
+    this.isEnded = true;
+    try { process.kill(-this.child.pid!, 'SIGKILL'); } catch { /* the group has already exited */ }
+  }
+
   private collect(stream: 'out' | 'err', chunk: string): void {
     const pending = this.pending;
     if (!pending) return;

@@ -3,7 +3,7 @@ import { stripVTControlCharacters } from 'node:util';
 
 const mocks = vi.hoisted(() => ({
   list: vi.fn(), get: vi.fn(), execute: vi.fn(), question: vi.fn(), close: vi.fn(),
-  opened: vi.fn(), ended: vi.fn(), closeSession: vi.fn(), once: vi.fn(),
+  opened: vi.fn(), ended: vi.fn(), closeSession: vi.fn(), once: vi.fn(), killSession: vi.fn(),
 }));
 vi.mock('@clearproof/content', () => ({ listRecipes: mocks.list, getRecipe: mocks.get }));
 vi.mock('../src/shell-session.js', () => ({
@@ -12,6 +12,7 @@ vi.mock('../src/shell-session.js', () => ({
     get ended() { return mocks.ended(); }
     run(command: string) { return mocks.execute(command); }
     close() { mocks.closeSession(); }
+    kill() { mocks.killSession(); }
   },
 }));
 const ok = { stdout: 'hello world', stderr: '', code: 0, stopped: null, sessionEnded: false };
@@ -172,5 +173,43 @@ describe('recipe browsing and interactive execution', () => {
     await expect(run(['sample', '--run'])).rejects.toThrow('A recipe step is already running');
     expect(mocks.closeSession).toHaveBeenCalledOnce();
     expect(printed()).not.toContain('Recipe complete.');
+  });
+  it('says the recipe is not complete when it has manual command blocks that --run skips', async () => {
+    const fence = '```';
+    mocks.get.mockReturnValue({ ...recipe, body:
+      `# Sample\n${fence}bash:run\necho "hello world"\n${fence}\nThen by hand:\n${fence}bash\nmake deploy\n${fence}\n` });
+    await run(['sample', '--run']);
+    expect(printed()).toContain('NOT complete: 1 command block(s) are manual and were not run');
+    expect(printed()).toContain('clearproof recipes sample');
+    expect(printed()).not.toContain('Recipe complete.');
+    output.mockClear();
+    mocks.get.mockReturnValue({ ...recipe, body: `${fence}bash:run\necho "hello world"\n${fence}\n` });
+    await run(['sample', '--run']);
+    expect(printed()).toContain('Recipe complete.');
+  });
+  it.each([['SIGINT', 130], ['SIGTERM', 143]] as const)(
+    'on %s stops the running step\'s process group and exits %i; handlers are removed afterwards', async (signal, code) => {
+      const before = process.listenerCount(signal);
+      let release = (_: typeof ok) => {};
+      mocks.execute.mockReturnValue(new Promise((resolve) => { release = resolve; }));
+      const running = run(['sample', '--run']);
+      await vi.waitFor(() => expect(mocks.execute).toHaveBeenCalled());
+      expect(process.listenerCount(signal)).toBe(before + 1);
+      expect(() => process.emit(signal, signal)).toThrow('synthetic exit');
+      expect(mocks.killSession).toHaveBeenCalledOnce();
+      expect(exit).toHaveBeenCalledWith(code);
+      release(ok);
+      await running;
+      expect(process.listenerCount(signal)).toBe(before);
+    });
+  it('an interrupt before any shell was opened just exits', async () => {
+    let answer = (_: string) => {};
+    mocks.question.mockImplementation((_prompt, callback) => { answer = callback; });
+    const running = run(['sample', '--run']);
+    await vi.waitFor(() => expect(mocks.question).toHaveBeenCalled());
+    expect(() => process.emit('SIGINT', 'SIGINT')).toThrow('synthetic exit');
+    expect(mocks.killSession).not.toHaveBeenCalled();
+    answer('n');
+    await running;
   });
 });
