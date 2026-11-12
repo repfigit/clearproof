@@ -92,7 +92,8 @@ make refresh-and-relay-sanctions  # rebuild the tree from live feeds, then relay
 make dev                    # uvicorn src.api.main:app --reload
 
 # Deploy
-make deploy NETWORK=arbitrum-sepolia
+make deploy NETWORK=arbitrum-sepolia        # legacy 16-signal stack
+make deploy-pilot NETWORK=sepolia           # pilot contracts; testnets/local only, no mainnet override
 ```
 
 ## REPORTING ISSUES (FOR AGENTS AND PEOPLE)

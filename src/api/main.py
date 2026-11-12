@@ -27,6 +27,7 @@ from src.api.routes.proof_jobs import router as proof_jobs_router
 from src.api.routes.readiness import router as readiness_router
 from src.api.routes.usage import router as usage_router
 from src.api.routes.wallet_ownership import router as wallet_ownership_router
+from src.api.target_configuration import load_authorization_targets, load_inspection_targets
 from src.sar.encryption import hkdf_salt
 from src.services.proving_configuration import load_proving_targets
 from src.storage.database import Database
@@ -84,6 +85,12 @@ async def lifespan(app: FastAPI):
             logger.warning("DATABASE_URL not set — running in in-memory mode")
         if os.getenv("PILOT_PROVING_FACTORY"):
             app.state.pilot_proving_targets = await load_proving_targets(db, RecordCipher(load_keyring()))
+        # Operator-owned trust for the current-profile routes. Unset leaves the
+        # capability unconfigured (503); a set factory that fails stops startup.
+        if os.getenv("PILOT_INSPECTION_FACTORY"):
+            app.state.pilot_inspection_targets = await load_inspection_targets(db, RecordCipher(load_keyring()))
+        if os.getenv("PILOT_AUTHORIZATION_FACTORY"):
+            app.state.pilot_authorization_targets = await load_authorization_targets(db, RecordCipher(load_keyring()))
         yield
     finally:
         app.state.db = None

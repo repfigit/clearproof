@@ -1,9 +1,25 @@
 import { beforeEach, expect, test, vi } from 'vitest';
-const mocks = vi.hoisted(() => ({ getContractFactory: vi.fn(), id: vi.fn() }));
+const mocks = vi.hoisted(() => ({ getContractFactory: vi.fn(), id: vi.fn(), provider: { getNetwork: vi.fn() } }));
 vi.mock('hardhat', () => ({ ethers: mocks }));
-import { prepareLegacyVerifier } from '../../packages/contracts/scripts/legacy-verifier';
+import { assertDevelopmentKeyChain, prepareLegacyVerifier } from '../../packages/contracts/scripts/legacy-verifier';
 
-beforeEach(() => vi.resetAllMocks());
+beforeEach(() => {
+  vi.resetAllMocks();
+  mocks.provider.getNetwork.mockResolvedValue({ chainId: 31337n });
+});
+
+test.each([1n, 8453n, 42161n, 137n, 10n, 999999n])(
+  'refuses chain %s before deploying: the verifier embeds development-only keys', async chainId => {
+    mocks.provider.getNetwork.mockResolvedValue({ chainId });
+    await expect(prepareLegacyVerifier()).rejects.toThrow(`Refusing to deploy the legacy verifier to chain ${chainId}`);
+    expect(mocks.getContractFactory).not.toHaveBeenCalled();
+  },
+);
+
+test.each([31337n, 11155111n, 84532n, 421614n, 80002n, 11155420n])('allows local or testnet chain %s', async chainId => {
+  mocks.provider.getNetwork.mockResolvedValue({ chainId });
+  await expect(assertDevelopmentKeyChain()).resolves.toBeUndefined();
+});
 
 test.each([0, -1, 1.5, NaN, Infinity, Number.MAX_SAFE_INTEGER + 1])(
   'rejects invalid activation delay %s before deploying', async delay => {

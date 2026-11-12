@@ -79,8 +79,11 @@ test-results/
 # These churn on every pass and would otherwise leave the working tree dirty,
 # which trips the builder's clean-tree preflight check on every run.
 # builder-context.md is deliberately NOT ignored — it is durable repo knowledge.
+# The per-pass retry log is machine-local bookkeeping, not durable knowledge:
+# keeping it in builder-context.md produced a commit on main for every no-op pass.
 .repfigit-loop/*.json
 .repfigit-loop/traces/
+.repfigit-loop/retry-log.md
 
 # Private commercial operations and local bot state belong outside this repository.
 docs/commercial/

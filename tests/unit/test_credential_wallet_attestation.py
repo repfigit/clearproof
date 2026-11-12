@@ -86,7 +86,9 @@ async def test_wallet_service_unavailable_when_database_missing(monkeypatch):
     monkeypatch.setenv("PII_MASTER_KEY", "ab" * 32)
     monkeypatch.setenv("PILOT_CHAIN_ID", "31337")
     monkeypatch.setenv("PILOT_REGISTRY_ADDRESS", "0x" + "1" * 40)
-    principal = Principal(tenant_id="t", actor_id="a", roles=("credential:issue",), issuer_dids=())
+    principal = Principal(
+        tenant_id="t", actor_id="a", roles=("credential:issue",), issuer_dids=("did:web:issuer.example",)
+    )
     app = FastAPI()
     app.include_router(routes.router)
     app.dependency_overrides[TenantPrincipalDependency] = lambda: principal
@@ -108,7 +110,9 @@ async def test_wallet_service_unavailable_when_database_missing(monkeypatch):
 async def test_wallet_service_config_unavailable(monkeypatch):
     monkeypatch.setenv("PII_MASTER_KEY", "ab" * 32)
     monkeypatch.delenv("PILOT_CHAIN_ID", raising=False)
-    principal = Principal(tenant_id="t", actor_id="a", roles=("credential:issue",), issuer_dids=())
+    principal = Principal(
+        tenant_id="t", actor_id="a", roles=("credential:issue",), issuer_dids=("did:web:issuer.example",)
+    )
     app = FastAPI()
     app.include_router(routes.router)
     app.dependency_overrides[TenantPrincipalDependency] = lambda: principal

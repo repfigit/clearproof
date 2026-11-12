@@ -1,0 +1,24 @@
+# Local pilot acceptance in one command. DEVELOPMENT ONLY.
+#
+#   docker compose -f compose.pilot.yaml up --build
+#
+# Builds unapproved development keys, then runs the complete synthetic pilot
+# acceptance with an owned PostgreSQL 18 cluster and a loopback EVM inside one
+# container. It publishes no ports and uses no real customer data. Reports are
+# written to the `pilot-data` volume; see docs/operations/pilot-container.md.
+services:
+  pilot:
+    # The pinned Circom binary is amd64; arm64 hosts run this under emulation.
+    platform: linux/amd64
+    build:
+      context: .
+      dockerfile: docker/pilot/Dockerfile
+    image: clearproof-pilot-acceptance:dev
+    volumes:
+      - pilot-data:/data
+    # No ports, no host network access beyond the outbound download of the
+    # pinned powers-of-tau file on the first run.
+    restart: "no"
+
+volumes:
+  pilot-data:
