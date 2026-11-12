@@ -7,14 +7,14 @@ cli-topic: evaluation
 
 # Evaluate Clearproof
 
-Use a synthetic workflow to decide whether Clearproof's evidence is useful for your review task. Start with the smaller example or run the complete pilot, then record what worked, what failed and what remains unknown.
+Use a synthetic workflow to decide whether Clearproof's evidence is useful for your review task. Run the complete pilot for the current profile, or start with the smaller legacy example, then record what worked, what failed and what remains unknown.
 
 ## Choose a path
 
 | Path | What you can assess | Setup |
 | --- | --- | --- |
-| [Quick verification example](/docs/quickstart#quick-verification-example) | Pair a historical legacy proof, reproduce its expected policy rejection and reject tampered public data; no authorization | Git and Node; no database, Circom, signer or testnet funds |
-| [Complete local pilot](/docs/quickstart#complete-local-pilot) | Exercise the current eight-signal workflow, signed decisions, encrypted exports and independent inspection with local simulated sources | Python, Node, Circom and an owned disposable PostgreSQL/EVM setup |
+| [Current profile: complete local pilot](/docs/quickstart#current-profile-complete-local-pilot) | Exercise the current eight-signal workflow, signed decisions, encrypted exports and independent inspection with local simulated sources | Python, Node, Circom and an owned disposable PostgreSQL/EVM setup |
+| [Legacy demo: quick verification example](/docs/quickstart#legacy-demo-quick-verification-example) | Pair a historical legacy proof, reproduce its expected policy rejection and reject tampered public data; no authorization | Git and Node; no database, Circom, signer or testnet funds |
 
 Use [project status](/docs/status) to check the currently published profile and operating limits. For either path, retain your exact source revision, package versions, commands and artifact digests. Keep failed or incomplete attempts visible. A script that exits successfully is an example completion, not proof that another institution accepts the result.
 

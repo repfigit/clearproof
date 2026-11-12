@@ -1,41 +1,37 @@
 import { Command } from 'commander';
 import chalk from 'chalk';
 import { createInterface } from 'readline';
-import { execFile } from 'child_process';
 import { listRecipes, getRecipe } from '@clearproof/content';
 import { renderMarkdown } from '../render.js';
+import { ShellSession } from '../shell-session.js';
 
-function prompt(question: string): Promise<string> {
-  const rl = createInterface({ input: process.stdin, output: process.stdout });
-  return new Promise((resolve) => {
-    rl.question(question, (answer) => {
-      rl.close();
-      resolve(answer.trim());
-    });
-  });
+const STEP_TIMEOUT_MS = 60_000;
+
+/** Fenced code blocks in the recipe that --run does not execute (plain fences, not `bash:run`). */
+function manualBlockCount(body: string, runnableSteps: number): number {
+  const fences = body.split('\n').filter((line) => line.startsWith('```')).length;
+  return Math.max(0, Math.floor(fences / 2) - runnableSteps);
 }
 
-function runCommand(command: string): Promise<{ stdout: string; stderr: string; code: number }> {
+/** Ask one question. Resolves null when input closes without an answer, which is never consent. */
+function prompt(question: string): Promise<string | null> {
+  // A new interface on input that has already ended would never emit 'close'.
+  if (process.stdin.readableEnded) return Promise.resolve(null);
+  const rl = createInterface({ input: process.stdin, output: process.stdout });
   return new Promise((resolve) => {
-    // Split the command into program + args for execFile (no shell injection)
-    const parts = command.match(/(?:[^\s"']+|"[^"]*"|'[^']*')+/g) ?? [];
-    const prog = parts[0];
-    const args = parts.slice(1).map((a) => a.replace(/^["']|["']$/g, ''));
-
-    execFile(prog!, args, { timeout: 60_000 }, (error: Error | null, stdout: string, stderr: string) => {
-      resolve({
-        stdout: stdout?.toString() ?? '',
-        stderr: stderr?.toString() ?? '',
-        code: error ? (error as NodeJS.ErrnoException).code ? 1 : 1 : 0,
-      });
+    rl.once('close', () => resolve(null));
+    rl.question(question, (answer) => {
+      // Resolve before close(): close() emits 'close' synchronously.
+      resolve(answer.trim());
+      rl.close();
     });
   });
 }
 
 export const recipesCommand = new Command('recipes')
-  .description('Browse and run step-by-step recipes')
+  .description('Browse step-by-step recipes; --run executes one in a local bash session after per-step confirmation')
   .argument('[name]', 'Recipe slug to display or run')
-  .option('--run', 'Execute recipe steps interactively')
+  .option('--run', 'Execute the recipe steps in one bash session, asking before each step (60 s limit per step; steps get no terminal input)')
   .action(async (name?: string, opts?: { run?: boolean }) => {
     if (!name) {
       const recipes = listRecipes();
@@ -84,45 +80,92 @@ export const recipesCommand = new Command('recipes')
       console.log('');
     }
 
-    for (let i = 0; i < recipe.steps.length; i++) {
-      const step = recipe.steps[i];
-      console.log(chalk.bold.white(`  ## Step ${i + 1}: ${step.description}`));
-      console.log('');
-      console.log(`  ${chalk.dim('>')} ${chalk.dim(step.command)}`);
-      console.log('');
+    console.log(chalk.dim('  Steps run in one bash session from the current directory, so cd and export carry over.'));
+    console.log(chalk.dim('  Each step is limited to 60 seconds and cannot read from the terminal.'));
+    console.log('');
 
-      const answer = await prompt(`  Run this step? ${chalk.dim('[Y/n]')} `);
-      if (answer.toLowerCase() === 'n') {
-        console.log(chalk.yellow('  Skipped.'));
+    let session: ShellSession | null = null;
+    // The shell runs in its own process group so a timeout can stop everything a step
+    // started. That also means Ctrl+C does not reach it, so stop it explicitly.
+    const interrupted = (signal: NodeJS.Signals) => {
+      session?.kill();
+      process.exit(signal === 'SIGINT' ? 130 : 143);
+    };
+    process.once('SIGINT', interrupted);
+    process.once('SIGTERM', interrupted);
+    try {
+      for (let i = 0; i < recipe.steps.length; i++) {
+        const step = recipe.steps[i];
+        console.log(chalk.bold.white(`  ## Step ${i + 1}: ${step.description}`));
         console.log('');
-        continue;
-      }
+        for (const line of step.command.split('\n')) {
+          console.log(`  ${chalk.dim('>')} ${chalk.dim(line)}`);
+        }
+        console.log('');
 
-      const result = await runCommand(step.command);
-      if (result.stdout) {
-        console.log(chalk.dim(result.stdout));
-      }
-      if (result.stderr) {
-        console.error(chalk.yellow(result.stderr));
-      }
-      if (result.code !== 0) {
-        console.error(
-          chalk.red(`  Step failed with exit code ${result.code}`),
-        );
-        const cont = await prompt(`  Continue anyway? ${chalk.dim('[y/N]')} `);
-        if (cont.toLowerCase() !== 'y') {
+        const answer = await prompt(`  Run this step? ${chalk.dim('[Y/n]')} `);
+        if (answer === null) {
+          console.error(chalk.red('  Input closed before an answer. Stopping; this step was not run.'));
           process.exit(1);
         }
-      } else {
-        console.log(chalk.green('  OK'));
-      }
+        if (answer.toLowerCase() === 'n') {
+          console.log(chalk.yellow('  Skipped.'));
+          console.log('');
+          continue;
+        }
 
-      if (step.expected) {
-        console.log(chalk.dim(`  Expected: ${step.expected}`));
+        let result;
+        if (step.command.trim() === '') {
+          result = { stdout: '', stderr: '', code: 2, stopped: null, sessionEnded: false };
+          console.error(chalk.red('  This step has no command.'));
+        } else {
+          if (session?.ended) {
+            session.close();
+            session = null;
+            console.log(chalk.yellow('  Starting a new shell. Earlier cd and export commands are not carried over.'));
+          }
+          session ??= new ShellSession({ timeoutMs: STEP_TIMEOUT_MS });
+          result = await session.run(step.command);
+        }
+        if (result.stdout) {
+          console.log(chalk.dim(result.stdout));
+        }
+        if (result.stderr) {
+          console.error(chalk.yellow(result.stderr));
+        }
+        if (result.code !== 0) {
+          if (result.stopped === 'timeout') {
+            console.error(chalk.red(`  Step stopped after the ${STEP_TIMEOUT_MS / 1000} second limit`));
+          } else if (result.stopped === 'output-limit') {
+            console.error(chalk.red('  Step stopped after exceeding the output limit'));
+          } else {
+            console.error(chalk.red(`  Step failed with exit code ${result.code}`));
+          }
+          const cont = await prompt(`  Continue anyway? ${chalk.dim('[y/N]')} `);
+          if (cont?.toLowerCase() !== 'y') {
+            process.exit(1);
+          }
+        } else {
+          console.log(chalk.green('  OK'));
+        }
+
+        if (step.expected) {
+          console.log(chalk.dim(`  Expected: ${step.expected}`));
+        }
+        console.log('');
       }
-      console.log('');
+    } finally {
+      process.removeListener('SIGINT', interrupted);
+      process.removeListener('SIGTERM', interrupted);
+      session?.close();
     }
 
-    console.log(chalk.bold.green('  Recipe complete.'));
+    const manual = manualBlockCount(recipe.body, recipe.steps.length);
+    if (manual > 0) {
+      console.log(chalk.bold.yellow(`  Runnable steps finished. This recipe is NOT complete: ${manual} command block(s) are manual and were not run.`));
+      console.log(chalk.dim(`  Read them with: clearproof recipes ${name}`));
+    } else {
+      console.log(chalk.bold.green('  Recipe complete.'));
+    }
     console.log('');
   });

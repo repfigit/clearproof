@@ -22,7 +22,7 @@ const program = new Command();
 
 program
   .name('clearproof')
-  .description('ZK Travel Rule Compliance Bridge — proof generation & verification')
+  .description('Clearproof CLI: pilot-transfer-v3 commands that call an operator API or review files offline, plus local proving for the legacy 16-signal demo profile')
   .version(pkg.version);
 
 program.addCommand(doctorCommand);

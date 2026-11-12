@@ -6,11 +6,11 @@ import { defaultArtifactsDir, requireArtifactPaths } from '../legacy-artifacts.j
 import { parseProofFile } from '../input-guards.js';
 
 export const verifyCommand = new Command('verify')
-  .description('Verify a ZK compliance proof')
-  .requiredOption('--proof <file>', 'Path to proof JSON (output of "prove")')
+  .description('Legacy 16-signal demo profile: verify a proof locally (not pilot-transfer-v3; see inspect-current)')
+  .requiredOption('--proof <file>', 'Path to legacy proof JSON (output of "prove")')
   .option(
     '--artifacts <dir>',
-    'Path to circuit artifacts directory',
+    'Path to legacy circuit artifacts directory (none are bundled)',
     defaultArtifactsDir(),
   )
   .action(async (opts: { proof: string; artifacts: string }) => {

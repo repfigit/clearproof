@@ -110,7 +110,7 @@ If you find a defect while using or working on clearproof and you are not fixing
 
 ## NOTES
 - API refuses to start without valid PII_MASTER_KEY and configured HKDF_SALT (unless the explicit local-demo salt opt-in is set)
-- Circuit compilation (~5 min first run); CI caches ptau18
+- Circuit compilation (~5 min first run). `scripts/compile_circuits.sh` (legacy circuit only) downloads the Hermez ptau18; CI instead caches the pinned PSE `ppot_0080_17.ptau` and runs `scripts/test_development_circuits.py` for both profiles
 - TRISA bridge depends on generated protobufs — regenerate via protoc if protos/ changes
 - Multi-chain deployment uses Hardhat scripts in `packages/contracts/scripts/`
 

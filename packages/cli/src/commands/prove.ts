@@ -7,11 +7,11 @@ import { defaultArtifactsDir, requireArtifactPaths } from '../legacy-artifacts.j
 import { parseComplianceInput } from '../input-guards.js';
 
 export const proveCommand = new Command('prove')
-  .description('Generate a ZK compliance proof from an input JSON file')
-  .requiredOption('--input <file>', 'Path to JSON file with circuit inputs')
+  .description('Legacy 16-signal demo profile: generate a proof locally from an input JSON file (not pilot-transfer-v3)')
+  .requiredOption('--input <file>', 'Path to JSON file with legacy circuit inputs')
   .option(
     '--artifacts <dir>',
-    'Path to circuit artifacts directory',
+    'Path to legacy circuit artifacts directory (none are bundled)',
     defaultArtifactsDir(),
   )
   .option('--output <file>', 'Write proof JSON to this file (default: stdout)')

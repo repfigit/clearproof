@@ -1,7 +1,7 @@
 {
   "name": "@clearproof/cli",
   "version": "0.7.2",
-  "description": "CLI for generating and verifying ZK compliance proofs",
+  "description": "Clearproof CLI: pilot-transfer-v3 API and offline review commands, plus local proving for the legacy 16-signal demo profile",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "bin": {

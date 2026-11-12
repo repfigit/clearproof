@@ -3,7 +3,7 @@ import chalk from 'chalk';
 import { getSignal, listSignals } from '@clearproof/content';
 
 export const explainCommand = new Command('explain')
-  .description('Explain a public circuit signal')
+  .description('Explain a public signal of the legacy 16-signal demo profile (not pilot-transfer-v3)')
   .argument('<signal>', 'Signal name (e.g. credential_nullifier)')
   .action((signalName: string) => {
     const signal = getSignal(signalName);

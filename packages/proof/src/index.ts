@@ -36,5 +36,11 @@ export {
 } from './authorization.js';
 export type { AuthorizationRequest, AuthorizationReceipt, AuthorizationReport } from './authorization.js';
 
-export { walletOwnershipSigningMessage } from './wallet-ownership.js';
-export type { WalletOwnershipChallenge, WalletOwnershipCredential, ExpectedWalletOwnershipContext } from './wallet-ownership.js';
+export { walletOwnershipSigningMessage, siweWalletOwnershipMessage } from './wallet-ownership.js';
+export type {
+  WalletOwnershipChallenge,
+  WalletOwnershipChallengeV2,
+  AnyWalletOwnershipChallenge,
+  WalletOwnershipCredential,
+  ExpectedWalletOwnershipContext,
+} from './wallet-ownership.js';

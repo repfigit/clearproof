@@ -1,9 +1,9 @@
 # PACKAGES/PROOF AGENTS.md
 
-**Scope:** TypeScript SDK (`@clearproof/proof`) — the public API for generating and verifying Groth16 compliance proofs.
+**Scope:** TypeScript SDK (`@clearproof/proof`) — API clients for the current `pilot-transfer-v3` profile, local Groth16 proving/verification for the legacy 16-signal demo profile, and discovery/encoding helpers.
 
 ## OVERVIEW
-Thin wrapper around snarkjs that (1) maps camelCase SDK inputs to the snake_case signal names the Circom circuit expects, (2) calls `groth16.fullProve`, and (3) interprets verification results. Also includes a lightweight VASP discovery helper via `.well-known/clearproof.json`.
+The legacy path is a thin wrapper around snarkjs that (1) maps camelCase SDK inputs to the snake_case signal names the Circom circuit expects, (2) calls `groth16.fullProve`, and (3) interprets verification results. Also includes a lightweight VASP discovery helper via `.well-known/clearproof.json`.
 
 ## STRUCTURE
 ```
@@ -29,7 +29,8 @@ packages/proof/
 │   ├── observation.ts         # createObservation/readObservation + portable-record consistency
 │   ├── observation-page.ts    # listObservations (paged retained-record discovery)
 │   ├── observation-cohort.ts  # reportObservationCohort (selected-cohort consistency)
-│   ├── wallet-ownership.ts    # walletOwnershipSigningMessage (canonical challenge bytes)
+│   ├── wallet-ownership.ts    # walletOwnershipSigningMessage (v1 canonical text, v2 SIWE message)
+│   ├── eip55.ts               # toChecksumAddress (internal; used by the SIWE renderer)
 │   │
 │   │   # VASP discovery (self-declared .well-known metadata)
 │   ├── discovery.ts           # discoverVASP, supportsChain, DiscoveryClient, cache
@@ -79,7 +80,7 @@ import { authorizeCurrentProof, inspectCurrentProof, createObservation, readObse
 ```
 `authorizeCurrentProof` is the only call that consumes an authorization. Inspection and observation are read-only.
 
-**Canonical encoding / wallet ownership:** `canonicalBytes`, `recordDigest`, `walletOwnershipSigningMessage`.
+**Canonical encoding / wallet ownership:** `canonicalBytes`, `recordDigest`, `walletOwnershipSigningMessage` (validates context, then returns the v1 text or the v2 SIWE message), `siweWalletOwnershipMessage` (v2 renderer, no validation). Types: `WalletOwnershipChallenge`, `WalletOwnershipChallengeV2`, `AnyWalletOwnershipChallenge`. `toChecksumAddress` (`eip55.ts`) and `isoEpoch` stay internal.
 
 **VASP discovery (optional convenience):**
 ```ts

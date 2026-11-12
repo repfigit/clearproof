@@ -118,6 +118,10 @@ Never accept legacy proofs, roots or records as current pilot authorization.
 | `MockVerifier.sol` | Test-only 16-signal stub. |
 | `bench/Groth16VerifierBLS.sol` | ADR 0002 BLS12-381 benchmark (Prague precompiles). |
 
+The test-only contracts (`MockVerifier.sol`, `PairingHarness.sol`, `test/MockPilotVerifier.sol`) and their
+artifacts are excluded from the npm package by the `files` negations in `package.json`; add any new
+test-only contract there, and check with `npm pack --dry-run` after `npx hardhat compile`.
+
 Legacy sources stay at `contracts/` (not `contracts/legacy/`) because the published
 `@clearproof/contracts` package exposes `artifacts/contracts/<Name>.sol/<Name>.json`
 and `scripts/compile_circuits.sh` writes `Groth16Verifier.sol` in place; moving them

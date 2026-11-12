@@ -8,7 +8,7 @@ export const metadata = {
 
 # TypeScript SDK
 
-`@clearproof/proof` provides proof generation, cryptographic verification and counterparty discovery. Published version: **0.7.2**, checked October 7, 2026. It includes the pilot functions and the legacy 16-signal functions described below. Confirm the installed version before using its types.
+`@clearproof/proof` provides API clients for the current `pilot-transfer-v3` profile, local proof generation and verification for the legacy 16-signal profile only, and counterparty discovery. Published version: **0.7.2**, checked October 7, 2026. It includes the pilot functions and the legacy 16-signal functions described below. Confirm the installed version before using its types.
 
 ## Installation
 
@@ -35,7 +35,7 @@ async function inspect(origin: string, token: string, input: Uint8Array) {
 
 The operator configures the API target, current roots, policy, artifacts and tenant. The bearer principal needs `proof:inspect` and `evidence:decrypt`; input cannot select another tenant or replace trust. The client checks the returned schema and profile. Pairing and current-state checks happen on the selected server; this client is not an independent local verifier. A successful inspection does not consume authorization or establish counterparty acceptance.
 
-Use the [complete local pilot](/docs/quickstart#complete-local-pilot) to exercise generation, encrypted storage, observation and historical review with synthetic data. The [quick verification example](/docs/quickstart#quick-verification-example) requires only Node and uses an explicitly historical legacy fixture.
+Use the [complete local pilot](/docs/quickstart#current-profile-complete-local-pilot) to exercise generation, encrypted storage, observation and historical review with synthetic data. The [quick verification example](/docs/quickstart#legacy-demo-quick-verification-example) requires only Node and uses an explicitly historical legacy fixture.
 
 ## Pilot functions
 
@@ -46,7 +46,7 @@ Use the [complete local pilot](/docs/quickstart#complete-local-pilot) to exercis
 | `createObservation`, `readObservation`, `listObservations`, `reportObservationCohort` | Non-authorizing observations and cohort reports |
 | `requestReport`, `reportEndpoint` | Authenticated report requests |
 | `canonicalBytes`, `recordDigest` | Canonical encoding and domain-separated digests, matching the Python implementation |
-| `walletOwnershipSigningMessage` | Build the exact EIP-191 message for the wallet ownership challenge |
+| `walletOwnershipSigningMessage` | Validate a wallet ownership challenge against retained context and return the exact text to sign with EIP-191 `personal_sign` |
 
 These use server-selected trust: the API owns current roots, policy and consumption. The client validates response shape and profile (`pilot-transfer-v3`) but does not independently establish current state.
 
