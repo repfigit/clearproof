@@ -12,7 +12,7 @@ estimated-time: 10 min
 
 > **Legacy demo path.** This recipe uses the 16-signal legacy profile (`/proof/generate`, `/proof/verify`). It does not exercise the current `pilot-transfer-v3` workflow; for that, follow the [local acceptance guide](https://github.com/repfigit/clearproof/blob/main/docs/operations/local-pilot-acceptance.md).
 
-Complete compliance flow: issue a credential, generate a proof, verify off-chain, and record on-chain.
+Complete compliance flow: issue a credential, generate a proof, verify off-chain, and record on-chain. Run the steps from the repository root.
 
 The local API defaults to API-key auth:
 
@@ -66,10 +66,10 @@ Expected: 200 with `valid: true` and `is_compliant: true`
 ## 5. Record the proof on-chain
 
 ```bash:run
-export PROOF_PATH="$PWD/artifacts/latest_proof.json"
+export PROOF_PATH="$PWD/artifacts/latest_proof.json" # save the step 3 response here first
 export TRANSFER_ID="recipe-transfer-001"
 export VASP_DID="did:web:vasp.example.com"
-cd packages/contracts && npx hardhat run scripts/verify-onchain.ts --network sepolia
+(cd packages/contracts && npx hardhat run scripts/verify-onchain.ts --network sepolia)
 ```
 
 Expected: Transaction hash and `ProofVerified` event emitted on ComplianceRegistry
@@ -78,7 +78,7 @@ Expected: Transaction hash and `ProofVerified` event emitted on ComplianceRegist
 
 ```bash:run
 export TRANSFER_ID="recipe-transfer-001"
-cd packages/contracts && npx hardhat run scripts/check-transfer.ts --network sepolia
+(cd packages/contracts && npx hardhat run scripts/check-transfer.ts --network sepolia)
 ```
 
 Expected: `isVerified` returns `true` for the transfer ID

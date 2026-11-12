@@ -1,14 +1,15 @@
 ---
 title: Update Sanctions Tree
 prereqs:
-  - api-running
   - contracts-deployed
 estimated-time: 2 min
 ---
 
 # Update Sanctions Tree
 
-Rebuild the sanctions Merkle tree from OFAC/UN/EU lists and relay the new root to the on-chain SanctionsOracle.
+> **Legacy demo path.** This recipe updates the legacy 16-signal tree and its `SanctionsOracle`. The current `pilot-transfer-v3` profile uses a separate tree (`scripts/build_pilot_sanctions_tree.py`) and a signed head published with `scripts/publish_pilot_sanctions_head.py`; this recipe does not update it.
+
+Rebuild the legacy sanctions Merkle tree and submit the new root to a `SanctionsOracle` you deployed. Run the steps from the repository root.
 
 ## 1. Build the sanctions tree
 
@@ -16,20 +17,20 @@ Rebuild the sanctions Merkle tree from OFAC/UN/EU lists and relay the new root t
 python scripts/build_sanctions_tree.py --offline
 ```
 
-Expected: Tree built with leaf count printed, root hash displayed. The `--offline` flag uses cached list data; omit it to fetch fresh lists from OFAC/UN/EU sources.
+Expected: Tree built with leaf count printed, root hash displayed, `artifacts/sanctions_tree.json` written. `--offline` skips the HTTP fetches and uses only the addresses hardcoded in the script; omit it to fetch the OFAC and EU lists.
 
-## 2. Relay the new root to SanctionsOracle
+## 2. Submit the new root to SanctionsOracle
 
-```bash:run
-python scripts/relay_sanctions_root.py --network sepolia
+This step is not run by `clearproof recipes --run`: the script shows the current and proposed roots and waits for you to type a confirmation, and `--run` gives steps no terminal input. Run it yourself. It needs `SEPOLIA_RPC_URL`, `DEPLOYER_PRIVATE_KEY` (the oracle's operator wallet) and the oracle address in `packages/contracts/deployments/sepolia.json`.
+
+```bash
+make update-sanctions-oracle NETWORK=sepolia
 ```
 
-Expected: Transaction hash printed, `RootUpdated` event emitted on SanctionsOracle with new root and leaf count
+Expected: the current on-chain root, leaf count, last update time and `Stale:` state, then the proposed update. After you confirm, a transaction hash and `Sanctions oracle root updated successfully`. The oracle enforces a one-hour cooldown between updates and rejects a tree with fewer than half the current leaves.
 
-## 3. Verify the oracle is not stale
+To submit the same root to every network that has a deployment file, use `make relay-sanctions`.
 
-```bash:run
-cd packages/contracts && npx hardhat run scripts/check-oracle-staleness.ts --network sepolia
-```
+## 3. Confirm the oracle state
 
-Expected: `isStale` returns `false`, `lastUpdated` is recent
+Run the command from step 2 again. It reads the oracle before proposing anything. When the on-chain root equals the tree root it prints `On-chain root already matches tree. Nothing to do.` and exits without sending a transaction. Check that `Stale:` is `false`.

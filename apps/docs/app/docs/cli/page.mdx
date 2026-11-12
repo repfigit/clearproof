@@ -8,7 +8,7 @@ export const metadata = {
 
 # CLI
 
-`@clearproof/cli` provides local proof generation, verification, the pilot commands and a synthetic demo. Published npm version: **0.7.2**, checked October 7, 2026. It requires Node.js 22.12 or later.
+`@clearproof/cli` provides the pilot commands for the current `pilot-transfer-v3` profile, and local proof generation, verification and a synthetic demo for the legacy 16-signal profile only. Published npm version: **0.7.2**, checked October 7, 2026. It requires Node.js 22.12 or later.
 
 ## Install
 
@@ -19,34 +19,13 @@ clearproof --help
 
 Installation from npm was verified on September 26, 2026. You can also build from a source checkout; see [quickstart](/docs/quickstart).
 
-## Proof workflows
-
-With compatible artifacts and a complete input for that proof version:
-
-```bash
-clearproof prove --input inputs.json --artifacts ./artifacts --output proof.json
-clearproof verify --proof proof.json --artifacts ./artifacts
-```
-
-The current verifier reports cryptographic validity and interpreted circuit outputs. Its success exit code is not equivalent to on-chain registry acceptance or authorization to move funds.
-
-## Synthetic demo
-
-```bash
-clearproof demo --artifacts ./artifacts
-```
-
-The demo needs legacy development artifacts that match the current circuit. No npm package supplies them: generate them with `scripts/test_development_circuits.py <new-directory>` from a source checkout and pass `--artifacts <new-directory>/legacy`. (`clearproof demo` in CLI 0.5.0 tried the artifacts in `@clearproof/circuits` 0.3.0, which predate a circuit fix and fail witness generation; 0.6.0 fixes this.)
-
-The demo uses synthetic, historical inputs and development artifacts. It demonstrates a local proof workflow; it does not establish fresh sanctions state, live credential authenticity, current policy acceptance or safe transfer execution. Artifact presence and compatibility must be checked first. No fixed completion-time claim is made.
-
 ## Pilot commands
 
 These commands are in 0.7.2 and the source checkout (`report` from 0.6.0). Most call the authenticated pilot API; `verify-history` and `doctor` run offline.
 
 | Command | Purpose |
 | --- | --- |
-| `doctor` | Inspect pinned local artifacts without downloading, proving or authorizing |
+| `doctor` | Inspect pinned local pilot artifacts without downloading, proving or authorizing. Needs a source checkout: `--python` is required and must be that checkout's Python environment |
 | `inspect-current` | Inspect a pilot proof against current state; never consumes |
 | `authorize-current` | Consume one local pilot authorization, or recover its receipt; no fund execution |
 | `observation` | Create or read non-enforcing observations and cohort reports |
@@ -57,5 +36,30 @@ These commands are in 0.7.2 and the source checkout (`report` from 0.6.0). Most 
 | `report` | Print a pre-filled GitHub issue link with versions and platform; nothing is sent. See [report an issue](/docs/report-issues) |
 
 Private inputs (proofs, requests, keys) are read from stdin rather than command-line arguments.
+
+## Legacy proof workflows
+
+`prove`, `verify` and `demo` work on the legacy 16-signal profile, not `pilot-transfer-v3`. With compatible legacy artifacts and a complete input:
+
+```bash
+clearproof prove --input inputs.json --artifacts ./artifacts --output proof.json
+clearproof verify --proof proof.json --artifacts ./artifacts
+```
+
+The current verifier reports cryptographic validity and interpreted circuit outputs. Its success exit code is not equivalent to on-chain registry acceptance or authorization to move funds.
+
+## Legacy synthetic demo
+
+```bash
+clearproof demo --artifacts ./artifacts
+```
+
+The demo needs development artifacts that match the legacy circuit. No npm package supplies them: generate them with `scripts/test_development_circuits.py <new-directory>` from a source checkout and pass `--artifacts <new-directory>/legacy`. (`clearproof demo` in CLI 0.5.0 tried the artifacts in `@clearproof/circuits` 0.3.0, which predate a circuit fix and fail witness generation; 0.6.0 fixes this.)
+
+The demo uses synthetic, historical inputs and development artifacts. It demonstrates a local proof workflow; it does not establish fresh sanctions state, live credential authenticity, current policy acceptance or safe transfer execution. Artifact presence and compatibility must be checked first. No fixed completion-time claim is made.
+
+## Recipes
+
+`clearproof recipes` lists step-by-step recipes and `clearproof recipes <name>` prints one. Nothing runs unless you add `--run`. With `--run` the CLI asks before each step and runs the steps of a recipe in one `bash` session started in the current directory, so a `cd` or `export` in one step applies to the next. Each step has a 60-second limit and cannot read from the terminal; steps that need typed confirmation or run longer are left for you to run and are marked in the recipe. Most recipes cover the legacy profile and say so at the top. Running steps in one session is in the source checkout and not in npm 0.7.2, where steps that begin with `cd` or `export` fail.
 
 See [quickstart](/docs/quickstart) and [project status](/docs/status).

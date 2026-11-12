@@ -1,187 +1,169 @@
-# Groth16 Trusted Setup Documentation
+# Groth16 development setup (BN254)
 
-## Overview
+**Status:** development only. No ceremony has been run. Every proving and
+verification key produced by the commands below is unapproved, and production
+configuration rejects them. Nothing here is audited.
 
-This document describes the Groth16 trusted setup ceremony for the ZK Travel Rule Compliance Bridge circuits. The setup consists of two phases:
+This document describes how the repository creates development keys for its two
+proof profiles. The planned production ceremony is a separate document,
+[CEREMONY_RUNBOOK.md](CEREMONY_RUNBOOK.md). It targets BLS12-381 (ADR 0002), so
+no BN254 file or key named here can be reused for it, and its scheduling depends
+on the open decision in ADR 0004.
 
-1. **Powers of Tau** (Phase 1) - Generates toxic waste for the BN128 curve
-2. **Circuit-Specific Setup** (Phase 2) - Creates proving and verification keys for each circuit
+## Circuits
 
-## Circuit Configuration
+| Profile | Circuit | Main instantiation | Constraints | Public signals | Phase-1 file |
+|---------|---------|--------------------|-------------|----------------|--------------|
+| `pilot-transfer-v3` (current) | `circuits/pilot_compliance.circom` | `PilotCompliance(32, 20, 20)`: issuance 32, authorized issuers 20, sanctions 20 | 95,408 (ADR 0011) | 8 | Needs 2^17 or larger |
+| Legacy 16-signal demo | `circuits/compliance.circom` | `ComplianceProof(20, 10)`: sanctions 20, issuer 10 | 30,164 (measured 2026-07-31, [FFLONK_BENCHMARK.md](FFLONK_BENCHMARK.md)) | 16: 14 public inputs and 2 outputs (`is_compliant`, `sar_review_flag`) | CI uses the same 2^17 file; `compile_circuits.sh` uses a 2^18 file |
 
-| Circuit | Constraints | Tree Depths | Public Signals |
-|---------|-------------|-------------|----------------|
-| compliance | ~2^18 | sanctions=20, issuer=10 | 14 |
+Signal order and meaning are in `specs/pilot-transfer-v3.md` (pilot) and
+[CIRCUIT_SIGNALS.md](CIRCUIT_SIGNALS.md) (both). The two profiles have different
+keys and verifiers. Never choose a profile by signal count.
 
-The circuit uses the BN128 elliptic curve pairing, with:
+Both use the BN254 (`bn128`) curve:
+
 - **Scalar field (r)**: 21888242871839275222246405745257275088548364400416034343698204186575808495617
 - **Base field (q)**: 21888242871839275222246405745257275088696311157297823662689037894645226208583
 
-## Phase 1: Powers of Tau Ceremony
+## Setup phases
 
-The Powers of Tau ceremony establishes the common reference string (CRS) for the BN128 curve. This phase is circuit-agnostic and can be reused across multiple circuits.
+Groth16 setup has two phases:
 
-### Ceremony Steps
+1. **Powers of tau (phase 1)** is independent of the circuit. A prepared `.ptau`
+   file of power `n` supports circuits with up to 2^n constraints.
+2. **Circuit-specific setup (phase 2)** derives a proving key and a verification
+   key for one compiled circuit (`.r1cs`) from that file.
 
-```bash
-# Step 1: Start a new ceremony (2^18 constraints)
-npx snarkjs powersoftau new bn128 18 pot18_0000.ptau -v
+In every path below, phase 2 is a single local contribution. Whoever ran it could
+forge proofs for those keys, which is why they are development keys regardless
+of which phase-1 file was used.
 
-# Step 2: Single contribution (DEV ONLY - see Production section below)
-npx snarkjs powersoftau contribute pot18_0000.ptau pot18_0001.ptau \
-    --name="First contribution" \
-    -e="$(head -c 32 /dev/urandom | xxd -p)"
+## Path 1: both profiles (`scripts/test_development_circuits.py`)
 
-# Step 3: Prepare phase 2 (convert to circuit-ready format)
-npx snarkjs powersoftau prepare phase2 pot18_0001.ptau pot18_final.ptau -v
-
-# Step 4: Clean up intermediate files
-rm pot18_0000.ptau pot18_0001.ptau
-```
-
-### Security Levels by Power
-
-| Power | Constraints | Use Case |
-|-------|-------------|----------|
-| 18 | 262,144 | Development |
-| 20 | 1,048,576 | Small circuits |
-| 21 | 2,097,152 | Production (recommended minimum) |
-| 22 | 4,194,304 | High-security applications |
-
-## Phase 2: Circuit-Specific Setup
-
-After Powers of Tau, generate proving and verification keys for each circuit:
+This is the path CI and the local pilot acceptance guide use.
 
 ```bash
-# Generate initial proving key
-npx snarkjs groth16 setup compliance.r1cs pot18_final.ptau compliance_0000.zkey
-
-# Single contribution (DEV ONLY)
-npx snarkjs zkey contribute compliance_0000.zkey compliance_final.zkey \
-    --name="Dev contribution" \
-    -e="$(head -c 32 /dev/urandom | xxd -p)"
-
-# Export verification key
-npx snarkjs zkey export verificationkey compliance_final.zkey verification_key.json
-
-# Generate Solidity verifier
-npx snarkjs zkey export solidityverifier compliance_final.zkey \
-    packages/contracts/contracts/Groth16Verifier.sol
+.venv/bin/python scripts/test_development_circuits.py /absolute/new-development-output \
+  --prepared-ptau /absolute/ppot_0080_17.ptau
 ```
 
-## Production Trusted Setup Requirements
+- Compiles `compliance.circom` and `pilot_compliance.circom`, runs phase 2 for
+  each, exports the verification keys and performs real proof round trips. It
+  refuses to write into an existing directory.
+- Writes `<output>/legacy` (`compliance_final.zkey`, `verification_key.json`) and
+  `<output>/pilot` (`UNAPPROVED-development.zkey`, `verification-key.json`,
+  `manifest.json` and its digest in `development-manifest-pin.txt`).
+- `--prepared-ptau` selects an existing prepared phase-1 file. CI passes the PSE
+  perpetual powers of tau file `ppot_0080_17.ptau` (2^17), pinned by SHA-256
+  `f807e065fde53f72f4bf4d57140fab85b26daa6cc95bdfec7cce93622b3a367c` in
+  `.github/workflows/ci.yml`. The download command is in
+  `docs/operations/local-pilot-acceptance.md`.
+- Without `--prepared-ptau` the script generates a local single-party 2^17
+  phase 1, which can take well over an hour.
 
-### Critical Security Considerations
+See [PILOT_DEVELOPMENT_ARTIFACTS.md](PILOT_DEVELOPMENT_ARTIFACTS.md).
 
-1. **Multi-Party Computation (MPC)**: For production deployments, the Powers of Tau and Phase 2 ceremonies MUST be conducted as MPC ceremonies with contributions from multiple independent parties.
-
-2. **Minimum Contributors**: Recommend at least 4-6 diverse contributors from different organizations.
-
-3. **Toxic Waste Destruction**: Each contributor must securely destroy their random "toxic waste" after contributing. The ceremony is only trustworthy if at least one contributor destroys their randomness.
-
-4. **Attestation**: Each contribution should include a signed attestation with the contributor's public key and a hash of their contribution.
-
-### Recommended Production Tools
-
-- [Perpetual Powers of Tau](https://github.com/iden3/perpetual-powers-of-tau) - For phase 1
-- [SnarkJS ceremony](https://github.com/iden3/snarkjs#7-prepare-phase-2-ceremony) - For phase 2 with proper MPC
-
-### Verification
-
-After a ceremony, verify the final artifact:
+## Path 2: legacy circuit only (`scripts/compile_circuits.sh`)
 
 ```bash
-# Verify the zkey file is well-formed
-npx snarkjs zkey verify compliance.r1cs pot18_final.ptau compliance_final.zkey
-
-# Verify the ceremony transcript (if using MPC)
-npx snarkjs powersoftau verify pot18_final.ptau
+bash scripts/compile_circuits.sh
 ```
 
-## CI/CD Integration
+This script builds the legacy 16-signal circuit only. It does not build
+`pilot_compliance.circom`.
 
-The CI pipeline performs the following trusted setup steps:
-
-1. Installs circom and snarkjs
-2. Compiles circuits to .r1cs format with WASM witness generator
-3. Runs Powers of Tau ceremony (dev mode)
-4. Performs Groth16 phase 2 setup
-5. Exports verification key and Solidity verifier
-6. Uploads artifacts for downstream jobs
-
-See `.github/workflows/ci.yml` for the full pipeline configuration.
-
-## Artifact Locations
-
-After running `scripts/compile_circuits.sh`:
+- Phase 1: downloads the Hermez `powersOfTau28_hez_final_18.ptau` (2^18) and
+  checks it against a SHA-256 pinned in the script. This is a different file
+  from the one CI uses. `CLEARPROOF_GENERATE_PTAU=1` generates a local
+  single-party 2^18 file instead.
+- Phase 2: one local contribution.
+- Writes to `artifacts/` in the checkout:
 
 ```
 artifacts/
-├── pot18_final.ptau              # Powers of Tau ceremony output
-├── compliance.r1cs              # Compiled circuit constraints
-├── compliance.sym                # Symbol file for debugging
-├── compliance_js/               # WASM witness generator
+├── pot18_final.ptau          # phase-1 file (downloaded or generated)
+├── compliance.r1cs
+├── compliance.sym
+├── compliance_js/
 │   └── compliance.wasm
-├── compliance_final.zkey        # Proving key
-└── verification_key.json         # Verification key (JSON)
+├── compliance_final.zkey     # development proving key
+└── verification_key.json     # development verification key
 ```
 
-The Solidity verifier is written to:
-```
-packages/contracts/contracts/Groth16Verifier.sol
-```
+- Regenerates `packages/contracts/contracts/Groth16Verifier.sol` in place with
+  `scripts/generate_verifier.mjs`.
 
-## Regenerating the Verifier
+Development keys are never byte-reproducible, because snarkjs mixes operating
+system randomness into every contribution. The legacy proving key, verification
+key, `Groth16Verifier.sol` and the vectors under `tests/vectors/` must therefore
+be regenerated and committed together or not at all.
 
-When circuits change (adding/removing signals), regenerate the verifier:
+## Solidity verifiers
+
+Do not use `snarkjs zkey export solidityverifier`. Its template is GPL-3.0
+(ADR 0001). The repository has its own Apache-2.0 generators:
+
+- `scripts/generate_verifier.mjs` renders the legacy `Groth16Verifier.sol` from a
+  snarkjs verification key.
+- `PilotGroth16Verifier.sol` is a fixed source file. It takes the verification
+  key and the artifact-manifest digest as constructor arguments, so a new pilot
+  key does not change the Solidity source.
+- `scripts/generate_verifier_bls.mjs` renders the BLS12-381 benchmark verifier
+  (ADR 0002).
+
+## Checking a development key
 
 ```bash
-# 1. Recompile circuits
-bash scripts/compile_circuits.sh
+# The proving key matches the circuit and the phase-1 file
+npx snarkjs zkey verify compliance.r1cs pot18_final.ptau compliance_final.zkey
 
-# 2. Export new verifier
-npx snarkjs zkey export solidityverifier \
-    artifacts/compliance_final.zkey \
-    packages/contracts/contracts/Groth16Verifier.sol
+# The phase-1 file is well formed
+npx snarkjs powersoftau verify pot18_final.ptau
 
-# 3. Update the ComplianceRegistry to match new signal count
-# (see CIRCUIT_SIGNALS.md for signal definitions)
+# The verification key has one IC point per public signal, plus one
+npx snarkjs zkey export verificationkey artifacts/compliance_final.zkey /tmp/vkey.json
+jq '.IC | length' /tmp/vkey.json   # 17 for the legacy circuit, 9 for the pilot circuit
 ```
 
-## Signal Count Compatibility
+These checks show internal consistency only. They do not make a key trustworthy.
 
-The Groth16 verifier has a fixed number of public signal slots (16 for the current configuration). When adding new public inputs:
+## CI
 
-1. The circuit must be recompiled
-2. A new Groth16Verifier.sol must be generated
-3. The ComplianceRegistry.sol must be updated to handle the new signal layout
+The `development-circuits` job in `.github/workflows/ci.yml` (the `circuits` job
+is a required-check name that depends on it):
 
-All 16 public signal slots are actively used: 14 public inputs (sanctions root, issuer root, thresholds, domain binding, nullifier, expiration) plus 2 public outputs (`is_compliant`, `sar_review_flag`). See CIRCUIT_SIGNALS.md for the complete signal mapping.
+1. Installs the SHA-256-pinned Circom binary.
+2. Restores or downloads `ppot_0080_17.ptau` and checks its SHA-256.
+3. Runs `scripts/test_development_circuits.py` with `--prepared-ptau`, which
+   builds development keys for both profiles in the runner's temporary directory
+   and runs real proofs against them.
+4. Runs the Python and contract suites against those artifacts.
+
+CI does not run a powers-of-tau ceremony, does not use the Hermez file, and does
+not commit or publish any key. The job list in the workflow file is authoritative.
+
+## Changing a circuit
+
+Any change to a public signal, a tree depth or a constraint changes the keys.
+
+- Pilot: a new signal order, meaning or depth needs a new profile name
+  (ADR 0011), regenerated constants (`scripts/generate_signal_constants.py`) and
+  matching changes in every place listed in the root `CLAUDE.md` invariants.
+- Legacy: rerun `scripts/compile_circuits.sh`, commit the regenerated
+  `Groth16Verifier.sol` with its vectors, and update `ComplianceRegistry.sol` if
+  the signal layout changed.
 
 ## Troubleshooting
 
-### "Not enough points in the section" Error
+**"Not enough points in the section"**: the phase-1 file is too small for the
+circuit. The pilot circuit needs 2^17 or larger.
 
-This indicates the Powers of Tau ceremony does not have enough capacity for the circuit. Increase the power:
+**Verifier mismatch**: the deployed verifier was generated from a different
+verification key than the proving key in use. Regenerate the verifier, key and
+test vectors together.
 
-```bash
-# If circuit has > 2^18 constraints, use power 20 or higher
-npx snarkjs powersoftau new bn128 20 pot20_0000.ptau -v
-```
-
-### Verifier Mismatch
-
-If verification fails, ensure the Groth16Verifier.sol matches the zkey file:
-
-```bash
-# Compare verification keys
-npx snarkjs zkey export verificationkey artifacts/compliance_final.zkey /tmp/vkey.json
-cat /tmp/vkey.json | jq '.IC | length'  # Should match public signal count + 1
-```
-
-### WASM Compilation Failures
-
-Ensure circomlib is properly linked:
+**WASM compilation failure**: check that `circomlib` resolves:
 
 ```bash
 circom circuits/compliance.circom --r1cs --wasm --sym -l node_modules -o /tmp/build

@@ -119,10 +119,10 @@ const DEMO_INPUT: ComplianceInput = {
 };
 
 export const demoCommand = new Command('demo')
-  .description('Generate and verify a synthetic legacy development proof')
+  .description('Legacy 16-signal demo profile: generate and verify a synthetic development proof (not pilot-transfer-v3)')
   .option(
     '--artifacts <dir>',
-    'Path to circuit artifacts directory',
+    'Path to legacy circuit artifacts directory (none are bundled)',
     defaultArtifactsDir(),
   )
   .option(

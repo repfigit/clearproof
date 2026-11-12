@@ -44,11 +44,13 @@ Check that the requested credential, trusted issuer root, sanctions witnesses an
 
 **Symptom:** On-chain `verifyAndRecord()` reverts with `SanctionsOracleStale`.
 
-**Fix:** The oracle's grace period defaults to 24 hours. Update the sanctions root:
+**Fix:** The oracle's grace period defaults to 24 hours. Submit the root in `artifacts/sanctions_tree.json` to that network's oracle from the repository root. The script shows the current and proposed roots and asks for confirmation:
 
 ```bash
-python scripts/relay_sanctions_root.py --network sepolia
+make update-sanctions-oracle NETWORK=sepolia
 ```
+
+Rebuild and review the tree first with `make build-sanctions-tree` if it is out of date. `make relay-sanctions` submits the same root to every network that has a deployment file. This is the legacy 16-signal path; the pilot sanctions head is published separately with `scripts/publish_pilot_sanctions_head.py`.
 
 Check the configured grace period and actual root update time on each intended chain. Test fixtures may deliberately exercise stale state; do not bypass freshness checks to authorize a transfer.
 

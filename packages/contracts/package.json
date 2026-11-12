@@ -1,12 +1,18 @@
 {
   "name": "@clearproof/contracts",
   "version": "0.7.2",
-  "description": "On-chain Groth16 verifier for clearproof compliance proofs",
+  "description": "Solidity sources and ABIs for the Clearproof pilot-transfer-v3 contracts and the legacy 16-signal demo contracts. Unaudited; not a deployment",
   "license": "Apache-2.0",
   "files": [
     "contracts/",
     "artifacts/contracts/**/*.json",
-    "!artifacts/contracts/**/*.dbg.json"
+    "!artifacts/contracts/**/*.dbg.json",
+    "!contracts/MockVerifier.sol",
+    "!contracts/PairingHarness.sol",
+    "!contracts/test/",
+    "!artifacts/contracts/MockVerifier.sol/",
+    "!artifacts/contracts/PairingHarness.sol/",
+    "!artifacts/contracts/test/"
   ],
   "repository": {
     "type": "git",

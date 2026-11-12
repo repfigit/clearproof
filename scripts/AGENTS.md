@@ -8,7 +8,7 @@ Build, acceptance and operational scripts for reproducible proofs and sanctions 
 - `build_sanctions_tree.py` (563 LOC) — fetches OFAC + EU lists, normalizes crypto addresses, builds deterministic Poseidon Merkle tree, writes `artifacts/sanctions_tree.json` + test vectors.
 - `build_pilot_sanctions_tree.py` — derives the pilot-transfer-v3 raw-address tree (`PilotSanctionsTree`, depth 20, key-sorted) from `artifacts/sanctions_tree.json` (or `--fetch`, reusing the legacy fetchers/normalizer) and writes `artifacts/pilot_sanctions_tree.json`; `--verify` rebuilds it from the published address list.
 - `publish_pilot_sanctions_head.py` — human-confirmed publication of a signed `sanctions-root` approval for that tree as a `PilotCurrentRegistry` `Kind.Sanctions` head (default) or `PilotRootCheckpoint` approval. Dry-run with `--dry-run`.
-- `compile_circuits.sh` — circom + snarkjs trusted setup pipeline. Downloads the audited Hermez ptau18 (sha256-pinned) by default; `CLEARPROOF_GENERATE_PTAU=1` opts into a local single-party ceremony. Dev zkeys are never byte-reproducible (snarkjs mixes OS randomness into every contribution).
+- `compile_circuits.sh` — circom + snarkjs development setup pipeline for the legacy 16-signal circuit only. Downloads the public Hermez ptau18 (sha256-pinned) by default, which is not the file CI uses (CI runs `test_development_circuits.py` with the pinned PSE `ppot_0080_17.ptau`, 2^17, for both profiles); `CLEARPROOF_GENERATE_PTAU=1` opts into a local single-party ceremony. Dev zkeys are never byte-reproducible (snarkjs mixes OS randomness into every contribution).
 - `poseidon_hash.js` — Node.js comparison helper; Python tree builders use native `src/registry/poseidon.py`.
 - `regen_protobufs.sh` — regenerates gRPC stubs from `protos/` with pinned grpcio-tools + documented post-processing; `--check` mode runs in CI.
 - `generate_verifier.mjs` — renders the Apache-2.0 `Groth16Verifier.sol` from a snarkjs verification key (replaces the GPL-3.0 snarkjs exporter; see docs/adr/0001). Never reintroduce `snarkjs zkey export solidityverifier`.
@@ -19,7 +19,7 @@ Build, acceptance and operational scripts for reproducible proofs and sanctions 
 - **Build script version** (`BUILD_SCRIPT_VERSION`) must be bumped on any normalization or tree logic change.
 - **After running `build_sanctions_tree.py`** you **must** run the oracle relay (`make relay-sanctions` or equivalent) on all deployed chains. Skipping this is a critical anti-pattern (see root AGENTS.md).
 - **The pilot tree is separate:** rebuild it with `build_pilot_sanctions_tree.py` and publish its signed root with `publish_pilot_sanctions_head.py` on every pilot deployment. The legacy oracle relay does not update pilot heads.
-- Circuit compilation is a prerequisite for local proving; CI caches the Hermez ptau18 file.
+- Circuit compilation is a prerequisite for local proving; CI caches the PSE `ppot_0080_17.ptau` file, not the Hermez ptau18 that `compile_circuits.sh` downloads.
 - Development regeneration: `uv run python scripts/test_development_circuits.py /tmp/new-development-output` retains a matching legacy input/proof/public/vkey bundle and manifest in `legacy/regenerated-parity/`, and runs real local-EVM acceptance. Preserve the historical policy-negative committed fixture. Unapproved development keys, generated verifiers and compiled artifacts stay local; production replacements require the documented audited multi-party ceremony and a complete matching key set.
 
 ## WHERE TO LOOK

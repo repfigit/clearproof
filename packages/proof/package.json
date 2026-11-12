@@ -1,7 +1,7 @@
 {
   "name": "@clearproof/proof",
   "version": "0.7.2",
-  "description": "TypeScript SDK for generating and verifying ZK compliance proofs",
+  "description": "TypeScript SDK for Clearproof: API clients for the current pilot-transfer-v3 profile, local Groth16 proving and verification for the legacy 16-signal demo profile, and counterparty discovery",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "exports": {

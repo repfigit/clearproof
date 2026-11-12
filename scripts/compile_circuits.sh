@@ -29,8 +29,10 @@ CONTRACTS_DIR="packages/contracts/contracts"
 # come from the documented MPC ceremony (docs/internal/CEREMONY_RUNBOOK.md).
 DEV_ENTROPY="${CLEARPROOF_DEV_ENTROPY:-$(head -c 32 /dev/urandom | xxd -p)}"
 
-# Powers of Tau: reuse the audited Hermez 2^18 ptau (same as CI; itself an
-# MPC artifact with hundreds of independent contributions). Set
+# Powers of Tau: reuse the public Hermez 2^18 ptau (a multi-party ceremony
+# output, SHA-256 pinned below). This is not the file CI uses: CI builds both
+# profiles with scripts/test_development_circuits.py and the SHA-256-pinned
+# PSE ppot_0080_17.ptau (2^17); see .github/workflows/ci.yml. Set
 # CLEARPROOF_GENERATE_PTAU=1 to run a local single-party ceremony instead.
 PTAU_URL="https://storage.googleapis.com/zkevm/ptau/powersOfTau28_hez_final_18.ptau"
 PTAU_SHA256="e970efa7774da80101e0ac336d083ef3339855c98112539338d706b2b89ac694"

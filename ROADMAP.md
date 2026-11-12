@@ -52,7 +52,7 @@ clearproof is production quality when a regulated VASP can run real or shadow-mo
 | Track | Current status | Progress | Next proof point |
 | --- | --- | --- | --- |
 | Research/pilot foundation | Mostly implemented | Groth16 circuit, FastAPI gateway, SDK, CLI, contracts, sanctions tree, hybrid payloads, bridge models, docs, and tests are present | Clean hosted sandbox and pilot limitations document |
-| Developer adoption | Implemented for package-first demo path | CLI now uses bundled circuit artifacts, docs include auth headers, SDK README matches exports, on-chain scripts exist | A five-minute hosted quickstart that needs no repo clone |
+| Developer adoption | Implemented for a source-checkout demo path | The CLI's legacy demo takes caller-supplied circuit artifacts; no npm package bundles any (corrected 2026-11-11: an earlier version of this row said the CLI used bundled artifacts). Docs include auth headers, SDK README matches exports, on-chain scripts exist | A five-minute hosted quickstart that needs no repo clone |
 | Test coverage | Strengthened | Python, Hardhat, package Vitest, docs build, and CLI demo checks pass locally | CI should run the same full suite on every PR |
 | Vulnerability cleanup | Partially complete | Non-breaking dependency cleanup done where possible; remaining production audit items require breaking dependency changes | Decide whether to migrate off vulnerable transitive chains or accept short-term risk |
 | Production core | Not production-ready | Some auth modes and verification pieces exist, but durable state, tenant isolation, key delivery, and audit durability are not complete. Verifier parity now has a committed test vector enforced in CI (off-chain + on-chain); full registry-check parity remains open | Postgres/Redis-backed tenant-scoped pilot flow |
@@ -83,7 +83,7 @@ This repo already has the technical spine for a pilot:
 - [x] Deterministic sanctions tree builder with persisted witnesses
 - [x] Hybrid payload model with encrypted PII
 - [x] TRP/TRISA bridge models and integration tests
-- [x] Package-first demo path using bundled circuit artifacts
+- [x] Legacy demo path with caller-supplied development artifacts (`scripts/test_development_circuits.py`); no npm package bundles circuit artifacts
 - [x] Auth-aware recipes and on-chain walkthrough scripts
 - [x] Focused tests for circuit metadata, CLI artifact resolution, SDK discovery, and docs recipes
 - [x] Full local validation baseline passing

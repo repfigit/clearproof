@@ -22,8 +22,8 @@ export function doctorReport(stdout: string, code: number): Record<string, unkno
 }
 
 export const doctorCommand = new Command('doctor')
-  .description('Inspect pinned local artifacts without downloading, proving or authorizing')
-  .requiredOption('--python <executable>', 'Python environment with Clearproof installed')
+  .description('Inspect pinned local pilot artifacts without downloading, proving or authorizing; run from a Clearproof source checkout')
+  .requiredOption('--python <executable>', 'Required. Python executable of the source checkout environment (for example .venv/bin/python); it runs src.prover.pilot_artifacts')
   .requiredOption('--artifacts <directory>', 'Local artifact directory')
   .requiredOption('--trusted-manifest-digest <digest>', 'Independently selected manifest SHA-256 digest')
   .option('--mode <mode>', 'development or production (unapproved artifacts reject)', 'development')
