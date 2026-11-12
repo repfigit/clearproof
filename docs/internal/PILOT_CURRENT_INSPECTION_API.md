@@ -13,10 +13,16 @@ by `(tenant_id, target_id)`, with `InspectionTarget(configuration, verifier)` va
 The configuration is `CurrentStatementConfiguration`; the verifier is loaded by
 `PilotPairingVerifier.load` using inspected artifact and runtime digests. Targets
 are explicit transfer configurations, not caller-provided trust inventories.
-The default app has no targets and returns 503 until provisioned. Reinstall this
-operator configuration on process restart; durable enrollment/root/policy records
-remain in PostgreSQL. The local acceptance runner supplies synthetic configuration;
-a serialized operator provisioning loader is not supplied by this pilot.
+The default app has no targets and returns 503 until provisioned. Set
+`PILOT_INSPECTION_FACTORY` to an installed `module:callable` to provision them at
+startup (`src/api/target_configuration.py`). The callable accepts
+`(Database, RecordCipher)`, may be asynchronous, and returns between 1 and 256
+`InspectionTarget` values keyed by `(tenant_id, target_id)`. Startup checks the
+key, the exact target type, the tenant scope of the configuration and the
+verifier's artifact context; a factory that is set but fails to load stops
+startup with a fixed message. The factory is trusted deployment code and runs on
+every process start; durable enrollment/root/policy records remain in PostgreSQL.
+The local acceptance runner supplies synthetic configuration directly.
 
 The authenticated JWT needs both `proof:inspect` and `evidence:decrypt`. Static
 API-key development mode retains the existing fixed operator-assigned tenant and
