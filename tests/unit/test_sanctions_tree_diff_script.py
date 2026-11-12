@@ -1,7 +1,9 @@
 """The daily sanctions workflow must see a rebuilt tree even though artifacts/ is ignored."""
 
 import json
+import runpy
 import subprocess
+import sys
 
 import pytest
 
@@ -136,3 +138,21 @@ def test_cli_writes_github_outputs_and_reports_failure(repo, tmp_path, capsys):
     write(repo, diff.LEGACY_TREE, "11", 0)
     assert diff.main(["--repo", str(repo)]) == 1
     assert "::error::" in capsys.readouterr().err
+
+
+def test_cli_prints_outputs_without_github_output(repo, capsys):
+    write(repo, diff.LEGACY_TREE, "11", 40)
+    write(repo, diff.PILOT_TREE, 22, 42)
+    assert diff.main(["--repo", str(repo)]) == 0
+    out = capsys.readouterr().out
+    assert "changed=true" in out
+    assert "new_count=40" in out
+
+
+def test_cli_entry_reports_the_leaf_floor_failure(repo, monkeypatch):
+    write(repo, diff.LEGACY_TREE, "11", 0)
+    write(repo, diff.PILOT_TREE, 22, 2)
+    monkeypatch.setattr(sys, "argv", [diff.__file__, "--repo", str(repo)])
+    with pytest.raises(SystemExit) as exit_info:
+        runpy.run_path(diff.__file__, run_name="__main__")
+    assert exit_info.value.code == 1
