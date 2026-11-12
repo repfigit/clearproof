@@ -39,16 +39,6 @@ jobs:
       # The tree builder needs only the runtime dependencies (no zk/dev extras).
       - run: uv sync --locked
 
-      - name: Save previous leaf count
-        id: prev
-        run: |
-          if [ -f artifacts/sanctions_tree.json ]; then
-            PREV_COUNT=$(python3 -c "import json; d=json.load(open('artifacts/sanctions_tree.json')); print(len(d.get('leaves', d.get('entries', []))))" 2>/dev/null || echo "0")
-          else
-            PREV_COUNT=0
-          fi
-          echo "leaf_count=$PREV_COUNT" >> "$GITHUB_OUTPUT"
-
       - name: Build sanctions Merkle tree
         run: uv run python scripts/build_sanctions_tree.py
 
@@ -68,57 +58,53 @@ jobs:
             artifacts/sanctions_tree.json
             artifacts/pilot_sanctions_tree.json
           retention-days: 30
+          if-no-files-found: error
 
-      - name: Check for changes
+      # artifacts/ is ignored, so `git diff` never reports a rebuilt tree. Compare tree roots
+      # against the copies committed at HEAD instead: a first publication is a change, a new
+      # fetch timestamp alone is not. The same step enforces the 50% leaf-count floor.
+      - name: Compare with the reviewed trees on main
         id: diff
-        run: |
-          git diff --quiet artifacts/sanctions_tree.json && echo "changed=false" >> "$GITHUB_OUTPUT" || echo "changed=true" >> "$GITHUB_OUTPUT"
-
-      - name: Sanity check leaf count
-        if: steps.diff.outputs.changed == 'true'
-        id: sanity
-        env:
-          PREV_COUNT: ${{ steps.prev.outputs.leaf_count }}
-        run: |
-          NEW_COUNT=$(python3 -c "import json; d=json.load(open('artifacts/sanctions_tree.json')); print(len(d.get('leaves', d.get('entries', []))))" 2>/dev/null || echo "0")
-          echo "new_count=$NEW_COUNT" >> "$GITHUB_OUTPUT"
-          echo "Previous leaf count: $PREV_COUNT"
-          echo "New leaf count: $NEW_COUNT"
-
-          if [ "$PREV_COUNT" -gt 0 ] && [ "$NEW_COUNT" -gt 0 ]; then
-            # Check if the new count dropped by more than 50%
-            THRESHOLD=$(( PREV_COUNT / 2 ))
-            if [ "$NEW_COUNT" -lt "$THRESHOLD" ]; then
-              echo "::error::Sanctions leaf count dropped more than 50% ($PREV_COUNT -> $NEW_COUNT). Aborting — this may indicate a data source issue."
-              exit 1
-            fi
-          fi
+        run: uv run python scripts/sanctions_tree_diff.py --ref HEAD --github-output "$GITHUB_OUTPUT"
 
       - name: Create branch and open PR
         if: steps.diff.outputs.changed == 'true'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          PREV_LEAF_COUNT: ${{ steps.prev.outputs.leaf_count }}
-          NEW_LEAF_COUNT: ${{ steps.sanity.outputs.new_count }}
+          PREV_LEAF_COUNT: ${{ steps.diff.outputs.prev_count }}
+          NEW_LEAF_COUNT: ${{ steps.diff.outputs.new_count }}
+          PILOT_PREV_LEAF_COUNT: ${{ steps.diff.outputs.pilot_prev_count }}
+          PILOT_NEW_LEAF_COUNT: ${{ steps.diff.outputs.pilot_new_count }}
+          LEGACY_CHANGED: ${{ steps.diff.outputs.legacy_changed }}
+          PILOT_CHANGED: ${{ steps.diff.outputs.pilot_changed }}
         run: |
-          BRANCH_NAME="sanctions-update/$(date +%Y-%m-%d)"
+          # One rolling review branch: an unmerged update is refreshed in place instead of
+          # opening another PR every day.
+          BRANCH_NAME="sanctions-update/pending"
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git checkout -b "$BRANCH_NAME"
-          git add artifacts/sanctions_tree.json
-          git commit -m "chore: update sanctions Merkle tree (automated daily refresh)"
-          git push origin "$BRANCH_NAME"
-          gh pr create \
-            --title "chore: sanctions tree update $(date +%Y-%m-%d)" \
-            --body "Automated sanctions tree rebuild from OFAC/EU feeds. Please review leaf count changes before merging.
+          git checkout -B "$BRANCH_NAME"
+          # Both reviewed trees live on main; -f is required because artifacts/ is ignored.
+          git add -f artifacts/sanctions_tree.json artifacts/pilot_sanctions_tree.json
+          git commit -m "chore: update sanctions Merkle trees (automated daily refresh)"
+          git push --force origin "$BRANCH_NAME"
+          BODY="Automated sanctions tree rebuild from OFAC/EU feeds on $(date +%Y-%m-%d). Please review leaf count changes before merging.
 
-          **Previous leaf count:** $PREV_LEAF_COUNT
-          **New leaf count:** $NEW_LEAF_COUNT
+          **Legacy tree (artifacts/sanctions_tree.json):** root changed: $LEGACY_CHANGED; leaves $PREV_LEAF_COUNT -> $NEW_LEAF_COUNT
+          **Pilot tree (artifacts/pilot_sanctions_tree.json):** root changed: $PILOT_CHANGED; leaves $PILOT_PREV_LEAF_COUNT -> $PILOT_NEW_LEAF_COUNT
 
-          Merging this PR triggers the **Relay Sanctions Root** workflow (sanctions-relay.yml), which relays
-          the merged root to the configured chains. The pilot tree (artifacts/pilot_sanctions_tree.json) is attached to
-          the workflow run: a registrar signs a sanctions-root snapshot for its root/source digest, then run
+          Merging this PR triggers the **Relay Sanctions Root** workflow (sanctions-relay.yml) when the legacy
+          tree changed, which relays the merged root to the configured chains. The pilot tree is committed here
+          as the durable published copy for independent re-verification
+          (\`uv run python scripts/build_pilot_sanctions_tree.py --verify\`). It is not published on-chain by
+          merging: a registrar signs a sanctions-root snapshot for its root/source digest, then run
           \`make publish-pilot-sanctions-head\` per pilot deployment. To relay the legacy root manually instead:
           \`\`\`
           RELAY_NETWORKS=sepolia,base-sepolia,arbitrum-sepolia make relay-sanctions
           \`\`\`"
+          OPEN_PR=$(gh pr list --head "$BRANCH_NAME" --state open --json number --jq '.[0].number // empty')
+          if [ -n "$OPEN_PR" ]; then
+            gh pr edit "$OPEN_PR" --body "$BODY"
+          else
+            gh pr create --head "$BRANCH_NAME" --title "chore: sanctions tree update" --body "$BODY"
+          fi
