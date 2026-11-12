@@ -38,7 +38,15 @@ real-proof inspection with a tamper case, or the complete current pilot with
 preflight and recovery. The quick example uses a historical legacy development
 fixture whose threshold policy deliberately rejects it.
 
-Install the host prerequisites documented in the
+With Docker, one command builds development keys and runs the complete pilot
+acceptance without installing the prerequisites on the host; see the
+[container guide](docs/operations/pilot-container.md):
+
+```bash
+docker compose -f compose.pilot.yaml up --build
+```
+
+Without Docker, install the host prerequisites documented in the
 [local acceptance guide](docs/operations/local-pilot-acceptance.md), then:
 
 ```bash

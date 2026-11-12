@@ -228,6 +228,7 @@ jobs:
           tests/unit/test_compile_circuits_script.py
           tests/unit/test_build_pilot_sanctions_tree_script.py
           tests/unit/test_publish_pilot_sanctions_head_script.py
+          tests/unit/test_sanctions_tree_diff_script.py
           --cov=scripts --cov-branch --cov-report=json:operational-coverage.json
           --cov-report=term-missing --cov-fail-under=0 -q
       - name: Preserve completed operational script coverage

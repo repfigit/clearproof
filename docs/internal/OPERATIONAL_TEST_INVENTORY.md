@@ -24,7 +24,7 @@ removed from the Python denominator.
 | `generate_verifier_bls.mjs` | 41/41 statements, 12/12 branches, 35/35 lines, 4/4 functions; exact benchmark output, real CLI and rejected inputs | Retain coverage; benchmark is not a production migration |
 | `check_eip2537.mjs` | 32/32 statements, 16/16 branches, 28/28 lines, 1/1 functions; response/fallback/timeout tests and actual local EVM pairing vector | Retain coverage; tests do not establish current public-chain availability |
 | `compile_circuits.sh` | 26 actual shell control-flow tests with synthetic tools; isolated real compile/setup/verifier build and CLI proof verification | Retain behavior evidence; real download/local phase-one branches use synthetic boundary tests, not live ceremonies |
-| `circuit_lint.sh` | Ten isolated Bash acceptance tests; actual Circomspect passes with five documented findings; seven real SARIF reports validated | Retain shell behavior evidence and verify remote run; no line/branch percentage claimed |
+| `circuit_lint.sh` | Fifteen isolated Bash acceptance tests; actual Circomspect covers legacy and all `pilot-transfer-v3` files and passes with 19 documented findings (five legacy, 14 exact-count pilot entries) | Retain shell behavior evidence and verify remote run; no line/branch percentage claimed |
 | `regen_protobufs.sh` | 17 shell acceptance tests: real pinned-compiler output parity and all four stale/missing checks; postprocessor variants/failures and compiler failure | Retain behavior evidence; remote run verification pending |
 
 Run the current focused operational job from the repository root:
