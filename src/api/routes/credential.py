@@ -92,6 +92,18 @@ def _wallet_ownership_service(request: Request, principal: Principal) -> WalletO
         raise HTTPException(status_code=503, detail="Wallet evidence configuration unavailable") from exc
 
 
+def _owned_credential(registry: CredentialRegistry, credential_id: str, principal: Principal) -> zkKYCCredential:
+    """Return the credential only to its owning tenant.
+
+    A credential owned by another tenant, or registered without an owner, is
+    reported exactly like a missing one so its existence is not disclosed.
+    """
+    credential = registry.get(credential_id)
+    if credential is None or registry.tenant_of(credential_id) != principal.tenant_id:
+        raise HTTPException(status_code=404, detail="Credential not found")
+    return credential
+
+
 class CredentialRevokeRequest(BaseModel):
     """Request body for POST /credential/revoke."""
 
@@ -147,6 +159,10 @@ async def issue_credential(
     preimage has no circuit counterpart for this field, and evidence-level
     commitments live in the staged wallet-ownership extension profile.
     """
+    # Role and exact issuer scope come from the authenticated principal; the
+    # request body cannot widen them.
+    principal.require_issuer(request.issuer_did, "credential:issue")
+
     now = int(time.time())
     expires_at = now + request.expires_in_seconds
 
@@ -180,7 +196,7 @@ async def issue_credential(
         wallet_ownership_attestation_id=request.wallet_ownership_attestation_id,
     )
 
-    commitment = await _registry.issue(credential)
+    commitment = await _registry.issue(credential, tenant_id=principal.tenant_id)
 
     logger.info(
         "Credential issued: id=%s wallet_ownership_verified=%s",
@@ -206,16 +222,18 @@ async def issue_credential(
 async def revoke_credential(
     request: CredentialRevokeRequest,
     _auth: dict = Depends(JWTAuthDependency),
+    principal: Principal = Depends(TenantPrincipalDependency),
     _registry: CredentialRegistry = Depends(get_credential_registry),
 ):
     """
     Revoke a previously-issued zkKYC credential.
 
     Revoked credentials will fail any subsequent proof generation attempt.
+    The caller must belong to the owning tenant and hold ``credential:revoke``
+    for the credential's issuer.
     """
-    credential = _registry.get(request.credential_id)
-    if credential is None:
-        raise HTTPException(status_code=404, detail="Credential not found")
+    credential = _owned_credential(_registry, request.credential_id, principal)
+    principal.require_issuer(credential.issuer_did, "credential:revoke")
 
     if credential.revoked:
         raise HTTPException(status_code=400, detail="Credential already revoked")
@@ -239,6 +257,7 @@ async def revoke_credential(
 async def get_credential_status(
     credential_id: str,
     _auth: dict = Depends(JWTAuthDependency),
+    principal: Principal = Depends(TenantPrincipalDependency),
     _registry: CredentialRegistry = Depends(get_credential_registry),
 ):
     """
@@ -246,10 +265,9 @@ async def get_credential_status(
 
     Does **not** return the full credential data or PII — only metadata
     sufficient for the caller to decide whether to proceed with proof generation.
+    Only the owning tenant can read it.
     """
-    credential = _registry.get(credential_id)
-    if credential is None:
-        raise HTTPException(status_code=404, detail="Credential not found")
+    credential = _owned_credential(_registry, credential_id, principal)
 
     now = int(time.time())
     if credential.revoked:

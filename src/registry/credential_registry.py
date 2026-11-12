@@ -106,14 +106,22 @@ class CredentialRegistry:
         self._credentials: dict[str, zkKYCCredential] = {}
         self._commitments: dict[str, str] = {}  # credential_id -> commitment
         self._revoked: set[str] = set()
+        # Owning tenant per credential. Kept beside the model, not in it: the
+        # credential preimage and its serialized form are unchanged.
+        self._tenants: dict[str, str] = {}
 
-    async def issue(self, credential: zkKYCCredential) -> str:
+    async def issue(self, credential: zkKYCCredential, tenant_id: str | None = None) -> str:
         """
         Register a new credential and compute its Poseidon commitment.
+
+        ``tenant_id`` records the owning tenant. A credential registered
+        without one has no owner and is not served by the tenant-scoped routes.
 
         Returns the commitment hash string.
         """
         self._credentials[credential.credential_id] = credential
+        if tenant_id is not None:
+            self._tenants[credential.credential_id] = tenant_id
         commitment = await _poseidon_hash(credential._field_ints())
         self._commitments[credential.credential_id] = commitment
         return commitment
@@ -134,6 +142,10 @@ class CredentialRegistry:
     def is_revoked(self, credential_id: str) -> bool:
         """Check whether a credential has been revoked."""
         return credential_id in self._revoked
+
+    def tenant_of(self, credential_id: str) -> str | None:
+        """Return the owning tenant, or ``None`` when no owner was recorded."""
+        return self._tenants.get(credential_id)
 
     def get(self, credential_id: str) -> zkKYCCredential | None:
         """Retrieve a credential by ID, or ``None`` if not found."""

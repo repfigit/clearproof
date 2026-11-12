@@ -28,6 +28,10 @@ os.environ.setdefault(
     "API_KEY_ROLES",
     "credential:issue,credential:revoke,proof:generate,proof:inspect,evidence:export",
 )
+os.environ.setdefault(
+    "API_KEY_ISSUER_DIDS",
+    "did:web:issuer.example.com,did:web:test-issuer.example.com",
+)
 
 from src.protocol.compliance_proof import ComplianceProof
 from src.protocol.hybrid_payload import HybridPayload
