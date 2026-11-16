@@ -108,8 +108,25 @@ jobs:
           RELAY_NETWORKS=sepolia,base-sepolia,arbitrum-sepolia make relay-sanctions
           \`\`\`"
           OPEN_PR=$(gh pr list --head "$BRANCH_NAME" --state open --json number --jq '.[0].number // empty')
+          # The repository setting "Allow GitHub Actions to create and approve pull requests"
+          # (actions/permissions/workflow: can_approve_pull_request_reviews) gates both creating
+          # and editing PRs with GITHUB_TOKEN. The tree build, artifact upload and branch push
+          # above have already succeeded by this point, so a permission-blocked PR step is
+          # downgraded to a loud warning instead of failing the whole run and masking real
+          # build failures. Anything else still fails.
+          set +e
           if [ -n "$OPEN_PR" ]; then
-            gh pr edit "$OPEN_PR" --body "$BODY"
+            GH_OUT=$(gh pr edit "$OPEN_PR" --body "$BODY" 2>&1)
           else
-            gh pr create --head "$BRANCH_NAME" --title "chore: sanctions tree update" --body "$BODY"
+            GH_OUT=$(gh pr create --head "$BRANCH_NAME" --title "chore: sanctions tree update" --body "$BODY" 2>&1)
+          fi
+          GH_STATUS=$?
+          set -e
+          if [ "$GH_STATUS" -ne 0 ]; then
+            if printf '%s' "$GH_OUT" | grep -q 'not permitted to create or approve pull requests'; then
+              echo "::warning title=GitHub Actions cannot create or edit PRs::Trees were rebuilt and force-pushed to $BRANCH_NAME, but no PR could be opened: the repository setting \"Allow GitHub Actions to create and approve pull requests\" is disabled (can_approve_pull_request_reviews=false). An owner can enable it under Settings > Actions > General > Workflow permissions."
+            else
+              printf '%s\n' "$GH_OUT"
+              exit "$GH_STATUS"
+            fi
           fi
