@@ -87,7 +87,7 @@ async def fetch_addresses(offline: bool) -> tuple[list[str], dict[str, Any]]:
         ) as client:
             for name, fetcher in (
                 ("ofac_sdn_xml", legacy.fetch_ofac_sdn_xml),
-                ("ofac_consolidated_csv", legacy.fetch_ofac_consolidated_csv),
+                ("ofac_consolidated_xml", legacy.fetch_ofac_consolidated_xml),
                 ("eu_sanctions_xml", legacy.fetch_eu_sanctions_xml),
             ):
                 found, metadata = await fetcher(client)

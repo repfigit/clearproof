@@ -15,7 +15,7 @@ ADDRESS = "0x" + "12" * 20
 OTHER = "0x" + "34" * 20
 FETCHERS = [
     (builder.fetch_ofac_sdn_xml, builder.OFAC_SDN_XML_URL),
-    (builder.fetch_ofac_consolidated_csv, builder.OFAC_CONS_CSV_URL),
+    (builder.fetch_ofac_consolidated_xml, builder.OFAC_CONS_ADVANCED_XML_URL),
     (builder.fetch_eu_sanctions_xml, builder.EU_SANCTIONS_URL),
 ]
 
@@ -48,9 +48,13 @@ async def test_ofac_xml_extracts_crypto_features_ids_and_raw_text(namespace):
     "fetcher,url,payload",
     [
         (
-            builder.fetch_ofac_consolidated_csv,
-            builder.OFAC_CONS_CSV_URL,
-            f'ordinary,ignored\nDigital currency,"{ADDRESS}";({OTHER})\n"{ADDRESS}"\n',
+            builder.fetch_ofac_consolidated_xml,
+            builder.OFAC_CONS_ADVANCED_XML_URL,
+            (
+                f'<root xmlns="urn:synthetic-sanctions">'
+                f"<feature>Digital Currency Address - ETH <value>{ADDRESS}</value></feature>"
+                f"<id>ordinary label</id><id>ETH {OTHER}</id><feature/><!-- {ADDRESS} --></root>"
+            ),
         ),
         (
             builder.fetch_eu_sanctions_xml,

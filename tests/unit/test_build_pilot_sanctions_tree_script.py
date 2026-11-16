@@ -122,19 +122,19 @@ async def test_fetch_reuses_legacy_fetchers_without_network(tmp_path, monkeypatc
         return fetch
 
     monkeypatch.setattr(legacy, "fetch_ofac_sdn_xml", fake("sdn", [A]))
-    monkeypatch.setattr(legacy, "fetch_ofac_consolidated_csv", fake("csv", [B.upper().replace("0X", "0x")]))
+    monkeypatch.setattr(legacy, "fetch_ofac_consolidated_xml", fake("xml", [B.upper().replace("0X", "0x")]))
     monkeypatch.setattr(legacy, "fetch_eu_sanctions_xml", fake("eu", [C, A]))
     monkeypatch.setattr(legacy, "KNOWN_OFAC_ADDRESSES", [C])
     output = tmp_path / "pilot.json"
     assert await builder.main(["--fetch", "--output", str(output)]) == 0
     artifact = json.loads(output.read_text())
-    assert calls == ["sdn", "csv", "eu"]
+    assert calls == ["sdn", "xml", "eu"]
     assert artifact["sorted_addresses"] == sorted([A, B, C])
     assert artifact["input"]["kind"] == "live-feeds"
     assert set(artifact["input"]["sources"]) == {
         "hardcoded_ofac",
         "ofac_sdn_xml",
-        "ofac_consolidated_csv",
+        "ofac_consolidated_xml",
         "eu_sanctions_xml",
     }
 

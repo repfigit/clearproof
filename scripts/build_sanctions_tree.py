@@ -63,7 +63,16 @@ TEST_VECTORS_PATH = os.path.join(ARTIFACTS_DIR, "sanctions_test_vectors.json")
 # ---------------------------------------------------------------------------
 
 OFAC_SDN_XML_URL = "https://www.treasury.gov/ofac/downloads/sdn.xml"
-OFAC_CONS_CSV_URL = "https://www.treasury.gov/ofac/downloads/consolidated/cons_advanced.csv"
+# OFAC moved consolidated-list distribution to the Sanctions List Service. The
+# legacy cons_advanced.csv no longer exists (404 since 2026-11-13); the SLS
+# download endpoint redirects to a signed S3 URL serving CONS_ADVANCED.XML.
+# As of the 2026-11-04 issue this file contains no digital-currency feature
+# types, so it contributes zero addresses today; the fetcher is kept for
+# source-set completeness and picks up any future consolidated crypto entries.
+OFAC_CONS_ADVANCED_XML_URL = os.environ.get(
+    "OFAC_CONS_ADVANCED_XML_URL",
+    "https://sanctionslistservice.ofac.treas.gov/api/download/cons_advanced.xml",
+)
 # EU FSF requires a stable, well-known public token. Without it the endpoint
 # returns 403. The token is base64("token-2017") and has been treated as a
 # de-facto public handle by DG FISMA since 2017; OpenSanctions and every
@@ -254,13 +263,19 @@ async def fetch_ofac_sdn_xml(client: httpx.AsyncClient) -> tuple[list[str], dict
     return addresses, meta
 
 
-async def fetch_ofac_consolidated_csv(client: httpx.AsyncClient) -> tuple[list[str], dict[str, Any]]:
+async def fetch_ofac_consolidated_xml(client: httpx.AsyncClient) -> tuple[list[str], dict[str, Any]]:
+    """Fetch the SLS consolidated list (CONS_ADVANCED.XML) and extract crypto addresses.
+
+    Mirrors the SDN XML fetcher: parse features/ids that mention crypto program
+    keywords, plus a raw-hex token sweep over the whole document. Addresses are
+    raw hex only — no ENS or other name resolution.
+    """
     addresses: list[str] = []
-    meta: dict[str, Any] = {"source": OFAC_CONS_CSV_URL, "fetched": False, "error": None}
+    meta: dict[str, Any] = {"source": OFAC_CONS_ADVANCED_XML_URL, "fetched": False, "error": None}
 
     try:
-        print(f"  Fetching OFAC consolidated CSV from {OFAC_CONS_CSV_URL} ...")
-        resp = await client.get(OFAC_CONS_CSV_URL, timeout=HTTP_TIMEOUT)
+        print(f"  Fetching OFAC consolidated XML from {OFAC_CONS_ADVANCED_XML_URL} ...")
+        resp = await client.get(OFAC_CONS_ADVANCED_XML_URL, timeout=HTTP_TIMEOUT)
         resp.raise_for_status()
         meta["fetched"] = True
         meta["status_code"] = resp.status_code
@@ -268,18 +283,37 @@ async def fetch_ofac_consolidated_csv(client: httpx.AsyncClient) -> tuple[list[s
         meta["sha256"] = sha256_bytes(resp.content)
         meta["last_modified"] = resp.headers.get("Last-Modified", "unknown")
 
-        for line in resp.text.splitlines():
-            line_lower = line.lower()
-            if "digital currency" in line_lower or "0x" in line_lower:
-                found = _extract_eth_addresses_from_text(line)
+        root = ET.fromstring(resp.content)
+        ns = ""
+        if root.tag.startswith("{"):
+            ns = root.tag.split("}")[0] + "}"
+
+        for elem in root.iter():
+            tag_local = elem.tag.replace(ns, "") if ns else elem.tag
+            if tag_local.lower() in ("feature", "id"):
+                text_content = ET.tostring(elem, encoding="unicode", method="text")
+                if text_content:
+                    text_lower = text_content.lower()
+                    is_crypto = any(kw in text_lower for kw in _CRYPTO_PROGRAM_KEYWORDS)
+                    if is_crypto:
+                        found = _extract_eth_addresses_from_text(text_content)
+                        addresses.extend(found)
+            if elem.text and _ETH_ADDRESS_PREFIX in (elem.text or ""):
+                found = _extract_eth_addresses_from_text(elem.text)
                 addresses.extend(found)
 
+        raw_text = resp.text
+        for token in raw_text.split():
+            token = token.strip("\"'<>")
+            if _looks_like_eth_address(token):
+                addresses.append(token)
+
         meta["addresses_found"] = len(set(addresses))
-        print(f"    Found {meta['addresses_found']} addresses in OFAC consolidated CSV")
+        print(f"    Found {meta['addresses_found']} addresses in OFAC consolidated XML")
 
     except Exception as exc:
         meta["error"] = str(exc)
-        print(f"    OFAC consolidated CSV fetch failed: {exc}")
+        print(f"    OFAC consolidated XML fetch failed: {exc}")
 
     return addresses, meta
 
@@ -489,11 +523,11 @@ async def main(offline: bool = False, verify: bool = False, target_depth: int | 
             source_meta["ofac_sdn_xml"] = sdn_meta
             counts["ofac_sdn_xml"] = len(set(sdn_addrs))
 
-            print("\n[3/4] Fetching OFAC consolidated CSV ...")
-            csv_addrs, csv_meta = await fetch_ofac_consolidated_csv(client)
-            all_addresses.extend(csv_addrs)
-            source_meta["ofac_consolidated_csv"] = csv_meta
-            counts["ofac_consolidated_csv"] = len(set(csv_addrs))
+            print("\n[3/4] Fetching OFAC consolidated XML ...")
+            xml_addrs, cons_meta = await fetch_ofac_consolidated_xml(client)
+            all_addresses.extend(xml_addrs)
+            source_meta["ofac_consolidated_xml"] = cons_meta
+            counts["ofac_consolidated_xml"] = len(set(xml_addrs))
 
             print("\n[4/4] Fetching EU sanctions XML ...")
             eu_addrs, eu_meta = await fetch_eu_sanctions_xml(client)
