@@ -45,7 +45,10 @@ jobs:
       - run: uv sync --locked
 
       - name: Build sanctions Merkle tree
-        run: uv run python scripts/build_sanctions_tree.py
+        # The legacy 16-signal circuit pins sanctions_tree_depth=20 (ComplianceProof(20, 10)
+        # in circuits/compliance.circom). Build explicitly at 20 so the committed artifact's
+        # root and witness paths always match the circuit; auto depth drifts as the list grows.
+        run: uv run python scripts/build_sanctions_tree.py --depth 20
 
       # Pilot tree is derived from the same normalized feed output and independently re-verified.
       # Publishing the Kind.Sanctions head needs a registrar signature and human confirmation,
