@@ -127,7 +127,7 @@ describe('update detail page', () => {
     const update = getUpdate(slug)!;
     const html = renderToStaticMarkup(await UpdatePage({ params: Promise.resolve({ slug }) }));
     expect(html).toContain(update.title);
-    expect(html).toContain(update.summary);
+    expect(htmlContains(html, update.summary)).toBe(true);
     expect(html).toContain(update.sourceCommit.slice(0, 12));
     for (const ref of update.claimRefs) expect(html).toContain(ref);
   });
