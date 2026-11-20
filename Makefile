@@ -35,8 +35,10 @@ test-compliance:
 coverage:
 	uv run python -m pytest tests --cov=src --cov-branch --cov-report=term -q
 
+# Legacy circuit pins sanctions_tree_depth=20 (ComplianceProof(20, 10) in
+# circuits/compliance.circom); always build the artifact at that depth.
 build-sanctions-tree:
-	uv run python scripts/build_sanctions_tree.py
+	uv run python scripts/build_sanctions_tree.py --depth 20
 
 # Pilot (pilot-transfer-v3) raw-address sanctions tree, derived from artifacts/sanctions_tree.json
 build-pilot-sanctions-tree:
