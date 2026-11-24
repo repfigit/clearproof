@@ -5,6 +5,7 @@ import os
 from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import Field, ValidationError
 
+from src.api.middleware.rate_limit import wallet_ownership_limiter
 from src.auth.principal import Principal, TenantPrincipalDependency
 from src.protocol.transfer import Hex32, Record
 from src.protocol.wallet_ownership import WalletOwnershipError
@@ -18,7 +19,11 @@ from src.storage.keyring import load_keyring
 from src.storage.pilot import RecordConflict
 from src.storage.pilot_cipher import RecordCipher
 
-router = APIRouter(prefix="/wallet/ownership", tags=["wallet-ownership"])
+router = APIRouter(
+    prefix="/wallet/ownership",
+    tags=["wallet-ownership"],
+    dependencies=[Depends(wallet_ownership_limiter)],
+)
 
 
 class ChallengeRequest(Record):

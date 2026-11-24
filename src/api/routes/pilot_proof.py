@@ -6,6 +6,7 @@ from dataclasses import asdict, dataclass
 from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import Field
 
+from src.api.middleware.rate_limit import pilot_proof_limiter
 from src.api.request_body import read_private_body
 from src.auth.principal import Principal, TenantPrincipalDependency
 from src.policy.fact_approval import FactTrustStore
@@ -25,7 +26,7 @@ from src.storage.keyring import load_keyring
 from src.storage.pilot import RecordConflict
 from src.storage.pilot_cipher import RecordCipher, RecordIntegrityError
 
-router = APIRouter(prefix="/pilot/proof", tags=["pilot-proof"])
+router = APIRouter(prefix="/pilot/proof", tags=["pilot-proof"], dependencies=[Depends(pilot_proof_limiter)])
 
 
 @dataclass(frozen=True, repr=False)

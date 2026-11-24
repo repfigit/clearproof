@@ -6,6 +6,7 @@ import time
 from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import Field
 
+from src.api.middleware.rate_limit import pilot_events_limiter
 from src.api.request_body import read_private_body
 from src.auth.principal import Principal, TenantPrincipalDependency
 from src.protocol.transfer import Record
@@ -18,7 +19,7 @@ from src.storage.keyring import load_keyring
 from src.storage.pilot import RecordConflict
 from src.storage.pilot_cipher import RecordCipher
 
-router = APIRouter(prefix="/pilot/events", tags=["pilot-events"])
+router = APIRouter(prefix="/pilot/events", tags=["pilot-events"], dependencies=[Depends(pilot_events_limiter)])
 
 
 class AuthorityConfig(Record):

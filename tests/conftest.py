@@ -308,6 +308,9 @@ def _set_test_env(tmp_path):
     """Set environment variables for test isolation."""
     artifacts_dir = str(tmp_path / "artifacts")
     os.makedirs(artifacts_dir, exist_ok=True)
+    from src.api.middleware.rate_limit import reset_all_limiters
+
+    reset_all_limiters()
     with patch.dict(
         os.environ,
         {
@@ -316,6 +319,7 @@ def _set_test_env(tmp_path):
         },
     ):
         yield
+    reset_all_limiters()
 
 
 @pytest.fixture

@@ -11,15 +11,16 @@ import os
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 
-from src.api.middleware.rate_limit import RateLimiter
+from src.api.middleware.rate_limit import auth_nonce_limiter, auth_verify_limiter
 from src.auth.siwe_auth import SIWEAuth
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
-# H-8 + H-10: rate limit nonce endpoint
-_nonce_limiter = RateLimiter(max_requests=60, window_seconds=60)
+# H-8 + H-10: rate limit SIWE nonce and verify endpoints (config-driven)
+_nonce_limiter = auth_nonce_limiter
+_verify_limiter = auth_verify_limiter
 
 # Module-level SIWE handler (lazy init)
 _siwe: SIWEAuth | None = None
@@ -71,7 +72,7 @@ async def get_nonce(_rl: None = Depends(_nonce_limiter)):
 
 
 @router.post("/verify", response_model=VerifyResponse, summary="Verify SIWE signature")
-async def verify_signature(body: VerifyRequest):
+async def verify_signature(body: VerifyRequest, _rl: None = Depends(_verify_limiter)):
     """Verify a signed SIWE message and issue a session token.
 
     The client must:
