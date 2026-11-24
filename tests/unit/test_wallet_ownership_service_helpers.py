@@ -5,9 +5,10 @@ from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
 
 import pytest
+from eth_abi import encode as abi_encode
 from eth_account.messages import encode_defunct
 
-from src.chain.wallet_account import WalletAccountRPCError
+from src.chain.wallet_account import ERC_6492_MAGIC_SUFFIX, WalletAccountRPCError
 from src.protocol.wallet_ownership import (
     WalletAttestationV2,
     WalletChallenge,
@@ -337,3 +338,127 @@ async def test_active_delegation_review_and_public_helpers(wallet_enrollment, ch
 
     with pytest.raises(WalletOwnershipError, match="outside its validity interval"):
         await service.delegation_evidence(attestation_safe.attestation_id, now=attestation_safe.expires_at)
+
+
+@pytest.mark.asyncio
+async def test_verify_v2_dispatches_counterfactual_erc6492_when_has_code_false(wallet_enrollment, challenge_v2):
+    """Regression: counterfactual ERC-6492 wallets have empty on-chain code (has_code=False)."""
+    challenge, _ = challenge_v2
+    storage = {
+        ("wallet-challenge", challenge.nonce): challenge.model_dump(mode="json"),
+    }
+
+    @asynccontextmanager
+    async def transaction():
+        yield _FakeTx(storage)
+
+    async def probe_counterfactual(_addr: str) -> dict:
+        return {"delegated": False, "delegate": None, "indicator_malformed": False, "has_code": False}
+
+    called = []
+
+    async def verify_chain(address: str, message: str, signature: str) -> tuple[bool, str]:
+        called.append((address, message, signature))
+        return True, "erc-6492"
+
+    body = abi_encode(["address", "bytes", "bytes"], ["0x" + "11" * 20, b"\xaa\xbb", b"\x45" * 65])
+    erc6492_sig = "0x" + body.hex() + ERC_6492_MAGIC_SUFFIX[2:]
+
+    service = _service(wallet_enrollment, account_probe=probe_counterfactual, chain_verifier=verify_chain)
+    service.store = SimpleNamespace(transaction=transaction)
+
+    async def credential(_tx, _credential_id, _now):
+        return challenge.credential
+
+    service._credential = credential
+
+    attestation = await service.verify(challenge.nonce, erc6492_sig, now=1200)
+    assert attestation.method == "erc-6492"
+    assert len(called) == 1
+    assert called[0][0] == challenge.credential.subject_wallet
+    assert called[0][2] == erc6492_sig
+
+
+@pytest.mark.asyncio
+async def test_status_returns_latest_delegation_recheck_record(wallet_enrollment, challenge_v2):
+    """Regression: status() must return the latest re-checked delegation, not the stale initial snapshot."""
+    initial_delegation = {
+        "checked": True,
+        "delegated": False,
+        "delegate": None,
+        "checked_at": 1200,
+        "reason": None,
+    }
+    attestation = _v2_attestation(challenge_v2, delegation=initial_delegation)
+    storage = {
+        ("wallet-attestation", attestation.attestation_id): attestation.model_dump(mode="json"),
+    }
+
+    @asynccontextmanager
+    async def transaction():
+        yield _FakeTx(storage)
+
+    delegate_addr = "0x" + "33" * 20
+
+    async def probe_now_delegated(_addr: str) -> dict:
+        return {
+            "delegated": True,
+            "delegate": delegate_addr,
+            "indicator_malformed": False,
+            "has_code": True,
+        }
+
+    service = _service(wallet_enrollment, account_probe=probe_now_delegated, delegation_recheck_seconds=60)
+    service.store = SimpleNamespace(transaction=transaction)
+
+    async def credential(_tx, _credential_id, _now):
+        return attestation.challenge.credential
+
+    service._credential = credential
+
+    # Before the re-check interval elapses, status returns the initial unchecked-again delegation.
+    before = await service.status(attestation.attestation_id, now=1230)
+    assert before["wallet_ownership_verified"] is True
+    assert before["delegation"] == initial_delegation
+
+    # After the re-check interval elapses, status triggers a re-check and returns the latest record.
+    after = await service.status(attestation.attestation_id, now=1300)
+    assert after["wallet_ownership_verified"] is False
+    assert "delegated" in (after["reason"] or "")
+    assert after["delegation"] == {
+        "checked": True,
+        "delegated": True,
+        "delegate": delegate_addr,
+        "checked_at": 1300,
+        "reason": None,
+    }
+
+
+@pytest.mark.asyncio
+async def test_status_returns_none_delegation_for_v1_attestation(wallet_enrollment, challenge):
+    from src.protocol.wallet_ownership import WalletAttestation
+
+    chal, sig = challenge
+    att = WalletAttestation(
+        attestation_id=chal.nonce,
+        challenge=chal,
+        signature=sig,
+        issued_at=1200,
+        expires_at=1200 + 86400,
+    )
+    storage = {("wallet-attestation", att.attestation_id): att.model_dump(mode="json")}
+
+    @asynccontextmanager
+    async def transaction():
+        yield _FakeTx(storage)
+
+    service = _service(wallet_enrollment)
+    service.store = SimpleNamespace(transaction=transaction)
+
+    async def credential(_tx, _credential_id, _now):
+        return chal.credential
+
+    service._credential = credential
+    result = await service.status(att.attestation_id, now=1250)
+    assert result["wallet_ownership_verified"] is True
+    assert result["delegation"] is None

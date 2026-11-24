@@ -195,10 +195,45 @@ async def test_account_probe_delegation_helper(monkeypatch):
     monkeypatch.setattr(routes, "wallet_chain", lambda _module: SimpleNamespace())
 
     async def fake_account_code(_w3, _address):
-        return "0xef0100" + "22" * 20 + "000000"
+        return "0xef0100" + "22" * 20
 
     monkeypatch.setattr("src.chain.wallet_account.account_code", fake_account_code)
     probe = routes.account_probe()
     result = await probe("0x" + "11" * 20)
     assert result["delegated"] is True
+    assert result["delegate"] == "0x" + "22" * 20
+    assert result["indicator_malformed"] is False
     assert result["has_code"] is True
+
+
+def test_delegation_recheck_seconds_env_parsing(monkeypatch):
+    monkeypatch.delenv("WALLET_OWNERSHIP_DELEGATION_RECHECK_SECONDS", raising=False)
+    assert routes.delegation_recheck_seconds() == 3600
+
+    monkeypatch.setenv("WALLET_OWNERSHIP_DELEGATION_RECHECK_SECONDS", "   ")
+    assert routes.delegation_recheck_seconds() == 3600
+
+    monkeypatch.setenv("WALLET_OWNERSHIP_DELEGATION_RECHECK_SECONDS", "45")
+    assert routes.delegation_recheck_seconds() == 45
+
+    for invalid in ("0", "-10", "not-an-int"):
+        monkeypatch.setenv("WALLET_OWNERSHIP_DELEGATION_RECHECK_SECONDS", invalid)
+        with pytest.raises(ValueError):
+            routes.delegation_recheck_seconds()
+
+
+def test_wallet_service_wires_delegation_recheck_seconds_from_env(monkeypatch, principal):
+    monkeypatch.setenv("PII_MASTER_KEY", "ab" * 32)
+    monkeypatch.setenv("PILOT_CHAIN_ID", "31337")
+    monkeypatch.setenv("PILOT_REGISTRY_ADDRESS", "0x" + "1" * 40)
+    monkeypatch.setenv("WALLET_OWNERSHIP_DELEGATION_RECHECK_SECONDS", "120")
+    monkeypatch.delenv("WALLET_OWNERSHIP_RPC_URL", raising=False)
+
+    request = SimpleNamespace(app=SimpleNamespace(state=SimpleNamespace(db=SimpleNamespace(is_ready=True))))
+    service = routes.wallet_service(request, principal)
+    assert service.delegation_recheck_seconds == 120
+
+    monkeypatch.setenv("WALLET_OWNERSHIP_DELEGATION_RECHECK_SECONDS", "0")
+    with pytest.raises(routes.HTTPException) as exc_info:
+        routes.wallet_service(request, principal)
+    assert exc_info.value.status_code == 503

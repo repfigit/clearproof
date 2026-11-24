@@ -39,12 +39,15 @@ async def api(monkeypatch):
     ownership.assert_active = AsyncMock()
     with patch.object(routes, "load_keyring", return_value=None):
         with patch.object(routes, "RecordCipher", return_value=MagicMock()):
-            with patch.object(routes, "WalletOwnershipService", return_value=ownership):
+            with patch.object(routes, "WalletOwnershipService", return_value=ownership) as service_cls:
                 async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://test") as client:
-                    yield SimpleNamespace(client=client, ownership=ownership, registry=registry, app=app)
+                    yield SimpleNamespace(
+                        client=client, ownership=ownership, registry=registry, app=app, service_cls=service_cls
+                    )
 
 
-async def test_issue_with_wallet_attestation_marks_credential(api):
+async def test_issue_with_wallet_attestation_marks_credential(api, monkeypatch):
+    monkeypatch.setenv("WALLET_OWNERSHIP_DELEGATION_RECHECK_SECONDS", "90")
     body = {
         "issuer_did": "did:web:issuer.example",
         "subject_wallet": "0x" + "11" * 20,
@@ -58,6 +61,7 @@ async def test_issue_with_wallet_attestation_marks_credential(api):
     assert payload["wallet_ownership_verified"] is True
     assert payload["wallet_ownership_attestation_id"] == "cd" * 32
     api.ownership.assert_active.assert_awaited_once()
+    assert api.service_cls.call_args.kwargs["delegation_recheck_seconds"] == 90
 
 
 @pytest.mark.parametrize(

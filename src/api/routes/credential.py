@@ -16,6 +16,7 @@ from pydantic import BaseModel, Field
 
 from src.api.dependencies import get_credential_registry
 from src.api.middleware.auth import JWTAuthDependency
+from src.api.routes.wallet_ownership import account_probe, delegation_recheck_seconds
 from src.auth.principal import Principal, TenantPrincipalDependency
 from src.registry.credential_registry import CredentialRegistry, zkKYCCredential
 from src.services.enrollment import EnrollmentIneligible, EnrollmentIntegrityError, EnrollmentNotFound
@@ -87,6 +88,8 @@ def _wallet_ownership_service(request: Request, principal: Principal) -> WalletO
             principal,
             chain_id=int(os.environ["PILOT_CHAIN_ID"]),
             registry_address=os.environ["PILOT_REGISTRY_ADDRESS"],
+            account_probe=account_probe(),
+            delegation_recheck_seconds=delegation_recheck_seconds(),
         )
     except (KeyError, ValueError, RuntimeError) as exc:
         raise HTTPException(status_code=503, detail="Wallet evidence configuration unavailable") from exc
