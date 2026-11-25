@@ -225,8 +225,12 @@ async def test_authentication_is_required_before_job_lookup(api):
     assert response.status_code == 401
 
 
-async def test_missing_encryption_keyring_is_operator_failure(api, monkeypatch):
+async def test_missing_encryption_keyring_is_operator_failure(api):
     client, app, _, body, _ = api
-    monkeypatch.setattr(app.state, "record_cipher", None)
-    response = await client.post("/pilot/proof/jobs", json=body)
+    original = app.state.record_cipher
+    app.state.record_cipher = None
+    try:
+        response = await client.post("/pilot/proof/jobs", json=body)
+    finally:
+        app.state.record_cipher = original
     assert response.status_code == 503 and "PRIVATE" not in response.text

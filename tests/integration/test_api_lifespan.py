@@ -310,3 +310,51 @@ async def test_auth_dependency_reads_app_state_auth_config_over_module_globals(m
             assert ok.status_code == 200
             bad = await client.get("/_lifespan_auth_probe", headers={"X-API-Key": "stale-module-key"})
             assert bad.status_code == 401
+
+
+def test_lazy_config_accessors_construct_and_cache_on_bare_app_state(monkeypatch):
+    import json
+
+    from fastapi import FastAPI
+    from starlette.requests import Request
+
+    from src.api.config import (
+        EventConfig,
+        FireblocksConfig,
+        get_auth_config,
+        get_event_config,
+        get_fireblocks_config,
+        get_siwe_auth,
+    )
+
+    monkeypatch.setenv("PILOT_EVENT_AUTHORITIES", json.dumps({"authorities": []}))
+    monkeypatch.delenv("PILOT_INVESTIGATION_LINKS", raising=False)
+    monkeypatch.delenv("PILOT_FIREBLOCKS_INTEGRATIONS", raising=False)
+    monkeypatch.setenv("SIWE_DOMAIN", "bare.example")
+
+    app = FastAPI()
+    req = Request({"type": "http", "app": app, "headers": []})
+
+    # Bare app.state without lifespan lazily constructs and caches event/Fireblocks/SIWE config.
+    ev1 = get_event_config(req)
+    assert isinstance(ev1, EventConfig) and ev1.authorities == ()
+    assert app.state.event_config is ev1
+    monkeypatch.delenv("PILOT_EVENT_AUTHORITIES", raising=False)
+    assert get_event_config(req) is ev1
+
+    fb1 = get_fireblocks_config(req)
+    assert fb1 is None
+    assert app.state.fireblocks_config is None
+    assert get_fireblocks_config(req) is None
+    # Explicit override on app.state is respected without AttributeError.
+    custom_fb = FireblocksConfig()
+    app.state.fireblocks_config = custom_fb
+    assert get_fireblocks_config(req) is custom_fb
+
+    siwe1 = get_siwe_auth(req)
+    assert siwe1.domain == "bare.example"
+    assert app.state.siwe_auth is siwe1
+    assert get_siwe_auth(req) is siwe1
+
+    auth_cfg = get_auth_config(req)
+    assert auth_cfg.siwe_domain == "bare.example"

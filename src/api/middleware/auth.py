@@ -18,7 +18,7 @@ from typing import Optional
 from fastapi import HTTPException, Request
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
-from src.api.config import AuthConfig, resolve_auth_config
+from src.api.config import AuthConfig, get_siwe_auth, resolve_auth_config
 
 logger = logging.getLogger(__name__)
 
@@ -163,12 +163,7 @@ async def JWTAuthDependency(request: Request) -> dict:  # noqa: N802 — upperca
         credentials: Optional[HTTPAuthorizationCredentials] = await _bearer_scheme(request)
         if credentials is None or credentials.scheme.lower() != "bearer":
             raise HTTPException(status_code=401, detail="Missing Bearer token (SIWE session)")
-        try:
-            state = getattr(getattr(request, "app", None), "state", None)
-        except KeyError:
-            state = None
-        state_siwe = getattr(state, "siwe_auth", None) if state is not None else None
-        return await _verify_siwe_session(credentials.credentials, config=config, siwe_auth=state_siwe)
+        return await _verify_siwe_session(credentials.credentials, config=config, siwe_auth=get_siwe_auth(request))
 
     if mode == "jwt":
         credentials = await _bearer_scheme(request)

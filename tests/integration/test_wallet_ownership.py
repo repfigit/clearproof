@@ -153,8 +153,10 @@ async def test_real_http_lifecycle_and_auth_fail_closed(db, enrolled, monkeypatc
     from src.api.main import app
 
     wallet, consent, principal, _ = enrolled
-    monkeypatch.setattr(app.state, "db", db, raising=False)
-    monkeypatch.setattr(app.state, "record_cipher", cipher(), raising=False)
+    previous_db = getattr(app.state, "db", None)
+    previous_cipher = getattr(app.state, "record_cipher", None)
+    app.state.db = db
+    app.state.record_cipher = cipher()
     monkeypatch.setenv("PILOT_CHAIN_ID", str(consent.chain_id))
     monkeypatch.setenv("PILOT_REGISTRY_ADDRESS", consent.registry_address)
     monkeypatch.setattr("src.services.wallet_ownership.time.time", lambda: 1100)
@@ -201,6 +203,8 @@ async def test_real_http_lifecycle_and_auth_fail_closed(db, enrolled, monkeypatc
             )
             assert response.status_code == 422
     finally:
+        app.state.db = previous_db
+        app.state.record_cipher = previous_cipher
         app.dependency_overrides.clear()
         app.dependency_overrides.update(overrides)
     assert wallet.address.lower() not in caplog.text and signature not in caplog.text

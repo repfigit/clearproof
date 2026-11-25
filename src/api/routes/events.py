@@ -4,7 +4,7 @@ import time
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 
-from src.api.config import AuthorityConfig, EventConfig, LinkConfig, require_record_cipher
+from src.api.config import AuthorityConfig, EventConfig, LinkConfig, get_event_config, require_record_cipher
 from src.api.middleware.rate_limit import pilot_events_limiter
 from src.api.request_body import read_private_body
 from src.auth.principal import Principal, TenantPrincipalDependency
@@ -24,7 +24,7 @@ def event_service(request: Request, principal: Principal, *, ingestion: bool) ->
     if db is None or not db.is_ready:
         raise HTTPException(status_code=503, detail="Pilot database is unavailable")
     try:
-        config = getattr(request.app.state, "event_config", None)
+        config = get_event_config(request)
         if not isinstance(config, EventConfig):
             raise RuntimeError("Pilot event configuration is not installed on app.state")
         authorities = ()

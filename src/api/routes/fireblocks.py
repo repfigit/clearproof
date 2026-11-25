@@ -2,10 +2,11 @@
 
 import time
 
+import jwt
 from fastapi import APIRouter, Depends, HTTPException, Request
 
 from src.adapters.fireblocks import FireblocksError
-from src.api.config import FireblocksConfig, FireblocksIntegration, FireblocksIntegrations
+from src.api.config import FireblocksConfig, FireblocksIntegration, FireblocksIntegrations, get_fireblocks_config
 from src.api.middleware.rate_limit import pilot_fireblocks_limiter
 from src.api.request_body import read_private_body
 from src.api.routes.events import event_service
@@ -29,7 +30,10 @@ async def receive_fireblocks(
 ):
     principal.require("events:ingest")
     principal.require("evidence:decrypt")
-    config = getattr(request.app.state, "fireblocks_config", None)
+    try:
+        config = get_fireblocks_config(request)
+    except (KeyError, ValueError, TypeError, RecursionError, jwt.PyJWTError):
+        raise HTTPException(status_code=503, detail="Fireblocks relay configuration is unavailable") from None
     if not isinstance(config, FireblocksConfig):
         raise HTTPException(status_code=503, detail="Fireblocks relay configuration is unavailable")
     try:

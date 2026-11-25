@@ -11,7 +11,7 @@ from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, Field
 
-from src.api.config import resolve_auth_config
+from src.api.config import get_siwe_auth, resolve_auth_config
 from src.api.middleware.rate_limit import auth_nonce_limiter, auth_verify_limiter
 from src.auth.siwe_auth import SIWEAuth
 
@@ -30,16 +30,7 @@ _siwe: SIWEAuth | None = None
 def _get_siwe(request: Optional[Request] = None) -> SIWEAuth:
     global _siwe
     if request is not None:
-        try:
-            state = getattr(getattr(request, "app", None), "state", None)
-        except KeyError:
-            state = None
-        if state is not None and isinstance(getattr(state, "siwe_auth", None), SIWEAuth):
-            return state.siwe_auth
-        config = resolve_auth_config(request)
-        if _siwe is not None and _siwe.domain == config.siwe_domain:
-            return _siwe
-        return SIWEAuth(domain=config.siwe_domain)
+        return get_siwe_auth(request)
     if _siwe is None:
         config = resolve_auth_config(None)
         _siwe = SIWEAuth(domain=config.siwe_domain)

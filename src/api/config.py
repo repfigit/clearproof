@@ -65,6 +65,14 @@ class AuthConfig:
         )
 
 
+def _state_has_attr(state: Any, name: str) -> bool:
+    """Return True if ``name`` was explicitly set on ``state`` (even to ``None``)."""
+    backing = getattr(state, "_state", None)
+    if isinstance(backing, dict):
+        return name in backing
+    return hasattr(state, name)
+
+
 def _request_app_state(request: Optional[Request]):
     if request is None:
         return None
@@ -75,18 +83,19 @@ def _request_app_state(request: Optional[Request]):
     return getattr(app, "state", None) if app is not None else None
 
 
-def resolve_auth_config(request: Optional[Request] = None) -> AuthConfig:
-    """Return ``request.app.state.auth_config`` when populated, else fallback.
+def get_auth_config(request: Optional[Request] = None) -> AuthConfig:
+    """Return ``app.state.auth_config`` when populated, lazily resolving when absent.
 
-    During normal serving, lifespan populates ``app.state.auth_config``. Direct
-    unit tests that build a bare ``FastAPI()`` or synthetic ``Request`` without
-    running lifespan fall back to the legacy module-level settings in
-    ``src.api.middleware.auth`` and static API-key scope env vars.
+    During normal serving, lifespan populates ``app.state.auth_config``. When a
+    bare ``FastAPI()`` or synthetic ``Request`` is used without lifespan, this
+    falls back to the legacy module-level settings in ``src.api.middleware.auth``
+    and static API-key scope env vars (never raising ``AttributeError``).
     """
     state = _request_app_state(request)
-    config = getattr(state, "auth_config", None) if state is not None else None
-    if isinstance(config, AuthConfig):
-        return config
+    if state is not None and _state_has_attr(state, "auth_config"):
+        config = getattr(state, "auth_config", None)
+        if isinstance(config, AuthConfig):
+            return config
 
     from src.api.middleware import auth as _auth
 
@@ -102,6 +111,25 @@ def resolve_auth_config(request: Optional[Request] = None) -> AuthConfig:
         api_key_roles=tuple(r for r in os.getenv("API_KEY_ROLES", "").split(",") if r),
         api_key_issuer_dids=tuple(d for d in os.getenv("API_KEY_ISSUER_DIDS", "").split(",") if d),
     )
+
+
+resolve_auth_config = get_auth_config
+
+
+def get_siwe_auth(request: Optional[Request] = None):
+    """Return ``app.state.siwe_auth`` if set, lazily constructing and caching it when absent."""
+    from src.auth.siwe_auth import SIWEAuth
+
+    state = _request_app_state(request)
+    if state is not None and _state_has_attr(state, "siwe_auth"):
+        existing = getattr(state, "siwe_auth", None)
+        if isinstance(existing, SIWEAuth):
+            return existing
+    config = resolve_auth_config(request)
+    instance = SIWEAuth(domain=config.siwe_domain)
+    if state is not None and not _state_has_attr(state, "siwe_auth"):
+        state.siwe_auth = instance
+    return instance
 
 
 # ---------------------------------------------------------------------------
@@ -236,8 +264,48 @@ class FireblocksConfig:
 
 
 # ---------------------------------------------------------------------------
-# RecordCipher accessor
+# Lazy-caching app.state accessors
 # ---------------------------------------------------------------------------
+
+
+def get_event_config(request: Request) -> Optional[EventConfig]:
+    """Return ``app.state.event_config``, lazily constructing and caching it if absent.
+
+    When lifespan has populated ``app.state.event_config`` (or a test explicitly
+    sets it, including to ``None``), that value is returned without re-reading
+    the environment. When the attribute is absent (e.g. a bare ``FastAPI()``
+    app tested without lifespan), ``EventConfig.from_env()`` is constructed
+    once and cached on ``app.state.event_config``.
+    """
+    state = _request_app_state(request)
+    if state is None:
+        return None
+    if _state_has_attr(state, "event_config"):
+        config = getattr(state, "event_config", None)
+        return config if isinstance(config, EventConfig) else None
+    config = EventConfig.from_env()
+    state.event_config = config
+    return config
+
+
+def get_fireblocks_config(request: Request) -> Optional[FireblocksConfig]:
+    """Return ``app.state.fireblocks_config``, lazily constructing and caching it if absent.
+
+    When lifespan has populated ``app.state.fireblocks_config`` (or a test
+    explicitly sets it, including to ``None``), that value is returned without
+    re-reading the environment. When the attribute is absent (e.g. a bare
+    ``FastAPI()`` app tested without lifespan), ``FireblocksConfig.from_env()``
+    is constructed once and cached on ``app.state.fireblocks_config``.
+    """
+    state = _request_app_state(request)
+    if state is None:
+        return None
+    if _state_has_attr(state, "fireblocks_config"):
+        config = getattr(state, "fireblocks_config", None)
+        return config if isinstance(config, FireblocksConfig) else None
+    config = FireblocksConfig.from_env()
+    state.fireblocks_config = config
+    return config
 
 
 def get_record_cipher(request: Request, *, detail: str = "Pilot encryption configuration is unavailable") -> Any:
@@ -247,7 +315,8 @@ def get_record_cipher(request: Request, *, detail: str = "Pilot encryption confi
     ``app.state`` (for example, if startup did not populate it or a test
     explicitly clears ``app.state.record_cipher``).
     """
-    cipher = getattr(request.app.state, "record_cipher", None)
+    state = _request_app_state(request)
+    cipher = getattr(state, "record_cipher", None) if state is not None else None
     if cipher is None:
         raise HTTPException(status_code=503, detail=detail)
     return cipher
@@ -259,7 +328,8 @@ def require_record_cipher(request: Request) -> RecordCipher:
     Used inside helpers that already map ``RuntimeError`` to their route-specific
     redacted 503 detail.
     """
-    cipher = getattr(request.app.state, "record_cipher", None)
+    state = _request_app_state(request)
+    cipher = getattr(state, "record_cipher", None) if state is not None else None
     if cipher is None:
         raise RuntimeError("RecordCipher is not configured on app.state")
     return cipher

@@ -1449,15 +1449,18 @@ async def test_fireblocks_relay_requires_jwt_signature_and_operator_binding(db, 
                 rejected.assert_awaited_once()
         for invalid_configuration in ("duplicate", "jwks"):
             malformed = json.loads(json.dumps(config))
+            original_fireblocks_config = app.state.fireblocks_config
             if invalid_configuration == "duplicate":
                 malformed["integrations"].append(malformed["integrations"][0])
                 with pytest.raises(ValueError):
                     FireblocksConfig.from_raw(json.dumps(malformed).encode())
-                with monkeypatch.context() as patch:
-                    patch.setattr(app.state, "fireblocks_config", None)
+                try:
+                    app.state.fireblocks_config = None
                     response = await client.post(url, content=raw, headers=headers)
                     assert response.status_code == 503
                     assert response.json() == {"detail": "Fireblocks relay configuration is unavailable"}
+                finally:
+                    app.state.fireblocks_config = original_fireblocks_config
             else:
                 malformed["integrations"][0]["jwks"] = {"keys": []}
                 with pytest.raises(ValueError):
@@ -1467,11 +1470,13 @@ async def test_fireblocks_relay_requires_jwt_signature_and_operator_binding(db, 
                         json.dumps(malformed).encode()
                     ).integrations
                 )
-                with monkeypatch.context() as patch:
-                    patch.setattr(app.state, "fireblocks_config", uncompiled)
+                try:
+                    app.state.fireblocks_config = uncompiled
                     response = await client.post(url, content=raw, headers=headers)
                     assert response.status_code == 503
                     assert response.json() == {"detail": "Fireblocks verification configuration is unavailable"}
+                finally:
+                    app.state.fireblocks_config = original_fireblocks_config
         # All failed retries preserve the original successful notification.
         recovered = await client.post(url, content=raw, headers=headers)
         assert recovered.status_code == 200 and recovered.json()["duplicate"]
