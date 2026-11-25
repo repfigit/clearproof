@@ -220,14 +220,38 @@ def test_markdown_distinguishes_never_and_already_inverted(gas, label, ratio):
 def test_placeholder_transactions_are_deterministic_and_explicitly_warn(capsys):
     systems = model.load_systems(None)
     assert "placeholder transactions" in capsys.readouterr().err
-    assert [len(system.signed_tx) for system in systems] == [886, 1398]
-    assert [system.execution_gas for system in systems] == [341504, 232646]
+    assert [len(system.signed_tx) for system in systems] == [630, 1142]
+    assert [system.execution_gas for system in systems] == [362824, 225642]
     assert systems == model.load_systems(None)
-    assert systems[0].signed_tx != systems[1].signed_tx[:886]
+    assert systems[0].signed_tx != systems[1].signed_tx[:630]
 
 
-def test_historical_markdown_contains_finite_sensitivity_thresholds(capsys):
-    report = model.markdown(model.load_systems(None), CHAINS, model.REGIMES)
+@pytest.mark.parametrize(
+    "profile,expected_gas,expected_sizes",
+    [
+        ("pilot", [362824, 225642], [630, 1142]),
+        ("pilot-hardcoded", [282218, 225642], [630, 1142]),
+        ("legacy", [341504, 232646], [886, 1398]),
+    ],
+)
+def test_builtin_profiles_use_measured_constants_and_warn(capsys, profile, expected_gas, expected_sizes):
+    systems = model.load_systems(None, profile=profile)
+    err = capsys.readouterr().err
+    assert "placeholder transactions" in err
+    assert f"({profile} profile)" in err
+    assert [system.execution_gas for system in systems] == expected_gas
+    assert [len(system.signed_tx) for system in systems] == expected_sizes
+
+
+def test_unknown_profile_rejected(capsys):
+    with pytest.raises(ValueError, match="unknown profile 'bogus'"):
+        model.load_systems(None, profile="bogus")
+    capsys.readouterr()
+
+
+@pytest.mark.parametrize("profile", ["pilot", "pilot-hardcoded", "legacy"])
+def test_builtin_profile_markdown_contains_finite_sensitivity_thresholds(capsys, profile):
+    report = model.markdown(model.load_systems(None, profile=profile), CHAINS, model.REGIMES)
     capsys.readouterr()
     thresholds = report.split("#### Inversion thresholds", 1)[1]
     assert "never" not in thresholds

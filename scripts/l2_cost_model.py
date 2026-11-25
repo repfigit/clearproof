@@ -5,15 +5,16 @@
 # FastLZ port: op-geth 647c346e2bef36219cc7b47d76b1cb87e7ca29e4/core/types/rollup_cost.go
 """
 Price a compliance-proof verification on L2: execution gas *plus* the L1
-data-availability charge (AIF-99).
+data-availability charge (AIF-99; updated with measured `pilot-transfer-v3`
+constants alongside the historical 16-signal profile).
 
-This historical model uses the legacy 16-signal profile and dated assumptions.
-It does not estimate the current pilot or fetch current network fees.
+This model uses dated mainnet fee snapshots and assumed blob/L1 coupling.
+It does not fetch current network fees.
 The earlier ADR 0003 gas table was an L1 table. On a rollup the L1 DA term is a separate,
 often dominant, cost and it scales with the *compressed size of the signed
 transaction* — which is exactly where fflonk loses: 24 proof words against
 Groth16's 8, i.e. 512 extra high-entropy (incompressible) bytes on every
-proof. Whether the 32% execution-gas saving survives that is fee-regime
+proof. Whether the execution-gas saving survives that is fee-regime
 dependent, so this model reports a range rather than a point.
 
 Two rollup fee models are implemented, both from the sequencer's own source:
@@ -32,12 +33,15 @@ Two rollup fee models are implemented, both from the sequencer's own source:
   charges them at full size (see `estimate_compressed_size`).
 
 Usage:
-    uv run python scripts/l2_cost_model.py                    # built-in inputs
+    uv run python scripts/l2_cost_model.py                              # pilot-transfer-v3 defaults
+    uv run python scripts/l2_cost_model.py --profile pilot-hardcoded    # pilot-transfer-v3 hardcoded-VK Groth16
+    uv run python scripts/l2_cost_model.py --profile legacy             # historical 16-signal profile
     uv run python scripts/l2_cost_model.py --inputs /tmp/l2-cost-inputs.json
     uv run python scripts/l2_cost_model.py --format json
 
-Regenerate the measured inputs with:
+Regenerate the legacy measured inputs with:
     cd packages/contracts && npx hardhat test test/L2Cost.bench.ts
+For pilot-transfer-v3 reproduction steps, see docs/internal/FFLONK_BENCHMARK.md.
 """
 
 from __future__ import annotations
@@ -384,14 +388,34 @@ def markdown(systems: list[ProofSystem], chains: list[Chain], regimes: list[FeeR
 # --------------------------------------------------------------------------- #
 # Defaults
 # --------------------------------------------------------------------------- #
-# Groth16: measured in packages/contracts/test/L2Cost.bench.ts against the
-# committed vector (tests/vectors/compliance).
-# fflonk: execution gas from the AIF-86 L1 spike; the signed tx is synthesised
-# at fflonk's shape (24 proof words) and entropy. See FFLONK_BENCHMARK.md.
-DEFAULT_INPUTS = {
-    "groth16": {"execution_gas": 341_504, "signed_tx_bytes": 886},
-    "fflonk": {"execution_gas": 232_646, "signed_tx_bytes": 1_398},
+# Measured on the local Hardhat EVM harness (estimateGas on verifyProof plus
+# signed EIP-1559 transaction envelope size). See docs/internal/FFLONK_BENCHMARK.md.
+#
+# - pilot-transfer-v3 (8 public signals, 95,408 R1CS constraints):
+#   * "pilot" compares the shipped PilotGroth16Verifier (storage-backed VK,
+#     Apache-2.0) against snarkjs's exported FflonkVerifier (hardcoded VK,
+#     uncommitted GPL-3.0).
+#   * "pilot-hardcoded" compares an Apache-2.0 hardcoded-VK Groth16 verifier
+#     (generated via scripts/generate_verifier.mjs) against the same
+#     FflonkVerifier for an apples-to-apples VK-storage comparison.
+# - "legacy" retains the historical 16-signal compliance.circom profile
+#   (30,164 constraints, AIF-86 / AIF-99).
+PROFILE_INPUTS = {
+    "pilot": {
+        "groth16": {"execution_gas": 362_824, "signed_tx_bytes": 630},
+        "fflonk": {"execution_gas": 225_642, "signed_tx_bytes": 1_142},
+    },
+    "pilot-hardcoded": {
+        "groth16": {"execution_gas": 282_218, "signed_tx_bytes": 630},
+        "fflonk": {"execution_gas": 225_642, "signed_tx_bytes": 1_142},
+    },
+    "legacy": {
+        "groth16": {"execution_gas": 341_504, "signed_tx_bytes": 886},
+        "fflonk": {"execution_gas": 232_646, "signed_tx_bytes": 1_398},
+    },
 }
+DEFAULT_PROFILE = "pilot"
+DEFAULT_INPUTS = PROFILE_INPUTS[DEFAULT_PROFILE]
 
 
 def _synthetic_tx(n: int, salt: int) -> bytes:
@@ -411,14 +435,14 @@ def _synthetic_tx(n: int, salt: int) -> bytes:
     return bytes(out[:n])
 
 
-def load_systems(inputs_path: str | None) -> list[ProofSystem]:
+def load_systems(inputs_path: str | None, profile: str = DEFAULT_PROFILE) -> list[ProofSystem]:
     if not inputs_path:
         print(
-            "warning: no --inputs, using all-high-entropy placeholder transactions.\n"
-            "         The Groth16↔fflonk delta is right (528 B either way) but the\n"
+            f"warning: no --inputs, using all-high-entropy placeholder transactions ({profile} profile).\n"
+            "         The Groth16↔fflonk delta is right (~528 B either way) but the\n"
             "         absolute DA costs are overstated, because a real tx's public\n"
-            "         signals are mostly zero padding and do compress. Run\n"
-            "         `npx hardhat test test/L2Cost.bench.ts` and pass --inputs.\n",
+            "         signals contain zero padding and do compress. Pass --inputs\n"
+            "         with measured signed tx bytes (see docs/internal/FFLONK_BENCHMARK.md).\n",
             file=sys.stderr,
         )
     if inputs_path:
@@ -432,13 +456,15 @@ def load_systems(inputs_path: str | None) -> list[ProofSystem]:
             )
             for key in ("groth16", "fflonk")
         ]
+    if profile not in PROFILE_INPUTS:
+        raise ValueError(f"unknown profile {profile!r}")
     return [
         ProofSystem(
             name=key,
             execution_gas=spec["execution_gas"],
             signed_tx=_synthetic_tx(spec["signed_tx_bytes"], salt=i),
         )
-        for i, (key, spec) in enumerate(DEFAULT_INPUTS.items())
+        for i, (key, spec) in enumerate(PROFILE_INPUTS[profile].items())
     ]
 
 
@@ -509,12 +535,18 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
         "--inputs",
-        help="JSON emitted by packages/contracts/test/L2Cost.bench.ts",
+        help="JSON emitted by local EVM harness or packages/contracts/test/L2Cost.bench.ts",
+    )
+    parser.add_argument(
+        "--profile",
+        choices=tuple(PROFILE_INPUTS),
+        default=DEFAULT_PROFILE,
+        help="Built-in measured profile when --inputs is omitted (default: %(default)s)",
     )
     parser.add_argument("--format", choices=("markdown", "json"), default="markdown")
     args = parser.parse_args()
 
-    systems = load_systems(args.inputs)
+    systems = load_systems(args.inputs, profile=args.profile)
 
     if args.format == "json":
         rows = [
