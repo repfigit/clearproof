@@ -8,6 +8,7 @@ from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response
 
+from src.api.middleware.rate_limit import pilot_readiness_limiter
 from src.api.routes.pilot_proof import InspectionTarget
 from src.auth.principal import Principal, TenantPrincipalDependency
 from src.protocol.transfer import Epoch, OpaqueId, Record, VerificationContext
@@ -21,7 +22,11 @@ from src.storage.database import SCHEMA_VERSION
 from src.storage.keyring import load_keyring
 from src.storage.pilot_cipher import RecordCipher
 
-router = APIRouter(prefix="/pilot/readiness", tags=["pilot-readiness"])
+router = APIRouter(
+    prefix="/pilot/readiness",
+    tags=["pilot-readiness"],
+    dependencies=[Depends(pilot_readiness_limiter)],
+)
 Capability = Literal["inspection", "proving"]
 
 

@@ -4,6 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import JSONResponse
 from psycopg import Error as DatabaseError
 
+from src.api.middleware.rate_limit import pilot_proof_jobs_limiter
 from src.api.request_body import read_private_body
 from src.auth.principal import Principal, TenantPrincipalDependency
 from src.prover.pilot_artifacts import strict_json
@@ -12,7 +13,11 @@ from src.storage.keyring import load_keyring
 from src.storage.pilot_cipher import RecordCipher, RecordIntegrityError
 from src.storage.proof_jobs import ProofJobError, authorize
 
-router = APIRouter(prefix="/pilot/proof/jobs", tags=["pilot-proof-jobs"])
+router = APIRouter(
+    prefix="/pilot/proof/jobs",
+    tags=["pilot-proof-jobs"],
+    dependencies=[Depends(pilot_proof_jobs_limiter)],
+)
 
 
 def service(request: Request, principal: Principal):

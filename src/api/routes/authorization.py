@@ -4,6 +4,7 @@ from dataclasses import dataclass
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 
+from src.api.middleware.rate_limit import pilot_authorization_limiter
 from src.api.routes.pilot_proof import EvaluationBody, InspectionTarget, inspection_time, prepare_inspection
 from src.auth.principal import Principal, TenantPrincipalDependency
 from src.policy.fact_approval import FactTrustStore
@@ -19,7 +20,11 @@ from src.storage.keyring import load_keyring
 from src.storage.pilot import RecordConflict, ReplayConflict
 from src.storage.pilot_cipher import RecordCipher, RecordIntegrityError
 
-router = APIRouter(prefix="/pilot/proof", tags=["pilot-authorization"])
+router = APIRouter(
+    prefix="/pilot/proof",
+    tags=["pilot-authorization"],
+    dependencies=[Depends(pilot_authorization_limiter)],
+)
 
 
 @dataclass(frozen=True, repr=False, kw_only=True)

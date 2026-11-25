@@ -4,6 +4,7 @@ import time
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 
+from src.api.middleware.rate_limit import pilot_policy_limiter
 from src.api.request_body import read_private_body as read_policy_body
 from src.auth.principal import Principal, TenantPrincipalDependency
 from src.policy.diff import MAX_INPUT_BYTES, PolicyDiffRequest, compare_policies
@@ -19,7 +20,7 @@ from src.storage.keyring import load_keyring
 from src.storage.pilot import RecordConflict
 from src.storage.pilot_cipher import RecordCipher
 
-router = APIRouter(prefix="/pilot/policy", tags=["pilot-policy"])
+router = APIRouter(prefix="/pilot/policy", tags=["pilot-policy"], dependencies=[Depends(pilot_policy_limiter)])
 
 
 @router.post("/diff", summary="Compare policy versions against tenant-provided evidence snapshots")

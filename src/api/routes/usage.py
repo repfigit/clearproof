@@ -4,10 +4,11 @@ import time
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 
+from src.api.middleware.rate_limit import pilot_usage_limiter
 from src.auth.principal import Principal, TenantPrincipalDependency
 from src.services.usage import usage_inventory
 
-router = APIRouter(prefix="/pilot/usage", tags=["pilot-usage"])
+router = APIRouter(prefix="/pilot/usage", tags=["pilot-usage"], dependencies=[Depends(pilot_usage_limiter)])
 
 
 @router.get("", summary="Read retained tenant record counters, not billable charges")

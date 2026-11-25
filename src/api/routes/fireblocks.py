@@ -9,6 +9,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import Field, model_validator
 
 from src.adapters.fireblocks import FireblocksBinding, FireblocksError, FireblocksVerifier
+from src.api.middleware.rate_limit import pilot_fireblocks_limiter
 from src.api.request_body import read_private_body
 from src.api.routes.events import event_service
 from src.auth.principal import Principal, TenantPrincipalDependency
@@ -18,7 +19,11 @@ from src.services.event_ingestion import EventAuthorityError
 from src.services.fireblocks_intake import FireblocksIntake
 from src.storage.pilot import RecordConflict
 
-router = APIRouter(prefix="/pilot/fireblocks", tags=["pilot-fireblocks"])
+router = APIRouter(
+    prefix="/pilot/fireblocks",
+    tags=["pilot-fireblocks"],
+    dependencies=[Depends(pilot_fireblocks_limiter)],
+)
 
 
 class FireblocksIntegration(Record):
