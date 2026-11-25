@@ -1,4 +1,196 @@
-# fflonk vs Groth16 benchmark (AIF-86)
+# fflonk vs Groth16 benchmark (AIF-86; `pilot-transfer-v3` update 2026-11-25)
+
+**Updated:** 2026-11-25 (`pilot-transfer-v3`, branch `fix/fflonk-benchmark` @ `5fd315a`)
+**Original baseline:** 2026-07-31 (legacy `circuits/compliance.circom` @ `a54f3a0`, preserved below)
+
+## `pilot-transfer-v3` benchmark (2026-11-25)
+
+**Circuit:** `circuits/pilot_compliance.circom` (`pilot-transfer-v3`: issuance depth 32, authorized issuers depth 20, sanctions depth 20)
+**Constraints:** 95,408 R1CS (49,562 non-linear + 45,846 linear), 95,450 wires, 8 public signals, 334 private inputs (R1CS SHA-256 `4248cc7b67e7ead5a4ac7a4425acd0debffaee9642d540846be58daeae551aa8`)
+**fflonk PLONKish expansion:** 128,976 PLONK constraints, 33,560 additions, 129,010 vars, circuit power 17 (domain size 2^17 = 131,072)
+**Toolchain:** circom 2.2.2 (CI-pinned binary, SHA-256 `f3d8d1fdbc123779b80e210c909ee941d7a1e130c70365524646b48b8b0fe9d5`), snarkjs 0.7.6, Node.js v26.5.1, Hardhat local EVM (Prague hardfork, Solidity 0.8.24 optimizer runs=200)
+**Machine:** Linux x86-64, AMD Ryzen AI 9 HX 470 (12 physical cores / 24 logical CPUs, 57 GiB RAM). Proving was measured in both 4-physical-core pinned mode (`taskset -c 0,1,2,3`, matching `docs/benchmarks/native_prover.py`) and unpinned mode (all 24 logical CPUs).
+
+### Headline result (`pilot-transfer-v3`)
+
+- **Verifier gas:** fflonk (`225,642` gas) is **37.8% cheaper** than the shipped `PilotGroth16Verifier` (`362,824` gas, storage-backed VK, ratio `0.62×`) and **20.0% cheaper** than a hardcoded-VK Apache Groth16 verifier (`282,218` gas, ratio `0.80×`). Note the narrower margin on hardcoded-VK Groth16 than in the legacy 16-signal benchmark (`0.68×`): halving public signals from 16 to 8 cuts Groth16's public-input `ecMul`/`ecAdd` overhead roughly in half.
+- **Proving cost:** On 4 pinned physical cores, snarkjs fflonk proving takes **47.23 s mean / 47.35 s median** and **9.48 GiB peak RSS** vs **2.80 s** and **2.59 GiB** for snarkjs Groth16 (**16.9× slower, 3.66× memory**). Unpinned across all 24 logical CPUs, fflonk takes **38.41 s mean** (**10.39 GiB peak RSS**) vs **1.58 s** (**2.56 GiB**) for snarkjs Groth16 (**24.4× slower, 4.06× memory**). Relative to the separately measured rapidsnark native Groth16 prover on the same circuit (`1.05 s`, `86 MiB` on 4 cores; see [`2026-10-05-native-prover.md`](../benchmarks/2026-10-05-native-prover.md)), fflonk proving is **~45× slower and ~110× higher RSS**.
+- **Phase-1 ptau jump:** `pilot-transfer-v3` expands to domain size 2^17 (`131,072`), requiring `9 × 2^17 + 18 = 1,179,666` G1 points — **2^21 ptau** (`ppot_0080_21.ptau`, **2.25 GiB / 2,416,012,434 B**), up from CI's 2^17 (`ppot_0080_17.ptau`) for Groth16. Both `pot18` and `pot20` fail `snarkjs fflonk setup`.
+- **L2 calldata / DA impact:** With 8 public signals, `verifyProof` calldata is **1,028 B** (signed EIP-1559 tx **1,142 B**, **1,080 B** FastLZ) for fflonk vs **516 B** (signed tx **630 B**, **552 B** FastLZ) for Groth16 — the same incompressible **+512 B raw / +528 B FastLZ** penalty. At low L1 fees (2026-08-02 snapshot), fflonk remains cheaper (`0.62–0.63×` vs `PilotGroth16Verifier`, `0.80–0.81×` vs hardcoded Groth16). On OP Mainnet, the modeled inversion threshold is **~2.2 gwei** L1 base fee vs `PilotGroth16Verifier` and drops to **~0.9 gwei** vs hardcoded-VK Groth16.
+
+### Measurements (`pilot-transfer-v3`)
+
+All figures below come from one session on the identical compiled R1CS (`pilot_compliance.r1cs`) and identical synthetic witness (`synthetic.wtns`, 3,054,476 B, 8 public signals from `tests/unit/test_pilot_compliance.py:synthetic_case`). Both Groth16 verifier variants are shown so the storage-backed VK cost of `PilotGroth16Verifier` is not conflated with the proof-system difference.
+
+| Metric | Groth16 (`PilotGroth16Verifier`, storage VK) | Groth16 (hardcoded VK, `generate_verifier.mjs`) | fflonk (snarkjs template, hardcoded VK) | fflonk vs Pilot G16 / Hardcoded G16 |
+|---|---:|---:|---:|---:|
+| **On-chain `verifyProof` gas (`estimateGas`)** | **362,824** | **282,218** | **225,642** | **0.62× / 0.80×** |
+| On-chain `verifyProof` tx `gasUsed` | 360,012 | 279,489 | 225,642 | 0.63× / 0.81× |
+| Verifier deploy gas | 2,097,861 | 953,770 | 3,639,905 | 1.74× / 3.82× |
+| Verifier runtime bytecode | 3,739 B | 4,167 B | 16,619 B | 4.44× / 3.99× |
+| Verifier source size | ~140 lines (+ `Pairing.sol`) | 117 lines (+ `Pairing.sol`) | 1,392 lines (Yul-heavy) | — |
+| **Proving time — 4 pinned cores (run 1 / 2 / 3)** | 2.78 / 2.80 / 2.81 s | (same prover) | 47.35 / 47.68 / 46.65 s | — |
+| **Proving time — 4 pinned cores (mean / median)** | **2.80 s / 2.80 s** | (same prover) | **47.23 s / 47.35 s** | **16.9× / 16.9×** |
+| Peak RSS while proving (4 pinned cores, max of 3) | 2.59 GiB (2,655 MiB) | (same prover) | 9.48 GiB (9,708 MiB) | 3.66× |
+| **Proving time — unpinned 24 vCPU (run 1 / 2 / 3)** | 1.60 / 1.53 / 1.60 s | (same prover) | 37.10 / 38.55 / 39.58 s | — |
+| **Proving time — unpinned 24 vCPU (mean / median)** | **1.58 s / 1.60 s** | (same prover) | **38.41 s / 38.55 s** | **24.4× / 24.1×** |
+| Peak RSS while proving (unpinned, max of 3) | 2.56 GiB (2,619 MiB) | (same prover) | 10.39 GiB (10,637 MiB) | 4.06× |
+| Setup wall time (single-party dev G16 vs deterministic fflonk) | 8.65 s setup + 3.61 s contribute | (same setup) | 7.57 s | — |
+| Peak RSS during setup | 1.18 GiB (setup) / 0.45 GiB (contrib) | (same setup) | 6.57 GiB (6,733 MiB) | 5.55× |
+| Proving key (`zkey`) size | 41.8 MiB (43,818,940 B) | (same zkey) | 427.8 MiB (448,562,104 B) | 10.24× |
+| Proof JSON size | 805 B | 805 B | 2,252 B | 2.80× |
+| Proof payload (excluding 8 public signals) | 8 × 32 B = 256 B | 8 × 32 B = 256 B | 24 × 32 B = 768 B | 3.00× |
+| `verifyProof` calldata (4 B selector + proof + 8 signals) | 516 B (98 zero / 418 non-zero) | 516 B (98 zero / 418 non-zero) | 1,028 B (102 zero / 926 non-zero) | 1.99× (+512 B) |
+| Signed EIP-1559 tx size (raw / FastLZ) | 630 B / 552 B | 630 B / 552 B | 1,142 B / 1,080 B | +512 B / +528 B |
+| Phase-1 ptau power required | **2^17** (CI `ppot_0080_17.ptau`) | **2^17** | **2^21** (`ppot_0080_21.ptau`) | 16× domain (2.25 GiB file) |
+| **Trusted setup & trust model** | **Universal Phase-1 SRS (PSE PPOT) + per-circuit Phase-2 MPC ceremony** (toxic waste per circuit revision; dev keys used here are UNAPPROVED single-party) | Same as Pilot G16 | **Universal Phase-1 SRS only (PSE PPOT 2^21, 80 contributors)**; **no per-circuit Phase-2 ceremony** (circuit compilation is deterministic; security still depends on 1-of-N honesty in Phase-1 SRS) | Eliminates per-circuit Phase-2 MPC; retains Phase-1 SRS trust |
+| **Verifier licence & readiness** | **Apache-2.0** (shipped `PilotGroth16Verifier.sol`) | **Apache-2.0** (`scripts/generate_verifier.mjs`) | **GPL-3.0** (snarkjs export, **not committed**; requires greenfield Apache-2.0 rewrite + audit) | Major licensing/audit blocker |
+
+All measured proofs (6 Groth16 + 6 fflonk across 4-core and unpinned runs) verified off-chain (`snarkjs groth16 verify` → `OK!`; `snarkjs fflonk verify` → `PROOF VERIFIED SUCCESSFULLY`) and matched all 8 expected public signals. On the local Hardhat EVM harness, all three verifier contracts returned `true` on the valid proof and `false` when `pubSignals[0]` was incremented by 1.
+
+The Phase-1 parameter file used for both setups in this measurement was PSE Perpetual Powers of Tau `ppot_0080_21.ptau` (2,416,012,434 B):
+
+```
+url:     https://pse-trusted-setup-ppot.s3.eu-central-1.amazonaws.com/pot28_0080/ppot_0080_21.ptau
+sha256:  b4131202088141088d83fc05d654a142b51117df0960568613069e0719e7645a
+blake2b: bdd12bbbad348efdf86fd9c9765ec2f59b407ba3fac0fd3f4f73083eac6a09a11e93cc7a12b9e468dde972a8b643cd1b1cf57aebb780d366932f2ddd07aeab47
+```
+
+*(Note: `storage.googleapis.com/zkevm/ptau/powersOfTau28_hez_final_*.ptau` returned HTTP 403 at measurement time; PSE's public 80-contributor PPOT bucket is the same source already pinned by `.github/workflows/ci.yml` for `ppot_0080_17.ptau`.)*
+
+### Modeled L2 verification cost (`pilot-transfer-v3`)
+
+Using the measured signed transactions (`630 B` / `552 B` FastLZ for Groth16; `1,142 B` / `1,080 B` FastLZ for fflonk) with `scripts/l2_cost_model.py` (2026-08-02 mainnet chain scalars, ETH `$1,864`, assumed 1/17 blob/L1 coupling):
+
+#### Observed 2026-08-02 (L1 base fee 0.0425 gwei, blob base fee 2,400,000 wei, ETH $1,864)
+
+| Chain | System | Exec gas | Exec (USD) | L1 DA (USD) | Total (USD) | L1 share | vs Pilot G16 | vs Hardcoded G16 |
+|---|---|---:|---:|---:|---:|---:|---:|---:|
+| Base | Groth16 (`PilotGroth16Verifier`) | 362,824 | $0.00406 | $0.00000 | $0.00406 | 0% | baseline | — |
+| Base | Groth16 (hardcoded VK) | 282,218 | $0.00316 | $0.00000 | $0.00316 | 0% | — | baseline |
+| Base | fflonk | 225,642 | $0.00252 | $0.00001 | $0.00253 | 0% | **0.62×** | **0.80×** |
+| OP Mainnet | Groth16 (`PilotGroth16Verifier`) | 362,824 | $0.00068 | $0.00000 | $0.00068 | 1% | baseline | — |
+| OP Mainnet | Groth16 (hardcoded VK) | 282,218 | $0.00053 | $0.00000 | $0.00053 | 1% | — | baseline |
+| OP Mainnet | fflonk | 225,642 | $0.00042 | $0.00001 | $0.00043 | 2% | **0.63×** | **0.81×** |
+| Arbitrum One | Groth16 (`PilotGroth16Verifier`) | 362,824 | $0.01353 | $0.00002 | $0.01354 | 0% | baseline | — |
+| Arbitrum One | Groth16 (hardcoded VK) | 282,218 | $0.01052 | $0.00002 | $0.01054 | 0% | — | baseline |
+| Arbitrum One | fflonk | 225,642 | $0.00841 | $0.00003 | $0.00844 | 0% | **0.62×** | **0.80×** |
+
+#### Modeled L2 inversion thresholds (`pilot-transfer-v3`, real signed tx bytes)
+
+| Chain | Breakeven blob base fee (vs Pilot G16 / Hardcoded G16) | Breakeven L1 base fee (vs Pilot G16 / Hardcoded G16) | Headroom vs 2026-08-02 |
+|---|---:|---:|---:|
+| Base | 1,763,692,106 wei / 726,515,467 wei | 18.9 gwei / 7.8 gwei | 446× / 184× |
+| OP Mainnet | 302,587,050 wei / 122,733,447 wei | **2.2 gwei / 0.9 gwei** | **51× / 21×** |
+| Arbitrum One | 933,241,360 wei / 384,883,317 wei | 15.9 gwei / 6.5 gwei | 373× / 154× |
+
+`scripts/l2_cost_model.py` has been updated so its built-in profiles (`--profile pilot`, `--profile pilot-hardcoded`, and `--profile legacy`) carry these measured constants directly (defaulting to `pilot`).
+
+### `pilot-transfer-v3` reproduction commands
+
+The GPL-3.0 fflonk verifier is deliberately **not committed**. Generate it in a gitignored directory (`packages/contracts/contracts/bench/local/`), measure, and remove it afterwards:
+
+```bash
+# 0. Prerequisites: circom 2.2.2 (SHA-256 f3d8d1fd...fe9d5), npm ci, uv sync --all-extras
+BENCH=/tmp/fflonk-pilot-bench
+mkdir -p "$BENCH"
+
+# 1. Compile pilot-transfer-v3 from source
+circom circuits/pilot_compliance.circom --r1cs --wasm --sym -l node_modules -o "$BENCH"
+node node_modules/snarkjs/build/cli.cjs r1cs info "$BENCH/pilot_compliance.r1cs"
+
+# 2. Download PSE Perpetual Powers of Tau 2^21 (required for domain size 2^17 in fflonk)
+curl --fail --location --max-time 600 \
+  https://pse-trusted-setup-ppot.s3.eu-central-1.amazonaws.com/pot28_0080/ppot_0080_21.ptau \
+  -o "$BENCH/ppot_0080_21.ptau"
+echo "b4131202088141088d83fc05d654a142b51117df0960568613069e0719e7645a  $BENCH/ppot_0080_21.ptau" | sha256sum --check
+
+# 3. Generate the synthetic pilot-transfer-v3 witness
+uv run python -c '
+import json, runpy
+from pathlib import Path
+from src.prover.pilot_compliance import PUBLIC_SIGNALS
+out = Path("/tmp/fflonk-pilot-bench")
+fixture = runpy.run_path("tests/unit/test_pilot_compliance.py")
+witness, _, _ = fixture["synthetic_case"](artifact_manifest_digest="0"*64, with_trust=True)
+(out / "synthetic.json").write_text(json.dumps(witness))
+(out / "expected-public.json").write_text(json.dumps([witness[name] for name in PUBLIC_SIGNALS]))
+'
+node "$BENCH/pilot_compliance_js/generate_witness.js" \
+  "$BENCH/pilot_compliance_js/pilot_compliance.wasm" \
+  "$BENCH/synthetic.json" "$BENCH/synthetic.wtns"
+
+# 4. Setup: fflonk (universal, no Phase 2) and Groth16 (dev-only single-party Phase 2)
+/usr/bin/time -f "fflonk_setup wall=%e user=%U sys=%S rss_kib=%M" \
+  node node_modules/snarkjs/build/cli.cjs fflonk setup \
+  "$BENCH/pilot_compliance.r1cs" "$BENCH/ppot_0080_21.ptau" "$BENCH/pilot_fflonk.zkey"
+node node_modules/snarkjs/build/cli.cjs zkey export verificationkey \
+  "$BENCH/pilot_fflonk.zkey" "$BENCH/pilot_fflonk_vkey.json"
+node node_modules/snarkjs/build/cli.cjs zkey export solidityverifier \
+  "$BENCH/pilot_fflonk.zkey" "$BENCH/PilotFflonkVerifier.sol"
+
+/usr/bin/time -f "g16_setup wall=%e user=%U sys=%S rss_kib=%M" \
+  node node_modules/snarkjs/build/cli.cjs groth16 setup \
+  "$BENCH/pilot_compliance.r1cs" "$BENCH/ppot_0080_21.ptau" "$BENCH/pilot_g16_0000.zkey"
+/usr/bin/time -f "g16_contrib wall=%e user=%U sys=%S rss_kib=%M" \
+  node node_modules/snarkjs/build/cli.cjs zkey contribute \
+  "$BENCH/pilot_g16_0000.zkey" "$BENCH/pilot_g16_final.zkey" \
+  --name="Bench dev only" -e="pilot-v3-bench-unapproved"
+node node_modules/snarkjs/build/cli.cjs zkey export verificationkey \
+  "$BENCH/pilot_g16_final.zkey" "$BENCH/pilot_g16_vkey.json"
+node scripts/generate_verifier.mjs \
+  "$BENCH/pilot_g16_vkey.json" "$BENCH/PilotGroth16VerifierHardcoded.sol"
+
+# 5. Proving (1 warmup + 3 measured runs on 4 distinct physical cores, matching native_prover.py)
+for i in 0 1 2 3; do
+  /usr/bin/time -f "g16_4c_${i} wall=%e user=%U sys=%S rss_kib=%M" \
+    taskset -c 0,1,2,3 node node_modules/snarkjs/build/cli.cjs groth16 prove \
+    "$BENCH/pilot_g16_final.zkey" "$BENCH/synthetic.wtns" \
+    "$BENCH/g16_4c_${i}_proof.json" "$BENCH/g16_4c_${i}_public.json"
+  /usr/bin/time -f "fflonk_4c_${i} wall=%e user=%U sys=%S rss_kib=%M" \
+    taskset -c 0,1,2,3 node node_modules/snarkjs/build/cli.cjs fflonk prove \
+    "$BENCH/pilot_fflonk.zkey" "$BENCH/synthetic.wtns" \
+    "$BENCH/fflonk_4c_${i}_proof.json" "$BENCH/fflonk_4c_${i}_public.json" >/dev/null
+done
+
+# 6. Verify off-chain and export fflonk Solidity calldata
+node node_modules/snarkjs/build/cli.cjs groth16 verify \
+  "$BENCH/pilot_g16_vkey.json" "$BENCH/g16_4c_1_public.json" "$BENCH/g16_4c_1_proof.json"
+node node_modules/snarkjs/build/cli.cjs fflonk verify \
+  "$BENCH/pilot_fflonk_vkey.json" "$BENCH/fflonk_4c_1_public.json" "$BENCH/fflonk_4c_1_proof.json"
+node node_modules/snarkjs/build/cli.cjs zkey export soliditycalldata \
+  "$BENCH/fflonk_4c_1_public.json" "$BENCH/fflonk_4c_1_proof.json" > "$BENCH/fflonk_calldata.txt"
+
+# 7. Local EVM gas & calldata measurement (copy verifiers into gitignored bench/local/, compile, run, clean up)
+mkdir -p packages/contracts/contracts/bench/local
+cp "$BENCH/PilotFflonkVerifier.sol" packages/contracts/contracts/bench/local/FflonkVerifier.sol
+sed 's|"\./Pairing\.sol"|"../../Pairing.sol"|g; s|contract Groth16Verifier|contract Groth16VerifierPilotHardcoded|g' \
+  "$BENCH/PilotGroth16VerifierHardcoded.sol" \
+  > packages/contracts/contracts/bench/local/Groth16VerifierPilotHardcoded.sol
+(cd packages/contracts && npx hardhat compile)
+# Run local Hardhat script deploying PilotGroth16Verifier, Groth16VerifierPilotHardcoded, and FflonkVerifier,
+# verifying valid + tampered proofs, recording estimateGas/gasUsed/deployGas/bytecode and writing signed tx JSON.
+# Then price on L2 and discard uncommitted GPL verifier + typechain edits:
+uv run python scripts/l2_cost_model.py --inputs "$BENCH/l2_inputs_pilot_contract.json"
+uv run python scripts/l2_cost_model.py --inputs "$BENCH/l2_inputs_hardcoded_contract.json"
+rm -rf packages/contracts/contracts/bench/local && git checkout -- packages/contracts/typechain-types/
+
+# 8. Tests & static analysis
+uv run python -m pytest tests/unit/test_l2_cost_model.py -v
+bash scripts/circuit_lint.sh
+```
+
+### Risks and limitations (`pilot-transfer-v3`)
+
+- **GPL-3.0 verifier template:** snarkjs exports a 1,392-line Yul-heavy Solidity verifier under GPL-3.0 (not committed here). Adopting fflonk still requires a greenfield Apache-2.0 verifier implementation and independent security audit per ADR 0001.
+- **Proving latency and memory:** ~47 s and ~9.5 GiB RSS per proof on 4 cores (~38 s / ~10.4 GiB unpinned) makes synchronous HTTP proving non-viable and requires large worker RAM; unlike Groth16 (which has rapidsnark at 1.05 s / 86 MiB), no audited native fflonk prover is integrated.
+- **Large universal SRS:** fflonk on `pilot-transfer-v3` requires a 2^21 ptau (`2.25 GiB`), which increases CI cache/download footprint and key-generation RAM (`6.57 GiB`).
+- **Narrower L2 headroom vs hardcoded Groth16:** Against a hardcoded-VK Groth16 verifier (which eliminates `PilotGroth16Verifier`'s ~80.6k gas of storage VK reads), fflonk saves 56,576 gas instead of 137,182 gas, dropping OP Mainnet's modeled inversion threshold to ~0.9 gwei L1 base fee.
+- **Not measured here:** BLS12-381 (tracked separately in C2 / ADR 0002), wallet-ownership circuit composition (AIF-67), live mainnet/testnet L2 receipts for `pilot-transfer-v3`, and recursive aggregation. All keys generated here are unapproved development/benchmark artifacts.
+
+---
+
+## Legacy 16-signal benchmark (AIF-86 — 2026-07-31)
 
 **Date:** 2026-07-31
 **Circuit:** `circuits/compliance.circom`, compiled from `main` @ `a54f3a0`
