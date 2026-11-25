@@ -11,6 +11,7 @@ every request.
 from __future__ import annotations
 
 import json
+import math
 import os
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any, Mapping, Optional
@@ -306,6 +307,72 @@ def get_fireblocks_config(request: Request) -> Optional[FireblocksConfig]:
     config = FireblocksConfig.from_env()
     state.fireblocks_config = config
     return config
+
+
+DEFAULT_WALLET_RPC_TIMEOUT_SECONDS = 10.0
+
+
+def wallet_rpc_timeout_seconds(env: Optional[Mapping[str, str]] = None) -> float:
+    """Parse ``WALLET_OWNERSHIP_RPC_TIMEOUT_SECONDS`` (default 10s, positive finite float)."""
+    source = os.environ if env is None else env
+    raw = source.get("WALLET_OWNERSHIP_RPC_TIMEOUT_SECONDS")
+    if raw is None or not raw.strip():
+        return DEFAULT_WALLET_RPC_TIMEOUT_SECONDS
+    value = float(raw.strip())
+    if not math.isfinite(value) or value <= 0:
+        raise ValueError("WALLET_OWNERSHIP_RPC_TIMEOUT_SECONDS must be a positive finite number")
+    return value
+
+
+def build_wallet_web3(
+    env: Optional[Mapping[str, str]] = None,
+    *,
+    w3_module: Any = None,
+) -> Any:
+    """Construct an ``AsyncWeb3`` client for wallet ownership RPC, or ``None`` when unset.
+
+    Passes ``request_kwargs={"timeout": wallet_rpc_timeout_seconds(env)}`` to
+    ``AsyncHTTPProvider`` so every outbound RPC call has an explicit timeout.
+    """
+    source = os.environ if env is None else env
+    rpc_url = source.get("WALLET_OWNERSHIP_RPC_URL")
+    if not rpc_url:
+        return None
+    timeout = wallet_rpc_timeout_seconds(source)
+    if w3_module is None:
+        from web3 import AsyncHTTPProvider, AsyncWeb3
+
+        return AsyncWeb3(AsyncHTTPProvider(rpc_url, request_kwargs={"timeout": timeout}))
+    return w3_module.AsyncWeb3(w3_module.AsyncHTTPProvider(rpc_url, request_kwargs={"timeout": timeout}))
+
+
+async def close_wallet_web3(client: Any) -> None:
+    """Close a managed ``AsyncWeb3`` client's underlying provider session if present."""
+    if client is None:
+        return
+    provider = getattr(client, "provider", None)
+    disconnect = getattr(provider, "disconnect", None)
+    if callable(disconnect):
+        await disconnect()
+
+
+def get_wallet_web3(request: Optional[Request] = None) -> Any:
+    """Return ``app.state.wallet_web3``, lazily constructing and caching it when absent.
+
+    When lifespan has populated ``app.state.wallet_web3`` (or a test explicitly
+    sets it, including to ``None``), that value is returned without re-reading
+    the environment. When the attribute is absent (e.g., a bare ``FastAPI()``
+    app tested without lifespan), ``build_wallet_web3()`` is constructed once
+    and cached on ``app.state.wallet_web3``.
+    """
+    state = _request_app_state(request)
+    if state is None:
+        return build_wallet_web3()
+    if _state_has_attr(state, "wallet_web3"):
+        return getattr(state, "wallet_web3", None)
+    client = build_wallet_web3()
+    state.wallet_web3 = client
+    return client
 
 
 def get_record_cipher(request: Request, *, detail: str = "Pilot encryption configuration is unavailable") -> Any:

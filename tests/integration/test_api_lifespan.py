@@ -358,3 +358,57 @@ def test_lazy_config_accessors_construct_and_cache_on_bare_app_state(monkeypatch
 
     auth_cfg = get_auth_config(req)
     assert auth_cfg.siwe_domain == "bare.example"
+
+
+@pytest.mark.parametrize("failure", ["none", "serving", "connecting"])
+async def test_lifespan_constructs_and_disconnects_wallet_web3_on_every_exit(module, monkeypatch, failure):
+    monkeypatch.setenv("WALLET_OWNERSHIP_RPC_URL", "http://127.0.0.1:8545")
+    monkeypatch.setenv("WALLET_OWNERSHIP_RPC_TIMEOUT_SECONDS", "5")
+    monkeypatch.delenv("PILOT_EVENT_AUTHORITIES", raising=False)
+    monkeypatch.delenv("PILOT_INVESTIGATION_LINKS", raising=False)
+    monkeypatch.delenv("PILOT_FIREBLOCKS_INTEGRATIONS", raising=False)
+
+    disconnect = AsyncMock()
+    managed_w3 = SimpleNamespace(provider=SimpleNamespace(disconnect=disconnect))
+    builder = Mock(return_value=managed_w3)
+    monkeypatch.setattr(module, "build_wallet_web3", builder)
+
+    if failure == "connecting":
+        monkeypatch.setenv("DATABASE_URL", "configured")
+        database = SimpleNamespace(connect=AsyncMock(side_effect=RuntimeError("db connect failed")), close=AsyncMock())
+        monkeypatch.setattr(module, "Database", Mock(return_value=database))
+    else:
+        monkeypatch.delenv("DATABASE_URL", raising=False)
+
+    app = module.create_app()
+
+    async def run():
+        async with module.lifespan(app):
+            assert app.state.wallet_web3 is managed_w3
+            if failure == "serving":
+                raise RuntimeError("serving failed")
+
+    if failure == "none":
+        await run()
+    else:
+        with pytest.raises(RuntimeError, match="failed"):
+            await run()
+
+    builder.assert_called_once_with()
+    disconnect.assert_awaited_once()
+    assert app.state.wallet_web3 is None
+
+
+async def test_invalid_wallet_rpc_timeout_blocks_startup_before_db(module, monkeypatch):
+    monkeypatch.setenv("DATABASE_URL", "configured")
+    monkeypatch.setenv("WALLET_OWNERSHIP_RPC_URL", "http://127.0.0.1:8545")
+    monkeypatch.setenv("WALLET_OWNERSHIP_RPC_TIMEOUT_SECONDS", "0")
+    monkeypatch.delenv("PILOT_EVENT_AUTHORITIES", raising=False)
+    monkeypatch.delenv("PILOT_INVESTIGATION_LINKS", raising=False)
+    monkeypatch.delenv("PILOT_FIREBLOCKS_INTEGRATIONS", raising=False)
+    database = Mock()
+    monkeypatch.setattr(module, "Database", database)
+    with pytest.raises(RuntimeError, match="Invalid wallet ownership RPC configuration"):
+        async with module.lifespan(module.create_app()):
+            pytest.fail("invalid wallet RPC timeout reached serving state")
+    database.assert_not_called()

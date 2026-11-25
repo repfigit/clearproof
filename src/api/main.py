@@ -13,7 +13,13 @@ import jwt
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from src.api.config import AuthConfig, EventConfig, FireblocksConfig
+from src.api.config import (
+    AuthConfig,
+    EventConfig,
+    FireblocksConfig,
+    build_wallet_web3,
+    close_wallet_web3,
+)
 from src.api.routes.auth import router as auth_router
 from src.api.routes.authorization import router as authorization_router
 from src.api.routes.credential import router as credential_router
@@ -86,6 +92,10 @@ async def lifespan(app: FastAPI):
         fireblocks_config = FireblocksConfig.from_env()
     except (KeyError, ValueError, TypeError, RuntimeError, RecursionError, jwt.PyJWTError) as exc:
         raise RuntimeError("Invalid Fireblocks relay configuration") from exc
+    try:
+        wallet_web3 = build_wallet_web3()
+    except (ValueError, TypeError, RuntimeError) as exc:
+        raise RuntimeError("Invalid wallet ownership RPC configuration") from exc
 
     db = None
     app.state.db = None
@@ -94,6 +104,7 @@ async def lifespan(app: FastAPI):
     app.state.siwe_auth = siwe_auth
     app.state.event_config = event_config
     app.state.fireblocks_config = fireblocks_config
+    app.state.wallet_web3 = wallet_web3
     try:
         db_url = os.getenv("DATABASE_URL")
         if db_url:
@@ -121,6 +132,8 @@ async def lifespan(app: FastAPI):
         app.state.siwe_auth = None
         app.state.event_config = None
         app.state.fireblocks_config = None
+        app.state.wallet_web3 = None
+        await close_wallet_web3(wallet_web3)
         if db is not None:
             await db.close()
         logger.info("ZK Travel Rule Compliance Bridge shutting down.")
