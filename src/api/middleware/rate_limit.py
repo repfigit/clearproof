@@ -333,24 +333,22 @@ class PrincipalRateLimiter(RateLimiter):
 # All limiters are registered in ALL_LIMITERS so test fixtures can reset state
 # cleanly and operators can inspect configured tiers.
 
-# Unauthenticated SIWE endpoints
+# Unauthenticated SIWE endpoints (tighter on /auth/verify)
 auth_nonce_limiter = RateLimiter(max_requests=60, window_seconds=60, env_prefix="RATE_LIMIT_AUTH_NONCE")
-auth_verify_limiter = RateLimiter(max_requests=20, window_seconds=60, env_prefix="RATE_LIMIT_AUTH_VERIFY")
+auth_verify_limiter = RateLimiter(max_requests=30, window_seconds=60, env_prefix="RATE_LIMIT_AUTH_VERIFY")
 
-# Pilot heavy/cryptographic/mutating routes (pairing, proving, authorization)
-pilot_proof_limiter = RateLimiter(max_requests=30, window_seconds=60, env_prefix="RATE_LIMIT_PILOT_PROOF")
+# Pilot routes (default 120/min per tier; operators can tighten via env overrides)
+pilot_proof_limiter = RateLimiter(max_requests=120, window_seconds=60, env_prefix="RATE_LIMIT_PILOT_PROOF")
 pilot_authorization_limiter = RateLimiter(
-    max_requests=30, window_seconds=60, env_prefix="RATE_LIMIT_PILOT_AUTHORIZATION"
+    max_requests=120, window_seconds=60, env_prefix="RATE_LIMIT_PILOT_AUTHORIZATION"
 )
-pilot_proof_jobs_limiter = RateLimiter(max_requests=60, window_seconds=60, env_prefix="RATE_LIMIT_PILOT_PROOF_JOBS")
-
-# Pilot enrollment, policy, events, Fireblocks relay, usage, readiness
-pilot_credential_limiter = RateLimiter(max_requests=60, window_seconds=60, env_prefix="RATE_LIMIT_PILOT_CREDENTIAL")
-pilot_policy_limiter = RateLimiter(max_requests=60, window_seconds=60, env_prefix="RATE_LIMIT_PILOT_POLICY")
+pilot_proof_jobs_limiter = RateLimiter(max_requests=120, window_seconds=60, env_prefix="RATE_LIMIT_PILOT_PROOF_JOBS")
+pilot_credential_limiter = RateLimiter(max_requests=120, window_seconds=60, env_prefix="RATE_LIMIT_PILOT_CREDENTIAL")
+pilot_policy_limiter = RateLimiter(max_requests=120, window_seconds=60, env_prefix="RATE_LIMIT_PILOT_POLICY")
 pilot_events_limiter = RateLimiter(max_requests=120, window_seconds=60, env_prefix="RATE_LIMIT_PILOT_EVENTS")
 pilot_fireblocks_limiter = RateLimiter(max_requests=120, window_seconds=60, env_prefix="RATE_LIMIT_PILOT_FIREBLOCKS")
-pilot_readiness_limiter = RateLimiter(max_requests=60, window_seconds=60, env_prefix="RATE_LIMIT_PILOT_READINESS")
-pilot_usage_limiter = RateLimiter(max_requests=60, window_seconds=60, env_prefix="RATE_LIMIT_PILOT_USAGE")
+pilot_readiness_limiter = RateLimiter(max_requests=120, window_seconds=60, env_prefix="RATE_LIMIT_PILOT_READINESS")
+pilot_usage_limiter = RateLimiter(max_requests=120, window_seconds=60, env_prefix="RATE_LIMIT_PILOT_USAGE")
 
 # Wallet ownership routes (challenge/verify/recheck invoke crypto + optional RPC)
 wallet_ownership_limiter = RateLimiter(max_requests=60, window_seconds=60, env_prefix="RATE_LIMIT_WALLET_OWNERSHIP")

@@ -304,13 +304,31 @@ def credential_registry() -> CredentialRegistry:
 
 
 @pytest.fixture(autouse=True)
+def _reset_rate_limiters():
+    """Clear all module-level rate limiter stores between tests for order independence."""
+    import sys
+
+    from src.api.middleware.rate_limit import reset_all_limiters
+
+    def _clear():
+        reset_all_limiters()
+        proof_route = sys.modules.get("src.api.routes.proof")
+        if proof_route is not None:
+            for attr in ("_proof_generate_limiter", "_proof_verify_limiter"):
+                limiter = getattr(proof_route, attr, None)
+                if limiter is not None:
+                    limiter.reset()
+
+    _clear()
+    yield
+    _clear()
+
+
+@pytest.fixture(autouse=True)
 def _set_test_env(tmp_path):
     """Set environment variables for test isolation."""
     artifacts_dir = str(tmp_path / "artifacts")
     os.makedirs(artifacts_dir, exist_ok=True)
-    from src.api.middleware.rate_limit import reset_all_limiters
-
-    reset_all_limiters()
     with patch.dict(
         os.environ,
         {
@@ -319,7 +337,6 @@ def _set_test_env(tmp_path):
         },
     ):
         yield
-    reset_all_limiters()
 
 
 @pytest.fixture
