@@ -1,0 +1,286 @@
+{
+  "schema_version": "clearproof-preaudit-circuit-profile-v1",
+  "profile_id": "clearproof-preaudit-2026-11",
+  "assurance": "preaudit-frozen-no-ceremony",
+  "pilot_signals_source": {
+    "path": "specs/pilot-signals-v3.json",
+    "sha256": "4932f8bc2948340926aeb23c7ed202bb47615ba9c570c2731daea64366206948",
+    "size": 4632
+  },
+  "toolchain": {
+    "circom_version": "2.2.2",
+    "circom_linux_amd64_sha256": "f3d8d1fdbc123779b80e210c909ee941d7a1e130c70365524646b48b8b0fe9d5",
+    "snarkjs_version": "0.7.6",
+    "circomlib_version": "2.0.5"
+  },
+  "curves": {
+    "bn254": {
+      "curve": "bn254",
+      "circom_prime": "bn128",
+      "scalar_field_order": "21888242871839275222246405745257275088548364400416034343698204186575808495617",
+      "scalar_field_bits": 254,
+      "poseidon_sbox_power": 5,
+      "poseidon_full_rounds": 8,
+      "poseidon_partial_rounds": [
+        56,
+        57,
+        56,
+        60,
+        60,
+        63,
+        64,
+        63,
+        60,
+        66,
+        60,
+        65,
+        70,
+        60,
+        64,
+        68
+      ],
+      "poseidon_constants_json": {
+        "path": "src/registry/poseidon_constants.json",
+        "sha256": "4f0fcf456a32ff594e4713bb2c28ebee8b2c8ace58c5f33af789f565adbaf472",
+        "size": 880600
+      },
+      "poseidon_circom_constants": null
+    },
+    "bls12-381": {
+      "curve": "bls12-381",
+      "circom_prime": "bls12381",
+      "scalar_field_order": "52435875175126190479447740508185965837690552500527637822603658699938581184513",
+      "scalar_field_bits": 255,
+      "poseidon_sbox_power": 5,
+      "poseidon_full_rounds": 8,
+      "poseidon_partial_rounds": [
+        56,
+        57,
+        56,
+        60,
+        60,
+        63,
+        64,
+        63,
+        60,
+        66,
+        60,
+        65,
+        70,
+        60,
+        64,
+        68
+      ],
+      "poseidon_constants_json": {
+        "path": "src/registry/poseidon_constants_bls12381.json",
+        "sha256": "0b6152f5bda88a6fbf873cfb756dc2956d3b1e5646fe016ca449ba3ae242d652",
+        "size": 883170
+      },
+      "poseidon_circom_constants": {
+        "path": "circuits/generated/poseidon_bls12381_constants.circom",
+        "sha256": "e613214fc819e052bca28855cadbdca8462ac083c37b619db6b1886fdc756191",
+        "size": 434676
+      }
+    }
+  },
+  "circuits": [
+    {
+      "circuit_id": "pilot-transfer-v3-bn254",
+      "role": "transfer-compliance",
+      "profile_name": "pilot-transfer-v3",
+      "curve": "bn254",
+      "entry_circuit": "circuits/pilot_compliance.circom",
+      "source_files": [
+        {
+          "path": "circuits/pilot_compliance.circom",
+          "sha256": "519cf2c970ab436ba20ea85dad3efdf624e22c43f04820bc8582267ab1b2a16e",
+          "size": 5156
+        },
+        {
+          "path": "circuits/pilot_transfer.circom",
+          "sha256": "8293ff63acdc8e6e7f8f1f4f7288741e315fe03bc56d296365ffc46a969b4e73",
+          "size": 4055
+        },
+        {
+          "path": "circuits/pilot_credential.circom",
+          "sha256": "df78d8f3b9018230443fec8351ccd536f19dade4703ae95055846787996f2a5f",
+          "size": 4729
+        },
+        {
+          "path": "circuits/pilot_sanctions.circom",
+          "sha256": "b7fa4634973a8da84eda3ad5ad92b67510366ff75410330b29769b0533e50c35",
+          "size": 2274
+        },
+        {
+          "path": "circuits/pilot_valuation.circom",
+          "sha256": "1bc4e933c586731065ccdabc878c3826efbf830c31d33ef368487e5182ea794b",
+          "size": 4861
+        },
+        {
+          "path": "circuits/lib/merkle_tree.circom",
+          "sha256": "245774f54cc80be5c179d50efa9cf54c758dff0a19a2de8f45ee35432cdd221b",
+          "size": 3184
+        },
+        {
+          "path": "circuits/generated/pilot_constants.circom",
+          "sha256": "a3d1b7083bae07dbbf843bb127a72797ab10a428a5520708f3c84e68d6169069",
+          "size": 1706
+        },
+        {
+          "path": "circuits/generated/pilot_main.circom",
+          "sha256": "4345feb9b8245b3a356613501075e801b8c1ed4710305712aa3ba4fa6d3eef82",
+          "size": 417
+        }
+      ],
+      "public_signals": [
+        {
+          "name": "projection_commitment",
+          "meaning": "Poseidon(204, transfer projection, exact credential commitment, issuance root)"
+        },
+        {
+          "name": "authorized_issuer_root",
+          "meaning": "Aggregate authorized-issuer tree root"
+        },
+        {
+          "name": "sanctions_root",
+          "meaning": "Address non-membership tree root"
+        },
+        {
+          "name": "authorization_nullifier",
+          "meaning": "Poseidon(203, holder secret, authorization scope), unchanged from v1"
+        },
+        {
+          "name": "evaluated_at",
+          "meaning": "Proof evaluation time, bounded unsigned 53-bit integer"
+        },
+        {
+          "name": "proof_expires_at",
+          "meaning": "Exclusive expiry, bounded by transfer/credential expiry and evaluation + 300 seconds"
+        },
+        {
+          "name": "domain_chain_id",
+          "meaning": "Exact EVM deployment chain"
+        },
+        {
+          "name": "domain_registry",
+          "meaning": "Exact nonzero EVM registry address encoded as an integer"
+        }
+      ],
+      "public_signal_schema_digest": "b123520ee4f69d7b551eb3fc56e5e6f58974b74beb7e54e071da6c2dd736fa14",
+      "tree_depths": {
+        "issuance": 32,
+        "issuer": 20,
+        "sanctions": 20
+      },
+      "domain_tags": {
+        "holder": 101,
+        "credential": 102,
+        "issuer_leaf": 103,
+        "projection": 201,
+        "authorization_scope": 202,
+        "authorization_nullifier": 203,
+        "bound_projection": 204,
+        "sanctions_leaf": 301
+      },
+      "r1cs_constraints": 95408,
+      "r1cs_wires": 95450,
+      "r1cs_sha256": "4248cc7b67e7ead5a4ac7a4425acd0debffaee9642d540846be58daeae551aa8",
+      "artifact_status": "compiled-r1cs-pinned",
+      "ceremony_status": "unapproved-preaudit-no-ceremony"
+    },
+    {
+      "circuit_id": "wallet-ownership-v1-bn254",
+      "role": "wallet-ownership-extension",
+      "profile_name": "clearproof-wallet-credential-v1",
+      "curve": "bn254",
+      "entry_circuit": "circuits/wallet_ownership_credential.circom",
+      "source_files": [
+        {
+          "path": "circuits/wallet_ownership_credential.circom",
+          "sha256": "1f9f03ca41b5711c8184f60795764f4ee759e39ab2131703058f2763f3257cac",
+          "size": 1993
+        }
+      ],
+      "public_signals": [
+        {
+          "name": "extension_commitment",
+          "meaning": "Poseidon(6) over (111, base credential, attestation digest, issued_at, expires_at, verified flag)"
+        },
+        {
+          "name": "expected_credential_commitment",
+          "meaning": "Expected enrolled pilot credential commitment"
+        },
+        {
+          "name": "expected_attestation_digest",
+          "meaning": "Domain-separated wallet-ownership attestation digest reduced into the circuit scalar field"
+        },
+        {
+          "name": "evaluated_at",
+          "meaning": "Proof evaluation timestamp, bounded unsigned 53-bit integer"
+        }
+      ],
+      "public_signal_schema_digest": "6dc98360275f85c66a46b49258e875c2754923378285f236785eb264e7f9dd42",
+      "tree_depths": {},
+      "domain_tags": {
+        "wallet_ownership_extension": 111
+      },
+      "r1cs_constraints": 1246,
+      "r1cs_wires": 1245,
+      "r1cs_sha256": "33b73ece669735ec6c87ba028b8faf522cc273dbe7270fbb30300b738db4a7a9",
+      "artifact_status": "compiled-r1cs-pinned",
+      "ceremony_status": "unapproved-preaudit-no-ceremony"
+    },
+    {
+      "circuit_id": "wallet-ownership-v1-bls12381",
+      "role": "wallet-ownership-extension",
+      "profile_name": "clearproof-wallet-credential-v1-bls12381",
+      "curve": "bls12-381",
+      "entry_circuit": "circuits/wallet_ownership_credential_bls12381.circom",
+      "source_files": [
+        {
+          "path": "circuits/wallet_ownership_credential_bls12381.circom",
+          "sha256": "e1eabb065fb30fb647825b6587afa93d7370292c8cc1d4b58d3b90190b87bad1",
+          "size": 2067
+        },
+        {
+          "path": "circuits/lib/poseidon_bls12381.circom",
+          "sha256": "63a802a7226453c78034273eff1274b11c57f67ed6048dc061cd39529a7c615d",
+          "size": 5748
+        },
+        {
+          "path": "circuits/generated/poseidon_bls12381_constants.circom",
+          "sha256": "e613214fc819e052bca28855cadbdca8462ac083c37b619db6b1886fdc756191",
+          "size": 434676
+        }
+      ],
+      "public_signals": [
+        {
+          "name": "extension_commitment",
+          "meaning": "Poseidon(6) over (111, base credential, attestation digest, issued_at, expires_at, verified flag)"
+        },
+        {
+          "name": "expected_credential_commitment",
+          "meaning": "Expected enrolled pilot credential commitment"
+        },
+        {
+          "name": "expected_attestation_digest",
+          "meaning": "Domain-separated wallet-ownership attestation digest reduced into the circuit scalar field"
+        },
+        {
+          "name": "evaluated_at",
+          "meaning": "Proof evaluation timestamp, bounded unsigned 53-bit integer"
+        }
+      ],
+      "public_signal_schema_digest": "624a83a7cc658522813cea9e6f5073bb1e304207b0945311df75b70742f86b4c",
+      "tree_depths": {},
+      "domain_tags": {
+        "wallet_ownership_extension": 111
+      },
+      "r1cs_constraints": 1246,
+      "r1cs_wires": 1245,
+      "r1cs_sha256": "457300c8a5a60e664c1098ebb8c3d2328ca1ae05a3008ee74461cde36c00f048",
+      "artifact_status": "compiled-r1cs-pinned",
+      "ceremony_status": "unapproved-preaudit-no-ceremony"
+    }
+  ]
+}

@@ -24,12 +24,14 @@ fi
 
 CIRCUIT_FILES=(
     circuits/wallet_ownership_credential.circom
+    circuits/wallet_ownership_credential_bls12381.circom
     circuits/compliance.circom
     circuits/sanctions_nonmembership.circom
     circuits/credential_validity.circom
     circuits/amount_tier.circom
     circuits/lib/merkle_tree.circom
     circuits/lib/poseidon_hasher.circom
+    circuits/lib/poseidon_bls12381.circom
     # Current profile (pilot-transfer-v3). Circomspect analyzes only the
     # templates defined in the file it is given, so every file is listed.
     circuits/pilot_compliance.circom
@@ -39,6 +41,7 @@ CIRCUIT_FILES=(
     circuits/pilot_valuation.circom
     circuits/generated/pilot_constants.circom
     circuits/generated/pilot_main.circom
+    circuits/generated/poseidon_bls12381_constants.circom
 )
 
 # Known-intentional findings (matched as substrings against warning text):

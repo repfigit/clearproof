@@ -12,12 +12,14 @@ import pytest
 SCRIPT = Path(__file__).resolve().parents[2] / "scripts/circuit_lint.sh"
 CIRCUITS = [
     "wallet_ownership_credential",
+    "wallet_ownership_credential_bls12381",
     "compliance",
     "sanctions_nonmembership",
     "credential_validity",
     "amount_tier",
     "merkle_tree",
     "poseidon_hasher",
+    "poseidon_bls12381",
     "pilot_compliance",
     "pilot_transfer",
     "pilot_credential",
@@ -25,6 +27,7 @@ CIRCUITS = [
     "pilot_valuation",
     "pilot_constants",
     "pilot_main",
+    "poseidon_bls12381_constants",
 ]
 LESS_THAN = "Inputs to `LessThan` need to be constrained to ensure that they are non-negative"
 NUM2BITS = "Using `Num2Bits` to convert field elements to bits may lead to aliasing issues."

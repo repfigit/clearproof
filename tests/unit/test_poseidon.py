@@ -30,12 +30,14 @@ from scripts import build_native_poseidon as build_script
 from src.registry import poseidon as poseidon_module
 from src.registry.pilot_tree import PilotTree, zero_root
 from src.registry.poseidon import (
+    BLS12_381_SCALAR_FIELD,
     BN254_SCALAR_FIELD,
     PoseidonBackendError,
     PoseidonIntegrityError,
     configure_poseidon_backend,
     get_active_poseidon_backend,
     poseidon_hash,
+    poseidon_hash_bls12381,
     poseidon_hash_python,
 )
 
@@ -454,3 +456,144 @@ def test_build_native_poseidon_script(tmp_path: Path, monkeypatch: pytest.Monkey
         timeout=60,
     )
     assert proc.returncode == 0 and cli_out.is_file() and "sha256=" in proc.stdout
+
+
+# Known-answer vectors for curve-correct BLS12-381 Poseidon (ADR 0002 task 3),
+# verified against compiled Circom PoseidonBls(n) (--prime bls12381).
+BLS12_381_VECTORS: list[tuple[list[int], int]] = [
+    (
+        [0, 0],
+        39704413365395714732902920194612999065094381874203236779011164022408220537174,
+    ),
+    (
+        [1, 2],
+        18456658763349757341014058622209659766100673761449600566550821987295786346378,
+    ),
+    (
+        [1, 2, 3],
+        41091099622722973056082071867846799679887891223501702244297781245659866568853,
+    ),
+    (
+        [204, 11, 22, 33],
+        49264448164909394063443318819423742571068542411188447188706153570671675683814,
+    ),
+    (
+        [111, 12345, 67890, 1200, 87600, 1],
+        46452670317930163960339998452000309255733502327112562796345186473617373585116,
+    ),
+    (
+        [201, 1, 2, 3, 4, 5, 6, 7, 8],
+        12926200779156670433811275351835833735505950207777825141738713560434141610891,
+    ),
+    (
+        [102, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13],
+        35094980855324609566572852488257070130035405744181374746571045160406227180351,
+    ),
+    (
+        [BLS12_381_SCALAR_FIELD - 1, BLS12_381_SCALAR_FIELD + 5],
+        10294520724728164521974710211175144946335862078518536969276353479490757112503,
+    ),
+]
+
+
+@pytest.mark.parametrize("inputs,expected", BLS12_381_VECTORS)
+def test_poseidon_bls12381_known_answer_vectors(inputs: list[int], expected: int) -> None:
+    digest = poseidon_hash_bls12381(inputs)
+    assert digest == expected
+    assert 0 <= digest < BLS12_381_SCALAR_FIELD
+    # Must differ from BN254 Poseidon (curve-bound round constants).
+    assert digest != poseidon_hash(inputs)
+
+
+def test_poseidon_bls12381_independent_of_native_bn254_backend(native_lib_path: Path) -> None:
+    """BLS12-381 hashing stays curve-correct and unaffected when the BN254 native backend is active."""
+    assert configure_poseidon_backend("native", lib_path=str(native_lib_path)) == "native"
+    for inputs, expected in BLS12_381_VECTORS:
+        assert poseidon_hash_bls12381(inputs) == expected
+
+
+def test_poseidon_bls12381_constants_match_cleanroom_generator() -> None:
+    proc = subprocess.run(
+        [
+            sys.executable,
+            str(PROJECT_ROOT / "scripts" / "generate_poseidon_constants.py"),
+            "--curve",
+            "bls12-381",
+            "--emit-circom",
+            "--verify-only",
+        ],
+        capture_output=True,
+        text=True,
+        timeout=120,
+    )
+    assert proc.returncode == 0, f"BLS12-381 constants mismatch:\n{proc.stdout}\n{proc.stderr}"
+
+
+@pytest.mark.skipif(
+    shutil.which("circom") is None or shutil.which("node") is None,
+    reason="Circom and Node.js required for in-circuit BLS12-381 Poseidon parity",
+)
+@pytest.mark.parametrize(
+    "sample",
+    [
+        [1, 2],
+        [204, 11, 22, 33],
+        [111, 12345, 67890, 1200, 87600, 1],
+        [201, 1, 2, 3, 4, 5, 6, 7, 8],
+        [102, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13],
+    ],
+)
+def test_poseidon_bls12381_circom_witness_parity(tmp_path: Path, sample: list[int]) -> None:
+    """In-circuit PoseidonBls(n) compiled with --prime bls12381 matches Python bit-for-bit."""
+    arity = len(sample)
+    expected = poseidon_hash_bls12381(sample)
+    probe = tmp_path / f"probe_{arity}.circom"
+    probe.write_text(
+        f'pragma circom 2.1.6;\ninclude "{PROJECT_ROOT}/circuits/lib/poseidon_bls12381.circom";\n'
+        f"template Probe() {{\n"
+        f"    signal input inputs[{arity}];\n"
+        f"    signal input expected;\n"
+        f"    component h = PoseidonBls({arity});\n"
+        f"    for (var i = 0; i < {arity}; i++) {{ h.inputs[i] <== inputs[i]; }}\n"
+        f"    h.out === expected;\n"
+        f"}}\n"
+        f"component main {{public [expected]}} = Probe();\n"
+    )
+    comp = subprocess.run(
+        ["circom", str(probe), "--prime", "bls12381", "--wasm", "--r1cs", "-o", str(tmp_path)],
+        capture_output=True,
+        timeout=120,
+    )
+    assert comp.returncode == 0, comp.stderr.decode()
+    js_dir = tmp_path / f"probe_{arity}_js"
+    valid_input = tmp_path / "valid.json"
+    valid_input.write_text(json.dumps({"inputs": [str(x) for x in sample], "expected": str(expected)}))
+    ok = subprocess.run(
+        [
+            "node",
+            str(js_dir / "generate_witness.js"),
+            str(js_dir / f"probe_{arity}.wasm"),
+            str(valid_input),
+            str(tmp_path / "valid.wtns"),
+        ],
+        capture_output=True,
+        timeout=30,
+    )
+    assert ok.returncode == 0, ok.stderr.decode()
+
+    wrong_input = tmp_path / "wrong.json"
+    wrong_input.write_text(
+        json.dumps({"inputs": [str(x) for x in sample], "expected": str((expected + 1) % BLS12_381_SCALAR_FIELD)})
+    )
+    bad = subprocess.run(
+        [
+            "node",
+            str(js_dir / "generate_witness.js"),
+            str(js_dir / f"probe_{arity}.wasm"),
+            str(wrong_input),
+            str(tmp_path / "wrong.wtns"),
+        ],
+        capture_output=True,
+        timeout=30,
+    )
+    assert bad.returncode != 0 and b"Assert Failed" in bad.stderr

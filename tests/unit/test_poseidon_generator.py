@@ -92,3 +92,63 @@ def test_verify_only_does_not_replace_missing_or_malformed_reference(contents, e
         assert not destination.exists()
     else:
         assert destination.read_text() == contents
+
+
+def test_bls12381_generation_and_circom_verify_lifecycle(tmp_path, monkeypatch, capsys):
+    ref_json = json.loads(Path(generator.BLS12_381_OUTPUT_PATH).read_text())
+    ref_circom = Path(generator.BLS12_381_CIRCOM_PATH).read_text()
+    json_dest = tmp_path / "bls" / "constants.json"
+    circom_dest = tmp_path / "bls" / "constants.circom"
+    spec = generator.CurveSpec("bls12-381", generator.BLS12_381_P, 255, str(json_dest), str(circom_dest))
+    monkeypatch.setitem(generator.CURVES, "bls12-381", spec)
+
+    monkeypatch.setattr(sys, "argv", ["generate_poseidon_constants.py", "--curve", "bls12-381", "--emit-circom"])
+    generator.main()
+    assert json.loads(json_dest.read_text()) == ref_json
+    assert circom_dest.read_text() == ref_circom
+    out = capsys.readouterr().out
+    assert f"Wrote {json_dest}" in out and f"Wrote {circom_dest}" in out
+
+    # --verify-only succeeds when both JSON and Circom match.
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        ["generate_poseidon_constants.py", "--curve", "bls12-381", "--emit-circom", "--verify-only"],
+    )
+    generator.main()
+    assert "VERIFY OK" in capsys.readouterr().out
+
+    # --verify-only fails when Circom output drifts while JSON still matches.
+    circom_dest.write_text(ref_circom + "\n// drift\n")
+    with pytest.raises(SystemExit, match="regenerated Circom constants differ"):
+        generator.main()
+
+    # --emit-circom on bn254 is rejected cleanly.
+    monkeypatch.setattr(sys, "argv", ["generate_poseidon_constants.py", "--curve", "bn254", "--emit-circom"])
+    with pytest.raises(SystemExit, match="--emit-circom is only supported for --curve bls12-381"):
+        generator.main()
+
+
+def test_matrix_inverse_rejects_singular_matrix():
+    with pytest.raises(ZeroDivisionError, match="singular"):
+        generator._mat_inv([[1, 2], [2, 4]], generator.BLS12_381_P)
+
+
+def test_derive_optimized_constants_matches_bn254_standard_permutation():
+    ref = json.loads(Path(generator.OUTPUT_PATH).read_text())
+    c_std = [int(x, 16) for x in ref["C"][1]]
+    m_std = [[int(x, 16) for x in row] for row in ref["M"][1]]
+    c_opt, s_flat, m_t, p_t = generator.derive_optimized_constants(
+        c_std, m_std, 3, generator.N_ROUNDS_P[1], generator.BN254_P
+    )
+    assert len(c_opt) == 3 * generator.N_ROUNDS_F + generator.N_ROUNDS_P[1]
+    assert len(s_flat) == generator.N_ROUNDS_P[1] * 5
+    assert len(m_t) == 3 and len(p_t) == 3
+
+
+def test_script_entrypoint_runs_verify_only_under_main(monkeypatch, capsys):
+    import runpy
+
+    monkeypatch.setattr(sys, "argv", ["generate_poseidon_constants.py", "--verify-only"])
+    runpy.run_path(generator.__file__, run_name="__main__")
+    assert "VERIFY OK" in capsys.readouterr().out
