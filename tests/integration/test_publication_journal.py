@@ -399,6 +399,7 @@ async def test_attempt_migration_preserves_existing_claims_and_unclaimed_intents
         await conn.execute(OBSERVATION_MIGRATION)
         # Remove the later proving-queue schema as well as its version rows so
         # reconnection exercises a genuine version-18 upgrade, not stale tables.
+        await conn.execute("DROP TABLE pilot_merkle_nodes, pilot_merkle_leaves, pilot_merkle_roots")
         await conn.execute("DROP TABLE proof_jobs, proof_job_control")
         await conn.execute("DELETE FROM schema_migrations WHERE version>=19")
     await db.close()

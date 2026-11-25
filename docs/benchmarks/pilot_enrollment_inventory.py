@@ -22,7 +22,7 @@ from src.protocol.credential import PilotCredential, holder_commitment
 from src.protocol.enrollment import EnrollmentConsent
 from src.services.enrollment import EnrollmentService
 from src.services.enrollment_inventory import EnrollmentInventoryService, EnrollmentPageRequest
-from src.services.issuance_source import MAX_ISSUANCE_ENTRIES
+from src.registry.pilot_tree import ISSUANCE_TREE_DEPTH
 from src.services.issuance_tree import build_issuance_tree
 from src.storage.database import Database
 from src.storage.keyring import KeyRing, KeyVersion
@@ -117,7 +117,7 @@ async def measure(counts: list[int], samples: int) -> dict:
             platform=platform.platform(),
             postgresql=version,
             affinity=sorted(os.sched_getaffinity(0)),
-            software_guard=MAX_ISSUANCE_ENTRIES,
+            software_guard=2**ISSUANCE_TREE_DEPTH,
             source_sha256={name: hashlib.sha256((root / name).read_bytes()).hexdigest() for name in names},
             measurements=rows,
             excludes=[
@@ -144,7 +144,7 @@ def main():
     parser.add_argument("--samples", type=int, default=3)
     args = parser.parse_args()
     counts = [int(value) for value in args.counts.split(",")]
-    if counts != sorted(set(counts)) or not counts or not 1 <= counts[0] <= counts[-1] <= MAX_ISSUANCE_ENTRIES:
+    if counts != sorted(set(counts)) or not counts or not 1 <= counts[0] <= counts[-1] <= 2**ISSUANCE_TREE_DEPTH:
         parser.error("counts must be ascending unique integers within the software guard")
     if not 1 <= args.samples <= 10 or args.output.exists():
         parser.error("samples must be 1–10 and output must not exist")

@@ -527,7 +527,7 @@ async def test_lost_count_head_cannot_reset_an_existing_index_counter(db):
     assert await counts(db) == before
 
 
-async def test_registrar_shares_scan_budget_across_issuers_and_rolls_back_every_partial_root(db, monkeypatch):
+async def test_registrar_shares_scan_budget_across_issuers_and_rolls_back_every_partial_root(db):
     from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 
     from src.protocol.root_snapshot import RootAuthority, RootTrustStore
@@ -559,16 +559,16 @@ async def test_registrar_shares_scan_budget_across_issuers_and_rolls_back_every_
         chain_id=31337,
         registry_address=REGISTRY,
     )
-    monkeypatch.setattr(module, "MAX_ISSUANCE_ENTRIES", 1)
     before = await counts(db)
     with pytest.raises(ValueError, match="scan capacity"):
-        await registrar.refresh(expected_revision=0, idempotency_key="shared-budget", now=120)
+        await registrar.refresh(expected_revision=0, idempotency_key="shared-budget", now=120, scan_limit=1)
     assert await counts(db) == before
-    monkeypatch.setattr(module, "MAX_ISSUANCE_ENTRIES", 2)
-    result = await registrar.refresh(expected_revision=0, idempotency_key="shared-budget", now=120)
+    result = await registrar.refresh(expected_revision=0, idempotency_key="shared-budget", now=120, scan_limit=2)
     assert result["status"] == "published"
     before = await counts(db)
-    assert await registrar.refresh(expected_revision=0, idempotency_key="shared-budget", now=121) == result
+    assert (
+        await registrar.refresh(expected_revision=0, idempotency_key="shared-budget", now=121, scan_limit=2) == result
+    )
     assert await counts(db) == before
 
 
