@@ -87,7 +87,7 @@ def _wallet_ownership_service(request: Request, principal: Principal) -> WalletO
             principal,
             chain_id=int(os.environ["PILOT_CHAIN_ID"]),
             registry_address=os.environ["PILOT_REGISTRY_ADDRESS"],
-            account_probe=account_probe(),
+            account_probe=account_probe(request),
             delegation_recheck_seconds=delegation_recheck_seconds(),
         )
     except (KeyError, ValueError, RuntimeError) as exc:

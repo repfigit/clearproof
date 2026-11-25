@@ -1,11 +1,12 @@
 """Wallet ownership challenge/attestation endpoints (SIWE/EIP-4361 profile)."""
 
 import os
+from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import Field, ValidationError
 
-from src.api.config import require_record_cipher
+from src.api.config import build_wallet_web3, get_wallet_web3, require_record_cipher
 from src.api.middleware.rate_limit import wallet_ownership_limiter
 from src.auth.principal import Principal, TenantPrincipalDependency
 from src.protocol.transfer import Hex32, Record
@@ -41,25 +42,20 @@ class AttestationRequest(Record):
 
 
 def wallet_chain(w3_module):
-    """Shared AsyncWeb3 for the wallet-ownership chain integrations (or None)."""
-    rpc_url = os.environ.get("WALLET_OWNERSHIP_RPC_URL")
-    if not rpc_url:
-        return None
-    return w3_module.AsyncWeb3(w3_module.AsyncHTTPProvider(rpc_url))
+    """Build an AsyncWeb3 with explicit timeout for wallet-ownership RPC (or None)."""
+    return build_wallet_web3(w3_module=w3_module)
 
 
-def account_probe():
-    """Delegation probe from WALLET_OWNERSHIP_RPC_URL, or None when unconfigured.
+def account_probe(request: Optional[Request] = None):
+    """Delegation probe using the managed ``app.state.wallet_web3`` client, or None.
 
     The probe runs eth_getCode per address and classifies the EIP-7702
     delegation indicator. Unconfigured is a supported deployment posture:
     attestation records record the check as not performed instead of guessing.
     """
-    from web3 import AsyncWeb3
-
     from src.chain.wallet_account import account_code, delegation_indicator
 
-    w3 = wallet_chain(AsyncWeb3)
+    w3 = get_wallet_web3(request)
     if w3 is None:
         return None
 
@@ -72,14 +68,13 @@ def account_probe():
     return probe
 
 
-def chain_verifier():
-    """ERC-1271/ERC-6492 verifier over WALLET_OWNERSHIP_RPC_URL, or None."""
+def chain_verifier(request: Optional[Request] = None):
+    """ERC-1271/ERC-6492 verifier using the managed ``app.state.wallet_web3`` client, or None."""
     from eth_account.messages import defunct_hash_message
-    from web3 import AsyncWeb3
 
     from src.chain.wallet_account import verify_signature as verify_on_chain
 
-    w3 = wallet_chain(AsyncWeb3)
+    w3 = get_wallet_web3(request)
     if w3 is None:
         return None
 
@@ -114,8 +109,8 @@ def wallet_service(request: Request, principal: Principal = Depends(TenantPrinci
             principal,
             chain_id=int(os.environ["PILOT_CHAIN_ID"]),
             registry_address=os.environ["PILOT_REGISTRY_ADDRESS"],
-            account_probe=account_probe(),
-            chain_verifier=chain_verifier(),
+            account_probe=account_probe(request),
+            chain_verifier=chain_verifier(request),
             delegation_recheck_seconds=delegation_recheck_seconds(),
         )
     except (KeyError, ValueError, RuntimeError) as exc:

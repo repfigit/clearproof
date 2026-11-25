@@ -10,12 +10,16 @@ from starlette.requests import Request
 from src.api.config import (
     AuthConfig,
     _request_app_state,
+    build_wallet_web3,
+    close_wallet_web3,
     get_auth_config,
     get_event_config,
     get_fireblocks_config,
     get_record_cipher,
     get_siwe_auth,
+    get_wallet_web3,
     require_record_cipher,
+    wallet_rpc_timeout_seconds,
 )
 from src.api.middleware import auth as auth_middleware
 from src.api.routes import auth as auth_routes
@@ -130,3 +134,73 @@ async def test_fireblocks_route_returns_503_when_get_fireblocks_config_raises(mo
     assert response.status_code == 503
     assert response.json() == {"detail": "Fireblocks relay configuration is unavailable"}
     assert "SYNTHETIC-PRIVATE-PARSE-DETAIL" not in response.text
+
+
+def test_wallet_rpc_timeout_seconds_parsing_and_validation(monkeypatch):
+    monkeypatch.delenv("WALLET_OWNERSHIP_RPC_TIMEOUT_SECONDS", raising=False)
+    assert wallet_rpc_timeout_seconds() == 10.0
+
+    monkeypatch.setenv("WALLET_OWNERSHIP_RPC_TIMEOUT_SECONDS", "   ")
+    assert wallet_rpc_timeout_seconds() == 10.0
+
+    monkeypatch.setenv("WALLET_OWNERSHIP_RPC_TIMEOUT_SECONDS", "2.5")
+    assert wallet_rpc_timeout_seconds() == 2.5
+
+    for invalid in ("0", "-1", "nan", "inf", "-inf", "not-a-float"):
+        with pytest.raises(ValueError):
+            wallet_rpc_timeout_seconds({"WALLET_OWNERSHIP_RPC_TIMEOUT_SECONDS": invalid})
+
+
+def test_build_and_get_wallet_web3_lazy_caching_and_timeout(monkeypatch):
+    from web3 import AsyncHTTPProvider, AsyncWeb3
+
+    # Unset URL returns None without constructing a client.
+    assert build_wallet_web3({}) is None
+
+    # Default web3 branch constructs a real AsyncWeb3 with AsyncHTTPProvider + explicit timeout.
+    real_client = build_wallet_web3(
+        {"WALLET_OWNERSHIP_RPC_URL": "http://127.0.0.1:8545", "WALLET_OWNERSHIP_RPC_TIMEOUT_SECONDS": "7.5"}
+    )
+    assert isinstance(real_client, AsyncWeb3)
+    assert isinstance(real_client.provider, AsyncHTTPProvider)
+    assert real_client.provider._request_kwargs == {"timeout": 7.5}
+
+    # get_wallet_web3 with request=None or missing app falls back to build_wallet_web3().
+    monkeypatch.setenv("WALLET_OWNERSHIP_RPC_URL", "http://127.0.0.1:8545")
+    monkeypatch.setenv("WALLET_OWNERSHIP_RPC_TIMEOUT_SECONDS", "4")
+    sentinel = SimpleNamespace(provider=SimpleNamespace())
+    calls = []
+
+    def fake_build():
+        calls.append(True)
+        return sentinel
+
+    monkeypatch.setattr("src.api.config.build_wallet_web3", fake_build)
+    assert get_wallet_web3(None) is sentinel
+    assert get_wallet_web3(Request({"type": "http", "headers": []})) is sentinel
+    assert len(calls) == 2
+
+    # Bare FastAPI app without lifespan lazily constructs once and caches on app.state.wallet_web3.
+    app = FastAPI()
+    req = Request({"type": "http", "app": app, "headers": []})
+    first = get_wallet_web3(req)
+    assert first is sentinel
+    assert app.state.wallet_web3 is sentinel
+    assert get_wallet_web3(req) is sentinel
+    assert len(calls) == 3
+
+    # Explicit None on app.state is respected without rebuilding.
+    app.state.wallet_web3 = None
+    assert get_wallet_web3(req) is None
+    assert len(calls) == 3
+
+
+async def test_close_wallet_web3_handles_none_non_disconnect_and_disconnect():
+    from unittest.mock import AsyncMock
+
+    await close_wallet_web3(None)
+    await close_wallet_web3(SimpleNamespace(provider=SimpleNamespace()))
+
+    disconnect = AsyncMock()
+    await close_wallet_web3(SimpleNamespace(provider=SimpleNamespace(disconnect=disconnect)))
+    disconnect.assert_awaited_once()

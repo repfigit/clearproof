@@ -158,47 +158,50 @@ def test_account_probe_and_chain_verifier_without_rpc(monkeypatch):
     assert routes.wallet_chain(object()) is None
 
 
-def test_wallet_chain_builds_web3_when_rpc_configured(monkeypatch):
+def test_wallet_chain_builds_web3_with_timeout_when_rpc_configured(monkeypatch):
     monkeypatch.setenv("WALLET_OWNERSHIP_RPC_URL", "http://127.0.0.1:8545")
+    monkeypatch.delenv("WALLET_OWNERSHIP_RPC_TIMEOUT_SECONDS", raising=False)
     fake_module = SimpleNamespace(
         AsyncWeb3=lambda provider: SimpleNamespace(provider=provider),
-        AsyncHTTPProvider=lambda url: ("provider", url),
+        AsyncHTTPProvider=lambda url, request_kwargs=None: ("provider", url, request_kwargs),
     )
     client = routes.wallet_chain(fake_module)
-    assert client.provider == ("provider", "http://127.0.0.1:8545")
+    assert client.provider == ("provider", "http://127.0.0.1:8545", {"timeout": 10.0})
 
 
-def test_account_probe_with_rpc(monkeypatch):
-    monkeypatch.setenv("WALLET_OWNERSHIP_RPC_URL", "http://127.0.0.1:8545")
-    monkeypatch.setattr(routes, "wallet_chain", lambda _module: SimpleNamespace())
-    assert routes.account_probe() is not None
-    assert routes.chain_verifier() is not None
+def test_account_probe_and_chain_verifier_read_app_state_wallet_web3():
+    fake_w3 = SimpleNamespace()
+    request = SimpleNamespace(app=SimpleNamespace(state=SimpleNamespace(wallet_web3=fake_w3)))
+    assert routes.account_probe(request) is not None
+    assert routes.chain_verifier(request) is not None
 
 
 @pytest.mark.asyncio
 async def test_chain_verifier_calls_on_chain_helper(monkeypatch):
-    monkeypatch.setenv("WALLET_OWNERSHIP_RPC_URL", "http://127.0.0.1:8545")
-    monkeypatch.setattr(routes, "wallet_chain", lambda _module: SimpleNamespace())
+    fake_w3 = SimpleNamespace()
+    request = SimpleNamespace(app=SimpleNamespace(state=SimpleNamespace(wallet_web3=fake_w3)))
 
-    async def fake_verify(_w3, _address, _digest, _signature):
+    async def fake_verify(w3, _address, _digest, _signature):
+        assert w3 is fake_w3
         return True, "erc-1271"
 
     monkeypatch.setattr("src.chain.wallet_account.verify_signature", fake_verify)
-    verify = routes.chain_verifier()
+    verify = routes.chain_verifier(request)
     valid, method = await verify("0x" + "11" * 20, "hello", "0x" + "ab" * 64)
     assert (valid, method) == (True, "erc-1271")
 
 
 @pytest.mark.asyncio
 async def test_account_probe_delegation_helper(monkeypatch):
-    monkeypatch.setenv("WALLET_OWNERSHIP_RPC_URL", "http://127.0.0.1:8545")
-    monkeypatch.setattr(routes, "wallet_chain", lambda _module: SimpleNamespace())
+    fake_w3 = SimpleNamespace()
+    request = SimpleNamespace(app=SimpleNamespace(state=SimpleNamespace(wallet_web3=fake_w3)))
 
-    async def fake_account_code(_w3, _address):
+    async def fake_account_code(w3, _address):
+        assert w3 is fake_w3
         return "0xef0100" + "22" * 20
 
     monkeypatch.setattr("src.chain.wallet_account.account_code", fake_account_code)
-    probe = routes.account_probe()
+    probe = routes.account_probe(request)
     result = await probe("0x" + "11" * 20)
     assert result["delegated"] is True
     assert result["delegate"] == "0x" + "22" * 20

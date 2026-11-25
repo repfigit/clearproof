@@ -47,6 +47,8 @@ async def api(monkeypatch):
 
 async def test_issue_with_wallet_attestation_marks_credential(api, monkeypatch):
     monkeypatch.setenv("WALLET_OWNERSHIP_DELEGATION_RECHECK_SECONDS", "90")
+    fake_w3 = SimpleNamespace()
+    api.app.state.wallet_web3 = fake_w3
     body = {
         "issuer_did": "did:web:issuer.example",
         "subject_wallet": "0x" + "11" * 20,
@@ -61,6 +63,7 @@ async def test_issue_with_wallet_attestation_marks_credential(api, monkeypatch):
     assert payload["wallet_ownership_attestation_id"] == "cd" * 32
     api.ownership.assert_active.assert_awaited_once()
     assert api.service_cls.call_args.kwargs["delegation_recheck_seconds"] == 90
+    assert api.service_cls.call_args.kwargs["account_probe"] is not None
 
 
 @pytest.mark.parametrize(
