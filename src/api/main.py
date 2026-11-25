@@ -19,6 +19,7 @@ from src.api.config import (
     FireblocksConfig,
     build_wallet_web3,
     close_wallet_web3,
+    legacy_api_enabled,
 )
 from src.api.routes.auth import router as auth_router
 from src.api.routes.authorization import router as authorization_router
@@ -27,7 +28,7 @@ from src.api.routes.discovery import router as discovery_router
 from src.api.routes.enrollment import router as enrollment_router
 from src.api.routes.events import router as events_router
 from src.api.routes.fireblocks import router as fireblocks_router
-from src.api.routes.health import router as health_router
+from src.api.routes.health import health_only_router, metrics_router
 from src.api.routes.pilot_proof import router as pilot_proof_router
 from src.api.routes.policy import router as policy_router
 from src.api.routes.proof import router as proof_router
@@ -83,7 +84,10 @@ async def lifespan(app: FastAPI):
     # handlers read app.state instead of re-parsing environment variables per request.
     record_cipher = RecordCipher(load_keyring())
     auth_config = AuthConfig.from_env()
-    siwe_auth = SIWEAuth(domain=auth_config.siwe_domain)
+    try:
+        siwe_auth = SIWEAuth(domain=auth_config.siwe_domain)
+    except ValueError as exc:
+        raise RuntimeError("Invalid SIWE session configuration") from exc
     try:
         event_config = EventConfig.from_env()
     except (KeyError, ValueError, TypeError, RuntimeError, RecursionError) as exc:
@@ -167,9 +171,11 @@ def create_app() -> FastAPI:
         allow_headers=["Authorization", "Content-Type", "X-Idempotency-Key", "X-API-Key"],
     )
 
-    app.include_router(proof_router)
-    app.include_router(credential_router)
-    app.include_router(health_router)
+    app.include_router(health_only_router)
+    if legacy_api_enabled():
+        app.include_router(proof_router)
+        app.include_router(credential_router)
+        app.include_router(metrics_router)
     app.include_router(readiness_router)
     app.include_router(auth_router)
     app.include_router(discovery_router)

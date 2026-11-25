@@ -309,6 +309,33 @@ def get_fireblocks_config(request: Request) -> Optional[FireblocksConfig]:
     return config
 
 
+_TRUTHY = frozenset({"1", "true", "yes", "on"})
+_FALSY = frozenset({"0", "false", "no", "off"})
+
+
+def legacy_api_enabled(env: Optional[Mapping[str, str]] = None) -> bool:
+    """Return whether legacy routers (``/proof/*``, ``/credential/*``, ``/metrics``) are mounted.
+
+    Reads ``CLEARPROOF_ENABLE_LEGACY_API``:
+    - Explicit truthy (``1``/``true``/``yes``/``on``) enables legacy routers.
+    - Explicit falsy (``0``/``false``/``no``/``off``) disables legacy routers.
+    - Unset defaults to disabled when ``CLEARPROOF_PROFILE`` is ``production``
+      or ``pilot``, and enabled otherwise for backwards compatibility.
+    - Any other value raises ``ValueError`` (fail closed).
+    """
+    source = os.environ if env is None else env
+    raw = source.get("CLEARPROOF_ENABLE_LEGACY_API")
+    if raw is None or not raw.strip():
+        profile = source.get("CLEARPROOF_PROFILE", "").strip().lower()
+        return profile not in ("production", "pilot")
+    normalized = raw.strip().lower()
+    if normalized in _TRUTHY:
+        return True
+    if normalized in _FALSY:
+        return False
+    raise ValueError("CLEARPROOF_ENABLE_LEGACY_API must be a boolean flag (0/1/false/true)")
+
+
 DEFAULT_WALLET_RPC_TIMEOUT_SECONDS = 10.0
 
 

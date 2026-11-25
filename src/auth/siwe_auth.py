@@ -7,7 +7,8 @@ Flow:
 4. Server verifies signature + nonce -> returns session token
 5. Subsequent requests use session token in Authorization header
 
-Nonces stored in an in-memory dict with 5-minute TTL to prevent replay.
+Nonces and sessions are stored in bounded in-memory OrderedDicts (with TTL
+sweep on read/write and LRU eviction) when Redis is not configured.
 When Redis is available, nonces and sessions are stored there instead.
 """
 
@@ -15,6 +16,7 @@ import logging
 import os
 import secrets
 import time
+from collections import OrderedDict
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
@@ -24,26 +26,106 @@ logger = logging.getLogger(__name__)
 
 _NONCE_TTL_SECONDS = int(os.getenv("SIWE_NONCE_TTL", "300"))  # 5 minutes
 _SESSION_TTL_SECONDS = int(os.getenv("SIWE_SESSION_TTL", "86400"))  # 24 hours
+DEFAULT_MAX_SESSIONS = 10_000
 
-# In-memory stores (used when Redis is not configured)
+
+def siwe_max_sessions() -> int:
+    """Parse ``SIWE_MAX_SESSIONS`` (default 10000, positive integer)."""
+    raw = os.getenv("SIWE_MAX_SESSIONS")
+    if raw is None or not raw.strip():
+        return DEFAULT_MAX_SESSIONS
+    value = int(raw.strip())
+    if value <= 0:
+        raise ValueError("SIWE_MAX_SESSIONS must be a positive integer")
+    return value
+
+
+class BoundedSessionStore:
+    """Bounded LRU session store with TTL expiry sweep on read and write."""
+
+    def __init__(self, max_entries: int = DEFAULT_MAX_SESSIONS) -> None:
+        if max_entries <= 0:
+            raise ValueError("max_entries must be a positive integer")
+        self._max_entries = max_entries
+        self._entries: OrderedDict[str, dict[str, Any]] = OrderedDict()
+
+    @property
+    def max_entries(self) -> int:
+        return self._max_entries
+
+    def size(self) -> int:
+        """Return the current number of stored sessions (test/diagnostic hook)."""
+        return len(self._entries)
+
+    def __len__(self) -> int:
+        return len(self._entries)
+
+    def __contains__(self, token: object) -> bool:
+        return token in self._entries
+
+    def __getitem__(self, token: str) -> dict[str, Any]:
+        return self._entries[token]
+
+    def sweep_expired(self, now: datetime | None = None) -> int:
+        """Remove all entries whose ``expires_at`` is at or before ``now``."""
+        current = datetime.now(timezone.utc) if now is None else now
+        expired = [k for k, v in self._entries.items() if current >= datetime.fromisoformat(v["expires_at"])]
+        for k in expired:
+            del self._entries[k]
+        return len(expired)
+
+    def set(self, token: str, session_data: dict[str, Any]) -> None:
+        """Store or refresh ``token``, sweeping expired entries and evicting LRU if full."""
+        self.sweep_expired()
+        if token in self._entries:
+            self._entries.move_to_end(token)
+            self._entries[token] = session_data
+            return
+        while len(self._entries) >= self._max_entries:
+            self._entries.popitem(last=False)
+        self._entries[token] = session_data
+
+    def get(self, token: str) -> dict[str, Any] | None:
+        """Return live session data for ``token`` (marking it MRU) or ``None``."""
+        self.sweep_expired()
+        session = self._entries.get(token)
+        if session is None:
+            return None
+        self._entries.move_to_end(token)
+        return session
+
+
+# In-memory nonce store (used when Redis is not configured)
 _nonce_store: dict[str, float] = {}  # nonce -> created_at
-_session_store: dict[str, dict[str, Any]] = {}  # token -> session_data
 
 
 class SIWEAuth:
     """SIWE authentication handler.
 
-    Supports both in-memory and Redis-backed storage for nonces and sessions.
+    Supports both bounded in-memory and Redis-backed storage for nonces and sessions.
     """
 
-    def __init__(self, domain: str, redis_client: Any | None = None) -> None:
+    def __init__(
+        self,
+        domain: str,
+        redis_client: Any | None = None,
+        *,
+        max_sessions: int | None = None,
+    ) -> None:
         """
         Args:
             domain: The expected domain in SIWE messages (e.g. "app.clearproof.io").
-            redis_client: Optional async Redis client. Falls back to in-memory dicts.
+            redis_client: Optional async Redis client. Falls back to in-memory stores.
+            max_sessions: Optional cap on in-memory sessions (defaults to ``SIWE_MAX_SESSIONS``).
         """
         self.domain = domain
         self.redis = redis_client
+        cap = siwe_max_sessions() if max_sessions is None else max_sessions
+        self._sessions = BoundedSessionStore(max_entries=cap)
+
+    def session_count(self) -> int:
+        """Return the number of in-memory sessions currently retained (test hook)."""
+        return self._sessions.size()
 
     # -- nonce management ------------------------------------------------------
 
@@ -121,14 +203,15 @@ class SIWEAuth:
 
         # Build session
         session_token = secrets.token_urlsafe(48)
-        expires_at = datetime.now(timezone.utc) + timedelta(seconds=_SESSION_TTL_SECONDS)
+        now = datetime.now(timezone.utc)
+        expires_at = now + timedelta(seconds=_SESSION_TTL_SECONDS)
 
         session_data = {
             "address": siwe_msg.address,
             "chain_id": siwe_msg.chain_id,
             "session_token": session_token,
             "expires_at": expires_at.isoformat(),
-            "created_at": datetime.now(timezone.utc).isoformat(),
+            "created_at": now.isoformat(),
         }
 
         # Store session
@@ -141,7 +224,7 @@ class SIWEAuth:
                 json.dumps(session_data),
             )
         else:
-            _session_store[session_token] = session_data
+            self._sessions.set(session_token, session_data)
 
         return session_data
 
@@ -164,17 +247,7 @@ class SIWEAuth:
                 return None
             return json.loads(raw)
 
-        session = _session_store.get(token)
-        if session is None:
-            return None
-
-        # Check expiry
-        expires_at = datetime.fromisoformat(session["expires_at"])
-        if datetime.now(timezone.utc) >= expires_at:
-            del _session_store[token]
-            return None
-
-        return session
+        return self._sessions.get(token)
 
 
 # ---------------------------------------------------------------------------

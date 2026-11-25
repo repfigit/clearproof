@@ -11,7 +11,7 @@ from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, Field
 
-from src.api.config import get_siwe_auth, resolve_auth_config
+from src.api.config import get_siwe_auth
 from src.api.middleware.rate_limit import auth_nonce_limiter, auth_verify_limiter
 from src.auth.siwe_auth import SIWEAuth
 
@@ -23,18 +23,9 @@ router = APIRouter(prefix="/auth", tags=["auth"])
 _nonce_limiter = auth_nonce_limiter
 _verify_limiter = auth_verify_limiter
 
-# Module-level SIWE handler fallback when lifespan/app.state is not used
-_siwe: SIWEAuth | None = None
-
 
 def _get_siwe(request: Optional[Request] = None) -> SIWEAuth:
-    global _siwe
-    if request is not None:
-        return get_siwe_auth(request)
-    if _siwe is None:
-        config = resolve_auth_config(None)
-        _siwe = SIWEAuth(domain=config.siwe_domain)
-    return _siwe
+    return get_siwe_auth(request)
 
 
 # ---------------------------------------------------------------------------

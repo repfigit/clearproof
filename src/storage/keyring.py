@@ -22,16 +22,32 @@ from typing import Optional
 logger = logging.getLogger(__name__)
 
 
+DEFAULT_KEY_TTL_SECONDS = 86400 * 90
+
+
 class KeyVersion:
     version_id: str
     key_bytes: bytes
     activated_at: int
+    expires_at: int
     retired: bool
 
-    def __init__(self, version_id: str, key_bytes: bytes, activated_at: int, retired: bool = False) -> None:
+    def __init__(
+        self,
+        version_id: str,
+        key_bytes: bytes,
+        activated_at: int,
+        retired: bool = False,
+        *,
+        expires_at: Optional[int] = None,
+    ) -> None:
+        resolved_expires_at = activated_at + DEFAULT_KEY_TTL_SECONDS if expires_at is None else expires_at
+        if resolved_expires_at < activated_at:
+            raise ValueError("expires_at must be greater than or equal to activated_at")
         self.version_id = version_id
         self.key_bytes = key_bytes
         self.activated_at = activated_at
+        self.expires_at = resolved_expires_at
         self.retired = retired
 
     @property
@@ -40,12 +56,16 @@ class KeyVersion:
 
     @property
     def is_expired(self) -> bool:
-        return int(time.time()) - self.activated_at > 86400 * 90
+        now = int(time.time())
+        if now < self.activated_at:
+            return False
+        return now > self.expires_at
 
     def to_dict(self) -> dict:
         return {
             "version_id": self.version_id,
             "activated_at": self.activated_at,
+            "expires_at": self.expires_at,
             "retired": self.retired,
             "is_expired": self.is_expired,
         }
