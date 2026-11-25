@@ -4,6 +4,7 @@ import time
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 
+from src.api.config import require_record_cipher
 from src.api.middleware.rate_limit import pilot_policy_limiter
 from src.api.request_body import read_private_body as read_policy_body
 from src.auth.principal import Principal, TenantPrincipalDependency
@@ -16,9 +17,7 @@ from src.services.policy_review import (
     PolicyReviewService,
     StoredPolicyComparison,
 )
-from src.storage.keyring import load_keyring
 from src.storage.pilot import RecordConflict
-from src.storage.pilot_cipher import RecordCipher
 
 router = APIRouter(prefix="/pilot/policy", tags=["pilot-policy"], dependencies=[Depends(pilot_policy_limiter)])
 
@@ -56,7 +55,7 @@ def review_service(request: Request, principal: Principal) -> PolicyReviewServic
     if db is None or not db.is_ready:
         raise HTTPException(status_code=503, detail="Pilot database is unavailable")
     try:
-        cipher = RecordCipher(load_keyring())
+        cipher = require_record_cipher(request)
     except (KeyError, ValueError, RuntimeError):
         raise HTTPException(status_code=503, detail="Pilot encryption configuration is unavailable") from None
     return PolicyReviewService(db, cipher, principal)

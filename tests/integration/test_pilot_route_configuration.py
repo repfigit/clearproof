@@ -42,23 +42,36 @@ def test_route_dependencies_reject_unavailable_database(principal, module, funct
     [
         (*dependency, failure)
         for dependency in DEPENDENCIES
-        for failure in ("missing-key", "invalid-chain", "invalid-key")
-        if failure != "invalid-chain" or dependency[0] in ("wallet_ownership", "enrollment")
+        for failure in ("missing-key", "invalid-chain", "missing-event-config")
+        if (failure != "invalid-chain" or dependency[0] in ("wallet_ownership", "enrollment"))
+        and (failure != "missing-event-config" or dependency[0] == "events")
     ],
 )
 def test_route_dependencies_minimize_configuration_errors(principal, monkeypatch, module, function, kwargs, failure):
+    from src.api.config import EventConfig
+    from src.storage.keyring import KeyRing, KeyVersion
+    from src.storage.pilot_cipher import RecordCipher
+
     routes = import_module(f"src.api.routes.{module}")
-    monkeypatch.setenv("PII_MASTER_KEY", "ab" * 32)
-    monkeypatch.delenv("PII_ROTATED_KEYS", raising=False)
     monkeypatch.setenv("PILOT_CHAIN_ID", "31337")
     monkeypatch.setenv("PILOT_REGISTRY_ADDRESS", "0x" + "12" * 20)
+    record_cipher = RecordCipher(KeyRing(KeyVersion("current", b"a" * 32, 0)))
+    event_config = EventConfig()
     if failure == "invalid-chain":
         monkeypatch.setenv("PILOT_CHAIN_ID", "synthetic-invalid-chain")
     elif failure == "missing-key":
-        monkeypatch.delenv("PII_MASTER_KEY")
-    else:
-        monkeypatch.setenv("PII_MASTER_KEY", "synthetic-invalid-key")
-    request = SimpleNamespace(app=SimpleNamespace(state=SimpleNamespace(db=SimpleNamespace(is_ready=True))))
+        record_cipher = None
+    elif failure == "missing-event-config":
+        event_config = None
+    request = SimpleNamespace(
+        app=SimpleNamespace(
+            state=SimpleNamespace(
+                db=SimpleNamespace(is_ready=True),
+                record_cipher=record_cipher,
+                event_config=event_config,
+            )
+        )
+    )
     with pytest.raises(HTTPException) as error:
         getattr(routes, function)(request, principal, **kwargs)
     assert error.value.status_code == 503

@@ -14,6 +14,7 @@ from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, Field
 
+from src.api.config import require_record_cipher
 from src.api.dependencies import get_credential_registry
 from src.api.middleware.auth import JWTAuthDependency
 from src.api.routes.wallet_ownership import account_probe, delegation_recheck_seconds
@@ -21,8 +22,6 @@ from src.auth.principal import Principal, TenantPrincipalDependency
 from src.registry.credential_registry import CredentialRegistry, zkKYCCredential
 from src.services.enrollment import EnrollmentIneligible, EnrollmentIntegrityError, EnrollmentNotFound
 from src.services.wallet_ownership import WalletOwnershipError, WalletOwnershipService
-from src.storage.keyring import load_keyring
-from src.storage.pilot_cipher import RecordCipher
 
 logger = logging.getLogger(__name__)
 
@@ -84,7 +83,7 @@ def _wallet_ownership_service(request: Request, principal: Principal) -> WalletO
     try:
         return WalletOwnershipService(
             db,
-            RecordCipher(load_keyring()),
+            require_record_cipher(request),
             principal,
             chain_id=int(os.environ["PILOT_CHAIN_ID"]),
             registry_address=os.environ["PILOT_REGISTRY_ADDRESS"],

@@ -223,13 +223,23 @@ def test_delegation_recheck_seconds_env_parsing(monkeypatch):
 
 
 def test_wallet_service_wires_delegation_recheck_seconds_from_env(monkeypatch, principal):
+    from src.storage.keyring import KeyRing, KeyVersion
+    from src.storage.pilot_cipher import RecordCipher
+
     monkeypatch.setenv("PII_MASTER_KEY", "ab" * 32)
     monkeypatch.setenv("PILOT_CHAIN_ID", "31337")
     monkeypatch.setenv("PILOT_REGISTRY_ADDRESS", "0x" + "1" * 40)
     monkeypatch.setenv("WALLET_OWNERSHIP_DELEGATION_RECHECK_SECONDS", "120")
     monkeypatch.delenv("WALLET_OWNERSHIP_RPC_URL", raising=False)
 
-    request = SimpleNamespace(app=SimpleNamespace(state=SimpleNamespace(db=SimpleNamespace(is_ready=True))))
+    request = SimpleNamespace(
+        app=SimpleNamespace(
+            state=SimpleNamespace(
+                db=SimpleNamespace(is_ready=True),
+                record_cipher=RecordCipher(KeyRing(KeyVersion("current", b"a" * 32, 0))),
+            )
+        )
+    )
     service = routes.wallet_service(request, principal)
     assert service.delegation_recheck_seconds == 120
 

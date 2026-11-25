@@ -206,3 +206,107 @@ async def test_operator_target_factories_load_before_serving_and_close_on_failur
     assert loader.call_args.args[0] is database
     unused.assert_not_awaited()
     database.close.assert_awaited_once()
+
+
+async def test_lifespan_populates_shared_cipher_and_runtime_configs_and_clears_on_shutdown(module, monkeypatch):
+    import json
+
+    from src.api.config import AuthConfig, EventConfig, FireblocksConfig
+    from src.storage.pilot_cipher import RecordCipher
+
+    monkeypatch.setenv("AUTH_MODE", "jwt")
+    monkeypatch.setenv("JWT_ISSUER", "custom-issuer")
+    monkeypatch.setenv("JWT_AUDIENCE", "custom-audience")
+    monkeypatch.setenv("SIWE_DOMAIN", "custom.example")
+    monkeypatch.setenv("PILOT_EVENT_AUTHORITIES", json.dumps({"authorities": []}))
+    monkeypatch.delenv("PILOT_INVESTIGATION_LINKS", raising=False)
+    monkeypatch.delenv("PILOT_FIREBLOCKS_INTEGRATIONS", raising=False)
+    monkeypatch.setenv("DATABASE_URL", "configured")
+    monkeypatch.setenv("PILOT_PROVING_FACTORY", "synthetic_operator:proving")
+    monkeypatch.setenv("PILOT_INSPECTION_FACTORY", "synthetic_operator:inspection")
+    monkeypatch.setenv("PILOT_AUTHORIZATION_FACTORY", "synthetic_operator:authorization")
+
+    database = SimpleNamespace(connect=AsyncMock(), close=AsyncMock())
+    monkeypatch.setattr(module, "Database", Mock(return_value=database))
+    proving_loader = AsyncMock(return_value={})
+    inspection_loader = AsyncMock(return_value={})
+    authorization_loader = AsyncMock(return_value={})
+    monkeypatch.setattr(module, "load_proving_targets", proving_loader)
+    monkeypatch.setattr(module, "load_inspection_targets", inspection_loader)
+    monkeypatch.setattr(module, "load_authorization_targets", authorization_loader)
+
+    app = module.create_app()
+    async with module.lifespan(app):
+        assert isinstance(app.state.record_cipher, RecordCipher)
+        # All three operator target loaders receive the same lifespan-constructed RecordCipher.
+        assert proving_loader.call_args.args[1] is app.state.record_cipher
+        assert inspection_loader.call_args.args[1] is app.state.record_cipher
+        assert authorization_loader.call_args.args[1] is app.state.record_cipher
+        assert isinstance(app.state.auth_config, AuthConfig)
+        assert app.state.auth_config.auth_mode == "jwt"
+        assert app.state.auth_config.jwt_issuer == "custom-issuer"
+        assert app.state.auth_config.jwt_audience == "custom-audience"
+        assert app.state.auth_config.siwe_domain == "custom.example"
+        assert app.state.siwe_auth.domain == "custom.example"
+        assert isinstance(app.state.event_config, EventConfig)
+        assert app.state.event_config.authorities == ()
+        assert app.state.event_config.links == ()
+        assert app.state.fireblocks_config is None
+
+    assert app.state.record_cipher is None
+    assert app.state.auth_config is None
+    assert app.state.siwe_auth is None
+    assert app.state.event_config is None
+    assert app.state.fireblocks_config is None
+    assert isinstance(FireblocksConfig(), FireblocksConfig)
+
+
+@pytest.mark.parametrize(
+    "variable,value,pattern",
+    [
+        ("PILOT_EVENT_AUTHORITIES", "{invalid", "Invalid pilot event configuration"),
+        ("PILOT_INVESTIGATION_LINKS", '{"links":[{"url":"javascript:bad"}]}', "Invalid pilot event configuration"),
+        ("PILOT_FIREBLOCKS_INTEGRATIONS", "{invalid", "Invalid Fireblocks relay configuration"),
+    ],
+)
+async def test_invalid_event_or_fireblocks_config_blocks_startup_before_db(
+    module, monkeypatch, variable, value, pattern
+):
+    monkeypatch.setenv("DATABASE_URL", "configured")
+    monkeypatch.setenv(variable, value)
+    database = Mock()
+    monkeypatch.setattr(module, "Database", database)
+    with pytest.raises(RuntimeError, match=pattern):
+        async with module.lifespan(module.create_app()):
+            pytest.fail("invalid event/fireblocks config reached serving state")
+    database.assert_not_called()
+
+
+async def test_auth_dependency_reads_app_state_auth_config_over_module_globals(module, monkeypatch):
+    from fastapi import Depends
+
+    from src.api.config import AuthConfig
+    from src.api.middleware import auth as auth_middleware
+
+    # Set conflicting module-level globals to prove app.state.auth_config wins.
+    monkeypatch.setattr(auth_middleware, "AUTH_MODE", "jwt")
+    monkeypatch.setattr(auth_middleware, "API_KEY", "stale-module-key")
+    monkeypatch.setenv("AUTH_MODE", "api-key")
+    monkeypatch.setenv("API_KEY", "lifespan-api-key")
+    monkeypatch.delenv("PILOT_EVENT_AUTHORITIES", raising=False)
+    monkeypatch.delenv("PILOT_INVESTIGATION_LINKS", raising=False)
+    monkeypatch.delenv("PILOT_FIREBLOCKS_INTEGRATIONS", raising=False)
+
+    app = module.create_app()
+
+    @app.get("/_lifespan_auth_probe")
+    async def probe(claims: dict = Depends(auth_middleware.JWTAuthDependency)):
+        return claims
+
+    async with module.lifespan(app):
+        assert isinstance(app.state.auth_config, AuthConfig)
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://local") as client:
+            ok = await client.get("/_lifespan_auth_probe", headers={"X-API-Key": "lifespan-api-key"})
+            assert ok.status_code == 200
+            bad = await client.get("/_lifespan_auth_probe", headers={"X-API-Key": "stale-module-key"})
+            assert bad.status_code == 401

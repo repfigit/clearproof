@@ -279,6 +279,7 @@ async def test_enrollment_api_real_signatures_tenant_binding_and_reconnect(db, m
     headers = {"Authorization": "Bearer " + jwt.encode(claims, private, algorithm="ES256")}
     app = create_app()
     app.state.db = db
+    app.state.record_cipher = cipher()
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
         response = await client.post("/pilot/credential/enroll", json=body, headers=headers)
         assert response.status_code == 200, response.text
@@ -297,6 +298,7 @@ async def test_enrollment_api_real_signatures_tenant_binding_and_reconnect(db, m
     await db.connect()
     restarted = create_app()
     restarted.state.db = db
+    restarted.state.record_cipher = cipher()
     async with AsyncClient(transport=ASGITransport(app=restarted), base_url="http://test") as client:
         retry = await client.post("/pilot/credential/enroll", json=body, headers=headers)
         assert retry.status_code == 200 and retry.json() == response.json()
@@ -859,6 +861,7 @@ async def test_policy_http_approval_and_stored_comparison_real_jwt(db, monkeypat
     comparison = fixtures["comparison"].__wrapped__()
     app, token = fixtures["authenticated_app"].__wrapped__(monkeypatch)
     app.state.db = db
+    app.state.record_cipher = cipher()
     monkeypatch.setenv("PII_MASTER_KEY", "61" * 32)
     monkeypatch.setattr(routes, "time", SimpleNamespace(time=lambda: comparison.cases[0].evaluated_at))
     headers = {"Authorization": "Bearer " + token(roles=("policy:approve", "policy:read", "evidence:decrypt"))}
@@ -1117,6 +1120,7 @@ async def test_event_api_real_jwt_configuration_and_minimized_errors(db, monkeyp
 
     from httpx import ASGITransport, AsyncClient
 
+    from src.api.config import EventConfig
     from src.api.routes import events as routes
 
     source, authority = event_case
@@ -1124,8 +1128,8 @@ async def test_event_api_real_jwt_configuration_and_minimized_errors(db, monkeyp
     app, token = fixture["authenticated_app"].__wrapped__(monkeypatch)
     app.include_router(routes.router)
     app.state.db = db
-    monkeypatch.setenv("PII_MASTER_KEY", "61" * 32)
-    monkeypatch.setenv("PILOT_EVENT_AUTHORITIES", json.dumps({"authorities": [authority.model_dump(mode="json")]}))
+    app.state.record_cipher = cipher()
+    app.state.event_config = EventConfig(authorities=(authority,))
     monkeypatch.setattr(routes, "time", SimpleNamespace(time=lambda: 150))
     headers = {"Authorization": "Bearer " + token(roles=("events:ingest", "evidence:read", "evidence:decrypt"))}
     body = source.model_dump(mode="json")
@@ -1169,7 +1173,12 @@ async def test_event_api_real_jwt_configuration_and_minimized_errors(db, monkeyp
             dict(link, scope_digest="ff" * 32),
             dict(link, source_id="other-source"),
         ]
-        monkeypatch.setenv("PILOT_INVESTIGATION_LINKS", json.dumps({"links": [link, *excluded]}))
+        app.state.event_config = EventConfig.from_env(
+            {
+                "PILOT_EVENT_AUTHORITIES": json.dumps({"authorities": [authority.model_dump(mode="json")]}),
+                "PILOT_INVESTIGATION_LINKS": json.dumps({"links": [link, *excluded]}),
+            }
+        )
         linked = await client.post("/pilot/events/investigate", json=scope, headers=headers)
         expected_link = {k: v for k, v in link.items() if k not in ("tenant_id", "scope_digest")}
         assert linked.status_code == 200 and linked.json()["provider_links"] == [expected_link]
@@ -1187,13 +1196,14 @@ async def test_event_api_real_jwt_configuration_and_minimized_errors(db, monkeyp
             "/pilot/events/investigate", json={**scope, "provider_links": [link]}, headers=headers
         )
         assert spoofed_link.status_code == 422 and "console.example" not in spoofed_link.text
-        monkeypatch.setenv(
-            "PILOT_INVESTIGATION_LINKS", json.dumps({"links": [dict(link, url="javascript:PRIVATE-MARKER")]})
-        )
+        with pytest.raises(ValueError):
+            EventConfig.from_env(
+                {"PILOT_INVESTIGATION_LINKS": json.dumps({"links": [dict(link, url="javascript:PRIVATE-MARKER")]})}
+            )
+        app.state.event_config = None
         invalid = await client.post("/pilot/events/investigate", json=scope, headers=headers)
         assert invalid.status_code == 503 and "PRIVATE-MARKER" not in invalid.text
-        monkeypatch.delenv("PILOT_INVESTIGATION_LINKS")
-        monkeypatch.delenv("PILOT_EVENT_AUTHORITIES")
+        app.state.event_config = EventConfig(authorities=None, links=())
         assert (await client.post("/pilot/events/ingest", json=body, headers=headers)).status_code == 503
         assert (await client.post("/pilot/events/investigate", json=scope, headers=headers)).status_code == 200
 
@@ -1346,6 +1356,7 @@ async def test_fireblocks_relay_requires_jwt_signature_and_operator_binding(db, 
 
     from httpx import ASGITransport, AsyncClient
 
+    from src.api.config import EventConfig, FireblocksConfig
     from src.api.routes import fireblocks as routes
     from src.services.event_ingestion import EventAuthority
 
@@ -1356,6 +1367,7 @@ async def test_fireblocks_relay_requires_jwt_signature_and_operator_binding(db, 
     app, token = auth_fixture["authenticated_app"].__wrapped__(monkeypatch)
     app.include_router(routes.router)
     app.state.db = db
+    app.state.record_cipher = cipher()
     now, raw = fixtures["NOW"], fixtures["FIXTURE"].read_bytes()
     signature = fixtures["sign"](raw, key)
     config = {
@@ -1380,9 +1392,8 @@ async def test_fireblocks_relay_requires_jwt_signature_and_operator_binding(db, 
         valid_from=0,
         valid_until=now // 1000 + 1000,
     )
-    monkeypatch.setenv("PILOT_FIREBLOCKS_INTEGRATIONS", json.dumps(config))
-    monkeypatch.setenv("PILOT_EVENT_AUTHORITIES", json.dumps({"authorities": [authority.model_dump(mode="json")]}))
-    monkeypatch.setenv("PII_MASTER_KEY", "61" * 32)
+    app.state.fireblocks_config = FireblocksConfig.from_raw(json.dumps(config).encode())
+    app.state.event_config = EventConfig(authorities=(authority,))
     monkeypatch.setattr(routes, "time", SimpleNamespace(time_ns=lambda: now * 1000000))
     headers = {
         "Authorization": "Bearer " + token(roles=("events:ingest", "evidence:decrypt")),
@@ -1440,24 +1451,33 @@ async def test_fireblocks_relay_requires_jwt_signature_and_operator_binding(db, 
             malformed = json.loads(json.dumps(config))
             if invalid_configuration == "duplicate":
                 malformed["integrations"].append(malformed["integrations"][0])
+                with pytest.raises(ValueError):
+                    FireblocksConfig.from_raw(json.dumps(malformed).encode())
+                with monkeypatch.context() as patch:
+                    patch.setattr(app.state, "fireblocks_config", None)
+                    response = await client.post(url, content=raw, headers=headers)
+                    assert response.status_code == 503
+                    assert response.json() == {"detail": "Fireblocks relay configuration is unavailable"}
             else:
                 malformed["integrations"][0]["jwks"] = {"keys": []}
-            with monkeypatch.context() as patch:
-                patch.setenv("PILOT_FIREBLOCKS_INTEGRATIONS", json.dumps(malformed))
-                response = await client.post(url, content=raw, headers=headers)
-                assert response.status_code == 503
-                expected_detail = (
-                    "Fireblocks relay configuration is unavailable"
-                    if invalid_configuration == "duplicate"
-                    else "Fireblocks verification configuration is unavailable"
+                with pytest.raises(ValueError):
+                    FireblocksConfig.from_raw(json.dumps(malformed).encode())
+                uncompiled = FireblocksConfig(
+                    integrations=routes.FireblocksIntegrations.model_validate_json(
+                        json.dumps(malformed).encode()
+                    ).integrations
                 )
-                assert response.json() == {"detail": expected_detail}
+                with monkeypatch.context() as patch:
+                    patch.setattr(app.state, "fireblocks_config", uncompiled)
+                    response = await client.post(url, content=raw, headers=headers)
+                    assert response.status_code == 503
+                    assert response.json() == {"detail": "Fireblocks verification configuration is unavailable"}
         # All failed retries preserve the original successful notification.
         recovered = await client.post(url, content=raw, headers=headers)
         assert recovered.status_code == 200 and recovered.json()["duplicate"]
-        monkeypatch.setenv("PILOT_EVENT_AUTHORITIES", '{"authorities":[]}')
+        app.state.event_config = EventConfig(authorities=())
         assert (await client.post(url, content=raw, headers=headers)).status_code == 403
-        monkeypatch.delenv("PILOT_FIREBLOCKS_INTEGRATIONS")
+        app.state.fireblocks_config = None
         assert (await client.post(url, content=raw, headers=headers)).status_code == 503
         async with db.connection() as conn:
             assert count == (await (await conn.execute("SELECT count(*) FROM pilot_records")).fetchone())[0]
@@ -1522,11 +1542,14 @@ async def test_ageing_queue_paginates_without_omissions_or_cross_tenant_reads(db
         db, cipher(), Principal(tenant_id="tenant-b", actor_id="actor-a", roles=principal.roles), authorities=()
     )
     assert (await foreign.queue(QueueRequest(), now=200)).items == ()
+    from src.api.config import EventConfig
+
     fixture = runpy.run_path(str(Path(__file__).resolve().parents[1] / "unit/test_policy_diff.py"))
     app, token = fixture["authenticated_app"].__wrapped__(monkeypatch)
     app.include_router(routes.router)
     app.state.db = db
-    monkeypatch.setenv("PII_MASTER_KEY", "61" * 32)
+    app.state.record_cipher = cipher()
+    app.state.event_config = EventConfig()
     monkeypatch.setattr(routes, "time", SimpleNamespace(time=lambda: 200))
     headers = {"Authorization": "Bearer " + token(roles=("evidence:read", "evidence:decrypt"))}
     async with db.connection() as conn:
@@ -3566,6 +3589,7 @@ async def check_current_inspection_http(
     body["credential_id"] = credential_id
     app = create_app()
     app.state.db = db
+    app.state.record_cipher = cipher()
     targets = {(principal.tenant_id, "synthetic-transfer"): InspectionTarget(configuration, verifier)}
     app.state.pilot_inspection_targets = targets
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
@@ -3617,6 +3641,7 @@ async def check_current_inspection_http(
     await db.connect()
     restarted = create_app()
     restarted.state.db = db
+    restarted.state.record_cipher = cipher()
     restarted.state.pilot_inspection_targets = targets
     async with AsyncClient(transport=ASGITransport(app=restarted), base_url="http://test") as client:
         assert (await client.post("/pilot/proof/inspect", json=body, headers=headers())).json()["cryptographic_valid"]
@@ -3748,6 +3773,7 @@ async def check_current_evaluation_http(
     )
     app = create_app()
     app.state.db = db
+    app.state.record_cipher = cipher()
     selector = (principal.tenant_id, "synthetic-transfer")
     targets = {selector: InspectionTarget(configuration, verifier, trust)}
     app.state.pilot_inspection_targets = targets
@@ -3810,6 +3836,7 @@ async def check_current_evaluation_http(
     await db.connect()
     restarted = create_app()
     restarted.state.db = db
+    restarted.state.record_cipher = cipher()
     restarted.state.pilot_inspection_targets = targets
     async with AsyncClient(transport=ASGITransport(app=restarted), base_url="http://test") as client:
         result = await client.post("/pilot/proof/evaluate", json=body, headers=headers())
@@ -4099,6 +4126,7 @@ async def check_observation_http(app, db, headers, evaluation_body, cases):
     await db.connect()
     restarted = create_app()
     restarted.state.db = db
+    restarted.state.record_cipher = cipher()
     # No current targets are configured in the replacement app.
     async with AsyncClient(transport=ASGITransport(app=restarted), base_url="http://test") as client:
         assert (await client.post("/pilot/proof/observe", json=body, headers=writer_headers)).status_code == 503
@@ -4527,6 +4555,7 @@ async def prepare_authorization_http(
     )
     app = create_app()
     app.state.db = db
+    app.state.record_cipher = cipher()
     targets = {(principal.tenant_id, "local-transfer"): target}
     app.state.pilot_authorization_targets = targets
     body = dict(

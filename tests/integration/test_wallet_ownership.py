@@ -151,15 +151,12 @@ async def test_durable_challenge_quotas_and_failed_verification_do_not_consume(d
 
 async def test_real_http_lifecycle_and_auth_fail_closed(db, enrolled, monkeypatch, caplog):
     from src.api.main import app
-    from src.api.routes import wallet_ownership as routes
 
     wallet, consent, principal, _ = enrolled
     monkeypatch.setattr(app.state, "db", db, raising=False)
+    monkeypatch.setattr(app.state, "record_cipher", cipher(), raising=False)
     monkeypatch.setenv("PILOT_CHAIN_ID", str(consent.chain_id))
     monkeypatch.setenv("PILOT_REGISTRY_ADDRESS", consent.registry_address)
-    # Use the real cipher factory without exposing keyring internals in production.
-    monkeypatch.setattr(routes, "RecordCipher", lambda _: cipher())
-    monkeypatch.setattr(routes, "load_keyring", lambda: None)
     monkeypatch.setattr("src.services.wallet_ownership.time.time", lambda: 1100)
     overrides = app.dependency_overrides.copy()
     current = [principal]

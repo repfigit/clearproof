@@ -8,6 +8,7 @@ from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response
 
+from src.api.config import require_record_cipher
 from src.api.middleware.rate_limit import pilot_readiness_limiter
 from src.api.routes.pilot_proof import InspectionTarget
 from src.auth.principal import Principal, TenantPrincipalDependency
@@ -19,8 +20,6 @@ from src.prover.pilot_verifier import PilotPairingVerifier
 from src.services.proof_inspection import CurrentStatementConfiguration
 from src.services.proof_jobs import ProvingTarget
 from src.storage.database import SCHEMA_VERSION
-from src.storage.keyring import load_keyring
-from src.storage.pilot_cipher import RecordCipher
 
 router = APIRouter(
     prefix="/pilot/readiness",
@@ -137,7 +136,7 @@ async def readiness(
         except Exception:
             checks["migration_history"] = False
     try:
-        cipher = RecordCipher(load_keyring())
+        cipher = require_record_cipher(request)
         value = {"probe": "synthetic-readiness-v1"}
         row = {**cipher.seal(principal.tenant_id, "readiness", "synthetic-probe", 1, value), "revision": 1}
         checks["storage_key"] = cipher.open(principal.tenant_id, "readiness", "synthetic-probe", row) == value

@@ -18,6 +18,8 @@ from typing import Optional
 from fastapi import HTTPException, Request
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
+from src.api.config import AuthConfig, resolve_auth_config
+
 logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
@@ -38,7 +40,7 @@ _bearer_scheme = HTTPBearer(auto_error=False)
 # ---------------------------------------------------------------------------
 
 
-def verify_jwt_token(token: str) -> dict:
+def verify_jwt_token(token: str, *, config: Optional[AuthConfig] = None) -> dict:
     """
     Verify an ES256 JWT and return its decoded claims.
 
@@ -56,7 +58,11 @@ def verify_jwt_token(token: str) -> dict:
             detail="JWT verification unavailable — PyJWT not installed",
         ) from exc
 
-    if not JWT_PUBLIC_KEY:
+    public_key = JWT_PUBLIC_KEY if config is None else config.jwt_public_key
+    issuer = JWT_ISSUER if config is None else config.jwt_issuer
+    audience = JWT_AUDIENCE if config is None else config.jwt_audience
+
+    if not public_key:
         raise HTTPException(
             status_code=500,
             detail="JWT_PUBLIC_KEY environment variable not set",
@@ -65,10 +71,10 @@ def verify_jwt_token(token: str) -> dict:
     try:
         claims = jwt.decode(
             token,
-            JWT_PUBLIC_KEY,
+            public_key,
             algorithms=["ES256"],
-            issuer=JWT_ISSUER,
-            audience=JWT_AUDIENCE,
+            issuer=issuer,
+            audience=audience,
             options={"require": ["exp", "iat", "iss", "aud", "sub"]},
         )
     except jwt.ExpiredSignatureError:
@@ -80,15 +86,11 @@ def verify_jwt_token(token: str) -> dict:
 
 
 # ---------------------------------------------------------------------------
-# API-key verification
-# ---------------------------------------------------------------------------
-
-# ---------------------------------------------------------------------------
 # SIWE session verification
 # ---------------------------------------------------------------------------
 
 
-async def _verify_siwe_session(token: str) -> dict:
+async def _verify_siwe_session(token: str, *, config: Optional[AuthConfig] = None, siwe_auth=None) -> dict:
     """
     Validate a SIWE session token and return its session data as claims.
 
@@ -96,8 +98,9 @@ async def _verify_siwe_session(token: str) -> dict:
     """
     from src.auth.siwe_auth import SIWEAuth
 
-    domain = os.environ.get("SIWE_DOMAIN", "localhost")
-    siwe_auth = SIWEAuth(domain=domain)
+    if siwe_auth is None:
+        domain = os.environ.get("SIWE_DOMAIN", "localhost") if config is None else config.siwe_domain
+        siwe_auth = SIWEAuth(domain=domain)
     session = await siwe_auth.validate_session(token)
 
     if session is None:
@@ -116,19 +119,20 @@ async def _verify_siwe_session(token: str) -> dict:
 # ---------------------------------------------------------------------------
 
 
-def _verify_api_key(provided: str) -> dict:
+def _verify_api_key(provided: str, *, config: Optional[AuthConfig] = None) -> dict:
     """
     Constant-time comparison of the provided key against the stored key.
 
     Returns a minimal claims dict on success.
     """
-    if not API_KEY:
+    expected_key = API_KEY if config is None else config.api_key
+    if not expected_key:
         raise HTTPException(
             status_code=500,
             detail="API_KEY environment variable not set",
         )
 
-    if not hmac.compare_digest(provided, API_KEY):
+    if not hmac.compare_digest(provided, expected_key):
         raise HTTPException(status_code=401, detail="Invalid API key")
 
     return {"sub": "api-key-user", "iat": int(time.time())}
@@ -143,30 +147,40 @@ async def JWTAuthDependency(request: Request) -> dict:  # noqa: N802 — upperca
     """
     FastAPI dependency that validates the caller's credentials.
 
+    Reads ``app.state.auth_config`` populated during FastAPI lifespan startup
+    (falling back to module defaults when a test constructs a bare app without
+    running lifespan).
+
     In **jwt** mode the caller must supply a ``Bearer <token>`` header.
     In **api-key** mode the caller must supply an ``X-API-Key`` header.
 
     Returns the decoded claims dict on success; raises 401 otherwise.
     """
-    mode = AUTH_MODE.lower()
+    config = resolve_auth_config(request)
+    mode = config.auth_mode.lower()
 
     if mode == "siwe":
         credentials: Optional[HTTPAuthorizationCredentials] = await _bearer_scheme(request)
         if credentials is None or credentials.scheme.lower() != "bearer":
             raise HTTPException(status_code=401, detail="Missing Bearer token (SIWE session)")
-        return await _verify_siwe_session(credentials.credentials)
+        try:
+            state = getattr(getattr(request, "app", None), "state", None)
+        except KeyError:
+            state = None
+        state_siwe = getattr(state, "siwe_auth", None) if state is not None else None
+        return await _verify_siwe_session(credentials.credentials, config=config, siwe_auth=state_siwe)
 
     if mode == "jwt":
         credentials = await _bearer_scheme(request)
         if credentials is None or credentials.scheme.lower() != "bearer":
             raise HTTPException(status_code=401, detail="Missing Bearer token")
-        return verify_jwt_token(credentials.credentials)
+        return verify_jwt_token(credentials.credentials, config=config)
 
     if mode == "api-key":
         api_key = request.headers.get("X-API-Key", "")
         if not api_key:
             raise HTTPException(status_code=401, detail="Missing X-API-Key header")
-        return _verify_api_key(api_key)
+        return _verify_api_key(api_key, config=config)
 
     # Unknown mode — fail closed.
     raise HTTPException(status_code=500, detail=f"Unknown AUTH_MODE: {mode}")

@@ -65,7 +65,7 @@ from typing import Any, Optional
 
 from fastapi import Depends, HTTPException, Request
 
-from src.api.middleware import auth as _auth
+from src.api.config import resolve_auth_config
 from src.api.middleware.auth import JWTAuthDependency
 
 DEFAULT_MAX_CLIENTS = 10_000
@@ -302,11 +302,12 @@ class RateLimiter:
 
         host = trusted_client_ip(request)
         api_key = request.headers.get("X-API-Key") or ""
-        configured = _auth.API_KEY
+        config = resolve_auth_config(request)
+        configured = config.api_key
         if (
             api_key
             and configured
-            and _auth.AUTH_MODE.lower() == "api-key"
+            and config.auth_mode.lower() == "api-key"
             and hmac.compare_digest(api_key.encode(), configured.encode())
         ):
             return f"key:{_digest(api_key, host)}"

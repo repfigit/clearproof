@@ -6,6 +6,7 @@ import time
 from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from pydantic import Field
 
+from src.api.config import require_record_cipher
 from src.api.middleware.rate_limit import pilot_credential_limiter
 from src.api.request_body import read_private_body
 from src.auth.principal import Principal, TenantPrincipalDependency
@@ -20,9 +21,8 @@ from src.services.enrollment_inventory import (
     EnrollmentInventoryService,
     EnrollmentPageRequest,
 )
-from src.storage.keyring import load_keyring
 from src.storage.pilot import RecordConflict
-from src.storage.pilot_cipher import RecordCipher, RecordIntegrityError
+from src.storage.pilot_cipher import RecordIntegrityError
 
 router = APIRouter(
     prefix="/pilot/credential",
@@ -53,7 +53,7 @@ async def list_enrollment(
     try:
         service = EnrollmentInventoryService(
             db,
-            RecordCipher(load_keyring()),
+            require_record_cipher(request),
             principal,
             chain_id=int(os.environ["PILOT_CHAIN_ID"]),
             registry_address=os.environ["PILOT_REGISTRY_ADDRESS"],
@@ -85,7 +85,7 @@ async def backfill_enrollment_inventory(
     try:
         service = EnrollmentInventoryService(
             db,
-            RecordCipher(load_keyring()),
+            require_record_cipher(request),
             principal,
             chain_id=int(os.environ["PILOT_CHAIN_ID"]),
             registry_address=os.environ["PILOT_REGISTRY_ADDRESS"],
@@ -110,7 +110,7 @@ def enrollment_service(
     try:
         chain_id = int(os.environ["PILOT_CHAIN_ID"])
         registry = os.environ["PILOT_REGISTRY_ADDRESS"]
-        cipher = RecordCipher(load_keyring())
+        cipher = require_record_cipher(request)
     except (KeyError, ValueError, RuntimeError) as exc:
         raise HTTPException(status_code=503, detail="Pilot enrollment configuration is unavailable") from exc
     return EnrollmentService(db, cipher, principal, chain_id=chain_id, registry_address=registry)

@@ -6,6 +6,7 @@ from dataclasses import asdict, dataclass
 from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import Field
 
+from src.api.config import require_record_cipher
 from src.api.middleware.rate_limit import pilot_proof_limiter
 from src.api.request_body import read_private_body
 from src.auth.principal import Principal, TenantPrincipalDependency
@@ -22,9 +23,8 @@ from src.services.observation_report import (
 )
 from src.services.proof_inspection import CurrentStatementConfiguration, ProofInspectionService
 from src.services.proof_observation import ProofObservationService, read_observation
-from src.storage.keyring import load_keyring
 from src.storage.pilot import RecordConflict
-from src.storage.pilot_cipher import RecordCipher, RecordIntegrityError
+from src.storage.pilot_cipher import RecordIntegrityError
 
 router = APIRouter(prefix="/pilot/proof", tags=["pilot-proof"], dependencies=[Depends(pilot_proof_limiter)])
 
@@ -95,7 +95,7 @@ async def prepare_inspection(
     if db is None or not db.is_ready:
         raise HTTPException(status_code=503, detail="Pilot database is unavailable")
     try:
-        service = service_type(db, RecordCipher(load_keyring()), principal, target.verifier, target.configuration)
+        service = service_type(db, require_record_cipher(request), principal, target.verifier, target.configuration)
     except (ValueError, TypeError, KeyError, RuntimeError):
         raise HTTPException(status_code=503, detail="Pilot inspection configuration is unavailable") from None
     return service, target, body, proof, signals
@@ -204,7 +204,7 @@ async def get_observation(request: Request, principal: Principal = Depends(Tenan
     if db is None or not db.is_ready:
         raise HTTPException(status_code=503, detail="Pilot database is unavailable")
     try:
-        cipher = RecordCipher(load_keyring())
+        cipher = require_record_cipher(request)
     except (KeyError, ValueError, RuntimeError):
         raise HTTPException(status_code=503, detail="Pilot encryption configuration is unavailable") from None
     try:
@@ -230,7 +230,7 @@ async def report_observations(request: Request, principal: Principal = Depends(T
     if db is None or not db.is_ready:
         raise HTTPException(status_code=503, detail="Pilot database is unavailable")
     try:
-        cipher = RecordCipher(load_keyring())
+        cipher = require_record_cipher(request)
         return await observation_cohort_report(db, cipher, principal, cohort)
     except (KeyError, ValueError, RuntimeError, TypeError, RecordIntegrityError):
         raise HTTPException(status_code=503, detail="Observation cohort cannot be read") from None
@@ -252,6 +252,6 @@ async def discover_observations(request: Request, principal: Principal = Depends
     if db is None or not db.is_ready:
         raise HTTPException(status_code=503, detail="Pilot database is unavailable")
     try:
-        return await list_observations(db, RecordCipher(load_keyring()), principal, page)
+        return await list_observations(db, require_record_cipher(request), principal, page)
     except (KeyError, ValueError, RuntimeError, TypeError, RecordIntegrityError):
         raise HTTPException(status_code=503, detail="Observation page cannot be read") from None

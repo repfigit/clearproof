@@ -9,9 +9,11 @@ import logging
 import os
 from contextlib import asynccontextmanager
 
+import jwt
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from src.api.config import AuthConfig, EventConfig, FireblocksConfig
 from src.api.routes.auth import router as auth_router
 from src.api.routes.authorization import router as authorization_router
 from src.api.routes.credential import router as credential_router
@@ -28,6 +30,7 @@ from src.api.routes.readiness import router as readiness_router
 from src.api.routes.usage import router as usage_router
 from src.api.routes.wallet_ownership import router as wallet_ownership_router
 from src.api.target_configuration import load_authorization_targets, load_inspection_targets
+from src.auth.siwe_auth import SIWEAuth
 from src.sar.encryption import hkdf_salt
 from src.services.proving_configuration import load_proving_targets
 from src.storage.database import Database
@@ -70,8 +73,27 @@ async def lifespan(app: FastAPI):
     # the preferred envelope path is HPKE: legacy derivation remains available.
     hkdf_salt()
 
+    # Construct shared cipher and runtime configs once during startup so route
+    # handlers read app.state instead of re-parsing environment variables per request.
+    record_cipher = RecordCipher(load_keyring())
+    auth_config = AuthConfig.from_env()
+    siwe_auth = SIWEAuth(domain=auth_config.siwe_domain)
+    try:
+        event_config = EventConfig.from_env()
+    except (KeyError, ValueError, TypeError, RuntimeError, RecursionError) as exc:
+        raise RuntimeError("Invalid pilot event configuration") from exc
+    try:
+        fireblocks_config = FireblocksConfig.from_env()
+    except (KeyError, ValueError, TypeError, RuntimeError, RecursionError, jwt.PyJWTError) as exc:
+        raise RuntimeError("Invalid Fireblocks relay configuration") from exc
+
     db = None
     app.state.db = None
+    app.state.record_cipher = record_cipher
+    app.state.auth_config = auth_config
+    app.state.siwe_auth = siwe_auth
+    app.state.event_config = event_config
+    app.state.fireblocks_config = fireblocks_config
     try:
         db_url = os.getenv("DATABASE_URL")
         if db_url:
@@ -84,16 +106,21 @@ async def lifespan(app: FastAPI):
         else:
             logger.warning("DATABASE_URL not set — running in in-memory mode")
         if os.getenv("PILOT_PROVING_FACTORY"):
-            app.state.pilot_proving_targets = await load_proving_targets(db, RecordCipher(load_keyring()))
+            app.state.pilot_proving_targets = await load_proving_targets(db, record_cipher)
         # Operator-owned trust for the current-profile routes. Unset leaves the
         # capability unconfigured (503); a set factory that fails stops startup.
         if os.getenv("PILOT_INSPECTION_FACTORY"):
-            app.state.pilot_inspection_targets = await load_inspection_targets(db, RecordCipher(load_keyring()))
+            app.state.pilot_inspection_targets = await load_inspection_targets(db, record_cipher)
         if os.getenv("PILOT_AUTHORIZATION_FACTORY"):
-            app.state.pilot_authorization_targets = await load_authorization_targets(db, RecordCipher(load_keyring()))
+            app.state.pilot_authorization_targets = await load_authorization_targets(db, record_cipher)
         yield
     finally:
         app.state.db = None
+        app.state.record_cipher = None
+        app.state.auth_config = None
+        app.state.siwe_auth = None
+        app.state.event_config = None
+        app.state.fireblocks_config = None
         if db is not None:
             await db.close()
         logger.info("ZK Travel Rule Compliance Bridge shutting down.")
