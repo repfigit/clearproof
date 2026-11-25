@@ -5,7 +5,9 @@ from src.protocol.canonical import record_digest
 from src.protocol.credential import PilotCredential
 from src.protocol.enrollment import EnrollmentConsent
 from src.protocol.transfer import Epoch, Hex32, OpaqueId, Record
+from src.registry.pilot_tree import ISSUANCE_TREE_DEPTH
 from src.storage.database import Database
+from src.storage.merkle import IncrementalMerkleStore
 from src.storage.pilot import PilotStore, PilotTransaction
 from src.storage.pilot_cipher import RecordCipher
 
@@ -123,6 +125,7 @@ class EnrollmentService:
 
         async def persist(tx):
             credential = consent.credential
+            scope = enrollment_scope(consent)
             await tx.put(
                 "credential",
                 credential.credential_nonce,
@@ -134,7 +137,19 @@ class EnrollmentService:
                     "accepted_at": now,
                 },
             )
-            await tx.index_enrollment(credential.credential_nonce, enrollment_scope(consent))
+            await tx.index_enrollment(credential.credential_nonce, scope)
+            merkle = IncrementalMerkleStore(tx, scope, depth=ISSUANCE_TREE_DEPTH)
+            # Maintain the persisted incremental Merkle tree atomically under the
+            # tenant lock when the new credential extends the canonical sorted
+            # tail. Out-of-order credential_ids defer reconciliation to
+            # build_issuance_tree/sync_entries.
+            root_state = await merkle.read_root()
+            if root_state is None:
+                await merkle.append(credential.credential_nonce, credential.commitment)
+            else:
+                last_id = await merkle.last_credential_id()
+                if last_id is None or credential.credential_nonce > last_id:
+                    await merkle.append(credential.credential_nonce, credential.commitment)
             return {"credential_id": credential.credential_nonce, "status": "awaiting-root-publication"}
 
         return await self._store.run_idempotent("issue-credential", idempotency_key, request, persist)

@@ -11,7 +11,7 @@ from src.protocol.root_snapshot import RootSnapshot, RootTrustStore, SignedRootS
 from src.prover.generated_signals import ISSUER_LEAF_DOMAIN_TAG
 from src.registry.pilot_tree import ISSUANCE_TREE_DEPTH, ISSUER_TREE_DEPTH, MAX_TREE_DEPTH, PilotTree
 from src.registry.poseidon import poseidon_hash
-from src.services.issuance_source import MAX_ISSUANCE_ENTRIES, PAGE_DOMAIN, issuance_source_domain
+from src.services.issuance_source import issuance_page_domain, issuance_source_domain
 from src.services.issuance_tree import IssuanceTreeContext, build_issuance_tree
 from src.services.root_publication import persist_approved_root, root_record_id
 from src.storage.database import Database
@@ -51,7 +51,15 @@ class PilotRegistrar:
         self._chain_id, self._registry_address = chain_id, registry_address
         self._issuance_depth, self._issuer_depth = issuance_depth, issuer_depth
 
-    async def refresh(self, *, expected_revision: int, idempotency_key: str, now: int, ttl: int = 300) -> dict:
+    async def refresh(
+        self,
+        *,
+        expected_revision: int,
+        idempotency_key: str,
+        now: int,
+        ttl: int = 300,
+        scan_limit: int | None = None,
+    ) -> dict:
         self._principal.require("tenant:admin")
         self._principal.require("evidence:decrypt")
         for issuer in self._issuers:
@@ -60,6 +68,8 @@ class PilotRegistrar:
             raise ValueError("Expected revision must be a nonnegative safe integer")
         if type(ttl) is not int or not 1 <= ttl <= 86400:
             raise ValueError("Approval lifetime must be 1–86400 seconds")
+        if scan_limit is not None and (type(scan_limit) is not int or not 0 <= scan_limit <= 2**self._issuance_depth):
+            raise ValueError("Invalid enrollment scan budget")
         key_id = root_key_id(self._signer.public_key().public_bytes_raw())
         base = dict(
             tenant_id=self._principal.tenant_id,
@@ -109,7 +119,7 @@ class PilotRegistrar:
                 # Signature scope and predecessor checks happen before commit.
                 await persist_approved_root(tx, signed, self._trust, now=now)
                 for page in pages:
-                    digest = record_digest(PAGE_DOMAIN, page)
+                    digest = record_digest(issuance_page_domain(page), page)
                     previous_page = await tx.get("root-source", digest)
                     if previous_page is None:
                         await tx.put("root-source", digest, page)
@@ -123,7 +133,7 @@ class PilotRegistrar:
                 return signed
 
             leaves, issuer_sources = [], []
-            scan_budget = MAX_ISSUANCE_ENTRIES
+            scan_budget = scan_limit
             for issuer in self._issuers:
                 candidate = await build_issuance_tree(
                     tx,
@@ -134,7 +144,8 @@ class PilotRegistrar:
                     depth=self._issuance_depth,
                     scan_limit=scan_budget,
                 )
-                scan_budget -= candidate.scanned_enrollments
+                if scan_budget is not None:
+                    scan_budget -= candidate.scanned_enrollments
                 signed = await approve(
                     "issuance-root",
                     issuer,

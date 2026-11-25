@@ -12,8 +12,10 @@ from src.prover.pilot_current import expected_current_signals
 from src.registry.pilot_sanctions import PilotSanctionsTree
 from src.registry.pilot_tree import ISSUANCE_TREE_DEPTH, ISSUER_TREE_DEPTH, PilotTree
 from src.registry.poseidon import poseidon_hash
+from src.services.enrollment import enrollment_audience
 from src.services.issuance_source import issuance_source_domain, load_issuance_entries
 from src.services.proof_inspection import ProofInspectionService
+from src.storage.merkle import IncrementalMerkleStore, MerkleIntegrityError
 
 
 class ProofPreparationService(ProofInspectionService):
@@ -77,20 +79,40 @@ class ProofPreparationService(ProofInspectionService):
             issuance_source, issuer_source = sources
             if issuance_source.get("issuer_did") != credential.issuer_did:
                 raise RootTrustError("Retained issuance source issuer differs")
-            issuance_tree = PilotTree(
-                await load_issuance_entries(tx, issuance_source),
-                depth=ISSUANCE_TREE_DEPTH,
-            )
-            if (credential_id, credential.commitment) not in issuance_tree.entries:
+            issuance_entries = await load_issuance_entries(tx, issuance_source)
+            if (credential_id, credential.commitment) not in issuance_entries:
                 raise RootTrustError("Enrollment is absent from retained issuance inventory")
+            issuance_snapshot = self._inputs["issuance"].snapshot
+            scope = enrollment_audience(
+                tx.tenant_id,
+                credential.issuer_did,
+                issuance_snapshot.chain_id,
+                issuance_snapshot.registry_address,
+            )
+            merkle = IncrementalMerkleStore(tx, scope, depth=ISSUANCE_TREE_DEPTH)
+            try:
+                merkle_state = await merkle.read_root()
+                if merkle_state is not None and merkle_state.root_hash == issuance_snapshot.root:
+                    persisted_leaves = await merkle.read_leaves()
+                    if [(leaf.credential_id, leaf.commitment) for leaf in persisted_leaves] == issuance_entries:
+                        issuance_root = merkle_state.root_hash
+                        issuance_path = await merkle.membership(credential_id)
+                    else:
+                        raise MerkleIntegrityError("Persisted Merkle leaves differ from retained source")
+                else:
+                    issuance_tree = PilotTree(issuance_entries, depth=ISSUANCE_TREE_DEPTH)
+                    issuance_root = issuance_tree.root
+                    issuance_path = issuance_tree.membership(credential_id)
+            except (KeyError, MerkleIntegrityError) as exc:
+                raise RootTrustError("Persisted Merkle state is inconsistent with retained issuance source") from exc
             issuer_id = hashlib.sha256(credential.issuer_did.encode("ascii")).hexdigest()
             entries = issuer_source["issuers"]
             selected = [entry for entry in entries if entry["entry_id"] == issuer_id]
             if len(selected) != 1 or selected[0] != {
                 "issuer_did": credential.issuer_did,
                 "entry_id": issuer_id,
-                "issuance_snapshot_digest": self._inputs["issuance"].snapshot.digest,
-                "issuance_root": issuance_tree.root,
+                "issuance_snapshot_digest": issuance_snapshot.digest,
+                "issuance_root": issuance_root,
             }:
                 raise RootTrustError("Retained issuer inventory does not bind the issuance approval")
             issuer_tree = PilotTree(
@@ -111,7 +133,7 @@ class ProofPreparationService(ProofInspectionService):
                 ],
                 depth=ISSUER_TREE_DEPTH,
             )
-            if (issuance_tree.root, issuer_tree.root, sanctions_tree.root) != tuple(
+            if (issuance_root, issuer_tree.root, sanctions_tree.root) != tuple(
                 self._inputs[name].snapshot.root for name in ("issuance", "issuers", "sanctions")
             ):
                 raise RootTrustError("Witness inventory roots differ from approved heads")
@@ -121,7 +143,7 @@ class ProofPreparationService(ProofInspectionService):
                 self._inputs["registry"],
                 credential,
                 secret=secret,
-                issuance_path=issuance_tree.membership(credential_id),
+                issuance_path=issuance_path,
                 issuer_path=issuer_tree.membership(issuer_id),
                 sanctions=sanctions_tree,
                 valuation_approval=self._inputs["valuation_approval"],
