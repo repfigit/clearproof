@@ -42,6 +42,7 @@ from pathlib import Path
 from typing import Literal
 
 __all__ = [
+    "BLS12_381_SCALAR_FIELD",
     "BN254_SCALAR_FIELD",
     "PoseidonBackendError",
     "PoseidonIntegrityError",
@@ -49,6 +50,7 @@ __all__ = [
     "configure_poseidon_backend",
     "get_active_poseidon_backend",
     "poseidon_hash",
+    "poseidon_hash_bls12381",
     "poseidon_hash_python",
 ]
 
@@ -56,8 +58,11 @@ logger = logging.getLogger(__name__)
 
 # BN254 (alt_bn128) scalar field order.
 BN254_SCALAR_FIELD = 21888242871839275222246405745257275088548364400416034343698204186575808495617
+# BLS12-381 scalar field order (ADR 0002).
+BLS12_381_SCALAR_FIELD = 0x73EDA753299D7D483339D80809A1D80553BDA402FFFE5BFEFFFFFFFF00000001
 
 _CONSTANTS_PATH = os.path.join(os.path.dirname(__file__), "poseidon_constants.json")
+_BLS12_381_CONSTANTS_PATH = os.path.join(os.path.dirname(__file__), "poseidon_constants_bls12381.json")
 
 _N_ROUNDS_F = 8
 _N_ROUNDS_P = [56, 57, 56, 60, 60, 63, 64, 63, 60, 66, 60, 65, 70, 60, 64, 68]
@@ -240,10 +245,8 @@ def get_active_poseidon_backend() -> Literal["native", "python"]:
     return "native" if _resolve_native_handle() is not None else "python"
 
 
-@lru_cache(maxsize=1)
-def _load_constants() -> dict[str, list]:
-    """Load and pre-parse the generated round constants (cached process-wide)."""
-    with open(_CONSTANTS_PATH) as f:
+def _parse_constants(path: str) -> dict[str, list]:
+    with open(path) as f:
         raw = json.load(f)
 
     def to_int(v: str | int) -> int:
@@ -257,12 +260,24 @@ def _load_constants() -> dict[str, list]:
     }
 
 
-def _pow5(a: int) -> int:
-    a2 = a * a % _P
-    return a2 * a2 % _P * a % _P
+@lru_cache(maxsize=1)
+def _load_constants() -> dict[str, list]:
+    """Load and pre-parse the BN254 round constants (cached process-wide)."""
+    return _parse_constants(_CONSTANTS_PATH)
 
 
-def _normalize_inputs(inputs: list[int | str]) -> list[int]:
+@lru_cache(maxsize=1)
+def _load_bls12381_constants() -> dict[str, list]:
+    """Load and pre-parse the BLS12-381 round constants (cached process-wide)."""
+    return _parse_constants(_BLS12_381_CONSTANTS_PATH)
+
+
+def _pow5(a: int, prime: int) -> int:
+    a2 = a * a % prime
+    return a2 * a2 % prime * a % prime
+
+
+def _normalize_inputs(inputs: list[int | str], *, prime: int = _P) -> list[int]:
     if not inputs:
         raise ValueError("Poseidon requires at least 1 input")
     if len(inputs) > len(_N_ROUNDS_P):
@@ -270,14 +285,13 @@ def _normalize_inputs(inputs: list[int | str]) -> list[int]:
 
     def to_field(v: int | str) -> int:
         if isinstance(v, str):
-            return (int(v, 16) if v.startswith("0x") else int(v)) % _P
-        return int(v) % _P
+            return (int(v, 16) if v.startswith("0x") else int(v)) % prime
+        return int(v) % prime
 
     return [to_field(v) for v in inputs]
 
 
-def _poseidon_hash_python_fields(field_inputs: list[int]) -> int:
-    consts = _load_constants()
+def _poseidon_permutation_fields(field_inputs: list[int], *, prime: int, consts: dict[str, list]) -> int:
     t = len(field_inputs) + 1
     idx = t - 2
     n_rounds_f = _N_ROUNDS_F
@@ -290,14 +304,18 @@ def _poseidon_hash_python_fields(field_inputs: list[int]) -> int:
     half_f = n_rounds_f // 2
     for r in range(n_rounds_f + n_rounds_p):
         base = r * t
-        state = [(a + C[base + i]) % _P for i, a in enumerate(state)]
+        state = [(a + C[base + i]) % prime for i, a in enumerate(state)]
         if r < half_f or r >= half_f + n_rounds_p:
-            state = [_pow5(a) for a in state]
+            state = [_pow5(a, prime) for a in state]
         else:
-            state[0] = _pow5(state[0])
-        state = [sum(M[i][j] * state[j] for j in range(t)) % _P for i in range(t)]
+            state[0] = _pow5(state[0], prime)
+        state = [sum(M[i][j] * state[j] for j in range(t)) % prime for i in range(t)]
 
     return state[0]
+
+
+def _poseidon_hash_python_fields(field_inputs: list[int]) -> int:
+    return _poseidon_permutation_fields(field_inputs, prime=_P, consts=_load_constants())
 
 
 def poseidon_hash_python(inputs: list[int | str]) -> int:
@@ -333,3 +351,16 @@ def poseidon_hash(inputs: list[int | str]) -> int:
     if native is not None:
         return native.hash_field_elements(field_inputs)
     return _poseidon_hash_python_fields(field_inputs)
+
+
+def poseidon_hash_bls12381(inputs: list[int | str]) -> int:
+    """
+    Compute Poseidon(inputs) over the BLS12-381 scalar field (ADR 0002 task 3).
+
+    Uses curve-correct Grain-LFSR round constants and Cauchy MDS matrices
+    generated directly for BLS12-381 r (255 bits) and matches the in-circuit
+    ``PoseidonBls(len(inputs))`` template bit-for-bit. Always evaluates in
+    pure Python (the native C accelerator is BN254-only).
+    """
+    field_inputs = _normalize_inputs(inputs, prime=BLS12_381_SCALAR_FIELD)
+    return _poseidon_permutation_fields(field_inputs, prime=BLS12_381_SCALAR_FIELD, consts=_load_bls12381_constants())
