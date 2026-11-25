@@ -2,17 +2,18 @@
   "schema_version": "clearproof-pilot-sanctions-tree-v1",
   "profile": "pilot-raw-address-sanctions-v1",
   "depth": 20,
-  "root": "1609419230007428227443983538031425471421832497669155883680242345651529978993",
-  "source_digest": "f41bf1713d80afb26a2ec19320e8c5eec4da9c7c35463146423cd82bb07c0d49",
+  "root": "15370579339588672497776806386800258936331009737066275925865158335940850536509",
+  "source_digest": "61ac547ad997787039a16ddc31869c483ba7094c7a9bdb842e7cfc130ddebd47",
   "leaf_domain_tag": 301,
   "ordering": "ascending-uint160-address-key",
   "sentinels": [
     "0",
     "1461501637330902918203684832716283019655932542976"
   ],
-  "address_count": 141,
-  "leaf_count": 143,
+  "address_count": 143,
+  "leaf_count": 145,
   "sorted_addresses": [
+    "0x002471b8a185f9980708d0eaec5b289714f56f8d",
     "0x0330070fd38ec3bb94f58fa55d40368271e9e54a",
     "0x038989cbb1710c72b9920dc4fa529158f463e72c",
     "0x04dba1194ee10112fe6c3207c0687def0e78bacf",
@@ -40,6 +41,7 @@
     "0x2711d73d559f62f4f855ee21f38378f528e07985",
     "0x2c7dcd774b33e10367f7d6385479e04f97d179dc",
     "0x2f389ce8bd8ff92de3402ffce4691d17fc4f6535",
+    "0x3051ca7cb7f6c599fa2f27385ad75010cf0f2bbf",
     "0x308ed4b7b49797e1a98d3818bff6fe5385410370",
     "0x32da24ca413f3e7b53145d4737e172c3bdf81e3e",
     "0x35fb6f6db4fb05e6a4ce86f2c93691425626d4b1",
@@ -160,15 +162,15 @@
   "build": {
     "script_version": "1.0.0",
     "script_sha256": "f283e474d356ae79151de9643fa33a1d292e301008a0c215b485155ff532e9c5",
-    "built_at": "2026-11-24T06:14:06.617594+00:00"
+    "built_at": "2026-11-25T06:14:50.174342+00:00"
   },
   "input": {
     "kind": "legacy-sanctions-tree",
     "path": "artifacts/sanctions_tree.json",
-    "sha256": "82919aceb280c8f0914b71d550e5d48dbc56d308f82287663fa31dd0b5073932",
-    "legacy_root": "4747737994867755328630987093004875557999477544126747567026191744465984880961",
+    "sha256": "f68ff9a93c5f254bbf11e0b185d577a4179566f6db67bd6b943103d8695b9e2e",
+    "legacy_root": "6164042097526369458841454629659639909990859824621226210135686322573779860983",
     "legacy_build_script_version": "1.2.0",
-    "fetch_timestamp": "2026-11-24T06:13:54.627211+00:00",
+    "fetch_timestamp": "2026-11-25T06:14:32.541730+00:00",
     "sources": {
       "ofac_sdn_xml": {
         "source": "https://www.treasury.gov/ofac/downloads/sdn.xml",
@@ -192,8 +194,13 @@
       },
       "eu_sanctions_xml": {
         "source": "https://webgate.ec.europa.eu/fsd/fsf/public/files/xmlFullSanctionsList_1_1/content?token=dG9rZW4tMjAxNw",
-        "fetched": false,
-        "error": "Server error '500 Internal Server Error' for url 'https://webgate.ec.europa.eu/fsd/fsf/public/files/xmlFullSanctionsList_1_1/content?token=dG9rZW4tMjAxNw'\nFor more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/500"
+        "fetched": true,
+        "error": null,
+        "status_code": 200,
+        "content_length": 26066969,
+        "sha256": "3eea03e34a447659af3196440a1b5303da7884d41a01f834c38cbec0dee0bf14",
+        "last_modified": "Fri, 20 Nov 2026 16:00:12 GMT",
+        "addresses_found": 2
       }
     }
   }
