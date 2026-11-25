@@ -506,3 +506,110 @@ async def test_lazy_get_siwe_auth_binds_ready_database_on_bare_app(db, monkeypat
         assert await app.state.siwe_auth._pg_sessions.count() == 1
         validated = await app.state.siwe_auth.validate_session(resp.json()["session_token"])
         assert validated is not None and validated["address"] == address
+
+
+async def test_api_state_stores_unwind_transactions_and_release_connections_on_cursor_error():
+    """Verify cursor errors unwind transaction/cursor/connection contexts cleanly without leaks."""
+    from contextlib import asynccontextmanager
+
+    events: list[str] = []
+
+    class FailingCursor:
+        def __init__(self, fail_on_call: int = 1) -> None:
+            self._calls = 0
+            self._fail_on_call = fail_on_call
+            self.rowcount = 0
+
+        async def execute(self, *_args, **_kwargs) -> None:
+            self._calls += 1
+            if self._calls == self._fail_on_call:
+                raise RuntimeError("simulated cursor execute failure")
+
+        async def fetchone(self):
+            return None
+
+    class FakeConnection:
+        def __init__(self, fail_on_call: int = 1) -> None:
+            self._fail_on_call = fail_on_call
+
+        @asynccontextmanager
+        async def transaction(self):
+            events.append("tx:enter")
+            try:
+                yield
+            except BaseException:
+                events.append("tx:rollback")
+                raise
+            finally:
+                events.append("tx:exit")
+
+        @asynccontextmanager
+        async def cursor(self):
+            events.append("cur:enter")
+            try:
+                yield FailingCursor(self._fail_on_call)
+            finally:
+                events.append("cur:exit")
+
+    class FakeDB:
+        def __init__(self, fail_on_call: int = 1) -> None:
+            self.open_connections = 0
+            self._fail_on_call = fail_on_call
+
+        @asynccontextmanager
+        async def connection(self):
+            self.open_connections += 1
+            events.append("conn:enter")
+            try:
+                yield FakeConnection(self._fail_on_call)
+            finally:
+                self.open_connections -= 1
+                events.append("conn:exit")
+
+    def assert_clean_unwind(fake_db: FakeDB) -> None:
+        assert fake_db.open_connections == 0
+        assert events == ["conn:enter", "tx:enter", "cur:enter", "cur:exit", "tx:rollback", "tx:exit", "conn:exit"]
+        events.clear()
+
+    # 1. Rate-limit check_and_increment (record)
+    fake_db = FakeDB()
+    rl_store = PostgresRateLimitStore(fake_db)
+    with pytest.raises(RuntimeError, match="simulated cursor execute failure"):
+        await rl_store.check_and_increment("K", max_requests=5, window_seconds=60.0, max_clients=10)
+    assert_clean_unwind(fake_db)
+
+    # 2. Rate-limit cleanup with max_buckets and explicit batch_size (fail on 1st and 2nd execute)
+    for fail_on in (1, 2):
+        fake_db = FakeDB(fail_on_call=fail_on)
+        rl_store = PostgresRateLimitStore(fake_db)
+        with pytest.raises(RuntimeError, match="simulated cursor execute failure"):
+            await rl_store.cleanup(max_buckets=5, batch_size=3)
+        assert_clean_unwind(fake_db)
+
+    # 3. Rate-limit clear
+    fake_db = FakeDB()
+    rl_store = PostgresRateLimitStore(fake_db)
+    with pytest.raises(RuntimeError, match="simulated cursor execute failure"):
+        await rl_store.clear()
+    assert_clean_unwind(fake_db)
+
+    # 4. SIWE session set (create)
+    fake_db = FakeDB()
+    siwe_store = PostgresSIWESessionStore(fake_db, max_entries=10)
+    with pytest.raises(RuntimeError, match="simulated cursor execute failure"):
+        await siwe_store.set("tok-err", address="0x1111", chain_id=1, ttl_seconds=60)
+    assert_clean_unwind(fake_db)
+
+    # 5. SIWE session get
+    fake_db = FakeDB()
+    siwe_store = PostgresSIWESessionStore(fake_db, max_entries=10)
+    with pytest.raises(RuntimeError, match="simulated cursor execute failure"):
+        await siwe_store.get("tok-err")
+    assert_clean_unwind(fake_db)
+
+    # 6. SIWE session sweep_expired with explicit batch_size
+    fake_db = FakeDB()
+    siwe_store = PostgresSIWESessionStore(fake_db, max_entries=10)
+    with pytest.raises(RuntimeError, match="simulated cursor execute failure"):
+        await siwe_store.sweep_expired(batch_size=4)
+    assert_clean_unwind(fake_db)

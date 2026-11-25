@@ -85,57 +85,55 @@ class PostgresRateLimitStore:
         max_clients: int,
     ) -> RateLimitDecision:
         """Atomically record a request or reject if ``max_requests`` is reached."""
-        async with self._db.connection() as conn:
-            async with conn.transaction():
-                async with conn.cursor() as cur:
-                    await cur.execute(
-                        """
-                        INSERT INTO api_rate_limit_buckets AS b (
-                            bucket_key,
-                            window_started_at,
-                            window_expires_at,
-                            request_count,
-                            updated_at
-                        )
-                        VALUES (
-                            %(bucket_key)s,
-                            clock_timestamp(),
-                            clock_timestamp() + make_interval(secs => %(window_seconds)s),
-                            1,
-                            clock_timestamp()
-                        )
-                        ON CONFLICT (bucket_key) DO UPDATE SET
-                            window_started_at = CASE
-                                WHEN b.window_expires_at <= clock_timestamp()
-                                    THEN clock_timestamp()
-                                ELSE b.window_started_at
-                            END,
-                            window_expires_at = CASE
-                                WHEN b.window_expires_at <= clock_timestamp()
-                                    THEN clock_timestamp() + make_interval(secs => %(window_seconds)s)
-                                ELSE b.window_expires_at
-                            END,
-                            request_count = CASE
-                                WHEN b.window_expires_at <= clock_timestamp()
-                                    THEN 1
-                                WHEN b.request_count <= %(max_requests)s
-                                    THEN b.request_count + 1
-                                ELSE b.request_count
-                            END,
-                            updated_at = clock_timestamp()
-                        RETURNING
-                            request_count,
-                            EXTRACT(EPOCH FROM (window_expires_at - clock_timestamp()))
-                        """,
-                        {
-                            "bucket_key": bucket_key,
-                            "window_seconds": float(window_seconds),
-                            "max_requests": int(max_requests),
-                        },
-                    )
-                    row = await cur.fetchone()
-                    count = int(row[0])
-                    remaining = float(row[1])
+        async with self._db.connection() as conn, conn.transaction(), conn.cursor() as cur:
+            await cur.execute(
+                """
+                INSERT INTO api_rate_limit_buckets AS b (
+                    bucket_key,
+                    window_started_at,
+                    window_expires_at,
+                    request_count,
+                    updated_at
+                )
+                VALUES (
+                    %(bucket_key)s,
+                    clock_timestamp(),
+                    clock_timestamp() + make_interval(secs => %(window_seconds)s),
+                    1,
+                    clock_timestamp()
+                )
+                ON CONFLICT (bucket_key) DO UPDATE SET
+                    window_started_at = CASE
+                        WHEN b.window_expires_at <= clock_timestamp()
+                            THEN clock_timestamp()
+                        ELSE b.window_started_at
+                    END,
+                    window_expires_at = CASE
+                        WHEN b.window_expires_at <= clock_timestamp()
+                            THEN clock_timestamp() + make_interval(secs => %(window_seconds)s)
+                        ELSE b.window_expires_at
+                    END,
+                    request_count = CASE
+                        WHEN b.window_expires_at <= clock_timestamp()
+                            THEN 1
+                        WHEN b.request_count <= %(max_requests)s
+                            THEN b.request_count + 1
+                        ELSE b.request_count
+                    END,
+                    updated_at = clock_timestamp()
+                RETURNING
+                    request_count,
+                    EXTRACT(EPOCH FROM (window_expires_at - clock_timestamp()))
+                """,
+                {
+                    "bucket_key": bucket_key,
+                    "window_seconds": float(window_seconds),
+                    "max_requests": int(max_requests),
+                },
+            )
+            row = await cur.fetchone()
+            count = int(row[0])
+            remaining = float(row[1])
 
         self._write_counter += 1
         if self._write_counter >= self._cleanup_interval_writes:
@@ -155,55 +153,50 @@ class PostgresRateLimitStore:
         """Delete expired buckets (bounded batch) and evict oldest rows above ``max_buckets``."""
         limit = self._cleanup_batch_size if batch_size is None else batch_size
         deleted = 0
-        async with self._db.connection() as conn:
-            async with conn.transaction():
-                async with conn.cursor() as cur:
-                    await cur.execute(
-                        """
-                        DELETE FROM api_rate_limit_buckets
-                        WHERE bucket_key IN (
-                            SELECT bucket_key
-                            FROM api_rate_limit_buckets
-                            WHERE window_expires_at <= clock_timestamp()
-                            ORDER BY window_expires_at ASC
-                            LIMIT %(limit)s
-                        )
-                        """,
-                        {"limit": limit},
-                    )
-                    deleted += cur.rowcount
+        async with self._db.connection() as conn, conn.transaction(), conn.cursor() as cur:
+            await cur.execute(
+                """
+                DELETE FROM api_rate_limit_buckets
+                WHERE bucket_key IN (
+                    SELECT bucket_key
+                    FROM api_rate_limit_buckets
+                    WHERE window_expires_at <= clock_timestamp()
+                    ORDER BY window_expires_at ASC
+                    LIMIT %(limit)s
+                )
+                """,
+                {"limit": limit},
+            )
+            deleted += cur.rowcount
 
-                    if max_buckets is not None:
-                        await cur.execute(
-                            """
-                            DELETE FROM api_rate_limit_buckets
-                            WHERE bucket_key IN (
-                                SELECT bucket_key
-                                FROM api_rate_limit_buckets
-                                ORDER BY updated_at DESC, bucket_key DESC
-                                OFFSET %(max_buckets)s
-                                LIMIT %(limit)s
-                            )
-                            """,
-                            {"max_buckets": int(max_buckets), "limit": limit},
-                        )
-                        deleted += cur.rowcount
+            if max_buckets is not None:
+                await cur.execute(
+                    """
+                    DELETE FROM api_rate_limit_buckets
+                    WHERE bucket_key IN (
+                        SELECT bucket_key
+                        FROM api_rate_limit_buckets
+                        ORDER BY updated_at DESC, bucket_key DESC
+                        OFFSET %(max_buckets)s
+                        LIMIT %(limit)s
+                    )
+                    """,
+                    {"max_buckets": int(max_buckets), "limit": limit},
+                )
+                deleted += cur.rowcount
         return deleted
 
     async def count(self) -> int:
         """Return the number of persisted rate-limit buckets (diagnostic/test hook)."""
-        async with self._db.connection() as conn:
-            async with conn.cursor() as cur:
-                await cur.execute("SELECT count(*) FROM api_rate_limit_buckets")
-                row = await cur.fetchone()
-                return int(row[0])
+        async with self._db.connection() as conn, conn.cursor() as cur:
+            await cur.execute("SELECT count(*) FROM api_rate_limit_buckets")
+            row = await cur.fetchone()
+            return int(row[0])
 
     async def clear(self) -> None:
         """Delete all persisted rate-limit buckets (test isolation hook)."""
-        async with self._db.connection() as conn:
-            async with conn.transaction():
-                async with conn.cursor() as cur:
-                    await cur.execute("DELETE FROM api_rate_limit_buckets")
+        async with self._db.connection() as conn, conn.transaction(), conn.cursor() as cur:
+            await cur.execute("DELETE FROM api_rate_limit_buckets")
 
 
 class PostgresSIWESessionStore:
@@ -244,69 +237,67 @@ class PostgresSIWESessionStore:
     ) -> dict[str, Any]:
         """Persist a session keyed by ``sha256(token)``, pruning expired and LRU rows."""
         token_hash = hash_session_token(token)
-        async with self._db.connection() as conn:
-            async with conn.transaction():
-                async with conn.cursor() as cur:
-                    await cur.execute(
-                        """
-                        DELETE FROM siwe_sessions
-                        WHERE token_hash IN (
-                            SELECT token_hash
-                            FROM siwe_sessions
-                            WHERE expires_at <= clock_timestamp()
-                            ORDER BY expires_at ASC
-                            LIMIT %(limit)s
-                        )
-                        """,
-                        {"limit": self._cleanup_batch_size},
-                    )
-                    await cur.execute(
-                        """
-                        INSERT INTO siwe_sessions (
-                            token_hash,
-                            address,
-                            chain_id,
-                            created_at,
-                            expires_at,
-                            last_accessed_at
-                        )
-                        VALUES (
-                            %(token_hash)s,
-                            %(address)s,
-                            %(chain_id)s,
-                            clock_timestamp(),
-                            clock_timestamp() + make_interval(secs => %(ttl_seconds)s),
-                            clock_timestamp()
-                        )
-                        ON CONFLICT (token_hash) DO UPDATE SET
-                            address = EXCLUDED.address,
-                            chain_id = EXCLUDED.chain_id,
-                            created_at = EXCLUDED.created_at,
-                            expires_at = EXCLUDED.expires_at,
-                            last_accessed_at = EXCLUDED.last_accessed_at
-                        RETURNING created_at, expires_at
-                        """,
-                        {
-                            "token_hash": token_hash,
-                            "address": address,
-                            "chain_id": int(chain_id),
-                            "ttl_seconds": float(ttl_seconds),
-                        },
-                    )
-                    created_at, expires_at = await cur.fetchone()
-                    await cur.execute(
-                        """
-                        DELETE FROM siwe_sessions
-                        WHERE token_hash IN (
-                            SELECT token_hash
-                            FROM siwe_sessions
-                            ORDER BY last_accessed_at DESC, token_hash DESC
-                            OFFSET %(max_entries)s
-                            LIMIT %(limit)s
-                        )
-                        """,
-                        {"max_entries": self._max_entries, "limit": self._cleanup_batch_size},
-                    )
+        async with self._db.connection() as conn, conn.transaction(), conn.cursor() as cur:
+            await cur.execute(
+                """
+                DELETE FROM siwe_sessions
+                WHERE token_hash IN (
+                    SELECT token_hash
+                    FROM siwe_sessions
+                    WHERE expires_at <= clock_timestamp()
+                    ORDER BY expires_at ASC
+                    LIMIT %(limit)s
+                )
+                """,
+                {"limit": self._cleanup_batch_size},
+            )
+            await cur.execute(
+                """
+                INSERT INTO siwe_sessions (
+                    token_hash,
+                    address,
+                    chain_id,
+                    created_at,
+                    expires_at,
+                    last_accessed_at
+                )
+                VALUES (
+                    %(token_hash)s,
+                    %(address)s,
+                    %(chain_id)s,
+                    clock_timestamp(),
+                    clock_timestamp() + make_interval(secs => %(ttl_seconds)s),
+                    clock_timestamp()
+                )
+                ON CONFLICT (token_hash) DO UPDATE SET
+                    address = EXCLUDED.address,
+                    chain_id = EXCLUDED.chain_id,
+                    created_at = EXCLUDED.created_at,
+                    expires_at = EXCLUDED.expires_at,
+                    last_accessed_at = EXCLUDED.last_accessed_at
+                RETURNING created_at, expires_at
+                """,
+                {
+                    "token_hash": token_hash,
+                    "address": address,
+                    "chain_id": int(chain_id),
+                    "ttl_seconds": float(ttl_seconds),
+                },
+            )
+            created_at, expires_at = await cur.fetchone()
+            await cur.execute(
+                """
+                DELETE FROM siwe_sessions
+                WHERE token_hash IN (
+                    SELECT token_hash
+                    FROM siwe_sessions
+                    ORDER BY last_accessed_at DESC, token_hash DESC
+                    OFFSET %(max_entries)s
+                    LIMIT %(limit)s
+                )
+                """,
+                {"max_entries": self._max_entries, "limit": self._cleanup_batch_size},
+            )
 
         return {
             "address": address,
@@ -319,30 +310,28 @@ class PostgresSIWESessionStore:
     async def get(self, token: str) -> dict[str, Any] | None:
         """Validate ``token`` against the DB clock, refreshing ``last_accessed_at``."""
         token_hash = hash_session_token(token)
-        async with self._db.connection() as conn:
-            async with conn.transaction():
-                async with conn.cursor() as cur:
-                    await cur.execute(
-                        """
-                        UPDATE siwe_sessions
-                        SET last_accessed_at = clock_timestamp()
-                        WHERE token_hash = %(token_hash)s
-                          AND expires_at > clock_timestamp()
-                        RETURNING address, chain_id, created_at, expires_at
-                        """,
-                        {"token_hash": token_hash},
-                    )
-                    row = await cur.fetchone()
-                    if row is None:
-                        await cur.execute(
-                            """
-                            DELETE FROM siwe_sessions
-                            WHERE token_hash = %(token_hash)s
-                              AND expires_at <= clock_timestamp()
-                            """,
-                            {"token_hash": token_hash},
-                        )
-                        return None
+        async with self._db.connection() as conn, conn.transaction(), conn.cursor() as cur:
+            await cur.execute(
+                """
+                UPDATE siwe_sessions
+                SET last_accessed_at = clock_timestamp()
+                WHERE token_hash = %(token_hash)s
+                  AND expires_at > clock_timestamp()
+                RETURNING address, chain_id, created_at, expires_at
+                """,
+                {"token_hash": token_hash},
+            )
+            row = await cur.fetchone()
+            if row is None:
+                await cur.execute(
+                    """
+                    DELETE FROM siwe_sessions
+                    WHERE token_hash = %(token_hash)s
+                      AND expires_at <= clock_timestamp()
+                    """,
+                    {"token_hash": token_hash},
+                )
+                return None
 
         address, chain_id, created_at, expires_at = row
         return {
@@ -356,31 +345,28 @@ class PostgresSIWESessionStore:
     async def sweep_expired(self, *, batch_size: int | None = None) -> int:
         """Delete a bounded batch of expired sessions using the PostgreSQL clock."""
         limit = self._cleanup_batch_size if batch_size is None else batch_size
-        async with self._db.connection() as conn:
-            async with conn.transaction():
-                async with conn.cursor() as cur:
-                    await cur.execute(
-                        """
-                        DELETE FROM siwe_sessions
-                        WHERE token_hash IN (
-                            SELECT token_hash
-                            FROM siwe_sessions
-                            WHERE expires_at <= clock_timestamp()
-                            ORDER BY expires_at ASC
-                            LIMIT %(limit)s
-                        )
-                        """,
-                        {"limit": limit},
-                    )
-                    return cur.rowcount
+        async with self._db.connection() as conn, conn.transaction(), conn.cursor() as cur:
+            await cur.execute(
+                """
+                DELETE FROM siwe_sessions
+                WHERE token_hash IN (
+                    SELECT token_hash
+                    FROM siwe_sessions
+                    WHERE expires_at <= clock_timestamp()
+                    ORDER BY expires_at ASC
+                    LIMIT %(limit)s
+                )
+                """,
+                {"limit": limit},
+            )
+            return cur.rowcount
 
     async def count(self) -> int:
         """Return the number of persisted sessions (diagnostic/test hook)."""
-        async with self._db.connection() as conn:
-            async with conn.cursor() as cur:
-                await cur.execute("SELECT count(*) FROM siwe_sessions")
-                row = await cur.fetchone()
-                return int(row[0])
+        async with self._db.connection() as conn, conn.cursor() as cur:
+            await cur.execute("SELECT count(*) FROM siwe_sessions")
+            row = await cur.fetchone()
+            return int(row[0])
 
 
 def _format_utc(ts: datetime) -> str:
