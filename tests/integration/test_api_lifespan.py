@@ -412,3 +412,58 @@ async def test_invalid_wallet_rpc_timeout_blocks_startup_before_db(module, monke
         async with module.lifespan(module.create_app()):
             pytest.fail("invalid wallet RPC timeout reached serving state")
     database.assert_not_called()
+
+
+async def test_invalid_siwe_max_sessions_blocks_startup_before_db(module, monkeypatch):
+    monkeypatch.setenv("DATABASE_URL", "configured")
+    monkeypatch.setenv("SIWE_MAX_SESSIONS", "0")
+    monkeypatch.delenv("PILOT_EVENT_AUTHORITIES", raising=False)
+    monkeypatch.delenv("PILOT_INVESTIGATION_LINKS", raising=False)
+    monkeypatch.delenv("PILOT_FIREBLOCKS_INTEGRATIONS", raising=False)
+    monkeypatch.delenv("WALLET_OWNERSHIP_RPC_URL", raising=False)
+    database = Mock()
+    monkeypatch.setattr(module, "Database", database)
+    with pytest.raises(RuntimeError, match="Invalid SIWE session configuration"):
+        async with module.lifespan(module.create_app()):
+            pytest.fail("invalid SIWE_MAX_SESSIONS reached serving state")
+    database.assert_not_called()
+
+
+async def test_lifespan_shares_single_siwe_auth_across_routes_and_middleware(module, monkeypatch):
+    from fastapi import Depends
+
+    from src.api.config import get_siwe_auth
+    from src.api.middleware import auth as auth_middleware
+    from src.auth import siwe_auth
+    from tests.unit.test_siwe_auth import signed
+
+    monkeypatch.setattr(siwe_auth, "_nonce_store", {})
+    monkeypatch.setenv("AUTH_MODE", "siwe")
+    monkeypatch.setenv("SIWE_DOMAIN", "wallet.example")
+    monkeypatch.setenv("SIWE_MAX_SESSIONS", "4")
+    monkeypatch.delenv("PILOT_EVENT_AUTHORITIES", raising=False)
+    monkeypatch.delenv("PILOT_INVESTIGATION_LINKS", raising=False)
+    monkeypatch.delenv("PILOT_FIREBLOCKS_INTEGRATIONS", raising=False)
+    monkeypatch.delenv("WALLET_OWNERSHIP_RPC_URL", raising=False)
+
+    app = module.create_app()
+
+    @app.get("/_siwe_identity_probe")
+    async def probe(claims: dict = Depends(auth_middleware.JWTAuthDependency)):
+        return claims
+
+    async with module.lifespan(app):
+        lifespan_siwe = app.state.siwe_auth
+        assert lifespan_siwe._sessions.max_entries == 4
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://local") as client:
+            nonce = (await client.get("/auth/nonce")).json()["nonce"]
+            message, signature, address = signed(nonce, domain="wallet.example")
+            verify_resp = await client.post("/auth/verify", json={"message": message, "signature": signature})
+            assert verify_resp.status_code == 200
+            token = verify_resp.json()["session_token"]
+            assert app.state.siwe_auth is lifespan_siwe
+            assert lifespan_siwe.session_count() == 1
+            protected = await client.get("/_siwe_identity_probe", headers={"Authorization": f"Bearer {token}"})
+            assert protected.status_code == 200
+            assert protected.json()["sub"] == address
+            assert get_siwe_auth(SimpleNamespace(app=app)) is lifespan_siwe

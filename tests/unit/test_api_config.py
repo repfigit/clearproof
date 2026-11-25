@@ -18,6 +18,7 @@ from src.api.config import (
     get_record_cipher,
     get_siwe_auth,
     get_wallet_web3,
+    legacy_api_enabled,
     require_record_cipher,
     wallet_rpc_timeout_seconds,
 )
@@ -92,14 +93,17 @@ def test_get_record_cipher_returns_cipher_or_raises_503():
         assert exc_info.value.detail == "Custom unavailable detail"
 
 
-def test_auth_route_get_siwe_without_request_caches_module_fallback(monkeypatch):
-    monkeypatch.setattr(auth_routes, "_siwe", None)
+def test_auth_route_get_siwe_delegates_to_app_state_accessor(monkeypatch):
     monkeypatch.setenv("SIWE_DOMAIN", "module-fallback.example")
     first = auth_routes._get_siwe(None)
     assert isinstance(first, SIWEAuth)
     assert first.domain == "module-fallback.example"
-    # Second call reuses the cached module-level _siwe instance.
-    assert auth_routes._get_siwe(None) is first
+
+    app = FastAPI()
+    req = Request({"type": "http", "app": app, "headers": []})
+    from_req = auth_routes._get_siwe(req)
+    assert app.state.siwe_auth is from_req
+    assert auth_routes._get_siwe(req) is from_req
 
 
 async def test_verify_siwe_session_constructs_siwe_auth_when_not_passed(monkeypatch):
@@ -204,3 +208,70 @@ async def test_close_wallet_web3_handles_none_non_disconnect_and_disconnect():
     disconnect = AsyncMock()
     await close_wallet_web3(SimpleNamespace(provider=SimpleNamespace(disconnect=disconnect)))
     disconnect.assert_awaited_once()
+
+
+def test_legacy_api_enabled_parsing_and_profile_defaults():
+    # Unset flag: enabled by default unless CLEARPROOF_PROFILE is pilot or production.
+    assert legacy_api_enabled({}) is True
+    assert legacy_api_enabled({"CLEARPROOF_ENABLE_LEGACY_API": "   "}) is True
+    assert legacy_api_enabled({"CLEARPROOF_PROFILE": "development"}) is True
+    assert legacy_api_enabled({"CLEARPROOF_PROFILE": "pilot"}) is False
+    assert legacy_api_enabled({"CLEARPROOF_PROFILE": "PRODUCTION"}) is False
+
+    # Explicit flag overrides profile default in both directions.
+    for truthy in ("1", "true", "TRUE", "yes", "on"):
+        assert legacy_api_enabled({"CLEARPROOF_PROFILE": "production", "CLEARPROOF_ENABLE_LEGACY_API": truthy}) is True
+    for falsy in ("0", "false", "FALSE", "no", "off"):
+        assert legacy_api_enabled({"CLEARPROOF_PROFILE": "development", "CLEARPROOF_ENABLE_LEGACY_API": falsy}) is False
+
+    # Invalid flag fails closed.
+    with pytest.raises(ValueError, match="CLEARPROOF_ENABLE_LEGACY_API"):
+        legacy_api_enabled({"CLEARPROOF_ENABLE_LEGACY_API": "maybe"})
+
+
+async def test_legacy_routers_gated_by_clearproof_enable_legacy_api(monkeypatch):
+    from src.api.main import create_app
+
+    monkeypatch.setenv("AUTH_MODE", "api-key")
+    monkeypatch.setenv("API_KEY", "legacy-gate-key")
+    monkeypatch.delenv("CLEARPROOF_PROFILE", raising=False)
+
+    # Flag=0 disables /proof/*, /credential/*, and /metrics while keeping /health and /pilot/*.
+    monkeypatch.setenv("CLEARPROOF_ENABLE_LEGACY_API", "0")
+    disabled_app = create_app()
+    disabled_app.state.auth_config = AuthConfig(auth_mode="api-key", api_key="legacy-gate-key")
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=disabled_app), base_url="http://test") as client:
+        assert (await client.get("/health")).status_code == 200
+        assert (await client.get("/metrics", headers={"X-API-Key": "legacy-gate-key"})).status_code == 404
+        assert (
+            await client.post("/proof/generate", json={}, headers={"X-API-Key": "legacy-gate-key"})
+        ).status_code == 404
+        assert (
+            await client.post("/proof/verify", json={}, headers={"X-API-Key": "legacy-gate-key"})
+        ).status_code == 404
+        assert (
+            await client.post("/credential/issue", json={}, headers={"X-API-Key": "legacy-gate-key"})
+        ).status_code == 404
+        # Pilot proof jobs remain mounted even when legacy API is disabled.
+        assert (await client.get("/pilot/proof/jobs/" + "a" * 64)).status_code == 401
+
+    # Flag=1 mounts legacy routers (/metrics returns 200; /proof/* and /credential/* are reachable).
+    monkeypatch.setenv("CLEARPROOF_ENABLE_LEGACY_API", "1")
+    enabled_app = create_app()
+    enabled_app.state.auth_config = AuthConfig(
+        auth_mode="api-key",
+        api_key="legacy-gate-key",
+        api_key_tenant_id="tenant-a",
+        api_key_actor_id="actor-a",
+        api_key_roles=("credential:issue", "proof:generate"),
+        api_key_issuer_dids=("did:web:issuer.example",),
+    )
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=enabled_app), base_url="http://test") as client:
+        assert (await client.get("/health")).status_code == 200
+        assert (await client.get("/metrics", headers={"X-API-Key": "legacy-gate-key"})).status_code == 200
+        assert (
+            await client.post("/proof/generate", json={}, headers={"X-API-Key": "legacy-gate-key"})
+        ).status_code == 422
+        assert (
+            await client.post("/credential/issue", json={}, headers={"X-API-Key": "legacy-gate-key"})
+        ).status_code == 422

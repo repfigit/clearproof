@@ -14,6 +14,8 @@ from src.api.middleware.auth import JWTAuthDependency
 from src.version import VERSION
 
 router = APIRouter(tags=["health"])
+health_only_router = APIRouter(tags=["health"])
+metrics_router = APIRouter(tags=["health"])
 
 
 # ---------------------------------------------------------------------------
@@ -80,7 +82,7 @@ class MetricsResponse(BaseModel):
 # ---------------------------------------------------------------------------
 
 
-@router.get("/health", response_model=HealthResponse, summary="Health check")
+@health_only_router.get("/health", response_model=HealthResponse, summary="Health check")
 async def health():
     """Process liveness only. Does not inspect database, trust, artifacts or external services."""
     return HealthResponse(
@@ -90,7 +92,7 @@ async def health():
     )
 
 
-@router.get("/metrics", response_model=MetricsResponse, summary="Operational metrics")
+@metrics_router.get("/metrics", response_model=MetricsResponse, summary="Operational metrics")
 async def get_metrics(_auth: dict = Depends(JWTAuthDependency)):
     """
     Basic operational metrics.
@@ -107,3 +109,7 @@ async def get_metrics(_auth: dict = Depends(JWTAuthDependency)):
         credential_revoked_count=metrics.credential_revoked_count,
         uptime_seconds=round(metrics.uptime_seconds, 2),
     )
+
+
+router.include_router(health_only_router)
+router.include_router(metrics_router)

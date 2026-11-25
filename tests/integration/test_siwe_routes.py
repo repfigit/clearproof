@@ -15,8 +15,6 @@ from tests.unit.test_siwe_auth import signed
 @pytest.fixture
 async def client(monkeypatch):
     monkeypatch.setattr(siwe_auth, "_nonce_store", {})
-    monkeypatch.setattr(siwe_auth, "_session_store", {})
-    monkeypatch.setattr(routes, "_siwe", None)
     monkeypatch.setattr(routes._nonce_limiter, "_requests", routes._nonce_limiter._requests.copy())
     routes._nonce_limiter._requests.clear()
     monkeypatch.setattr(middleware, "AUTH_MODE", "siwe")
@@ -29,39 +27,47 @@ async def client(monkeypatch):
         return claims
 
     async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://test") as value:
-        yield value
+        yield value, app
 
 
 async def test_nonce_sign_verify_protected_request_replay_and_expiry(client):
-    response = await client.get("/auth/nonce")
+    http_client, app = client
+    response = await http_client.get("/auth/nonce")
     assert response.status_code == 200
+    siwe_after_nonce = app.state.siwe_auth
     message, signature, address = signed(response.json()["nonce"])
     payload = {"message": message, "signature": signature}
-    response = await client.post("/auth/verify", json=payload)
+    response = await http_client.post("/auth/verify", json=payload)
     assert response.status_code == 200
+    # /auth/nonce, /auth/verify, and JWTAuthDependency all share the exact app.state.siwe_auth instance.
+    assert app.state.siwe_auth is siwe_after_nonce
+    assert siwe_after_nonce.session_count() == 1
     session = response.json()
     assert session["address"] == address
     assert session["chain_id"] == 1
     headers = {"Authorization": f"Bearer {session['session_token']}"}
-    response = await client.get("/protected", headers=headers)
+    response = await http_client.get("/protected", headers=headers)
     assert response.status_code == 200
+    assert app.state.siwe_auth is siwe_after_nonce
     assert response.json()["sub"] == address
     assert response.json()["auth_mode"] == "siwe"
-    assert (await client.post("/auth/verify", json=payload)).status_code == 401
-    assert (await client.get("/protected")).status_code == 401
-    assert (await client.get("/protected", headers={"Authorization": "Bearer unknown"})).status_code == 401
-    siwe_auth._session_store[session["session_token"]]["expires_at"] = (
+    assert (await http_client.post("/auth/verify", json=payload)).status_code == 401
+    assert (await http_client.get("/protected")).status_code == 401
+    assert (await http_client.get("/protected", headers={"Authorization": "Bearer unknown"})).status_code == 401
+    app.state.siwe_auth._sessions[session["session_token"]]["expires_at"] = (
         datetime.now(timezone.utc) - timedelta(seconds=1)
     ).isoformat()
-    assert (await client.get("/protected", headers=headers)).status_code == 401
+    assert (await http_client.get("/protected", headers=headers)).status_code == 401
+    assert app.state.siwe_auth.session_count() == 0
 
 
 async def test_malformed_input_and_nonce_rate_limit(client, monkeypatch):
-    response = await client.post("/auth/verify", json={"message": "invalid", "signature": "0x00"})
+    http_client, _ = client
+    response = await http_client.post("/auth/verify", json={"message": "invalid", "signature": "0x00"})
     assert response.status_code == 401
-    assert (await client.post("/auth/verify", json={})).status_code == 422
+    assert (await http_client.post("/auth/verify", json={})).status_code == 422
     monkeypatch.setattr(routes._nonce_limiter, "max_requests", 1)
-    assert (await client.get("/auth/nonce")).status_code == 200
-    limited = await client.get("/auth/nonce")
+    assert (await http_client.get("/auth/nonce")).status_code == 200
+    limited = await http_client.get("/auth/nonce")
     assert limited.status_code == 429
     assert int(limited.headers["Retry-After"]) > 0

@@ -27,11 +27,38 @@ def test_metadata_expiry_and_key_identifier_never_include_material():
     assert key.to_dict() == {
         "version_id": "current",
         "activated_at": key.activated_at,
+        "expires_at": key.activated_at + module.DEFAULT_KEY_TTL_SECONDS,
         "retired": False,
         "is_expired": True,
     }
     assert "key_bytes" not in key.to_dict()
     assert module.derive_key_id(key.key_bytes) == "key_" + hashlib.sha256(key.key_bytes).hexdigest()[:16]
+
+
+def test_key_version_explicit_expires_at_and_future_activated_at():
+    now = 10_000_000
+
+    # Explicit expires_at overrides the 90-day default: boundary at expires_at vs expires_at + 1.
+    at_boundary = module.KeyVersion("custom", b"a" * 32, now - 100, expires_at=now)
+    assert at_boundary.expires_at == now
+    assert at_boundary.is_expired is False
+
+    past_boundary = module.KeyVersion("custom-expired", b"a" * 32, now - 100, expires_at=now - 1)
+    assert past_boundary.is_expired is True
+
+    # Future activated_at (clock skew or pre-staged rotation) is never treated as expired.
+    future = module.KeyVersion("future", b"a" * 32, now + 3600)
+    assert future.expires_at == now + 3600 + module.DEFAULT_KEY_TTL_SECONDS
+    assert future.is_expired is False
+    assert future.to_dict()["expires_at"] == future.expires_at
+
+    # Zero-length TTL (expires_at == activated_at) is valid and not expired while now <= expires_at.
+    instant = module.KeyVersion("instant", b"a" * 32, now, expires_at=now)
+    assert instant.is_expired is False
+
+    # expires_at earlier than activated_at is rejected.
+    with pytest.raises(ValueError, match="expires_at"):
+        module.KeyVersion("invalid", b"a" * 32, now, expires_at=now - 1)
 
 
 def test_rotation_retirement_and_expired_cleanup_preserve_current_key():
