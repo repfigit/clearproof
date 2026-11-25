@@ -75,6 +75,7 @@ async def test_prequeue_schema_upgrade_preserves_encrypted_tenant_evidence(queue
     before = await retained.read("credential", "synthetic-record")
     async with db.connection() as conn:
         assert (await (await conn.execute("SELECT count(*) FROM proof_jobs")).fetchone())[0] == 0
+        await conn.execute("DROP TABLE api_rate_limit_buckets, siwe_sessions")
         await conn.execute("DROP TABLE pilot_merkle_nodes, pilot_merkle_leaves, pilot_merkle_roots")
         await conn.execute("DROP TABLE proof_jobs, proof_job_control, pilot_enrollment_index")
         await conn.execute("DELETE FROM schema_migrations WHERE version>=21")

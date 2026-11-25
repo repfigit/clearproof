@@ -44,8 +44,8 @@ _issuer_registry = IssuerRegistry(depth=10)
 _prover = SnarkJSProver()
 _audit_log = AuditLog()
 
-_proof_generate_limiter = PrincipalRateLimiter(max_requests=30, window_seconds=60)
-_proof_verify_limiter = PrincipalRateLimiter(max_requests=30, window_seconds=60)
+_proof_generate_limiter = PrincipalRateLimiter(max_requests=30, window_seconds=60, bucket_namespace="PROOF_GENERATE")
+_proof_verify_limiter = PrincipalRateLimiter(max_requests=30, window_seconds=60, bucket_namespace="PROOF_VERIFY")
 
 LEGACY_SIGNAL_COUNT = 16
 _DECIMAL = re.compile(r"[0-9]{1,78}")

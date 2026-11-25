@@ -413,3 +413,36 @@ def test_every_pilot_wallet_and_auth_route_has_rate_limit_dependency():
         assert any(isinstance(call, RateLimiter) for call in dep_calls), f"Missing RateLimiter on {path}"
         checked += 1
     assert checked >= 33
+
+
+def test_rate_limiter_resolve_pg_store_handles_starlette_request_without_app():
+    from starlette.requests import Request as StarletteRequest
+
+    from src.storage.api_state import PostgresRateLimitStore
+
+    limiter = RateLimiter(max_requests=5, window_seconds=60)
+    bare_request = StarletteRequest({"type": "http", "headers": []})
+    assert limiter._resolve_pg_store(bare_request) is None
+
+    # A stale PostgresRateLimitStore whose Database is closed is cleared and ignored.
+    app = FastAPI()
+    closed_db = SimpleNamespace(is_ready=False)
+    app.state.rate_limit_store = PostgresRateLimitStore(closed_db)
+    app.state.db = None
+    req = StarletteRequest({"type": "http", "app": app, "headers": []})
+    assert limiter._resolve_pg_store(req) is None
+    assert app.state.rate_limit_store is None
+
+
+def test_pg_store_validation_guards():
+    from src.storage.api_state import PostgresRateLimitStore, PostgresSIWESessionStore
+
+    sentinel_db = SimpleNamespace()
+    with pytest.raises(ValueError, match="cleanup_interval_writes"):
+        PostgresRateLimitStore(sentinel_db, cleanup_interval_writes=0)
+    with pytest.raises(ValueError, match="cleanup_batch_size"):
+        PostgresRateLimitStore(sentinel_db, cleanup_batch_size=0)
+    with pytest.raises(ValueError, match="max_entries"):
+        PostgresSIWESessionStore(sentinel_db, max_entries=0)
+    with pytest.raises(ValueError, match="cleanup_batch_size"):
+        PostgresSIWESessionStore(sentinel_db, max_entries=10, cleanup_batch_size=0)

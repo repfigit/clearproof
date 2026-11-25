@@ -1,5 +1,6 @@
 """
-In-memory sliding-window rate limiter with trusted-proxy client IP extraction.
+PostgreSQL-backed rate limiter with trusted-proxy client IP extraction and
+in-memory fallback when ``DATABASE_URL`` is absent.
 
 Usage as a FastAPI dependency::
 
@@ -39,18 +40,22 @@ Client identity, strongest first:
 3. Otherwise the trusted client IP. An unauthenticated caller cannot mint fresh
    buckets by sending random ``X-API-Key`` or spoofed ``X-Forwarded-For`` values.
 
-Bounded in-process store & multi-instance caveat
-------------------------------------------------
+PostgreSQL-backed store & in-memory fallback
+--------------------------------------------
 
-Each ``RateLimiter`` keeps at most ``max_clients`` active buckets in an
-``OrderedDict`` (LRU eviction after sweeping expired windows), preventing
-unbounded memory growth under IP-spray attacks.
+When ``app.state.rate_limit_store`` (or a connected ``app.state.db``) is
+available — i.e., when ``DATABASE_URL`` is configured — rate-limit buckets are
+persisted in PostgreSQL (``api_rate_limit_buckets``) via an atomic
+``INSERT ... ON CONFLICT DO UPDATE`` using PostgreSQL's ``clock_timestamp()``
+for window expiry and bounded periodic on-write cleanup. All Uvicorn workers
+and API replicas enforce a single shared limit.
 
-**Multi-instance / multi-worker caveat:** State is process-local in memory.
-Running multiple Uvicorn workers or API replicas multiplies effective per-client
-rate limits by the worker/replica count. Enforce shared limits at the reverse
-proxy / ingress layer or move to a shared store (PostgreSQL/Redis) for multi-
-replica production deployments.
+**In-memory fallback (when ``DATABASE_URL`` is absent):** when no PostgreSQL
+store is attached (e.g., local demos or unit tests without ``DATABASE_URL``),
+each ``RateLimiter`` falls back to a process-local ``OrderedDict`` capped at
+``max_clients`` active buckets (LRU eviction after sweeping expired windows).
+In that fallback mode, limits are per Python process; set ``DATABASE_URL`` for
+multi-worker/multi-replica correctness.
 """
 
 from __future__ import annotations
@@ -67,6 +72,8 @@ from fastapi import Depends, HTTPException, Request
 
 from src.api.config import resolve_auth_config
 from src.api.middleware.auth import JWTAuthDependency
+from src.storage.api_state import PostgresRateLimitStore
+from src.storage.database import Database
 
 DEFAULT_MAX_CLIENTS = 10_000
 
@@ -184,7 +191,8 @@ def _positive_float_env(name: str, default: float) -> float:
 
 class RateLimiter:
     """
-    Sliding-window rate limiter backed by a bounded in-memory OrderedDict.
+    Rate limiter backed by PostgreSQL when configured, with bounded in-memory
+    OrderedDict fallback when ``DATABASE_URL`` is absent.
 
     When the limit is exceeded the dependency raises HTTP 429 with a
     ``Retry-After`` header and stable error body.
@@ -194,14 +202,23 @@ class RateLimiter:
     max_requests : int
         Default maximum requests allowed within *window_seconds*.
     window_seconds : float
-        Default length of the sliding window in seconds.
+        Default length of the rate-limit window in seconds.
     env_prefix : str | None
         Optional environment variable prefix (e.g. ``"RATE_LIMIT_AUTH_VERIFY"``).
         When set, ``{env_prefix}_MAX_REQUESTS`` and ``{env_prefix}_WINDOW_SECONDS``
         override the defaults dynamically (with ``RATE_LIMIT_MAX_CLIENTS``
         overriding *max_clients*).
     max_clients : int
-        Hard cap on tracked client buckets in memory (LRU eviction when full).
+        Hard cap on tracked client buckets (LRU eviction when full).
+    bucket_namespace : str | None
+        Namespace prefix for PostgreSQL bucket keys so distinct route tiers
+        remain independent in ``api_rate_limit_buckets``. Defaults to
+        ``env_prefix`` when provided, else ``"default"``.
+    store : PostgresRateLimitStore | None
+        Optional explicit PostgreSQL store (primarily for direct/test injection).
+        When omitted, ``__call__`` checks ``request.app.state.rate_limit_store``
+        (or lazily binds a store from a connected ``request.app.state.db``) and
+        falls back to the bounded in-memory ``OrderedDict`` when absent.
     """
 
     def __init__(
@@ -211,6 +228,8 @@ class RateLimiter:
         *,
         env_prefix: str | None = None,
         max_clients: int = DEFAULT_MAX_CLIENTS,
+        bucket_namespace: str | None = None,
+        store: PostgresRateLimitStore | None = None,
     ) -> None:
         if max_requests <= 0:
             raise ValueError("max_requests must be positive")
@@ -222,6 +241,9 @@ class RateLimiter:
         self.window_seconds = window_seconds
         self.env_prefix = env_prefix
         self.max_clients = max_clients
+        self.bucket_namespace = bucket_namespace or env_prefix or "default"
+        self._store = store
+        # Fallback in-memory store (used only when no PostgreSQL store is configured):
         # client_key -> request timestamps (oldest first), ordered by recency
         self._requests: OrderedDict[str, deque[float]] = OrderedDict()
         self._last_sweep = time.monotonic()
@@ -237,20 +259,62 @@ class RateLimiter:
         return max_req, window, max_clients
 
     def reset(self) -> None:
-        """Clear all tracked client buckets (intended for tests)."""
+        """Clear all in-memory tracked client buckets (intended for tests)."""
         self._requests.clear()
         self._last_sweep = time.monotonic()
+
+    def _resolve_pg_store(self, request: Request) -> PostgresRateLimitStore | None:
+        if self._store is not None:
+            return self._store
+        try:
+            app = getattr(request, "app", None)
+        except KeyError:
+            return None
+        state = getattr(app, "state", None) if app is not None else None
+        if state is None:
+            return None
+        store = getattr(state, "rate_limit_store", None)
+        if isinstance(store, PostgresRateLimitStore):
+            if getattr(store._db, "is_ready", True):
+                return store
+            state.rate_limit_store = None
+        db = getattr(state, "db", None)
+        if isinstance(db, Database) and db.is_ready:
+            store = PostgresRateLimitStore(db)
+            state.rate_limit_store = store
+            return store
+        return None
 
     # ------------------------------------------------------------------
     # FastAPI dependency interface
     # ------------------------------------------------------------------
 
     async def __call__(self, request: Request) -> None:
-        self._hit(self._identify_client(request))
+        await self._check(request, self._identify_client(request))
 
     # ------------------------------------------------------------------
     # Internals
     # ------------------------------------------------------------------
+
+    async def _check(self, request: Request, client_key: str) -> None:
+        store = self._resolve_pg_store(request)
+        if store is not None:
+            max_requests, window_seconds, max_clients = self._effective_limits()
+            bucket_key = f"{self.bucket_namespace}:{client_key}"
+            decision = await store.check_and_increment(
+                bucket_key,
+                max_requests=max_requests,
+                window_seconds=window_seconds,
+                max_clients=max_clients,
+            )
+            if not decision.allowed:
+                raise HTTPException(
+                    status_code=429,
+                    detail="Rate limit exceeded",
+                    headers={"Retry-After": str(decision.retry_after)},
+                )
+            return
+        self._hit(client_key)
 
     def _hit(self, client_key: str) -> None:
         max_requests, window_seconds, max_clients = self._effective_limits()
@@ -324,7 +388,7 @@ class PrincipalRateLimiter(RateLimiter):
     async def __call__(self, request: Request, claims: Any = Depends(JWTAuthDependency)) -> None:
         subject = claims.get("sub") if isinstance(claims, dict) else None
         principal = subject if isinstance(subject, str) and subject else None
-        self._hit(self._identify_client(request, principal))
+        await self._check(request, self._identify_client(request, principal))
 
 
 # ---------------------------------------------------------------------------

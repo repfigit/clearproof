@@ -233,3 +233,9 @@ async def test_bounded_session_store_lru_eviction_and_ttl_sweep(monkeypatch):
     assert await auth.validate_session("long") is not None
     assert auth.session_count() == 1
     assert "short" not in auth._sessions
+
+
+def test_siwe_auth_accepts_explicit_session_store():
+    sentinel_store = object()
+    auth = module.SIWEAuth("wallet.example", session_store=sentinel_store)
+    assert auth._pg_sessions is sentinel_store

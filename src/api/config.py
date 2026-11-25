@@ -120,6 +120,7 @@ resolve_auth_config = get_auth_config
 def get_siwe_auth(request: Optional[Request] = None):
     """Return ``app.state.siwe_auth`` if set, lazily constructing and caching it when absent."""
     from src.auth.siwe_auth import SIWEAuth
+    from src.storage.database import Database
 
     state = _request_app_state(request)
     if state is not None and _state_has_attr(state, "siwe_auth"):
@@ -127,7 +128,9 @@ def get_siwe_auth(request: Optional[Request] = None):
         if isinstance(existing, SIWEAuth):
             return existing
     config = resolve_auth_config(request)
-    instance = SIWEAuth(domain=config.siwe_domain)
+    db = getattr(state, "db", None) if state is not None else None
+    ready_db = db if isinstance(db, Database) and db.is_ready else None
+    instance = SIWEAuth(domain=config.siwe_domain, db=ready_db)
     if state is not None and not _state_has_attr(state, "siwe_auth"):
         state.siwe_auth = instance
     return instance
