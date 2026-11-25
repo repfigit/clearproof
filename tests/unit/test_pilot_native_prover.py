@@ -140,6 +140,32 @@ async def test_invalid_native_proof_shape_is_rejected(bundle, proof):
         await native(bundle, proof=proof).prove(PRIVATE, expected_signals=SIGNALS)
 
 
+async def test_fast_exiting_native_child_with_empty_or_broken_stdin_does_not_surface_oserror(bundle, monkeypatch):
+    """A child exiting before stdin.drain() must not fail with native_runtime_unavailable."""
+    target = native(bundle, proof=[])
+    original_settled = module._settled
+
+    async def delayed_settled(task):
+        proc, cancelled = await original_settled(task)
+        # Allow a fast-exiting child to finish and close its stdin pipe before drain().
+        await asyncio.sleep(0.05)
+        return proc, cancelled
+
+    monkeypatch.setattr(module, "_settled", delayed_settled)
+    with pytest.raises(PilotProvingError, match="invalid_proving_result"):
+        await target.prove(PRIVATE, expected_signals=SIGNALS)
+
+    # Also cover payload-bearing child exiting early (BrokenPipeError/ConnectionResetError on drain).
+    with pytest.raises(PilotProvingError, match="native_runtime_failed"):
+        await module._run(
+            [sys.executable, "-c", "import sys; sys.exit(1)"],
+            descriptors=[],
+            cpus=target.cpus,
+            directory=str(bundle[0]),
+            payload=b"ignored",
+        )
+
+
 async def test_native_signal_mismatch_is_rejected_before_pairing(bundle):
     with pytest.raises(PilotProvingError, match="proving_signal_mismatch"):
         await native(bundle, signals=["2"] * 8).prove(PRIVATE, expected_signals=SIGNALS)

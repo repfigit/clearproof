@@ -185,7 +185,7 @@ async def _run(command, *, descriptors, cpus, directory, payload=b""):
                 json.dumps(cpus),
                 *command,
                 pass_fds=tuple(descriptors),
-                stdin=asyncio.subprocess.PIPE,
+                stdin=asyncio.subprocess.PIPE if payload else asyncio.subprocess.DEVNULL,
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.DEVNULL,
                 env={"LANG": "C", "TZ": "UTC", "OMP_NUM_THREADS": str(len(cpus)), "OMP_THREAD_LIMIT": str(len(cpus))},
@@ -196,9 +196,13 @@ async def _run(command, *, descriptors, cpus, directory, payload=b""):
         proc, cancelled = await _settled(creation)
         if cancelled:
             raise asyncio.CancelledError
-        proc.stdin.write(payload)
-        await proc.stdin.drain()
-        proc.stdin.close()
+        if payload:
+            proc.stdin.write(payload)
+            try:
+                await proc.stdin.drain()
+            except (BrokenPipeError, ConnectionResetError):
+                pass
+            proc.stdin.close()
         output = await bounded_output(proc.stdout)
         await proc.wait()
         if proc.returncode != 0:
