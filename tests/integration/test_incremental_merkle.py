@@ -951,3 +951,50 @@ async def test_proof_preparation_consumes_persisted_incremental_merkle_and_fails
             )
     finally:
         PilotTransaction.get = old_get
+
+
+async def test_incremental_merkle_roots_bit_exact_with_native_poseidon_on_vs_off(db, tmp_path):
+    """Differential incremental Merkle tree parity: native C Poseidon on vs pure Python off."""
+    from scripts.build_native_poseidon import build_native_poseidon, default_library_name
+    from src.registry.poseidon import configure_poseidon_backend
+
+    native_lib = build_native_poseidon(output=tmp_path / default_library_name())
+    store = PilotStore(db, cipher(), principal())
+    entries = _synthetic_entries(80)
+    scope_py = hashlib.sha256(b"poseidon-parity-py").hexdigest()
+    scope_native = hashlib.sha256(b"poseidon-parity-native").hexdigest()
+
+    try:
+        # Build incrementally with pure Python backend
+        configure_poseidon_backend("python")
+        zero_root.cache_clear()
+        async with store.transaction() as tx:
+            m_py = IncrementalMerkleStore(tx, scope_py, depth=ISSUANCE_TREE_DEPTH)
+            s_py_1 = await m_py.append_many(entries[:64])
+            for cid, comm in entries[64:70]:
+                s_py_2, _ = await m_py.append(cid, comm)
+            s_py_3 = await m_py.sync_entries(entries[:80])
+            proof_py = await m_py.membership(entries[67][0])
+
+        # Build identically with native C accelerator enabled
+        assert configure_poseidon_backend("native", lib_path=str(native_lib)) == "native"
+        zero_root.cache_clear()
+        async with store.transaction() as tx:
+            m_nat = IncrementalMerkleStore(tx, scope_native, depth=ISSUANCE_TREE_DEPTH)
+            s_nat_1 = await m_nat.append_many(entries[:64])
+            for cid, comm in entries[64:70]:
+                s_nat_2, _ = await m_nat.append(cid, comm)
+            s_nat_3 = await m_nat.sync_entries(entries[:80])
+            proof_nat = await m_nat.membership(entries[67][0])
+            # Cross-read the Python-built tree under native backend (verifies zero drift)
+            proof_cross = await IncrementalMerkleStore(tx, scope_py, depth=ISSUANCE_TREE_DEPTH).membership(
+                entries[67][0]
+            )
+    finally:
+        configure_poseidon_backend(None, lib_path=None)
+        zero_root.cache_clear()
+
+    assert s_nat_1.root_hash == s_py_1.root_hash
+    assert s_nat_2.root_hash == s_py_2.root_hash
+    assert s_nat_3.root_hash == s_py_3.root_hash
+    assert proof_nat == proof_py == proof_cross

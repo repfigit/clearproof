@@ -5,6 +5,9 @@ __pycache__/
 dist/
 build/
 .eggs/
+src/registry/_poseidon_native.so
+src/registry/_poseidon_native.dylib
+src/registry/_poseidon_native.dll
 
 # Virtual environments
 .venv/

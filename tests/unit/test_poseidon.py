@@ -1,27 +1,43 @@
+# SPDX-License-Identifier: Apache-2.0
 """
-Parity tests for the native Python Poseidon implementation.
+Parity and backend tests for Poseidon over the BN254 scalar field.
 
-The hardcoded vectors below were generated with circomlibjs
-(``scripts/poseidon_hash.js``) and must match ``src/registry/poseidon.py``
-exactly — this is what guarantees Python-computed Merkle roots and credential
-commitments remain consistent with the in-circuit Poseidon template.
-
-An optional live-parity test re-checks against circomlibjs when Node.js and
-circomlibjs are available; it skips otherwise. A regeneration test verifies
-the committed constants file matches the clean-room generator output.
+Covers:
+- Hardcoded circomlibjs reference vectors (both pure-Python and native C backends)
+- Clean-room constant generator parity and live circomlibjs parity (when Node is present)
+- Differential tests (native C vs pure Python) over randomized vectors across all 16 arities
+- Boundary BN254 field values (0, 1, p-1, p, p+1, 2p-1, negatives, 256-bit limbs, strings)
+- PilotTree and incremental Merkle root parity with native accelerator on vs off
+- Backend selection via env/config, load-failure fallback in auto mode, fail-closed
+  behavior in native mode, and strict non-fallback (PoseidonIntegrityError) on hash mismatch
+- Native build script helpers (scripts/build_native_poseidon.py)
 """
 
 from __future__ import annotations
 
+import ctypes
 import json
+import random
 import shutil
 import subprocess
 import sys
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
-from src.registry.poseidon import BN254_SCALAR_FIELD, poseidon_hash
+from scripts import build_native_poseidon as build_script
+from src.registry import poseidon as poseidon_module
+from src.registry.pilot_tree import PilotTree, zero_root
+from src.registry.poseidon import (
+    BN254_SCALAR_FIELD,
+    PoseidonBackendError,
+    PoseidonIntegrityError,
+    configure_poseidon_backend,
+    get_active_poseidon_backend,
+    poseidon_hash,
+    poseidon_hash_python,
+)
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 POSEIDON_SCRIPT = PROJECT_ROOT / "scripts" / "poseidon_hash.js"
@@ -76,9 +92,27 @@ VECTORS: list[tuple[list[int], int]] = [
 ]
 
 
+@pytest.fixture(scope="module")
+def native_lib_path(tmp_path_factory) -> Path:
+    """Compile the optional native C Poseidon library into an isolated temp path."""
+    out_dir = tmp_path_factory.mktemp("native-poseidon")
+    return build_script.build_native_poseidon(output=out_dir / build_script.default_library_name())
+
+
+@pytest.fixture(autouse=True)
+def _restore_poseidon_backend():
+    """Ensure every test leaves the global Poseidon backend selection clean."""
+    try:
+        yield
+    finally:
+        configure_poseidon_backend(None, lib_path=None)
+        zero_root.cache_clear()
+
+
 @pytest.mark.parametrize("inputs,expected", VECTORS)
 def test_poseidon_matches_circomlibjs_vectors(inputs: list[int], expected: int) -> None:
     assert poseidon_hash(inputs) == expected
+    assert poseidon_hash_python(inputs) == expected
 
 
 def test_poseidon_accepts_strings() -> None:
@@ -139,9 +173,7 @@ def test_live_parity_with_circomlibjs() -> None:
 
 
 def test_numeric_constant_encoding_preserves_reference_vectors(tmp_path, monkeypatch):
-    from src.registry import poseidon
-
-    original = json.loads(Path(poseidon._CONSTANTS_PATH).read_text())
+    original = json.loads(Path(poseidon_module._CONSTANTS_PATH).read_text())
 
     def numeric(value):
         if isinstance(value, list):
@@ -151,12 +183,274 @@ def test_numeric_constant_encoding_preserves_reference_vectors(tmp_path, monkeyp
     converted = {name: numeric(original[name]) for name in ("C", "M")}
     path = tmp_path / "numeric-constants.json"
     path.write_text(json.dumps(converted))
-    poseidon._load_constants.cache_clear()
+    poseidon_module._load_constants.cache_clear()
     try:
         with monkeypatch.context() as patch:
-            patch.setattr(poseidon, "_CONSTANTS_PATH", str(path))
+            patch.setattr(poseidon_module, "_CONSTANTS_PATH", str(path))
+            configure_poseidon_backend("python")
             for values, expected in VECTORS:
-                assert poseidon.poseidon_hash(values) == expected
+                assert poseidon_module.poseidon_hash(values) == expected
     finally:
-        poseidon._load_constants.cache_clear()
-    assert poseidon.poseidon_hash(VECTORS[0][0]) == VECTORS[0][1]
+        poseidon_module._load_constants.cache_clear()
+    assert poseidon_module.poseidon_hash(VECTORS[0][0]) == VECTORS[0][1]
+
+
+def test_native_differential_randomized_vectors_all_arities(native_lib_path: Path) -> None:
+    """Differential parity: native C vs pure Python across all 16 arities on randomized inputs."""
+    assert configure_poseidon_backend("native", lib_path=str(native_lib_path)) == "native"
+    assert get_active_poseidon_backend() == "native"
+
+    rng = random.Random(20261125)
+    for arity in range(1, 17):
+        for _ in range(8):
+            vec = [rng.randrange(0, BN254_SCALAR_FIELD) for _ in range(arity)]
+            native_out = poseidon_hash(vec)
+            python_out = poseidon_hash_python(vec)
+            assert native_out == python_out
+            assert 0 <= native_out < BN254_SCALAR_FIELD
+
+    # Verify all hardcoded circomlibjs reference vectors with native enabled
+    for vec, expected in VECTORS:
+        assert poseidon_hash(vec) == expected
+        assert poseidon_hash([hex(v) for v in vec]) == expected
+
+
+def test_native_differential_boundary_field_values(native_lib_path: Path) -> None:
+    """Differential parity over BN254 scalar field boundaries, limb edges, and modular reduction."""
+    assert configure_poseidon_backend("native", lib_path=str(native_lib_path)) == "native"
+    p = BN254_SCALAR_FIELD
+    boundary_scalars = [
+        0,
+        1,
+        2,
+        2**64 - 1,
+        2**64,
+        2**128 - 1,
+        2**128,
+        2**192 - 1,
+        2**192,
+        2**253,
+        p - 2,
+        p - 1,
+        p,
+        p + 1,
+        2 * p - 1,
+        2 * p,
+        2**256 - 1,
+        -1,
+        -p,
+        -(p - 1),
+    ]
+    for a in boundary_scalars:
+        assert poseidon_hash([a]) == poseidon_hash_python([a])
+    for i in range(len(boundary_scalars)):
+        a = boundary_scalars[i]
+        b = boundary_scalars[(i * 7 + 3) % len(boundary_scalars)]
+        assert poseidon_hash([a, b]) == poseidon_hash_python([a, b])
+        assert poseidon_hash([str(a), hex(b) if b >= 0 else str(b)]) == poseidon_hash_python([a, b])
+
+    # Also test the uncached C entry point directly against pure Python
+    lib = ctypes.CDLL(str(native_lib_path))
+    consts = poseidon_module._load_constants()
+    c_bytes = b"".join(v.to_bytes(32, "little") for v in consts["C"][1])
+    m_bytes = b"".join(v.to_bytes(32, "little") for row in consts["M"][1] for v in row)
+    in_bytes = (p - 1).to_bytes(32, "little") + (1).to_bytes(32, "little")
+    out_buf = (ctypes.c_uint8 * 32)()
+    rc = lib.clearproof_poseidon_hash(
+        3, poseidon_module._N_ROUNDS_F, poseidon_module._N_ROUNDS_P[1], in_bytes, c_bytes, m_bytes, out_buf
+    )
+    assert rc == 0
+    assert int.from_bytes(bytes(out_buf), "little") == poseidon_hash_python([p - 1, 1])
+
+
+def test_pilot_tree_roots_and_paths_identical_with_native_on_vs_off(native_lib_path: Path) -> None:
+    """Merkle tree roots and membership paths are bit-exact with accelerator on vs off."""
+    entries = [(f"{i:064x}", str((i * 997 + 13) % BN254_SCALAR_FIELD)) for i in range(1, 66)]
+
+    configure_poseidon_backend("python")
+    zero_root.cache_clear()
+    tree_py = PilotTree(entries, depth=32)
+    proofs_py = [tree_py.membership(entries[idx][0]) for idx in (0, 15, 31, 32, 64)]
+
+    configure_poseidon_backend("native", lib_path=str(native_lib_path))
+    zero_root.cache_clear()
+    tree_native = PilotTree(entries, depth=32)
+    proofs_native = [tree_native.membership(entries[idx][0]) for idx in (0, 15, 31, 32, 64)]
+
+    assert tree_native.root == tree_py.root
+    assert proofs_native == proofs_py
+
+
+def test_env_and_config_backend_switching_and_load_fallback(
+    native_lib_path: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Swappable via env/config; auto falls back ONLY on load failure; native fails closed."""
+    missing = str(tmp_path / "does_not_exist.so")
+
+    # Programmatic python mode
+    assert configure_poseidon_backend("python") == "python"
+    assert get_active_poseidon_backend() == "python"
+    assert poseidon_hash([1, 2]) == poseidon_hash_python([1, 2])
+
+    # Auto mode with missing library falls back silently to python
+    assert configure_poseidon_backend("auto", lib_path=missing) == "python"
+    assert get_active_poseidon_backend() == "python"
+    assert poseidon_hash([1, 2]) == poseidon_hash_python([1, 2])
+
+    # Native mode with missing library fails closed
+    with pytest.raises(PoseidonBackendError, match="Unable to load native Poseidon library"):
+        configure_poseidon_backend("native", lib_path=missing)
+
+    # Env-driven selection (auto -> native, python -> python, native -> native)
+    configure_poseidon_backend(None, lib_path=None)
+    monkeypatch.setenv("CLEARPROOF_POSEIDON_LIB", str(native_lib_path))
+    monkeypatch.setenv("CLEARPROOF_POSEIDON_BACKEND", "auto")
+    assert get_active_poseidon_backend() == "native"
+    assert poseidon_hash([42, 99]) == poseidon_hash_python([42, 99])
+
+    monkeypatch.setenv("CLEARPROOF_POSEIDON_BACKEND", "python")
+    assert get_active_poseidon_backend() == "python"
+    assert poseidon_hash([42, 99]) == poseidon_hash_python([42, 99])
+
+    monkeypatch.setenv("CLEARPROOF_POSEIDON_BACKEND", "native")
+    assert get_active_poseidon_backend() == "native"
+
+    # Invalid env backend fails closed
+    monkeypatch.setenv("CLEARPROOF_POSEIDON_BACKEND", "bogus")
+    with pytest.raises(PoseidonBackendError, match="Invalid CLEARPROOF_POSEIDON_BACKEND"):
+        get_active_poseidon_backend()
+
+    # Invalid programmatic backend fails closed
+    with pytest.raises(PoseidonBackendError, match="Invalid Poseidon backend"):
+        configure_poseidon_backend("invalid")  # type: ignore[arg-type]
+
+    # Platform default filename resolution branches
+    for plat, suffix in (("linux", ".so"), ("darwin", ".dylib"), ("win32", ".dll")):
+        monkeypatch.setattr(poseidon_module.sys, "platform", plat)
+        assert poseidon_module._default_native_lib_path().endswith(f"_poseidon_native{suffix}")
+
+
+def test_native_failure_modes_never_fallback_on_hash_or_integrity_mismatch(
+    native_lib_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """ABI mismatch/missing symbols fall back in auto; hash/constant/runtime mismatches ALWAYS raise."""
+
+    def _make_fake_lib(*, abi=1, load_rc=0, hash_rc=0, out_value=None, missing_symbol=False):
+        if missing_symbol:
+            return SimpleNamespace()
+
+        def abi_fn():
+            return abi
+
+        def load_fn(t, rf, rp, c_b, m_b):
+            return load_rc
+
+        def hash_fn(t, in_b, out_buf):
+            if hash_rc != 0:
+                return hash_rc
+            val = poseidon_module._SELF_TEST_EXPECTED if out_value is None else out_value
+            raw = val.to_bytes(32, "little")
+            ctypes.memmove(out_buf, raw, 32)
+            return 0
+
+        return SimpleNamespace(
+            clearproof_poseidon_abi_version=abi_fn,
+            clearproof_poseidon_load_constants=load_fn,
+            clearproof_poseidon_hash_cached=hash_fn,
+        )
+
+    # 1. Missing symbols -> PoseidonBackendError -> auto falls back, native raises
+    monkeypatch.setattr(poseidon_module.ctypes, "CDLL", lambda p: _make_fake_lib(missing_symbol=True))
+    assert configure_poseidon_backend("auto", lib_path="/fake/missing-sym.so") == "python"
+    with pytest.raises(PoseidonBackendError, match="missing required ABI symbols"):
+        configure_poseidon_backend("native", lib_path="/fake/missing-sym.so")
+
+    # 2. ABI mismatch -> PoseidonBackendError -> auto falls back, native raises
+    monkeypatch.setattr(poseidon_module.ctypes, "CDLL", lambda p: _make_fake_lib(abi=99))
+    assert configure_poseidon_backend("auto", lib_path="/fake/bad-abi.so") == "python"
+    with pytest.raises(PoseidonBackendError, match="Unsupported native Poseidon ABI version 99"):
+        configure_poseidon_backend("native", lib_path="/fake/bad-abi.so")
+
+    # 3. Constant load failure -> PoseidonIntegrityError EVEN IN AUTO MODE (no silent fallback)
+    monkeypatch.setattr(poseidon_module.ctypes, "CDLL", lambda p: _make_fake_lib(load_rc=-6))
+    with pytest.raises(PoseidonIntegrityError, match="failed to load constants"):
+        configure_poseidon_backend("auto", lib_path="/fake/bad-const.so")
+
+    # 4. Self-test hash mismatch -> PoseidonIntegrityError EVEN IN AUTO MODE (no silent fallback)
+    monkeypatch.setattr(poseidon_module.ctypes, "CDLL", lambda p: _make_fake_lib(out_value=12345))
+    with pytest.raises(PoseidonIntegrityError, match="self-test hash mismatch"):
+        configure_poseidon_backend("auto", lib_path="/fake/bad-hash.so")
+
+    # 5. Runtime native error & out-of-field return value -> PoseidonIntegrityError (never falls back)
+    monkeypatch.undo()
+    assert configure_poseidon_backend("native", lib_path=str(native_lib_path)) == "native"
+    handle = poseidon_module._resolve_native_handle()
+    assert handle is not None
+
+    with monkeypatch.context() as patch:
+        patch.setattr(handle, "_hash_fn", lambda t, in_b, out_buf: -4)
+        with pytest.raises(PoseidonIntegrityError, match="Native Poseidon hash failed"):
+            poseidon_hash([1, 2])
+
+    def _emit_out_of_field(t, in_b, out_buf):
+        ctypes.memmove(out_buf, BN254_SCALAR_FIELD.to_bytes(32, "little"), 32)
+        return 0
+
+    with monkeypatch.context() as patch:
+        patch.setattr(handle, "_hash_fn", _emit_out_of_field)
+        with pytest.raises(PoseidonIntegrityError, match="out-of-field"):
+            poseidon_hash([1, 2])
+
+
+def test_build_native_poseidon_script(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys) -> None:
+    """Exercise scripts/build_native_poseidon.py CLI, platform naming, and error paths."""
+    out = tmp_path / "custom_poseidon.so"
+    rc = build_script.main(["--output", str(out)])
+    assert rc == 0 and out.is_file()
+    assert "sha256=" in capsys.readouterr().out
+
+    # Default output path & platform naming (restore sys.platform afterward)
+    with monkeypatch.context() as patch:
+        for plat, expected_name in (
+            ("linux", "_poseidon_native.so"),
+            ("darwin", "_poseidon_native.dylib"),
+            ("win32", "_poseidon_native.dll"),
+        ):
+            patch.setattr(build_script.sys, "platform", plat)
+            assert build_script.default_library_name() == expected_name
+            assert build_script.default_output_path().name == expected_name
+
+    # Missing explicit compiler
+    with pytest.raises(RuntimeError, match="Requested C compiler not found"):
+        build_script.select_compiler("nonexistent-compiler-xyz-12345")
+
+    # Explicit valid compiler resolves
+    assert build_script.select_compiler("cc") is not None
+
+    # Auto-selection skips missing CC env var and finds fallback compiler
+    with monkeypatch.context() as patch:
+        patch.setenv("CC", "nonexistent-compiler-env-xyz")
+        assert build_script.select_compiler() is not None
+
+    # No compiler on PATH
+    with monkeypatch.context() as patch:
+        patch.delenv("CC", raising=False)
+        patch.setattr(build_script.shutil, "which", lambda name: None)
+        with pytest.raises(RuntimeError, match="No C compiler"):
+            build_script.select_compiler()
+
+    # Compiler invocation failure raises RuntimeError
+    bad_src = tmp_path / "broken.c"
+    bad_src.write_text("this is not valid C syntax ;;;")
+    with pytest.raises(RuntimeError, match="Native Poseidon build failed"):
+        build_script.build_native_poseidon(source=bad_src, output=tmp_path / "broken.so")
+
+    # Exercise CLI __main__ entry point via subprocess
+    cli_out = tmp_path / "cli_poseidon.so"
+    proc = subprocess.run(
+        [sys.executable, str(PROJECT_ROOT / "scripts" / "build_native_poseidon.py"), "--output", str(cli_out)],
+        capture_output=True,
+        text=True,
+        timeout=60,
+    )
+    assert proc.returncode == 0 and cli_out.is_file() and "sha256=" in proc.stdout
