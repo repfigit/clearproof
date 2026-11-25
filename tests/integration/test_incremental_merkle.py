@@ -450,28 +450,26 @@ async def test_migration_up_and_down_preserves_existing_records_and_reapplies_cl
     await service.enroll(c1, s1, idempotency_key="mig-1", now=110)
     stored_before = await PilotStore(db, cipher(), who).get("credential", c1.credential.credential_nonce)
 
-    merkle_version = len(_SCHEMA_MIGRATIONS)
+    merkle_version = _SCHEMA_MIGRATIONS.index(ISSUANCE_MERKLE_MIGRATION) + 1
+    head_version = len(_SCHEMA_MIGRATIONS)
     async with db.connection() as conn:
-        assert (await (await conn.execute("SELECT max(version) FROM schema_migrations")).fetchone())[
-            0
-        ] == merkle_version
+        assert (await (await conn.execute("SELECT max(version) FROM schema_migrations")).fetchone())[0] == head_version
         for tbl in ("pilot_merkle_roots", "pilot_merkle_leaves", "pilot_merkle_nodes"):
             assert (await (await conn.execute("SELECT to_regclass(%s)", (tbl,))).fetchone())[0] == tbl
 
-        # Downgrade: execute explicit downgrade DDL and remove the migration version row
+        # Downgrade back below ISSUANCE_MERKLE_MIGRATION (dropping later tables too)
+        await conn.execute("DROP TABLE api_rate_limit_buckets, siwe_sessions")
         await conn.execute(ISSUANCE_MERKLE_DOWNGRADE)
-        await conn.execute("DELETE FROM schema_migrations WHERE version = %s", (merkle_version,))
+        await conn.execute("DELETE FROM schema_migrations WHERE version >= %s", (merkle_version,))
         for tbl in ("pilot_merkle_roots", "pilot_merkle_leaves", "pilot_merkle_nodes"):
             assert (await (await conn.execute("SELECT to_regclass(%s)", (tbl,))).fetchone())[0] is None
 
-    # Reconnect triggers _migrate() which runs ISSUANCE_MERKLE_MIGRATION up again
+    # Reconnect triggers _migrate() which runs ISSUANCE_MERKLE_MIGRATION and later migrations up again
     await db.close()
     await db.connect()
 
     async with db.connection() as conn:
-        assert (await (await conn.execute("SELECT max(version) FROM schema_migrations")).fetchone())[
-            0
-        ] == merkle_version
+        assert (await (await conn.execute("SELECT max(version) FROM schema_migrations")).fetchone())[0] == head_version
         for tbl in ("pilot_merkle_roots", "pilot_merkle_leaves", "pilot_merkle_nodes"):
             assert (await (await conn.execute("SELECT to_regclass(%s)", (tbl,))).fetchone())[0] == tbl
 

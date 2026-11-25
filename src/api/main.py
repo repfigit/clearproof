@@ -40,6 +40,7 @@ from src.api.target_configuration import load_authorization_targets, load_inspec
 from src.auth.siwe_auth import SIWEAuth
 from src.sar.encryption import hkdf_salt
 from src.services.proving_configuration import load_proving_targets
+from src.storage.api_state import PostgresRateLimitStore
 from src.storage.database import Database
 from src.storage.keyring import load_keyring
 from src.storage.pilot_cipher import RecordCipher
@@ -103,6 +104,7 @@ async def lifespan(app: FastAPI):
 
     db = None
     app.state.db = None
+    app.state.rate_limit_store = None
     app.state.record_cipher = record_cipher
     app.state.auth_config = auth_config
     app.state.siwe_auth = siwe_auth
@@ -117,9 +119,13 @@ async def lifespan(app: FastAPI):
             db = Database(pool_min=pool_min, pool_max=pool_max)
             await db.connect()
             app.state.db = db
+            app.state.rate_limit_store = PostgresRateLimitStore(db)
+            siwe_auth.bind_database(db)
             logger.info("Database connected")
         else:
-            logger.warning("DATABASE_URL not set — running in in-memory mode")
+            logger.warning(
+                "DATABASE_URL not set — running with process-local in-memory fallback for rate limits and SIWE sessions"
+            )
         if os.getenv("PILOT_PROVING_FACTORY"):
             app.state.pilot_proving_targets = await load_proving_targets(db, record_cipher)
         # Operator-owned trust for the current-profile routes. Unset leaves the
@@ -131,6 +137,7 @@ async def lifespan(app: FastAPI):
         yield
     finally:
         app.state.db = None
+        app.state.rate_limit_store = None
         app.state.record_cipher = None
         app.state.auth_config = None
         app.state.siwe_auth = None

@@ -7,9 +7,18 @@ Flow:
 4. Server verifies signature + nonce -> returns session token
 5. Subsequent requests use session token in Authorization header
 
-Nonces and sessions are stored in bounded in-memory OrderedDicts (with TTL
-sweep on read/write and LRU eviction) when Redis is not configured.
-When Redis is available, nonces and sessions are stored there instead.
+Session persistence
+-------------------
+- When PostgreSQL is configured (``DATABASE_URL`` set and ``db`` passed to
+  ``SIWEAuth``), sessions are persisted in ``siwe_sessions`` keyed by the
+  SHA-256 hash of the session token with DB-clock TTL expiry and bounded LRU
+  eviction, allowing any API worker or replica to validate any issued session.
+- When Redis is explicitly supplied (``redis_client``), nonces and sessions
+  are stored in Redis.
+- **In-memory fallback (when ``DATABASE_URL`` and Redis are absent):** sessions
+  are stored in a process-local bounded ``OrderedDict`` (``BoundedSessionStore``)
+  with TTL sweep on read/write and LRU eviction. This fallback is single-process
+  only; configure ``DATABASE_URL`` (or Redis) for multi-worker deployments.
 """
 
 import logging
@@ -21,6 +30,9 @@ from datetime import datetime, timedelta, timezone
 from typing import Any
 
 from siwe import SiweMessage
+
+from src.storage.api_state import PostgresSIWESessionStore
+from src.storage.database import Database
 
 logger = logging.getLogger(__name__)
 
@@ -102,7 +114,8 @@ _nonce_store: dict[str, float] = {}  # nonce -> created_at
 class SIWEAuth:
     """SIWE authentication handler.
 
-    Supports both bounded in-memory and Redis-backed storage for nonces and sessions.
+    Supports PostgreSQL-backed (``db`` / ``session_store``), Redis-backed, and
+    bounded in-memory (fallback when ``DATABASE_URL`` is absent) session storage.
     """
 
     def __init__(
@@ -110,18 +123,32 @@ class SIWEAuth:
         domain: str,
         redis_client: Any | None = None,
         *,
+        db: Database | None = None,
+        session_store: PostgresSIWESessionStore | None = None,
         max_sessions: int | None = None,
     ) -> None:
         """
         Args:
             domain: The expected domain in SIWE messages (e.g. "app.clearproof.io").
-            redis_client: Optional async Redis client. Falls back to in-memory stores.
-            max_sessions: Optional cap on in-memory sessions (defaults to ``SIWE_MAX_SESSIONS``).
+            redis_client: Optional async Redis client.
+            db: Optional connected PostgreSQL ``Database`` for multi-worker session persistence.
+            session_store: Optional explicit ``PostgresSIWESessionStore`` (overrides ``db``).
+            max_sessions: Optional cap on stored sessions (defaults to ``SIWE_MAX_SESSIONS``).
         """
         self.domain = domain
         self.redis = redis_client
         cap = siwe_max_sessions() if max_sessions is None else max_sessions
         self._sessions = BoundedSessionStore(max_entries=cap)
+        if session_store is not None:
+            self._pg_sessions: PostgresSIWESessionStore | None = session_store
+        elif db is not None:
+            self._pg_sessions = PostgresSIWESessionStore(db, max_entries=cap)
+        else:
+            self._pg_sessions = None
+
+    def bind_database(self, db: Database) -> None:
+        """Attach a connected PostgreSQL ``Database`` for multi-worker session persistence."""
+        self._pg_sessions = PostgresSIWESessionStore(db, max_entries=self._sessions.max_entries)
 
     def session_count(self) -> int:
         """Return the number of in-memory sessions currently retained (test hook)."""
@@ -201,11 +228,38 @@ class SIWEAuth:
         except Exception as exc:
             raise ValueError(f"Signature verification failed: {exc}") from exc
 
-        # Build session
+        # Build and store session
         session_token = secrets.token_urlsafe(48)
+
+        if self.redis is not None:
+            import json
+
+            now = datetime.now(timezone.utc)
+            expires_at = now + timedelta(seconds=_SESSION_TTL_SECONDS)
+            session_data = {
+                "address": siwe_msg.address,
+                "chain_id": siwe_msg.chain_id,
+                "session_token": session_token,
+                "expires_at": expires_at.isoformat(),
+                "created_at": now.isoformat(),
+            }
+            await self.redis.setex(
+                f"siwe:session:{session_token}",
+                _SESSION_TTL_SECONDS,
+                json.dumps(session_data),
+            )
+            return session_data
+
+        if self._pg_sessions is not None:
+            return await self._pg_sessions.set(
+                session_token,
+                address=siwe_msg.address,
+                chain_id=siwe_msg.chain_id,
+                ttl_seconds=_SESSION_TTL_SECONDS,
+            )
+
         now = datetime.now(timezone.utc)
         expires_at = now + timedelta(seconds=_SESSION_TTL_SECONDS)
-
         session_data = {
             "address": siwe_msg.address,
             "chain_id": siwe_msg.chain_id,
@@ -213,19 +267,7 @@ class SIWEAuth:
             "expires_at": expires_at.isoformat(),
             "created_at": now.isoformat(),
         }
-
-        # Store session
-        if self.redis is not None:
-            import json
-
-            await self.redis.setex(
-                f"siwe:session:{session_token}",
-                _SESSION_TTL_SECONDS,
-                json.dumps(session_data),
-            )
-        else:
-            self._sessions.set(session_token, session_data)
-
+        self._sessions.set(session_token, session_data)
         return session_data
 
     # -- session validation ----------------------------------------------------
@@ -246,6 +288,9 @@ class SIWEAuth:
             if raw is None:
                 return None
             return json.loads(raw)
+
+        if self._pg_sessions is not None:
+            return await self._pg_sessions.get(token)
 
         return self._sessions.get(token)
 

@@ -9,6 +9,7 @@ from typing import AsyncIterator
 import psycopg
 from psycopg_pool import AsyncConnectionPool
 
+from src.storage.api_state_schema import RATE_LIMIT_BUCKETS_MIGRATION, SIWE_SESSIONS_MIGRATION
 from src.storage.enrollment_inventory_schema import ENROLLMENT_INVENTORY_MIGRATION
 from src.storage.merkle_schema import ISSUANCE_MERKLE_MIGRATION
 from src.storage.pilot_schema import (
@@ -145,6 +146,8 @@ _SCHEMA_MIGRATIONS = [
     ENROLLMENT_INVENTORY_MIGRATION,
     WALLET_DELEGATION_LOG_MIGRATION,
     ISSUANCE_MERKLE_MIGRATION,
+    RATE_LIMIT_BUCKETS_MIGRATION,
+    SIWE_SESSIONS_MIGRATION,
 ]
 
 SCHEMA_VERSION = len(_SCHEMA_MIGRATIONS)
