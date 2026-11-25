@@ -5,6 +5,7 @@ import os
 from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import Field, ValidationError
 
+from src.api.config import require_record_cipher
 from src.api.middleware.rate_limit import wallet_ownership_limiter
 from src.auth.principal import Principal, TenantPrincipalDependency
 from src.protocol.transfer import Hex32, Record
@@ -15,9 +16,7 @@ from src.services.wallet_ownership import (
     WalletEvidenceNotFound,
     WalletOwnershipService,
 )
-from src.storage.keyring import load_keyring
 from src.storage.pilot import RecordConflict
-from src.storage.pilot_cipher import RecordCipher
 
 router = APIRouter(
     prefix="/wallet/ownership",
@@ -111,7 +110,7 @@ def wallet_service(request: Request, principal: Principal = Depends(TenantPrinci
     try:
         return WalletOwnershipService(
             db,
-            RecordCipher(load_keyring()),
+            require_record_cipher(request),
             principal,
             chain_id=int(os.environ["PILOT_CHAIN_ID"]),
             registry_address=os.environ["PILOT_REGISTRY_ADDRESS"],

@@ -475,6 +475,7 @@ async def test_page_and_backfill_routes_use_actual_postgresql_and_preserve_reado
     app = FastAPI()
     app.include_router(router)
     app.state.db = db
+    app.state.record_cipher = cipher()
     app.dependency_overrides[TenantPrincipalDependency] = lambda: principal()
     async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://synthetic.local") as client:
         before = await counts(db)

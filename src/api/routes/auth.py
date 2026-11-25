@@ -6,11 +6,12 @@ POST /auth/verify — Verify a signed SIWE message and return a session token.
 """
 
 import logging
-import os
+from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, Field
 
+from src.api.config import get_siwe_auth, resolve_auth_config
 from src.api.middleware.rate_limit import auth_nonce_limiter, auth_verify_limiter
 from src.auth.siwe_auth import SIWEAuth
 
@@ -22,15 +23,17 @@ router = APIRouter(prefix="/auth", tags=["auth"])
 _nonce_limiter = auth_nonce_limiter
 _verify_limiter = auth_verify_limiter
 
-# Module-level SIWE handler (lazy init)
+# Module-level SIWE handler fallback when lifespan/app.state is not used
 _siwe: SIWEAuth | None = None
 
 
-def _get_siwe() -> SIWEAuth:
+def _get_siwe(request: Optional[Request] = None) -> SIWEAuth:
     global _siwe
+    if request is not None:
+        return get_siwe_auth(request)
     if _siwe is None:
-        domain = os.environ.get("SIWE_DOMAIN", "localhost")
-        _siwe = SIWEAuth(domain=domain)
+        config = resolve_auth_config(None)
+        _siwe = SIWEAuth(domain=config.siwe_domain)
     return _siwe
 
 
@@ -61,18 +64,18 @@ class VerifyResponse(BaseModel):
 
 
 @router.get("/nonce", response_model=NonceResponse, summary="Generate SIWE nonce")
-async def get_nonce(_rl: None = Depends(_nonce_limiter)):
+async def get_nonce(request: Request, _rl: None = Depends(_nonce_limiter)):
     """Generate a random nonce for constructing a SIWE message.
 
     The nonce is valid for 5 minutes and can only be used once.
     """
-    siwe = _get_siwe()
+    siwe = _get_siwe(request)
     nonce = await siwe.generate_nonce()
     return NonceResponse(nonce=nonce)
 
 
 @router.post("/verify", response_model=VerifyResponse, summary="Verify SIWE signature")
-async def verify_signature(body: VerifyRequest, _rl: None = Depends(_verify_limiter)):
+async def verify_signature(body: VerifyRequest, request: Request, _rl: None = Depends(_verify_limiter)):
     """Verify a signed SIWE message and issue a session token.
 
     The client must:
@@ -83,7 +86,7 @@ async def verify_signature(body: VerifyRequest, _rl: None = Depends(_verify_limi
 
     On success, returns a session token usable as a Bearer token.
     """
-    siwe = _get_siwe()
+    siwe = _get_siwe(request)
     try:
         session = await siwe.verify(body.message, body.signature)
     except ValueError as exc:

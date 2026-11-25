@@ -1,33 +1,22 @@
 """Tenant-authorized internal observations and read-only investigation."""
 
-import os
 import time
 
 from fastapi import APIRouter, Depends, HTTPException, Request
-from pydantic import Field
 
+from src.api.config import AuthorityConfig, EventConfig, LinkConfig, get_event_config, require_record_cipher
 from src.api.middleware.rate_limit import pilot_events_limiter
 from src.api.request_body import read_private_body
 from src.auth.principal import Principal, TenantPrincipalDependency
-from src.protocol.transfer import Record
 from src.prover.pilot_artifacts import strict_json
 from src.reconciliation.events import SourceEvent, TransferScope
-from src.reconciliation.provider_links import ScopedProviderLink
 from src.reconciliation.queue import QueueRequest
-from src.services.event_ingestion import EventAuthority, EventAuthorityError, EventIngestionService
-from src.storage.keyring import load_keyring
+from src.services.event_ingestion import EventAuthorityError, EventIngestionService
 from src.storage.pilot import RecordConflict
-from src.storage.pilot_cipher import RecordCipher
+
+__all__ = ["AuthorityConfig", "LinkConfig", "event_service", "router"]
 
 router = APIRouter(prefix="/pilot/events", tags=["pilot-events"], dependencies=[Depends(pilot_events_limiter)])
-
-
-class AuthorityConfig(Record):
-    authorities: tuple[EventAuthority, ...] = Field(max_length=256)
-
-
-class LinkConfig(Record):
-    links: tuple[ScopedProviderLink, ...] = Field(max_length=256)
 
 
 def event_service(request: Request, principal: Principal, *, ingestion: bool) -> EventIngestionService:
@@ -35,17 +24,16 @@ def event_service(request: Request, principal: Principal, *, ingestion: bool) ->
     if db is None or not db.is_ready:
         raise HTTPException(status_code=503, detail="Pilot database is unavailable")
     try:
+        config = get_event_config(request)
+        if not isinstance(config, EventConfig):
+            raise RuntimeError("Pilot event configuration is not installed on app.state")
         authorities = ()
         if ingestion:
-            raw = os.environ["PILOT_EVENT_AUTHORITIES"].encode()
-            strict_json(raw, limit=65536)
-            authorities = AuthorityConfig.model_validate_json(raw).authorities
-        links = ()
-        if not ingestion and "PILOT_INVESTIGATION_LINKS" in os.environ:
-            raw_links = os.environ["PILOT_INVESTIGATION_LINKS"].encode()
-            strict_json(raw_links, limit=65536)
-            links = LinkConfig.model_validate_json(raw_links).links
-        cipher = RecordCipher(load_keyring())
+            if config.authorities is None:
+                raise KeyError("PILOT_EVENT_AUTHORITIES")
+            authorities = config.authorities
+        links = () if ingestion else config.links
+        cipher = require_record_cipher(request)
         return EventIngestionService(db, cipher, principal, authorities=authorities, links=links)
     except (KeyError, ValueError, TypeError, RuntimeError, RecursionError):
         raise HTTPException(status_code=503, detail="Pilot event configuration is unavailable") from None

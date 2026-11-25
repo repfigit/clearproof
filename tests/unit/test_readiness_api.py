@@ -23,6 +23,7 @@ from src.prover.pilot_verifier import PilotPairingVerifier
 from src.services.proof_inspection import CurrentStatementConfiguration
 from src.services.proof_jobs import ProvingTarget
 from src.storage.keyring import KeyRing, KeyVersion
+from src.storage.pilot_cipher import RecordCipher
 from tests.unit.test_pilot_current import current_case as current_case  # noqa: F401
 
 
@@ -58,12 +59,12 @@ async def api(current_case, tmp_path, monkeypatch):
     app = FastAPI()
     app.include_router(route.router)
     app.state.db = database
+    app.state.record_cipher = RecordCipher(KeyRing(KeyVersion("current", b"a" * 32, 0)))
     app.state.pilot_inspection_targets = {(who.tenant_id, "target-a"): route.InspectionTarget(config, verifier)}
     app.state.pilot_proving_targets = {
         (who.tenant_id, "target-a"): ProvingTarget(config, prover, SimpleNamespace(root=config.sanctions.snapshot.root))
     }
     app.dependency_overrides[TenantPrincipalDependency] = lambda: who
-    monkeypatch.setattr(route, "load_keyring", lambda: KeyRing(KeyVersion("current", b"a" * 32, 0)))
     monkeypatch.setattr(route.time, "time", lambda: case["now"])
     monkeypatch.setattr(PilotPairingVerifier, "inspect", AsyncMock(side_effect=AssertionError("Unexpected pairing")))
     monkeypatch.setattr(PilotProver, "prove", AsyncMock(side_effect=AssertionError("Unexpected proving")))
@@ -212,19 +213,15 @@ async def test_database_outage_and_timeout_are_bounded_and_redacted(api, failure
 @pytest.mark.parametrize("failure", ["keyring", "open", "mismatch"])
 async def test_key_failure_does_not_expose_secret_or_generate_a_replacement(api, monkeypatch, failure):
     if failure == "keyring":
-
-        def fail():
-            raise RuntimeError("SYNTHETIC-PRIVATE-KEY")
-
-        monkeypatch.setattr(route, "load_keyring", fail)
+        api.app.state.record_cipher = None
     elif failure == "open":
 
         def fail(*args):
             raise RuntimeError("SYNTHETIC-PRIVATE-KEY")
 
-        monkeypatch.setattr(route.RecordCipher, "open", fail)
+        monkeypatch.setattr(RecordCipher, "open", fail)
     else:
-        monkeypatch.setattr(route.RecordCipher, "open", lambda *args: {})
+        monkeypatch.setattr(RecordCipher, "open", lambda *args: {})
     response = await api.client.get("/pilot/readiness/inspection/target-a")
     assert response.status_code == 503 and response.json()["checks"]["storage_key"] is False
     assert "PRIVATE" not in response.text

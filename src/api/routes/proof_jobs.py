@@ -4,13 +4,13 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import JSONResponse
 from psycopg import Error as DatabaseError
 
+from src.api.config import require_record_cipher
 from src.api.middleware.rate_limit import pilot_proof_jobs_limiter
 from src.api.request_body import read_private_body
 from src.auth.principal import Principal, TenantPrincipalDependency
 from src.prover.pilot_artifacts import strict_json
 from src.services.proof_jobs import GenerationBody, ProofJobService
-from src.storage.keyring import load_keyring
-from src.storage.pilot_cipher import RecordCipher, RecordIntegrityError
+from src.storage.pilot_cipher import RecordIntegrityError
 from src.storage.proof_jobs import ProofJobError, authorize
 
 router = APIRouter(
@@ -29,7 +29,7 @@ def service(request: Request, principal: Principal):
         raise HTTPException(status_code=503, detail="Pilot database is unavailable")
     try:
         return ProofJobService(
-            db, RecordCipher(load_keyring()), getattr(request.app.state, "pilot_proving_targets", None)
+            db, require_record_cipher(request), getattr(request.app.state, "pilot_proving_targets", None)
         )
     except (ValueError, TypeError, KeyError, RuntimeError):
         raise HTTPException(status_code=503, detail="Pilot proving configuration is unavailable") from None

@@ -18,6 +18,7 @@ from src.auth.principal import Principal, TenantPrincipalDependency
 from src.services.proof_inspection import CurrentStatementConfiguration
 from src.services.proof_jobs import ProvingTarget
 from src.storage.keyring import KeyRing, KeyVersion
+from src.storage.pilot_cipher import RecordCipher
 from src.storage.proof_jobs import ProofJobQueue
 from tests.integration.test_pilot_storage import cipher
 from tests.integration.test_pilot_storage import db as db
@@ -43,6 +44,7 @@ async def api(db, monkeypatch):
     app = FastAPI()
     app.include_router(route.router)
     app.state.db = db
+    app.state.record_cipher = RecordCipher(KeyRing(KeyVersion("current", b"a" * 32, 0)))
     who = Principal(tenant_id=credential.tenant_id, actor_id="job-holder", roles=ROLES)
     app.dependency_overrides[TenantPrincipalDependency] = lambda: who
     app.state.pilot_proving_targets = {
@@ -50,7 +52,6 @@ async def api(db, monkeypatch):
             CurrentStatementConfiguration(**inputs), fake, PilotSanctionsTree([])
         )
     }
-    monkeypatch.setattr(route, "load_keyring", lambda: KeyRing(KeyVersion("current", b"a" * 32, 0)))
     body = {
         "target_id": "synthetic-target",
         "credential_id": credential.credential_nonce,
@@ -224,12 +225,12 @@ async def test_authentication_is_required_before_job_lookup(api):
     assert response.status_code == 401
 
 
-async def test_missing_encryption_keyring_is_operator_failure(api, monkeypatch):
-    client, _, _, body, _ = api
-
-    def failed():
-        raise RuntimeError("PRIVATE-KEYRING-DETAIL")
-
-    monkeypatch.setattr(route, "load_keyring", failed)
-    response = await client.post("/pilot/proof/jobs", json=body)
+async def test_missing_encryption_keyring_is_operator_failure(api):
+    client, app, _, body, _ = api
+    original = app.state.record_cipher
+    app.state.record_cipher = None
+    try:
+        response = await client.post("/pilot/proof/jobs", json=body)
+    finally:
+        app.state.record_cipher = original
     assert response.status_code == 503 and "PRIVATE" not in response.text

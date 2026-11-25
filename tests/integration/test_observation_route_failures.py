@@ -8,6 +8,8 @@ from fastapi import FastAPI
 from httpx import ASGITransport, AsyncClient
 
 from src.auth.principal import Principal, TenantPrincipalDependency
+from src.storage.keyring import KeyRing, KeyVersion
+from src.storage.pilot_cipher import RecordCipher
 
 
 @pytest.fixture
@@ -23,6 +25,7 @@ def route_case(monkeypatch):
     )
     app.dependency_overrides[TenantPrincipalDependency] = lambda: principal
     app.state.db = SimpleNamespace(is_ready=True)
+    app.state.record_cipher = RecordCipher(KeyRing(KeyVersion("current", b"a" * 32, 0)))
     return app, pilot_proof
 
 
@@ -61,7 +64,7 @@ async def test_observation_routes_reject_invalid_encryption_configuration(
     service_name,
 ):
     app, routes = route_case
-    monkeypatch.delenv("PII_MASTER_KEY")
+    app.state.record_cipher = None
     called = AsyncMock()
     monkeypatch.setattr(routes, service_name, called)
     response = await post(app, operation, json=body)
@@ -201,7 +204,7 @@ async def test_inspection_configuration_rejects_before_service(inspection_case, 
     elif failure == "unready-db":
         app.state.db.is_ready = False
     else:
-        monkeypatch.delenv("PII_MASTER_KEY")
+        app.state.record_cipher = None
     response = await inspect_post(app, body)
     assert response.status_code == status
     assert response.json() == {"detail": detail}

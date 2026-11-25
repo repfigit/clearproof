@@ -2,10 +2,9 @@
 
 from __future__ import annotations
 
-import os
 from typing import Literal
 
-from fastapi import Depends, HTTPException
+from fastapi import Depends, HTTPException, Request
 from pydantic import Field, ValidationError, model_validator
 
 from src.api.middleware.auth import JWTAuthDependency
@@ -80,16 +79,18 @@ def principal_from_claims(claims: dict) -> Principal:
         raise HTTPException(status_code=403, detail="Invalid tenant-scoped authorization") from exc
 
 
-async def TenantPrincipalDependency(claims: dict = Depends(JWTAuthDependency)) -> Principal:  # noqa: N802
-    from src.api.middleware import auth
+async def TenantPrincipalDependency(request: Request, claims: dict = Depends(JWTAuthDependency)) -> Principal:  # noqa: N802
+    from src.api.config import resolve_auth_config
 
-    if auth.AUTH_MODE.lower() == "api-key":
+    config = resolve_auth_config(request)
+
+    if config.auth_mode.lower() == "api-key":
         # A static development key maps to exactly one operator-selected tenant.
         # Header/body/query parameters cannot supply these scopes.
         claims = {
-            "tenant_id": os.getenv("API_KEY_TENANT_ID"),
-            "actor_id": os.getenv("API_KEY_ACTOR_ID"),
-            "roles": [r for r in os.getenv("API_KEY_ROLES", "").split(",") if r],
-            "issuer_dids": [d for d in os.getenv("API_KEY_ISSUER_DIDS", "").split(",") if d],
+            "tenant_id": config.api_key_tenant_id,
+            "actor_id": config.api_key_actor_id,
+            "roles": list(config.api_key_roles),
+            "issuer_dids": list(config.api_key_issuer_dids),
         }
     return principal_from_claims(claims)

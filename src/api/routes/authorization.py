@@ -4,6 +4,7 @@ from dataclasses import dataclass
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 
+from src.api.config import require_record_cipher
 from src.api.middleware.rate_limit import pilot_authorization_limiter
 from src.api.routes.pilot_proof import EvaluationBody, InspectionTarget, inspection_time, prepare_inspection
 from src.auth.principal import Principal, TenantPrincipalDependency
@@ -16,9 +17,8 @@ from src.sar.pilot_envelope import RecipientTrustStore
 from src.services.authorization_input import SealedAuthorizationInformation
 from src.services.enrollment import EnrollmentNotFound
 from src.services.proof_authorization import AuthorizationRejected, ProofAuthorizationService
-from src.storage.keyring import load_keyring
 from src.storage.pilot import RecordConflict, ReplayConflict
-from src.storage.pilot_cipher import RecordCipher, RecordIntegrityError
+from src.storage.pilot_cipher import RecordIntegrityError
 
 router = APIRouter(
     prefix="/pilot/proof",
@@ -70,7 +70,7 @@ async def authorize_proof(request: Request, principal: Principal = Depends(Tenan
         if target.verifier.artifacts.manifest.assurance != "development-unapproved":
             raise ValueError("Unsupported authorization assurance")
         pii, approval = target.information.open(
-            RecordCipher(load_keyring()),
+            require_record_cipher(request),
             tenant_id=principal.tenant_id,
             target_id=body.target_id,
         )

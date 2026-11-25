@@ -11,6 +11,8 @@ from fastapi import FastAPI
 from src.api.routes import enrollment as routes
 from src.auth.principal import Principal, TenantPrincipalDependency
 from src.services.enrollment_inventory import EnrollmentInventoryPage, EnrollmentPageRequest, InventoryAudience
+from src.storage.keyring import KeyRing, KeyVersion
+from src.storage.pilot_cipher import RecordCipher
 
 
 @pytest.fixture
@@ -29,6 +31,7 @@ async def api(monkeypatch):
     app.include_router(routes.router)
     app.dependency_overrides[TenantPrincipalDependency] = lambda: who
     app.state.db = SimpleNamespace(is_ready=True)
+    app.state.record_cipher = RecordCipher(KeyRing(KeyVersion("current", b"a" * 32, 0)))
     page = AsyncMock(return_value=EnrollmentInventoryPage(checked_at=120, entries=(), next_cursor=None))
     monkeypatch.setattr(routes.EnrollmentInventoryService, "page", page)
     async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://synthetic.local") as client:
@@ -90,7 +93,7 @@ async def test_unavailable_or_inconsistent_inventory_is_redacted(api, monkeypatc
     elif failure == "closed-db":
         api.app.state.db.is_ready = False
     elif failure == "missing-key":
-        monkeypatch.delenv("PII_MASTER_KEY")
+        api.app.state.record_cipher = None
     elif failure == "bad-chain":
         monkeypatch.setenv("PILOT_CHAIN_ID", "SYNTHETIC-PRIVATE-DETAIL")
     elif failure == "bad-registry":
@@ -157,7 +160,7 @@ async def test_backfill_rejects_ambiguous_selectors_and_redacts_failures(api, mo
     elif failure == "database":
         api.app.state.db = None
     elif failure == "configuration":
-        monkeypatch.delenv("PII_MASTER_KEY")
+        api.app.state.record_cipher = None
     response = await api.client.post(url, **kwargs)
     assert response.status_code == code and "SYNTHETIC-PRIVATE-EVIDENCE" not in response.text
     if failure != "source":

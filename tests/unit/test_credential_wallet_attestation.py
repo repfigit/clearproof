@@ -35,15 +35,14 @@ async def api(monkeypatch):
     app.dependency_overrides[JWTAuthDependency] = lambda: {"sub": "test"}
     app.dependency_overrides[get_credential_registry] = lambda: registry
     app.state.db = SimpleNamespace(is_ready=True)
+    app.state.record_cipher = MagicMock()
     ownership = MagicMock()
     ownership.assert_active = AsyncMock()
-    with patch.object(routes, "load_keyring", return_value=None):
-        with patch.object(routes, "RecordCipher", return_value=MagicMock()):
-            with patch.object(routes, "WalletOwnershipService", return_value=ownership) as service_cls:
-                async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://test") as client:
-                    yield SimpleNamespace(
-                        client=client, ownership=ownership, registry=registry, app=app, service_cls=service_cls
-                    )
+    with patch.object(routes, "WalletOwnershipService", return_value=ownership) as service_cls:
+        async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://test") as client:
+            yield SimpleNamespace(
+                client=client, ownership=ownership, registry=registry, app=app, service_cls=service_cls
+            )
 
 
 async def test_issue_with_wallet_attestation_marks_credential(api, monkeypatch):
