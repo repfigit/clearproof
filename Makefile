@@ -1,4 +1,4 @@
-.PHONY: install dev lint format test test-unit test-integration test-compliance coverage build-sanctions-tree build-pilot-sanctions-tree verify-pilot-sanctions-tree publish-pilot-sanctions-head update-sanctions-oracle deploy deploy-pilot relay-sanctions refresh-and-relay-sanctions regen-protobufs check-protobufs
+.PHONY: install dev lint format test test-unit test-integration test-compliance coverage build-native-poseidon build-sanctions-tree build-pilot-sanctions-tree verify-pilot-sanctions-tree publish-pilot-sanctions-head update-sanctions-oracle deploy deploy-pilot relay-sanctions refresh-and-relay-sanctions regen-protobufs check-protobufs
 
 RUFF_PATHS := src tests scripts
 
@@ -34,6 +34,10 @@ test-compliance:
 # checkpoint/mirror evidence; without those, gated tests skip and the gate will not reach 100%.
 coverage:
 	uv run python -m pytest tests --cov=src --cov-branch --cov-report=term -q
+
+# Optional native C Poseidon accelerator (falls back to pure Python when absent)
+build-native-poseidon:
+	uv run python scripts/build_native_poseidon.py
 
 # Legacy circuit pins sanctions_tree_depth=20 (ComplianceProof(20, 10) in
 # circuits/compliance.circom); always build the artifact at that depth.
