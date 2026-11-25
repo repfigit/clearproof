@@ -129,12 +129,21 @@ class ProofObservationService(ProofInspectionService):
             },
         )
 
+        cached = await self._store.lookup_idempotent("observe-proof", idempotency_key, request)
+        if cached is not None:
+            return cached
+
+        started = time.monotonic_ns()
+        inspection, _ = await self._evaluate_outside_lock(
+            credential_id, proof, signals, references, fact_trust=fact_trust, now=now
+        )
+        duration = time.monotonic_ns() - started
+
         async def persist(tx):
-            started = time.monotonic_ns()
-            inspection, decision = await self._evaluate_transaction(
-                tx, credential_id, proof, signals, references, fact_trust=fact_trust, now=now
+            external, _ = await self._revalidate_evaluation_state(
+                tx, credential_id, references, fact_trust=fact_trust, now=now
             )
-            duration = time.monotonic_ns() - started
+            checked, decision = self._finish_evaluation(external, inspection, proof, signals, now=now)
             record = TimedObservationRecord(
                 evaluation_duration_ns=duration,
                 **{**request, "fact_ids": references},
@@ -142,11 +151,11 @@ class ProofObservationService(ProofInspectionService):
                 actor_id=self._principal.actor_id,
                 request_digest=request_digest,
                 policy_digest=self._context.policy_digest,
-                manifest_digest=inspection.manifest_digest,
-                proof_profile=inspection.proof_profile,
+                manifest_digest=checked.manifest_digest,
+                proof_profile=checked.proof_profile,
                 assurance=self._verifier.artifacts.manifest.assurance,
                 observed_at=now,
-                cryptographic_valid=inspection.cryptographic_valid,
+                cryptographic_valid=checked.cryptographic_valid,
                 policy=decision,
             )
             await tx.put("observation", record.digest, record.model_dump(mode="json"))

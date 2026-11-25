@@ -70,16 +70,37 @@ class ProofAuthorizationService(ProofInspectionService):
         }
         nullifier = format(int(signals[3]), "064x")
 
+        idempotent_request = {
+            **request,
+            "payload_digest": hashlib.sha256(pii).hexdigest(),
+            "information_approval": information_approval.model_dump(mode="json"),
+        }
+        cached = await self._store.lookup_idempotent("consume-proof", idempotency_key, idempotent_request)
+        if cached is not None:
+            return cached
+
+        # Pre-check nullifier and information approval before running slow pairing
+        # outside the tenant advisory lock.
+        async with self._store.transaction() as tx:
+            if await tx.is_consumed(nullifier):
+                raise ReplayConflict("Authorization is already consumed")
+        information_trust.verify(
+            information_approval, pii, self._inputs["transfer"], self._context, credential_id=credential_id, now=now
+        )
+        inspection, pre_decision = await self._evaluate_outside_lock(
+            credential_id, proof, signals, fact_ids, fact_trust=fact_trust, now=now
+        )
+        if not inspection.cryptographic_valid or pre_decision is None or pre_decision.outcome != "ALLOW":
+            raise AuthorizationRejected("Current proof and policy must yield ALLOW")
+
         async def persist(tx):
             if await tx.is_consumed(nullifier):
                 raise ReplayConflict("Authorization is already consumed")
-            information_trust.verify(
-                information_approval, pii, self._inputs["transfer"], self._context, credential_id=credential_id, now=now
+            external, _ = await self._revalidate_evaluation_state(
+                tx, credential_id, fact_ids, fact_trust=fact_trust, now=now
             )
-            inspection, decision = await self._evaluate_transaction(
-                tx, credential_id, proof, signals, fact_ids, fact_trust=fact_trust, now=now
-            )
-            if not inspection.cryptographic_valid or decision is None or decision.outcome != "ALLOW":
+            checked, decision = self._finish_evaluation(external, inspection, proof, signals, now=now)
+            if decision is None or decision.outcome != "ALLOW":
                 raise AuthorizationRejected("Current proof and policy must yield ALLOW")
             policy = self._inputs["policy_trust"].for_transfer(
                 self._inputs["transfer"], self._context, tenant_id=self._principal.tenant_id, now=now
@@ -112,8 +133,8 @@ class ProofAuthorizationService(ProofInspectionService):
                 "transfer_digest": self._context.transfer_digest,
                 "context_digest": self._context.digest,
                 "policy_digest": decision.policy_digest,
-                "manifest_digest": inspection.manifest_digest,
-                "proof_profile": inspection.proof_profile,
+                "manifest_digest": checked.manifest_digest,
+                "proof_profile": checked.proof_profile,
                 "nullifier": nullifier,
                 "authorized_at": now,
                 "expires_at": int(signals[5]),
@@ -147,13 +168,4 @@ class ProofAuthorizationService(ProofInspectionService):
 
         # Payload fingerprints stay inside the encrypted idempotency request digest;
         # public identifiers bind randomized ciphertext, never a guessable PII hash.
-        return await self._store.run_idempotent(
-            "consume-proof",
-            idempotency_key,
-            {
-                **request,
-                "payload_digest": hashlib.sha256(pii).hexdigest(),
-                "information_approval": information_approval.model_dump(mode="json"),
-            },
-            persist,
-        )
+        return await self._store.run_idempotent("consume-proof", idempotency_key, idempotent_request, persist)

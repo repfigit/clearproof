@@ -488,3 +488,237 @@ async def test_extension_retry_rejects_conflicting_retained_fields(db, enrolled)
     with pytest.raises(RecordConflict, match="Stored wallet extension differs"):
         await service.issue_extension(challenge.nonce, now=1201)
     assert await service.store.get("wallet-extension", challenge.nonce) == conflicting
+
+
+async def test_slow_wallet_rpc_probes_do_not_block_concurrent_tenant_writer(db, enrolled):
+    """Concurrency regression: holding slow account_probe/chain_verifier must not hold PilotStore.transaction()."""
+    wallet, consent, principal, _ = enrolled
+    probe_entered, probe_release = asyncio.Event(), asyncio.Event()
+    verifier_entered, verifier_release = asyncio.Event(), asyncio.Event()
+
+    async def slow_probe(_address: str) -> dict:
+        probe_entered.set()
+        await probe_release.wait()
+        return {"delegated": False, "delegate": None, "indicator_malformed": False, "has_code": True}
+
+    async def slow_verifier(_address: str, _message: str, _signature: str) -> tuple[bool, str]:
+        verifier_entered.set()
+        await verifier_release.wait()
+        return True, "erc-1271"
+
+    service = WalletOwnershipService(
+        db,
+        cipher(),
+        principal,
+        chain_id=consent.chain_id,
+        registry_address=consent.registry_address,
+        account_probe=slow_probe,
+        chain_verifier=slow_verifier,
+        delegation_recheck_seconds=1,
+    )
+    challenge = await service.challenge(consent.credential.credential_nonce, now=1100, siwe_domain="issuer.example")
+
+    verify_task = asyncio.create_task(service.verify(challenge.nonce, "0x" + "ab" * 120, now=1200))
+    try:
+        # 1. While account_probe is stalled in verify(), a second tenant writer commits without waiting.
+        await asyncio.wait_for(probe_entered.wait(), 5)
+        writer_challenge = await asyncio.wait_for(
+            service.challenge(consent.credential.credential_nonce, now=1500, siwe_domain="issuer.example"),
+            timeout=2.0,
+        )
+        assert writer_challenge.nonce != challenge.nonce
+
+        # 2. Release probe; while chain_verifier is stalled, another tenant writer commits without waiting.
+        probe_release.set()
+        await asyncio.wait_for(verifier_entered.wait(), 5)
+        writer_challenge_2 = await asyncio.wait_for(
+            service.challenge(consent.credential.credential_nonce, now=1900, siwe_domain="issuer.example"),
+            timeout=2.0,
+        )
+        assert writer_challenge_2.nonce not in (challenge.nonce, writer_challenge.nonce)
+
+        verifier_release.set()
+        attestation = await asyncio.wait_for(verify_task, 5)
+        assert attestation.method == "erc-1271"
+
+        # 3. While standing delegation re-check is stalled in recheck_delegation/status/assert_active/issue_extension,
+        # a concurrent tenant writer commits without waiting for the slow RPC probe.
+        for label, call_factory, writer_now in (
+            ("recheck", lambda: service.recheck_delegation(attestation.attestation_id, now=1210), 2300),
+            ("status", lambda: service.status(attestation.attestation_id, now=1220), 2700),
+            ("assert_active", lambda: service.assert_active(attestation.attestation_id, now=1230), 3100),
+            ("issue_extension", lambda: service.issue_extension(attestation.attestation_id, now=1240), 3500),
+        ):
+            probe_entered.clear()
+            probe_release.clear()
+            slow_task = asyncio.create_task(call_factory())
+            try:
+                await asyncio.wait_for(probe_entered.wait(), 5)
+                concurrent = await asyncio.wait_for(
+                    service.challenge(
+                        consent.credential.credential_nonce, now=writer_now, siwe_domain="issuer.example"
+                    ),
+                    timeout=2.0,
+                )
+                assert concurrent.nonce != challenge.nonce, f"writer blocked during {label}"
+                probe_release.set()
+                await asyncio.wait_for(slow_task, 5)
+            finally:
+                probe_release.set()
+                if not slow_task.done():
+                    slow_task.cancel()
+                await asyncio.gather(slow_task, return_exceptions=True)
+    finally:
+        probe_release.set()
+        verifier_release.set()
+        if not verify_task.done():
+            verify_task.cancel()
+        await asyncio.gather(verify_task, return_exceptions=True)
+
+
+async def test_v2_verify_rechecks_state_and_cas_after_slow_rpc_probe(db, enrolled):
+    """Concurrency regression: concurrent v2 verify calls race cleanly via CAS and detect expiry/revocation."""
+    wallet, consent, principal, enrollment_service = enrolled
+    entered, release = asyncio.Event(), asyncio.Event()
+    calls = 0
+
+    async def gated_probe(_address: str) -> dict:
+        nonlocal calls
+        calls += 1
+        if calls == 1:
+            entered.set()
+            await release.wait()
+        return {"delegated": False, "delegate": None, "indicator_malformed": False, "has_code": False}
+
+    service = WalletOwnershipService(
+        db,
+        cipher(),
+        principal,
+        chain_id=consent.chain_id,
+        registry_address=consent.registry_address,
+        account_probe=gated_probe,
+        delegation_recheck_seconds=1,
+    )
+    # Concurrent verify for the same nonce: only one wins the immutable CAS insert.
+    c1 = await service.challenge(consent.credential.credential_nonce, now=1100, siwe_domain="issuer.example")
+    sig1 = sign(wallet, c1)
+    t1 = asyncio.create_task(service.verify(c1.nonce, sig1, now=1200))
+    await asyncio.wait_for(entered.wait(), 5)
+    t2 = asyncio.create_task(service.verify(c1.nonce, sig1, now=1200))
+    winner = await asyncio.wait_for(t2, 5)
+    assert winner.attestation_id == c1.nonce
+    release.set()
+    with pytest.raises(RecordConflict):
+        await asyncio.wait_for(t1, 5)
+
+    # Concurrent delegation recheck: second commit sees the fresh entry appended while it probed.
+    c2 = await service.challenge(consent.credential.credential_nonce, now=1500, siwe_domain="issuer.example")
+    sig2 = sign(wallet, c2)
+    calls = 10  # do not block on verify
+    att2 = await service.verify(c2.nonce, sig2, now=1510)
+    entered.clear()
+    release.clear()
+    calls = 0
+    r1 = asyncio.create_task(service.recheck_delegation(att2.attestation_id, now=1520))
+    await asyncio.wait_for(entered.wait(), 5)
+    r2 = await asyncio.wait_for(service.recheck_delegation(att2.attestation_id, now=1520), 5)
+    assert len(r2["history"]) == 1
+    release.set()
+    r1_result = await asyncio.wait_for(r1, 5)
+    # r1 detects that a fresh entry within the interval was already committed.
+    assert len(r1_result["history"]) == 1
+
+    # Concurrent revocation during v2 verify rejects at commit re-check without creating an attestation.
+    c3 = await service.challenge(consent.credential.credential_nonce, now=1900, siwe_domain="issuer.example")
+    sig3 = sign(wallet, c3)
+    entered.clear()
+    release.clear()
+    calls = 0
+    v3 = asyncio.create_task(service.verify(c3.nonce, sig3, now=1910))
+    await asyncio.wait_for(entered.wait(), 5)
+    await enrollment_service.revoke(
+        RevocationRequest(
+            credential_id=consent.credential.credential_nonce,
+            idempotency_key="revoke-during-v2-verify",
+            reason_code="test",
+        ),
+        now=1910,
+    )
+    release.set()
+    with pytest.raises(EnrollmentIneligible):
+        await asyncio.wait_for(v3, 5)
+    assert await service.store.get("wallet-attestation", c3.nonce) is None
+
+
+async def test_v2_recheck_and_verify_commit_edge_branches(db, enrolled):
+    """Cover commit-time edge branches: stale concurrent recheck, missing delegation, v2 expiry/cred change."""
+    wallet, consent, principal, _ = enrolled
+    calls = 0
+    entered, release = asyncio.Event(), asyncio.Event()
+
+    async def probe(_address: str) -> dict:
+        nonlocal calls
+        calls += 1
+        if calls == 2:
+            entered.set()
+            await release.wait()
+        return {"delegated": False, "delegate": None, "indicator_malformed": False, "has_code": False}
+
+    service = WalletOwnershipService(
+        db,
+        cipher(),
+        principal,
+        chain_id=consent.chain_id,
+        registry_address=consent.registry_address,
+        account_probe=probe,
+        delegation_recheck_seconds=10,
+    )
+    # 1. _recheck_delegation_outside_lock when attestation has no delegation config -> returns None.
+    c_v1 = await service.challenge(consent.credential.credential_nonce, now=1100)
+    att_v1 = await service.verify(c_v1.nonce, sign(wallet, c_v1), now=1110)
+    none_recheck = await service._recheck_delegation(None, att_v1, 1120)
+    assert none_recheck == {"delegation": None, "history": []}
+
+    # 2. Concurrent recheck where the concurrent writer wrote a stale/unchecked entry -> still appends fresh entry.
+    c_v2 = await service.challenge(consent.credential.credential_nonce, now=1500, siwe_domain="issuer.example")
+    att_v2 = await service.verify(c_v2.nonce, sign(wallet, c_v2), now=1510)
+    # call 1 happened in verify; call 2 will pause in recheck_delegation.
+    recheck_task = asyncio.create_task(service.recheck_delegation(att_v2.attestation_id, now=1530))
+    await asyncio.wait_for(entered.wait(), 5)
+    # Write an unchecked entry while the probe is paused so current_rev != expected_revision
+    # and latest["checked"] is False.
+    async with service.store.transaction() as tx:
+        await tx.put(
+            "wallet-delegation-log",
+            att_v2.attestation_id,
+            {"entries": [{"checked": False, "delegated": None, "delegate": None, "checked_at": 1525, "reason": "err"}]},
+        )
+    release.set()
+    res = await asyncio.wait_for(recheck_task, 5)
+    assert len(res["history"]) == 2 and res["delegation"]["checked"] is True
+
+    # 3. v2 verify expiring between read tx and commit tx (clock advances to expires_at).
+    c_exp = await service.challenge(consent.credential.credential_nonce, now=1900, siwe_domain="issuer.example")
+    sig_exp = sign(wallet, c_exp)
+    clock_vals = iter((1910, c_exp.expires_at))
+    service.clock = lambda: next(clock_vals)
+    with pytest.raises(WalletOwnershipError, match="expired during verification"):
+        await service.verify(c_exp.nonce, sig_exp)
+
+    # 4. v2 verify where credential changes between read tx and commit tx.
+    c_chg = await service.challenge(consent.credential.credential_nonce, now=2300, siwe_domain="issuer.example")
+    sig_chg = sign(wallet, c_chg)
+    orig_cred = service._credential
+    cred_calls = 0
+
+    async def altered_cred(tx, cred_id, at):
+        nonlocal cred_calls
+        cred_calls += 1
+        real = await orig_cred(tx, cred_id, at)
+        if cred_calls == 2:
+            return real.model_copy(update={"jurisdiction": "CA" if real.jurisdiction != "CA" else "US"})
+        return real
+
+    service._credential = altered_cred
+    with pytest.raises(WalletOwnershipError, match="Challenge credential changed"):
+        await service.verify(c_chg.nonce, sig_chg, now=2310)
