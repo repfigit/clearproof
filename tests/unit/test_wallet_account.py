@@ -4,23 +4,31 @@ Uses a fake AsyncWeb3 double — no network, no real RPC.
 """
 
 import pytest
+from eth_abi import decode as abi_decode
+from eth_abi import encode as abi_encode
 
 from src.chain.wallet_account import (
+    _ERC6492_DEPLOYLESS_BYTECODE,
     ERC_1271_MAGIC_VALUE,
     ERC_6492_MAGIC_SUFFIX,
     EoaVerificationRequired,
     WalletAccountRPCError,
     account_code,
     delegation_indicator,
+    is_erc6492_signature,
     parse_erc6492,
     verify_signature,
 )
 
 MAGIC_RETURN = bytes.fromhex("1626ba7e" + "00" * 28)
+ERC6492_VALID_RETURN = (1).to_bytes(32, "big")
+ERC6492_INVALID_RETURN = (0).to_bytes(32, "big")
 DIGEST = bytes(range(32))
 ADDRESS = "0x" + "ab" * 20
 DELEGATE = "0x" + "cd" * 20
-CONTRACT = "0x" + "11" * 20
+FACTORY = "0x" + "11" * 20
+FACTORY_CALLDATA = "0x" + "de" * 12
+INNER_SIG = "0x" + "45" * 65
 
 
 class FakeEth:
@@ -51,14 +59,16 @@ class FakeW3:
 
 
 def valid_indicator_code(delegate=DELEGATE):
-    return "0xef0100" + delegate[2:] + "000000"
+    # Pectra EIP-7702 delegation designation: 0xef0100 || 20-byte address (23 bytes total).
+    return "0xef0100" + delegate[2:]
 
 
-def make_erc6492_signature(inner="0x" + "45" * 65, contract=CONTRACT, data="0x" + "ff" * 10):
-    data_bytes = bytes.fromhex(data[2:])
-    length_hex = len(data_bytes).to_bytes(32, "big").hex()
-    payload = inner[2:] + contract[2:] + data_bytes.hex() + length_hex + ERC_6492_MAGIC_SUFFIX[2:]
-    return "0x" + payload
+def make_erc6492_signature(factory=FACTORY, factory_calldata=FACTORY_CALLDATA, inner=INNER_SIG):
+    body = abi_encode(
+        ["address", "bytes", "bytes"],
+        [factory, bytes.fromhex(factory_calldata[2:]), bytes.fromhex(inner[2:])],
+    )
+    return "0x" + body.hex() + ERC_6492_MAGIC_SUFFIX[2:]
 
 
 # -- account_code -----------------------------------------------------------
@@ -80,29 +90,29 @@ async def test_account_code_fails_closed_on_rpc_error():
 # -- delegation_indicator ---------------------------------------------------
 
 
-def test_valid_indicator_is_delegated_with_exact_padding():
+def test_valid_23_byte_eip7702_indicator_is_delegated():
+    # Regression: finalized Pectra EIP-7702 indicators are exactly 23 bytes
+    # (0xef0100 + 20-byte address) with no trailing padding.
     result = delegation_indicator(valid_indicator_code())
     assert result == {"delegated": True, "delegate": DELEGATE, "indicator_malformed": False}
 
 
-def test_indicator_requires_exact_padding_and_length():
-    # Nonzero padding byte in the 23-byte payload → malformed, not delegated.
-    malformed_padding = "0xef0100" + DELEGATE[2:] + "000001"
-    assert delegation_indicator(malformed_padding) == {
+def test_indicator_rejects_wrong_length_as_malformed():
+    # Old 26-byte padded form is not a valid EIP-7702 indicator -> malformed.
+    padded_26 = "0xef0100" + DELEGATE[2:] + "000000"
+    assert delegation_indicator(padded_26) == {
         "delegated": False,
         "delegate": None,
         "indicator_malformed": True,
     }
-    # Missing the 3 padding bytes (bare 0xef0100 + address) → malformed.
-    short = "0xef0100" + DELEGATE[2:]
-    assert delegation_indicator(short)["indicator_malformed"] is True
-    assert delegation_indicator(short)["delegated"] is False
-    # Extra junk beyond the 23-byte payload → malformed.
+    # Extra trailing byte beyond 23 bytes -> malformed.
     long = valid_indicator_code() + "ff"
     assert delegation_indicator(long)["indicator_malformed"] is True
-    # Truncated delegate address → malformed.
-    truncated = "0xef0100" + DELEGATE[2:-2] + "000000"
+    assert delegation_indicator(long)["delegated"] is False
+    # Truncated delegate address -> malformed.
+    truncated = "0xef0100" + DELEGATE[2:-2]
     assert delegation_indicator(truncated)["indicator_malformed"] is True
+    assert delegation_indicator(truncated)["delegated"] is False
 
 
 def test_non_prefixed_code_is_ordinary_contract_code():
@@ -111,37 +121,61 @@ def test_non_prefixed_code_is_ordinary_contract_code():
     assert delegation_indicator("0x") == {"delegated": False, "delegate": None, "indicator_malformed": False}
 
 
-# -- parse_erc6492 ----------------------------------------------------------
+# -- is_erc6492_signature & parse_erc6492 -----------------------------------
+
+
+def test_is_erc6492_signature_detection():
+    assert is_erc6492_signature(make_erc6492_signature()) is True
+    assert is_erc6492_signature("0x" + "45" * 65) is False
+    assert is_erc6492_signature("0x" + "6492" * 8) is False  # only 16 bytes, not 32
+    assert is_erc6492_signature("not-hex") is False
+    assert is_erc6492_signature(make_erc6492_signature() + "00") is False
 
 
 def test_parse_erc6492_round_trip():
     signature = make_erc6492_signature()
     parsed = parse_erc6492(signature)
     assert parsed == {
-        "contract_address": CONTRACT,
-        "data_to_sign": "0x" + "ff" * 10,
-        "inner_signature": "0x" + "45" * 65,
+        "factory": FACTORY,
+        "factory_calldata": FACTORY_CALLDATA,
+        "inner_signature": INNER_SIG,
     }
 
 
 def test_parse_erc6492_returns_none_without_suffix():
     assert parse_erc6492("0x" + "45" * 65) is None
-    assert parse_erc6492("0x" + ERC_6492_MAGIC_SUFFIX[2:10]) is None
+    assert parse_erc6492("0x" + "6492" * 8) is None  # old 16-byte magic is not EIP-6492
 
 
-@pytest.mark.parametrize(
-    "bad",
-    [
-        "0x" + "45" * 65 + "11" * 20 + "ff" * 4 + (10).to_bytes(32, "big").hex() + ERC_6492_MAGIC_SUFFIX[2:] + "ff",
-        "0x" + "45" * 65 + "11" * 20 + "ff" * 4 + (99).to_bytes(32, "big").hex() + ERC_6492_MAGIC_SUFFIX[2:],
-        "0x" + "11" * 20 + "ff" * 4 + (10).to_bytes(32, "big").hex() + ERC_6492_MAGIC_SUFFIX[2:],
-        "0x" + "11" * 20 + (10).to_bytes(32, "big").hex() + ERC_6492_MAGIC_SUFFIX[2:],
-        "0x" + (10).to_bytes(32, "big").hex() + ERC_6492_MAGIC_SUFFIX[2:],
-    ],
-)
-def test_parse_erc6492_rejects_junk_and_inconsistent_layout(bad):
-    with pytest.raises(ValueError):
-        parse_erc6492(bad)
+def test_parse_erc6492_rejects_trailing_junk_and_malformed_abi():
+    valid = make_erc6492_signature()
+    with pytest.raises(ValueError, match="trailing junk"):
+        parse_erc6492(valid + "ff")
+    # Truncated / garbage ABI body before magic suffix.
+    with pytest.raises(ValueError, match="ABI payload is malformed"):
+        parse_erc6492("0x" + "ff" * 10 + ERC_6492_MAGIC_SUFFIX[2:])
+    # Noncanonical ABI encoding (dirty upper bits in address word or extra padding).
+    raw_body = bytearray(
+        abi_encode(["address", "bytes", "bytes"], [FACTORY, bytes.fromhex(FACTORY_CALLDATA[2:]), b"\x45" * 65])
+    )
+    raw_body[0] = 0x01  # dirty top byte of address word
+    with pytest.raises(ValueError, match="ABI payload"):
+        parse_erc6492("0x" + raw_body.hex() + ERC_6492_MAGIC_SUFFIX[2:])
+    # Extra trailing padding bytes after canonical ABI body.
+    canonical_body = abi_encode(
+        ["address", "bytes", "bytes"], [FACTORY, bytes.fromhex(FACTORY_CALLDATA[2:]), b"\x45" * 65]
+    )
+    with pytest.raises(ValueError, match="noncanonical"):
+        parse_erc6492("0x" + canonical_body.hex() + "00" * 32 + ERC_6492_MAGIC_SUFFIX[2:])
+
+
+def test_parse_erc6492_rejects_zero_factory_empty_calldata_and_empty_inner():
+    with pytest.raises(ValueError, match="factory address cannot be zero"):
+        parse_erc6492(make_erc6492_signature(factory="0x" + "00" * 20))
+    with pytest.raises(ValueError, match="empty factory calldata"):
+        parse_erc6492(make_erc6492_signature(factory_calldata="0x"))
+    with pytest.raises(ValueError, match="empty inner signature"):
+        parse_erc6492(make_erc6492_signature(inner="0x"))
 
 
 def test_parse_erc6492_rejects_malformed_hex():
@@ -151,11 +185,23 @@ def test_parse_erc6492_rejects_malformed_hex():
         parse_erc6492("0x1" + ERC_6492_MAGIC_SUFFIX[2:])
 
 
-def test_parse_erc6492_accepts_empty_data_to_sign():
-    signature = make_erc6492_signature(data="0x")
-    parsed = parse_erc6492(signature)
-    assert parsed["data_to_sign"] == "0x"
-    assert parsed["contract_address"] == CONTRACT
+def test_legacy_arbitrary_bytecode_wrapper_is_rejected_for_erc6492_forgery():
+    """Regression: attacker-crafted arbitrary runtime bytecode wrapper must be rejected."""
+    # Previous broken format: inner_sig || arbitrary_contract || arbitrary_runtime_code || len(32) || 16-byte magic
+    stub_code = bytes.fromhex("631626ba7e60e01b60005260206000f3")  # unconditionally returns 0x1626ba7e
+    forged_16 = "0x" + "45" * 65 + "99" * 20 + stub_code.hex() + len(stub_code).to_bytes(32, "big").hex() + "6492" * 8
+    assert parse_erc6492(forged_16) is None
+    # Even with the real 32-byte magic suffix, non-ABI arbitrary runtime bytecode is rejected.
+    forged_32 = (
+        "0x"
+        + "45" * 65
+        + "99" * 20
+        + stub_code.hex()
+        + len(stub_code).to_bytes(32, "big").hex()
+        + ERC_6492_MAGIC_SUFFIX[2:]
+    )
+    with pytest.raises(ValueError):
+        parse_erc6492(forged_32)
 
 
 # -- verify_signature -------------------------------------------------------
@@ -199,7 +245,7 @@ async def test_contract_account_erc1271_revert_is_invalid_not_rpc_error():
 
 @pytest.mark.asyncio
 async def test_delegated_eoa_is_treated_as_contract_code():
-    # Valid indicator code: ERC-1271-style call decides, never the EOA sentinel.
+    # Valid 23-byte indicator code: ERC-1271-style call decides, never the EOA sentinel.
     w3 = FakeW3(code=valid_indicator_code())
     assert await verify_signature(w3, ADDRESS, DIGEST, "0x" + "45" * 65) == (True, "erc-1271")
     w3.eth.call_result = b"\x01" + b"\x00" * 31
@@ -217,19 +263,34 @@ async def test_verify_signature_fails_closed_on_rpc_errors():
 
 
 @pytest.mark.asyncio
-async def test_verify_signature_erc6492_success_simulates_deploy():
+async def test_verify_signature_erc6492_uses_deployless_validator_without_state_override():
+    """Regression: ERC-6492 must NEVER use state_override or accept arbitrary contract_address/bytecode."""
     signature = make_erc6492_signature()
-    w3 = FakeW3(code="0x")  # counterfactual: account not yet deployed
+    w3 = FakeW3(code="0x", call_result=ERC6492_VALID_RETURN)
     valid, method = await verify_signature(w3, ADDRESS, DIGEST, signature)
     assert (valid, method) == (True, "erc-6492")
+    assert len(w3.eth.calls) == 1
     call = w3.eth.calls[0]
-    assert call["transaction"]["to"] == CONTRACT
-    assert call["state_override"] == {CONTRACT: {"code": "0x" + "ff" * 10}}
+    # No state_override (cannot inject arbitrary runtime bytecode) and no `to` (deployless eth_call).
+    assert call["state_override"] is None
+    assert "to" not in call["transaction"]
+    data = bytes.fromhex(call["transaction"]["data"][2:])
+    assert data.startswith(_ERC6492_DEPLOYLESS_BYTECODE)
+    # Constructor arguments bind the exact claimed signer address, digest, factory, calldata, and inner sig.
+    signer, digest, factory, factory_calldata, inner_sig = abi_decode(
+        ["address", "bytes32", "address", "bytes", "bytes"],
+        data[len(_ERC6492_DEPLOYLESS_BYTECODE) :],
+    )
+    assert signer.lower() == ADDRESS
+    assert digest == DIGEST
+    assert factory.lower() == FACTORY
+    assert "0x" + factory_calldata.hex() == FACTORY_CALLDATA
+    assert "0x" + inner_sig.hex() == INNER_SIG
 
 
 @pytest.mark.asyncio
 async def test_verify_signature_erc6492_failure_and_malformed_wrapper():
-    w3 = FakeW3(code="0x", call_result=b"\x00" * 32)
+    w3 = FakeW3(code="0x", call_result=ERC6492_INVALID_RETURN)
     assert await verify_signature(w3, ADDRESS, DIGEST, make_erc6492_signature()) == (False, "erc-6492")
     # 6492 wrapper wins over deployed code; revert maps to invalid, not RPC error.
     from web3.exceptions import ContractLogicError
@@ -237,9 +298,10 @@ async def test_verify_signature_erc6492_failure_and_malformed_wrapper():
     w2 = FakeW3(code="0x6080", call_error=ContractLogicError("reverted"))
     assert await verify_signature(w2, ADDRESS, DIGEST, make_erc6492_signature()) == (False, "erc-6492")
     # Structurally broken wrapper fails closed without touching the chain.
-    w3.eth.calls.clear()
-    broken = "0x" + "45" * 65 + "11" * 20 + (99).to_bytes(32, "big").hex() + ERC_6492_MAGIC_SUFFIX[2:]
-    assert await verify_signature(FakeW3(code="0x"), ADDRESS, DIGEST, broken) == (False, "erc-6492")
+    w_broken = FakeW3(code="0x", call_result=ERC6492_VALID_RETURN)
+    broken = "0x" + "ff" * 16 + ERC_6492_MAGIC_SUFFIX[2:]
+    assert await verify_signature(w_broken, ADDRESS, DIGEST, broken) == (False, "erc-6492")
+    assert w_broken.eth.calls == []
 
 
 @pytest.mark.asyncio
@@ -283,16 +345,8 @@ def test_normalize_helpers_reject_malformed_values():
         module._encode_is_valid_signature_call(DIGEST, b"")
 
 
-def test_parse_erc6492_rejects_empty_inner_signature():
-    contract = CONTRACT
-    data = "0x" + "ff" * 10
-    data_bytes = bytes.fromhex(data[2:])
-    length_hex = len(data_bytes).to_bytes(32, "big").hex()
-    payload = contract[2:] + data_bytes.hex() + length_hex + ERC_6492_MAGIC_SUFFIX[2:]
-    with pytest.raises(ValueError):
-        parse_erc6492("0x" + payload)
-
-
-def test_magic_constant_matches_expected_value():
+def test_magic_constants_match_eip_specifications():
     assert ERC_1271_MAGIC_VALUE == "0x1626ba7e"
     assert MAGIC_RETURN == bytes.fromhex("1626ba7e" + "00" * 28)
+    assert ERC_6492_MAGIC_SUFFIX == "0x" + "6492" * 16
+    assert len(bytes.fromhex(ERC_6492_MAGIC_SUFFIX[2:])) == 32

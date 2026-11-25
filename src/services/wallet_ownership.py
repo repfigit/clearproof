@@ -6,7 +6,7 @@ import time
 from typing import Awaitable, Callable
 
 from src.auth.principal import Principal
-from src.chain.wallet_account import WalletAccountRPCError
+from src.chain.wallet_account import WalletAccountRPCError, is_erc6492_signature
 from src.protocol.wallet_ownership import (
     ATTESTATION_TTL,
     CHALLENGE_TTL,
@@ -265,11 +265,12 @@ class WalletOwnershipService:
                 probe = await self._probe_delegation(challenge.credential.subject_wallet, now=now)
                 method = "eoa"
                 is_contract_wallet = bool(probe.get("has_code"))
-                if is_contract_wallet:
-                    # Smart account (or EIP-7702-delegated EOA): verify through
-                    # the contract's ERC-1271/ERC-6492 path on-chain. A 65-byte
-                    # signature is not accepted on code-bearing wallets.
-                    if len(signature) == 132:
+                is_erc6492 = is_erc6492_signature(signature)
+                if is_contract_wallet or is_erc6492:
+                    # Smart account (deployed ERC-1271, EIP-7702-delegated EOA,
+                    # or counterfactual ERC-6492): verify on-chain. A 65-byte
+                    # signature is never accepted on code-bearing wallets.
+                    if is_contract_wallet and len(signature) == 132:
                         raise WalletOwnershipError(
                             "Smart-account wallet cannot be verified with a 65-byte EOA signature"
                         )
@@ -351,6 +352,14 @@ class WalletOwnershipService:
                     raise WalletDelegationReview(f"Wallet delegation review required: {review}")
         return attestation
 
+    async def _latest_delegation(self, tx, attestation) -> dict | None:
+        """Return the most recent delegation status (re-check log if present, else initial)."""
+        if not isinstance(attestation, WalletAttestationV2):
+            return None
+        log = await tx.get("wallet-delegation-log", attestation.attestation_id)
+        entries = self._delegation_log_entries(log)
+        return dict(entries[-1]) if entries else dict(attestation.delegation)
+
     async def status(self, attestation_id: str, *, now: int | None = None) -> dict:
         async with self.store.transaction() as tx:
             attestation = await self._attestation(tx, attestation_id)
@@ -360,13 +369,14 @@ class WalletOwnershipService:
                 active, reason = True, None
             except (WalletOwnershipError, EnrollmentIneligible) as exc:
                 active, reason = False, str(exc)
+            delegation = await self._latest_delegation(tx, attestation)
             return {
                 "attestation_id": attestation_id,
                 "wallet_ownership_verified": active,
                 "issued_at": attestation.issued_at,
                 "expires_at": attestation.expires_at,
                 "reason": reason,
-                "delegation": dict(attestation.delegation) if isinstance(attestation, WalletAttestationV2) else None,
+                "delegation": delegation,
             }
 
     async def assert_active(

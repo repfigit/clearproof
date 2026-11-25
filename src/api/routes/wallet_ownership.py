@@ -88,6 +88,17 @@ def chain_verifier():
     return verify
 
 
+def delegation_recheck_seconds() -> int:
+    """Parse WALLET_OWNERSHIP_DELEGATION_RECHECK_SECONDS (default 3600)."""
+    raw = os.environ.get("WALLET_OWNERSHIP_DELEGATION_RECHECK_SECONDS")
+    if raw is None or not raw.strip():
+        return 3600
+    value = int(raw.strip())
+    if value <= 0:
+        raise ValueError("WALLET_OWNERSHIP_DELEGATION_RECHECK_SECONDS must be positive")
+    return value
+
+
 def wallet_service(request: Request, principal: Principal = Depends(TenantPrincipalDependency)):
     db = getattr(request.app.state, "db", None)
     if db is None or not db.is_ready:
@@ -101,6 +112,7 @@ def wallet_service(request: Request, principal: Principal = Depends(TenantPrinci
             registry_address=os.environ["PILOT_REGISTRY_ADDRESS"],
             account_probe=account_probe(),
             chain_verifier=chain_verifier(),
+            delegation_recheck_seconds=delegation_recheck_seconds(),
         )
     except (KeyError, ValueError, RuntimeError) as exc:
         raise HTTPException(status_code=503, detail="Wallet evidence configuration unavailable") from exc
