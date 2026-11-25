@@ -59,23 +59,27 @@ class ProofInspectionService:
         self._verifier = verifier
 
     async def inspect(self, credential_id: str, proof: bytes, signals: list[str], *, now: int) -> PairingInspection:
-        """Hold the existing tenant lock across current-state reads and pairing.
+        """Read current tenant state in a short transaction, then pair outside the lock.
 
-        This serializes with supported enrollment/revocation/root/policy writers.
+        Groth16 pairing runs in a subprocess without holding the tenant advisory
+        lock so concurrent tenant writers are never stalled by pairing latency.
         Other trust inventories remain operator configuration; this is not an
         independent historical authority. No record or consumption is written.
         """
         self._principal.require("proof:inspect")
         self._principal.require("evidence:decrypt")
         signals = public_signals(signals)
-        async with self._store.transaction() as tx:
-            return await self._inspect_transaction(tx, credential_id, proof, signals, now=now)
+        return await self._inspect_current(credential_id, proof, signals, now=now)
 
-    async def _inspect_transaction(self, tx: PilotTransaction, credential_id, proof, signals, *, now):
-        credential = await self._load_current_credential(tx, credential_id, now=now)
+    async def _pair_statement(self, proof: bytes, signals: list[str], *, credential, now: int) -> PairingInspection:
         return await inspect_current_statement(
             self._verifier, proof, signals=signals, credential=credential, now=now, **self._inputs
         )
+
+    async def _inspect_current(self, credential_id: str, proof: bytes, signals: list[str], *, now: int):
+        async with self._store.transaction() as tx:
+            credential = await self._load_current_credential(tx, credential_id, now=now)
+        return await self._pair_statement(proof, signals, credential=credential, now=now)
 
     async def _load_current_credential(self, tx: PilotTransaction, credential_id: str, *, now: int):
         """Shared durable selection for preparation and verification under the tenant lock."""
@@ -118,16 +122,49 @@ class ProofInspectionService:
 
         A failed cryptographic check yields no policy decision. Fact trust is
         server configuration, not accepted from a public evaluation request.
+        Groth16 pairing runs outside the tenant advisory lock.
         """
         for role in ("proof:inspect", "policy:read", "evidence:decrypt"):
             self._principal.require(role)
         signals = public_signals(signals)
-        async with self._store.transaction() as tx:
-            return await self._evaluate_transaction(
-                tx, credential_id, proof, signals, fact_ids, fact_trust=fact_trust, now=now
-            )
+        return await self._evaluate_outside_lock(
+            credential_id, proof, signals, fact_ids, fact_trust=fact_trust, now=now
+        )
 
-    async def _evaluate_transaction(self, tx, credential_id, proof, signals, fact_ids, *, fact_trust, now):
+    async def _evaluate_outside_lock(
+        self,
+        credential_id: str,
+        proof: bytes,
+        signals: list[str],
+        fact_ids: tuple[str, ...],
+        *,
+        fact_trust: FactTrustStore,
+        now: int,
+    ) -> tuple[PairingInspection, PolicyEvaluation | None]:
+        # Snapshot read inside a short transaction; Groth16 pairing runs outside the lock.
+        async with self._store.transaction() as tx:
+            external = await load_current_facts(
+                tx,
+                fact_trust,
+                fact_ids,
+                transfer=self._inputs["transfer"],
+                context=self._context,
+                now=now,
+            )
+            credential = await self._load_current_credential(tx, credential_id, now=now)
+        inspection = await self._pair_statement(proof, signals, credential=credential, now=now)
+        return self._finish_evaluation(external, inspection, proof, signals, now=now)
+
+    async def _revalidate_evaluation_state(
+        self,
+        tx: PilotTransaction,
+        credential_id: str,
+        fact_ids: tuple[str, ...],
+        *,
+        fact_trust: FactTrustStore,
+        now: int,
+    ) -> tuple:
+        """Recheck retained facts, active policy, credential, and roots inside a commit tx."""
         external = await load_current_facts(
             tx,
             fact_trust,
@@ -136,7 +173,18 @@ class ProofInspectionService:
             context=self._context,
             now=now,
         )
-        inspection = await self._inspect_transaction(tx, credential_id, proof, signals, now=now)
+        credential = await self._load_current_credential(tx, credential_id, now=now)
+        return external, credential
+
+    def _finish_evaluation(
+        self,
+        external,
+        inspection: PairingInspection,
+        proof: bytes,
+        signals: list[str],
+        *,
+        now: int,
+    ) -> tuple[PairingInspection, PolicyEvaluation | None]:
         if not inspection.cryptographic_valid:
             return inspection, None
         facts = with_verified_statement_facts(

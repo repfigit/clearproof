@@ -199,12 +199,13 @@ class WalletOwnershipService:
     async def _recheck_delegation(self, tx, attestation, now: int) -> dict:
         """Re-run the delegation probe when the last check is older than the interval.
 
-        This is the standing re-check for whitelisted addresses: every status
-        or extension evaluation refreshes the delegation picture at most once
-        per interval, appending to the per-attestation delegation log that the
-        evidence export reports. External schedulers can force an immediate
-        check via recheck_delegation().
+        When ``tx`` is ``None``, the method runs the snapshot read and log
+        append in separate short transactions so the RPC probe executes
+        without holding the tenant advisory lock. When an explicit ``tx`` is
+        passed (legacy/helper callers), it operates directly on that transaction.
         """
+        if tx is None:
+            return await self._recheck_delegation_outside_lock(attestation, now)
         delegation = getattr(attestation, "delegation", None)
         current = dict(delegation) if isinstance(delegation, dict) else None
         log_record = await tx.read("wallet-delegation-log", attestation.attestation_id)
@@ -225,27 +226,69 @@ class WalletOwnershipService:
         )
         return {"delegation": fresh, "history": entries}
 
+    async def _recheck_delegation_outside_lock(self, attestation, now: int) -> dict:
+        """Re-run the delegation probe outside the tenant advisory lock.
+
+        Reads the current delegation log snapshot in a short transaction, runs
+        the RPC probe without holding any database lock, then persists the new
+        entry in a short commit transaction with expected_revision CAS.
+        """
+        async with self.store.transaction() as tx:
+            delegation = getattr(attestation, "delegation", None)
+            current = dict(delegation) if isinstance(delegation, dict) else None
+            log_record = await tx.read("wallet-delegation-log", attestation.attestation_id)
+            entries = self._delegation_log_entries(log_record.value if log_record else None)
+            if entries:
+                current = entries[-1]
+            if current is None:
+                return {"delegation": None, "history": entries}
+            if current.get("checked") and now - current.get("checked_at", 0) < self.delegation_recheck_seconds:
+                return {"delegation": current, "history": entries}
+            expected_revision = log_record.revision if log_record else None
+
+        fresh = await self._probe_delegation(attestation.challenge.credential.subject_wallet, now=now)
+        fresh_status = self._delegation_status(fresh)
+
+        async with self.store.transaction() as tx:
+            log_record = await tx.read("wallet-delegation-log", attestation.attestation_id)
+            current_rev = log_record.revision if log_record else None
+            entries = self._delegation_log_entries(log_record.value if log_record else None)
+            if current_rev != expected_revision and entries:
+                latest = entries[-1]
+                if latest.get("checked") and now - latest.get("checked_at", 0) < self.delegation_recheck_seconds:
+                    return {"delegation": latest, "history": entries}
+            entries.append(fresh_status)
+            await tx.put(
+                "wallet-delegation-log",
+                attestation.attestation_id,
+                self._delegation_log_payload(entries),
+                expected_revision=current_rev,
+            )
+            return {"delegation": fresh, "history": entries}
+
     async def recheck_delegation(self, attestation_id: str, *, now: int | None = None) -> dict:
         """Force an immediate delegation re-check (scheduler entry point)."""
         async with self.store.transaction() as tx:
             attestation = await self._attestation(tx, attestation_id)
-            now = self._time(now)
-            if not attestation.issued_at <= now < attestation.expires_at:
+            checked_now = self._time(now)
+            if not attestation.issued_at <= checked_now < attestation.expires_at:
                 raise WalletOwnershipError("Wallet attestation is outside its validity interval")
-            result = await self._recheck_delegation(tx, attestation, now)
-            if result["delegation"] is None:
-                raise WalletOwnershipError("Delegation check is not configured for this attestation")
-            review = self._delegation_review(result["delegation"])
-            return {
-                "attestation_id": attestation_id,
-                "delegation": result["delegation"],
-                "delegation_review": review,
-                "history": result["history"],
-            }
+        result = await self._recheck_delegation(None, attestation, checked_now)
+        if result["delegation"] is None:
+            raise WalletOwnershipError("Delegation check is not configured for this attestation")
+        review = self._delegation_review(result["delegation"])
+        return {
+            "attestation_id": attestation_id,
+            "delegation": result["delegation"],
+            "delegation_review": review,
+            "history": result["history"],
+        }
 
     async def verify(
         self, nonce: str, signature: str, *, now: int | None = None
     ) -> WalletAttestation | WalletAttestationV2:
+        # Re-read state inside a short commit transaction, checking CAS on the
+        # attestation record (immutable nonce-keyed insert) and re-sampling time.
         async with self.store.transaction() as tx:
             stored = await tx.get("wallet-challenge", nonce)
             if stored is None:
@@ -258,59 +301,72 @@ class WalletOwnershipService:
             credential = await self._credential(tx, challenge.credential.credential_nonce, evaluated_at)
             if credential != challenge.credential:
                 raise WalletOwnershipError("Challenge credential changed")
-            now = self._time(now)
-            if not challenge.timestamp <= now < min(challenge.expires_at, credential.expires_at):
-                raise WalletOwnershipError("Wallet challenge or credential expired during verification")
             if isinstance(challenge, WalletChallengeV2):
-                probe = await self._probe_delegation(challenge.credential.subject_wallet, now=now)
-                method = "eoa"
-                is_contract_wallet = bool(probe.get("has_code"))
-                is_erc6492 = is_erc6492_signature(signature)
-                if is_contract_wallet or is_erc6492:
-                    # Smart account (deployed ERC-1271, EIP-7702-delegated EOA,
-                    # or counterfactual ERC-6492): verify on-chain. A 65-byte
-                    # signature is never accepted on code-bearing wallets.
-                    if is_contract_wallet and len(signature) == 132:
-                        raise WalletOwnershipError(
-                            "Smart-account wallet cannot be verified with a 65-byte EOA signature"
-                        )
-                    if self.chain_verifier is None:
-                        raise WalletOwnershipError(
-                            "Smart-account verification requires chain access (WALLET_OWNERSHIP_RPC_URL)"
-                        )
-                    try:
-                        valid, verified_method = await self.chain_verifier(
-                            challenge.credential.subject_wallet, challenge.message(), signature
-                        )
-                    except WalletAccountRPCError as exc:
-                        raise WalletOwnershipError(f"Smart-account verification unavailable: {exc}") from exc
-                    if not valid:
-                        raise WalletOwnershipError("Invalid wallet ownership signature")
-                    method = verified_method
-                else:
-                    if len(signature) != 132:
-                        raise WalletOwnershipError("EOA wallet verification requires a 65-byte signature")
-                    challenge.verify_signature(signature)
-                attestation = WalletAttestationV2(
-                    attestation_id=nonce,
-                    challenge=challenge,
-                    signature=signature,
-                    method=method,
-                    issued_at=now,
-                    expires_at=now + ATTESTATION_TTL,
-                    delegation=self._delegation_status(probe),
-                )
+                # Short read transaction ends before RPC probes.
+                pass
             else:
                 challenge.verify_signature(signature)
+                final_now = self._time(now)
+                if not challenge.timestamp <= final_now < min(challenge.expires_at, credential.expires_at):
+                    raise WalletOwnershipError("Wallet challenge or credential expired during verification")
                 attestation = WalletAttestation(
                     attestation_id=nonce,
                     challenge=challenge,
                     signature=signature,
-                    issued_at=now,
-                    expires_at=now + ATTESTATION_TTL,
+                    issued_at=final_now,
+                    expires_at=final_now + ATTESTATION_TTL,
                 )
-            # The immutable nonce-keyed attestation is also the consumption marker.
-            # Check/verify/insert all execute under the tenant transaction lock.
+                await tx.put("wallet-attestation", nonce, attestation.model_dump(mode="json"))
+                return attestation
+
+        # v2: run delegation probe and optional on-chain ERC-1271/ERC-6492
+        # verification outside the tenant advisory lock.
+        probe = await self._probe_delegation(challenge.credential.subject_wallet, now=evaluated_at)
+        method = "eoa"
+        is_contract_wallet = bool(probe.get("has_code"))
+        is_erc6492 = is_erc6492_signature(signature)
+        if is_contract_wallet or is_erc6492:
+            # Smart account (deployed ERC-1271, EIP-7702-delegated EOA,
+            # or counterfactual ERC-6492): verify on-chain. A 65-byte
+            # signature is never accepted on code-bearing wallets.
+            if is_contract_wallet and len(signature) == 132:
+                raise WalletOwnershipError("Smart-account wallet cannot be verified with a 65-byte EOA signature")
+            if self.chain_verifier is None:
+                raise WalletOwnershipError(
+                    "Smart-account verification requires chain access (WALLET_OWNERSHIP_RPC_URL)"
+                )
+            try:
+                valid, verified_method = await self.chain_verifier(
+                    challenge.credential.subject_wallet, challenge.message(), signature
+                )
+            except WalletAccountRPCError as exc:
+                raise WalletOwnershipError(f"Smart-account verification unavailable: {exc}") from exc
+            if not valid:
+                raise WalletOwnershipError("Invalid wallet ownership signature")
+            method = verified_method
+        else:
+            if len(signature) != 132:
+                raise WalletOwnershipError("EOA wallet verification requires a 65-byte signature")
+            challenge.verify_signature(signature)
+
+        # Re-enter a short transaction to re-verify state/expiry and persist the
+        # immutable nonce-keyed attestation (CAS insert fails on concurrent use).
+        async with self.store.transaction() as tx:
+            final_now = self._time(now)
+            credential_again = await self._credential(tx, challenge.credential.credential_nonce, final_now)
+            if credential_again != challenge.credential:
+                raise WalletOwnershipError("Challenge credential changed")
+            if not challenge.timestamp <= final_now < min(challenge.expires_at, credential_again.expires_at):
+                raise WalletOwnershipError("Wallet challenge or credential expired during verification")
+            attestation = WalletAttestationV2(
+                attestation_id=nonce,
+                challenge=challenge,
+                signature=signature,
+                method=method,
+                issued_at=final_now,
+                expires_at=final_now + ATTESTATION_TTL,
+                delegation=self._delegation_status(probe),
+            )
             await tx.put("wallet-attestation", nonce, attestation.model_dump(mode="json"))
             return attestation
 
@@ -332,24 +388,32 @@ class WalletOwnershipService:
             attestation.challenge.verify_signature(attestation.signature)
         return attestation
 
-    async def _active(self, tx, attestation_id, now):
+    async def _check_active_state(self, tx, attestation_id, now):
         attestation = await self._attestation(tx, attestation_id)
-        now = self._time(now)
-        if not attestation.issued_at <= now < attestation.expires_at:
+        checked_now = self._time(now)
+        if not attestation.issued_at <= checked_now < attestation.expires_at:
             raise WalletOwnershipError("Wallet attestation is outside its validity interval")
         if await tx.get("wallet-revocation", attestation_id) is not None:
             raise WalletOwnershipError("Wallet attestation is revoked")
-        credential = await self._credential(tx, attestation.challenge.credential.credential_nonce, now)
+        credential = await self._credential(tx, attestation.challenge.credential.credential_nonce, checked_now)
         if credential != attestation.challenge.credential:
             raise WalletOwnershipError("Wallet attestation credential changed")
+        return attestation, checked_now
+
+    async def _active_outside_lock(self, attestation_id, now):
+        async with self.store.transaction() as tx:
+            attestation, checked_now = await self._check_active_state(tx, attestation_id, now)
         if hasattr(attestation, "delegation"):
-            # Standing EBA ¶86 re-check: refresh at most once per interval; a
-            # delegated or malformed-indicator wallet pauses eligibility.
-            result = await self._recheck_delegation(tx, attestation, now)
+            # Standing EBA ¶86 re-check: run RPC probe outside the tenant lock;
+            # a delegated or malformed-indicator wallet pauses eligibility.
+            result = await self._recheck_delegation(None, attestation, checked_now)
             if result["delegation"] is not None:
                 review = self._delegation_review(result["delegation"])
                 if review:
                     raise WalletDelegationReview(f"Wallet delegation review required: {review}")
+            # Re-verify revocation/credential/expiry after releasing the lock.
+            async with self.store.transaction() as tx:
+                attestation, _ = await self._check_active_state(tx, attestation_id, now)
         return attestation
 
     async def _latest_delegation(self, tx, attestation) -> dict | None:
@@ -363,21 +427,22 @@ class WalletOwnershipService:
     async def status(self, attestation_id: str, *, now: int | None = None) -> dict:
         async with self.store.transaction() as tx:
             attestation = await self._attestation(tx, attestation_id)
-            # Eligibility errors do not become a successful verification flag.
-            try:
-                await self._active(tx, attestation_id, now)
-                active, reason = True, None
-            except (WalletOwnershipError, EnrollmentIneligible) as exc:
-                active, reason = False, str(exc)
+        # Eligibility errors do not become a successful verification flag.
+        try:
+            await self._active_outside_lock(attestation_id, now)
+            active, reason = True, None
+        except (WalletOwnershipError, EnrollmentIneligible) as exc:
+            active, reason = False, str(exc)
+        async with self.store.transaction() as tx:
             delegation = await self._latest_delegation(tx, attestation)
-            return {
-                "attestation_id": attestation_id,
-                "wallet_ownership_verified": active,
-                "issued_at": attestation.issued_at,
-                "expires_at": attestation.expires_at,
-                "reason": reason,
-                "delegation": delegation,
-            }
+        return {
+            "attestation_id": attestation_id,
+            "wallet_ownership_verified": active,
+            "issued_at": attestation.issued_at,
+            "expires_at": attestation.expires_at,
+            "reason": reason,
+            "delegation": delegation,
+        }
 
     async def assert_active(
         self, attestation_id: str, *, subject_wallet: str | None = None, now: int | None = None
@@ -387,14 +452,13 @@ class WalletOwnershipService:
         When subject_wallet is given, the attestation must belong to exactly that
         wallet — an attestation cannot upgrade a credential for a different subject.
         """
-        async with self.store.transaction() as tx:
-            attestation = await self._active(tx, attestation_id, now)
-            if (
-                subject_wallet is not None
-                and attestation.challenge.credential.subject_wallet.lower() != subject_wallet.lower()
-            ):
-                raise WalletOwnershipError("Wallet attestation belongs to a different subject wallet")
-            return attestation
+        attestation = await self._active_outside_lock(attestation_id, now)
+        if (
+            subject_wallet is not None
+            and attestation.challenge.credential.subject_wallet.lower() != subject_wallet.lower()
+        ):
+            raise WalletOwnershipError("Wallet attestation belongs to a different subject wallet")
+        return attestation
 
     async def delegation_evidence(self, attestation_id: str, *, now: int | None = None) -> dict:
         """Full evidence-export inputs: attestation record, delegation log, credential binding."""
@@ -431,8 +495,9 @@ class WalletOwnershipService:
             return {"attestation_id": attestation_id, "revoked": True, "revoked_at": prior["revoked_at"]}
 
     async def issue_extension(self, attestation_id: str, *, now: int | None = None) -> WalletCredentialExtension:
+        attestation = await self._active_outside_lock(attestation_id, now)
         async with self.store.transaction() as tx:
-            attestation = await self._active(tx, attestation_id, now)
+            attestation, _ = await self._check_active_state(tx, attestation_id, now)
             extension = WalletCredentialExtension(
                 credential_commitment=attestation.challenge.credential.commitment,
                 attestation_digest=attestation.digest_scalar,

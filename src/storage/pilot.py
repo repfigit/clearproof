@@ -127,13 +127,7 @@ class PilotStore:
         snapshot = await self.read(kind, record_id)
         return snapshot.value if snapshot else None
 
-    async def run_idempotent(
-        self,
-        operation: str,
-        key: str,
-        request: dict,
-        callback: Callable[["PilotTransaction"], Awaitable[dict]],
-    ) -> dict:
+    def _idempotency_binding(self, operation: str, key: str, request: dict) -> tuple[str, str]:
         if operation not in _OPERATIONS:
             raise ValueError("Unsupported pilot operation")
         self._principal.require(_OPERATIONS[operation])
@@ -147,6 +141,28 @@ class PilotStore:
             },
         )
         record_id = hashlib.sha256((operation + "\0" + key).encode()).hexdigest()
+        return record_id, request_digest
+
+    async def lookup_idempotent(self, operation: str, key: str, request: dict) -> dict | None:
+        """Check an idempotency record in a short transaction without running slow work."""
+        record_id, request_digest = self._idempotency_binding(operation, key, request)
+        async with self.transaction() as tx:
+            row = await tx._row("idempotency", record_id)
+            if not row:
+                return None
+            cached = self._cipher.open(self.tenant_id, "idempotency", record_id, row)
+            if not hmac.compare_digest(cached["request_digest"], request_digest):
+                raise RecordConflict("Idempotency key belongs to a different request or actor")
+            return cached["result"]
+
+    async def run_idempotent(
+        self,
+        operation: str,
+        key: str,
+        request: dict,
+        callback: Callable[["PilotTransaction"], Awaitable[dict]],
+    ) -> dict:
+        record_id, request_digest = self._idempotency_binding(operation, key, request)
         async with self.transaction() as tx:
             row = await tx._row("idempotency", record_id)
             if row:

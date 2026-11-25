@@ -133,25 +133,39 @@ class AuthorizationMirrorService(ProofInspectionService):
             }
             if envelope.get("binding") != expected_binding:
                 raise ValueError("Recipient envelope binding does not match")
-            inspection, decision = await self._evaluate_transaction(
+
+        # Run Groth16 pairing outside the tenant advisory lock, then re-enter a
+        # short transaction to re-check current state and read checkpoint heads.
+        inspection, decision = await self._evaluate_outside_lock(
+            request["credential_id"],
+            proof,
+            signals,
+            tuple(request["fact_ids"]),
+            fact_trust=fact_trust,
+            now=now,
+        )
+        if (
+            not inspection.cryptographic_valid
+            or decision is None
+            or decision.outcome != "ALLOW"
+            or (
+                receipt["policy_digest"] != decision.policy_digest
+                or receipt["proof_profile"] != inspection.proof_profile
+                or receipt["manifest_digest"] != inspection.manifest_digest
+            )
+        ):
+            raise ValueError("Current authorization checks did not confirm ALLOW")
+
+        async with self._store.transaction() as tx:
+            external, _ = await self._revalidate_evaluation_state(
                 tx,
                 request["credential_id"],
-                proof,
-                signals,
                 tuple(request["fact_ids"]),
                 fact_trust=fact_trust,
                 now=now,
             )
-            if (
-                not inspection.cryptographic_valid
-                or decision is None
-                or decision.outcome != "ALLOW"
-                or (
-                    receipt["policy_digest"] != decision.policy_digest
-                    or receipt["proof_profile"] != inspection.proof_profile
-                    or receipt["manifest_digest"] != inspection.manifest_digest
-                )
-            ):
+            _, decision = self._finish_evaluation(external, inspection, proof, signals, now=now)
+            if decision is None or decision.outcome != "ALLOW" or receipt["policy_digest"] != decision.policy_digest:
                 raise ValueError("Current authorization checks did not confirm ALLOW")
             policy = self._inputs["policy_trust"].for_transfer(transfer, context, tenant_id=tx.tenant_id, now=now)
             activation = await tx.read("policy-activation", activation_scope(policy))

@@ -3248,14 +3248,14 @@ async def test_durable_current_inspection_real_pairing_and_revocation(db, monkey
         assert complete.outcome == "INDETERMINATE" and complete.reasons == ("no_decisive_rule",)
         provided = signals.copy()
         evaluator = service()
-        real_transaction = evaluator._inspect_transaction
+        real_pair = evaluator._pair_statement
 
         async def mutate_after_pairing(*values, **options):
-            checked = await real_transaction(*values, **options)
+            checked = await real_pair(*values, **options)
             provided[5] = "0"
             return checked
 
-        monkeypatch.setattr(evaluator, "_inspect_transaction", mutate_after_pairing)
+        monkeypatch.setattr(evaluator, "_pair_statement", mutate_after_pairing)
         _, stable = await evaluator.evaluate(credential.credential_nonce, proof, provided, refs, **args)
         assert provided[5] == "0" and stable == complete
         false_refs = await retain(False)
@@ -3277,8 +3277,9 @@ async def test_durable_current_inspection_real_pairing_and_revocation(db, monkey
             before_kinds = dict(
                 await (await conn.execute("SELECT kind, count(*) FROM pilot_records GROUP BY kind")).fetchall()
             )
-        # Pause at the real pairing boundary with the tenant transaction held.
-        # Signature/root checks and the eventual pairing are never replaced.
+        # Pause at the real pairing boundary; the tenant lock must NOT be held
+        # across Groth16 pairing, so a concurrent revocation commits immediately
+        # without blocking on the advisory lock.
         from src.services import proof_inspection as inspection_module
 
         entered, release = asyncio.Event(), asyncio.Event()
@@ -3304,25 +3305,8 @@ async def test_durable_current_inspection_real_pairing_and_revocation(db, monkey
                     now=now,
                 )
             )
-            # Observe an actual PostgreSQL lock wait, not a scheduling delay.
-            lock = int.from_bytes(
-                hashlib.sha256(("clearproof/pilot/" + principal.tenant_id).encode()).digest()[:8], "big"
-            )
-            async with asyncio.timeout(5):
-                while True:
-                    async with db.connection() as conn:
-                        waiting = await (
-                            await conn.execute(
-                                "SELECT EXISTS (SELECT 1 FROM pg_locks WHERE locktype='advisory' "
-                                "AND classid=%s AND objid=%s AND objsubid=1 AND NOT granted "
-                                "AND database=(SELECT oid FROM pg_database WHERE datname=current_database()))",
-                                (lock >> 32, lock & 0xFFFFFFFF),
-                            )
-                        ).fetchone()
-                    if waiting[0]:
-                        break
-                    await asyncio.sleep(0.02)
-            assert not revoking.done()
+            # Revocation must commit while pairing is still paused (lock is not held).
+            assert (await asyncio.wait_for(revoking, 5))["status"] == "revoked"
             if mutation == "cancel":
                 inspecting.cancel()
                 with pytest.raises(asyncio.CancelledError):
@@ -3330,7 +3314,6 @@ async def test_durable_current_inspection_real_pairing_and_revocation(db, monkey
             else:
                 release.set()
                 assert (await asyncio.wait_for(inspecting, 10)).cryptographic_valid
-            assert (await asyncio.wait_for(revoking, 5))["status"] == "revoked"
         finally:
             release.set()
             pending = [task for task in (inspecting, revoking) if task is not None]
@@ -5581,7 +5564,7 @@ async def check_authorization_mirror_rejections(service, arguments, receipt, sig
                 await service.prepare(receipt["receipt_id"], **arguments)
 
     observed = []
-    original_evaluate = service._evaluate_transaction
+    original_evaluate = service._evaluate_outside_lock
 
     async def capture(*args, **kwargs):
         result = await original_evaluate(*args, **kwargs)
@@ -5589,7 +5572,7 @@ async def check_authorization_mirror_rejections(service, arguments, receipt, sig
         return result
 
     with pytest.MonkeyPatch.context() as patch:
-        patch.setattr(service, "_evaluate_transaction", capture)
+        patch.setattr(service, "_evaluate_outside_lock", capture)
         await service.prepare(receipt["receipt_id"], **arguments)
     inspection, decision = observed[0]
     assert inspection.cryptographic_valid and decision.outcome == "ALLOW"
@@ -5605,7 +5588,7 @@ async def check_authorization_mirror_rejections(service, arguments, receipt, sig
     # were verified above. Altered inspection results must never authorize a plan.
     for result in rejected:
         with pytest.MonkeyPatch.context() as patch:
-            patch.setattr(service, "_evaluate_transaction", AsyncMock(return_value=result))
+            patch.setattr(service, "_evaluate_outside_lock", AsyncMock(return_value=result))
             with pytest.raises(ValueError, match="Current authorization checks did not confirm ALLOW"):
                 await service.prepare(receipt["receipt_id"], **arguments)
 
@@ -5618,13 +5601,17 @@ async def check_authorization_mirror_rejections(service, arguments, receipt, sig
             return await original_read(tx, kind, record_id, **kwargs)
 
         with pytest.MonkeyPatch.context() as patch:
-            patch.setattr(service, "_evaluate_transaction", AsyncMock(return_value=(inspection, decision)))
+            patch.setattr(service, "_evaluate_outside_lock", AsyncMock(return_value=(inspection, decision)))
+            patch.setattr(service, "_revalidate_evaluation_state", AsyncMock(return_value=(None, None)))
+            patch.setattr(service, "_finish_evaluation", lambda *a, **k: (inspection, decision))
             patch.setattr(PilotTransaction, "read", missing_source)
             with pytest.raises(ValueError, match="Current source records are unavailable"):
                 await service.prepare(receipt["receipt_id"], **arguments)
 
     with pytest.MonkeyPatch.context() as patch:
-        patch.setattr(service, "_evaluate_transaction", AsyncMock(return_value=(inspection, decision)))
+        patch.setattr(service, "_evaluate_outside_lock", AsyncMock(return_value=(inspection, decision)))
+        patch.setattr(service, "_revalidate_evaluation_state", AsyncMock(return_value=(None, None)))
+        patch.setattr(service, "_finish_evaluation", lambda *a, **k: (inspection, decision))
         patch.setattr(service._inputs["valuation_trust"], "current_valid_until", lambda *a, **k: arguments["now"])
         with pytest.raises(ValueError, match="Mirror checkpoint interval is not current"):
             await service.prepare(receipt["receipt_id"], **arguments)
@@ -5713,7 +5700,9 @@ async def check_mirror_rebound_evidence(service, arguments, receipt, signer, eva
                 if mutation == "participants":
                     # Independently test the final participant-evidence gate even
                     # if a policy dependency reports ALLOW without participant facts.
-                    patch.setattr(service, "_evaluate_transaction", AsyncMock(return_value=evaluation))
+                    patch.setattr(service, "_evaluate_outside_lock", AsyncMock(return_value=evaluation))
+                    patch.setattr(service, "_revalidate_evaluation_state", AsyncMock(return_value=(None, None)))
+                    patch.setattr(service, "_finish_evaluation", lambda *a, **k: evaluation)
                 with pytest.raises(ValueError, match=message):
                     await service.prepare(identity, **arguments)
         finally:
@@ -6246,3 +6235,645 @@ def check_history_reconstruction_guards(bundle, verifier, statement_trust, fact_
         with pytest.raises(ValueError, match=expected):
             policy(candidate)
     assert policy(bundle)
+
+
+async def test_slow_groth16_pairing_does_not_hold_tenant_lock_and_preserves_atomicity(db, monkeypatch):
+    """Concurrency regression: holding Groth16 pairing must not block a concurrent tenant writer.
+
+    Covers inspect, evaluate, observe, authorize, and mirror prepare paths without
+    needing compiled development circuit artifacts by stubbing the pairing call.
+    """
+    import hashlib
+    import json
+    import runpy
+    from pathlib import Path
+    from types import SimpleNamespace
+
+    from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
+    from eth_account import Account
+
+    from src.policy.diff import PolicyCase
+    from src.policy.evaluator import PolicyFact, PolicyFacts
+    from src.policy.fact_approval import FactApproval, FactAuthority, FactTrustStore, sign_fact
+    from src.protocol.decision_attestation import DecisionAuthority, DecisionSigner, DecisionTrustStore
+    from src.protocol.enrollment import EnrollmentConsent
+    from src.protocol.information_approval import (
+        InformationApproval,
+        InformationAuthority,
+        InformationTrustStore,
+        sign_information,
+    )
+    from src.prover.pilot_compliance import PUBLIC_SIGNALS
+    from src.prover.pilot_verifier import PairingInspection
+    from src.sar.hpke_envelope import generate_keypair
+    from src.sar.pilot_envelope import RecipientAuthority, RecipientTrustStore
+    from src.services import proof_inspection as inspection_module
+    from src.services.authorization_mirror import AuthorizationMirrorService
+    from src.services.enrollment import EnrollmentIneligible, EnrollmentService, RevocationRequest
+    from src.services.fact_evidence import FactEvidenceService
+    from src.services.policy_activation import PolicyActivationRequest, PolicyActivationService
+    from src.services.policy_review import PolicyReviewRequest, PolicyReviewService, ReviewedCase
+    from src.services.proof_authorization import AuthorizationRejected, ProofAuthorizationService
+    from src.services.proof_inspection import CurrentStatementConfiguration, ProofInspectionService
+    from src.services.proof_observation import ProofObservationService
+    from src.services.root_publication import RootPublicationService
+
+    helper = runpy.run_path(str(Path(__file__).parents[1] / "unit/test_pilot_compliance.py"))["synthetic_case"]
+    manifest_digest = "ab" * 32
+    witness, _, inputs = helper(artifact_manifest_digest=manifest_digest, with_trust=True, authorization=True)
+    signals = [witness[name] for name in PUBLIC_SIGNALS]
+    credential, now = inputs.pop("credential"), inputs.pop("now")
+    configuration = CurrentStatementConfiguration(**inputs)
+    principal = Principal(
+        tenant_id=credential.tenant_id,
+        actor_id="simulator",
+        roles=(*ROLES, "policy:activate", "policy:read", "facts:ingest", "observations:write", "evidence:export"),
+        issuer_dids=(credential.issuer_did,),
+    )
+    wallet = Account.from_key(bytes([8]) * 32)
+    consent = EnrollmentConsent(
+        credential=credential,
+        chain_id=configuration.root_pins.chain_id,
+        registry_address=configuration.root_pins.registry_address,
+        consent_expires_at=min(credential.issued_at + 600, credential.expires_at),
+    )
+    enrollment = EnrollmentService(
+        db, cipher(), principal, chain_id=consent.chain_id, registry_address=consent.registry_address
+    )
+    await enrollment.enroll(
+        consent,
+        "0x" + wallet.sign_message(consent.signing_message()).signature.hex(),
+        idempotency_key="lock-enroll",
+        now=credential.issued_at,
+    )
+    publication = RootPublicationService(db, cipher(), principal, configuration.root_trust)
+    for name in ("issuance", "issuers", "sanctions"):
+        await publication.publish(getattr(configuration, name), idempotency_key="lock-root-" + name, now=now)
+
+    policy = configuration.policy_trust.for_transfer(
+        configuration.transfer, configuration.context, tenant_id=principal.tenant_id, now=now
+    )
+    review_service = PolicyReviewService(db, cipher(), principal)
+    case = PolicyCase(
+        case_id="synthetic-lock-review",
+        transfer=configuration.transfer,
+        context=configuration.context,
+        facts=PolicyFacts(tenant_id=principal.tenant_id, transfer_digest=configuration.transfer.digest, facts=()),
+        evaluated_at=now,
+    )
+    await review_service.approve(
+        PolicyReviewRequest(policy=policy, cases=(ReviewedCase(case=case, expected="INDETERMINATE"),)),
+        idempotency_key="lock-approve",
+        now=now,
+    )
+    await PolicyActivationService(db, cipher(), principal).activate(
+        PolicyActivationRequest(policy_digest=policy.digest),
+        idempotency_key="lock-activate",
+        now=now,
+    )
+
+    fact_key = Ed25519PrivateKey.generate()
+    fact_authority = FactAuthority(
+        public_key=fact_key.public_key().public_bytes_raw().hex(),
+        tenant_id=principal.tenant_id,
+        chain_id=configuration.root_pins.chain_id,
+        registry_address=configuration.root_pins.registry_address,
+        source_ids=("business",),
+        predicates=("applicability_resolved", "counterparty_trusted", "required_information_complete"),
+        not_before=now,
+        not_after=credential.expires_at,
+        max_lifetime_seconds=86400,
+        max_observation_age_seconds=86400,
+    )
+    fact_trust = FactTrustStore([fact_authority])
+    approvals = tuple(
+        sign_fact(
+            FactApproval(
+                tenant_id=principal.tenant_id,
+                transfer_digest=configuration.transfer.digest,
+                context_digest=configuration.context.digest,
+                source_id="business",
+                signed_at=now,
+                key_id=fact_authority.key_id,
+                fact=PolicyFact(
+                    predicate=predicate,
+                    value=True,
+                    observed_at=now,
+                    expires_at=credential.expires_at,
+                    evidence_digest="ab" * 32,
+                ),
+            ),
+            fact_key,
+        )
+        for predicate in ("applicability_resolved", "counterparty_trusted", "required_information_complete")
+    )
+    fact_ids = await FactEvidenceService(db, cipher(), principal, fact_trust).retain(
+        approvals, transfer=configuration.transfer, context=configuration.context, now=now
+    )
+
+    proof_bytes = json.dumps(
+        {
+            "protocol": "groth16",
+            "curve": "bn128",
+            "pi_a": ["1", "2", "1"],
+            "pi_b": [["1", "2"], ["3", "4"], ["1", "0"]],
+            "pi_c": ["5", "6", "1"],
+        }
+    ).encode()
+
+    stub_verifier = SimpleNamespace(
+        artifacts=SimpleNamespace(
+            manifest=SimpleNamespace(
+                digest=manifest_digest,
+                assurance="development-unapproved",
+                model_dump=lambda mode="json": {"digest": manifest_digest, "assurance": "development-unapproved"},
+            ),
+            verification_key_bytes=b'{"protocol":"groth16"}',
+        ),
+        bundle=b"synthetic-bundle",
+    )
+    valid_inspection = PairingInspection(
+        cryptographic_valid=True,
+        manifest_digest=manifest_digest,
+        proof_profile="pilot-transfer-v3",
+    )
+
+    entered, release = asyncio.Event(), asyncio.Event()
+    pairing_result = [valid_inspection]
+
+    async def paused_pairing(*_args, **_kwargs):
+        entered.set()
+        await release.wait()
+        return pairing_result[0]
+
+    monkeypatch.setattr(inspection_module, "inspect_current_statement", paused_pairing)
+
+    inspector = ProofInspectionService(db, cipher(), principal, stub_verifier, configuration)
+    observer = ProofObservationService(db, cipher(), principal, stub_verifier, configuration)
+    authorizer = ProofAuthorizationService(db, cipher(), principal, stub_verifier, configuration)
+    mirror = AuthorizationMirrorService(db, cipher(), principal, stub_verifier, configuration, consumer="0x" + "7" * 40)
+
+    _, public = generate_keypair()
+    recipient = RecipientAuthority(
+        tenant_id=principal.tenant_id,
+        chain_id=int(configuration.context.deployment_chain_id),
+        registry_address=configuration.context.deployment_address,
+        recipient_did=configuration.transfer.beneficiary.vasp_did,
+        public_key=public.hex(),
+        not_before=now,
+        not_after=credential.expires_at,
+    )
+    make_information = runpy.run_path(str(Path(__file__).parents[1] / "unit/test_transfer_information.py"))[
+        "synthetic_information"
+    ]
+    raw_info = json.dumps(make_information(configuration.transfer, configuration.context)).encode()
+    info_key = Ed25519PrivateKey.generate()
+    info_authority = InformationAuthority(
+        public_key=info_key.public_key().public_bytes_raw().hex(),
+        tenant_id=principal.tenant_id,
+        chain_id=int(configuration.context.deployment_chain_id),
+        registry_address=configuration.context.deployment_address,
+        source_ids=("synthetic-kyc",),
+        not_before=now,
+        not_after=credential.expires_at,
+        max_lifetime_seconds=86400,
+    )
+    signed_info = sign_information(
+        InformationApproval(
+            tenant_id=principal.tenant_id,
+            transfer_digest=configuration.transfer.digest,
+            context_digest=configuration.context.digest,
+            credential_id=credential.credential_nonce,
+            payload_digest=hashlib.sha256(raw_info).hexdigest(),
+            source_id="synthetic-kyc",
+            source_evidence_digest="cd" * 32,
+            signed_at=now,
+            expires_at=credential.expires_at,
+            key_id=info_authority.key_id,
+        ),
+        info_key,
+    )
+    decision_key = Ed25519PrivateKey.generate()
+    decision_authority = DecisionAuthority(
+        public_key=decision_key.public_key().public_bytes_raw().hex(),
+        tenant_id=principal.tenant_id,
+        chain_id=int(configuration.context.deployment_chain_id),
+        registry_address=configuration.context.deployment_address,
+        not_before=now,
+        not_after=credential.expires_at,
+    )
+    decision_signer = DecisionSigner(decision_authority, decision_key)
+    decision_trust = DecisionTrustStore([decision_authority])
+    info_trust = InformationTrustStore([info_authority])
+    recipient_trust = RecipientTrustStore([recipient])
+
+    writer_store = PilotStore(db, cipher(), principal)
+
+    async def assert_writer_commits_while_paused(coro, writer_id: str):
+        entered.clear()
+        release.clear()
+        task = asyncio.create_task(coro)
+        try:
+            waiter = asyncio.create_task(entered.wait())
+            done, _ = await asyncio.wait({task, waiter}, timeout=5, return_when=asyncio.FIRST_COMPLETED)
+            if task in done and not entered.is_set():
+                waiter.cancel()
+                await task  # surface the underlying exception immediately
+            if not entered.is_set():
+                waiter.cancel()
+                raise TimeoutError(f"pairing did not start for {writer_id}")
+
+            # Fire a second writer in the same tenant while pairing is paused.
+            # It must commit immediately without waiting for release.set().
+            async def concurrent_write():
+                async with writer_store.transaction() as tx:
+                    await tx.put("transfer", writer_id, {"marker": writer_id})
+
+            await asyncio.wait_for(concurrent_write(), timeout=2.0)
+            assert not task.done()
+            release.set()
+            return await asyncio.wait_for(task, 5)
+        finally:
+            release.set()
+            if not task.done():
+                task.cancel()
+            await asyncio.gather(task, return_exceptions=True)
+
+    # 1. inspect() does not hold lock during pairing.
+    inspected = await assert_writer_commits_while_paused(
+        inspector.inspect(credential.credential_nonce, proof_bytes, list(signals), now=now),
+        "writer-during-inspect",
+    )
+    assert inspected.cryptographic_valid is True
+
+    # 2. evaluate() does not hold lock during pairing.
+    eval_insp, eval_dec = await assert_writer_commits_while_paused(
+        inspector.evaluate(
+            credential.credential_nonce, proof_bytes, list(signals), fact_ids, fact_trust=fact_trust, now=now
+        ),
+        "writer-during-evaluate",
+    )
+    assert eval_insp.cryptographic_valid is True and eval_dec.outcome == "ALLOW"
+
+    # 3. observe() does not hold lock during pairing; retry hits idempotency cache without pairing.
+    observed = await assert_writer_commits_while_paused(
+        observer.observe(
+            credential.credential_nonce,
+            proof_bytes,
+            list(signals),
+            fact_ids,
+            fact_trust=fact_trust,
+            idempotency_key="lock-observe-1",
+            now=now,
+        ),
+        "writer-during-observe",
+    )
+    assert observed["policy"]["outcome"] == "ALLOW"
+    # Retry returns cached result without calling pairing again.
+    entered.clear()
+    cached_obs = await observer.observe(
+        credential.credential_nonce,
+        proof_bytes,
+        list(signals),
+        fact_ids,
+        fact_trust=fact_trust,
+        idempotency_key="lock-observe-1",
+        now=now,
+    )
+    assert cached_obs == observed and not entered.is_set()
+
+    # 4. authorize() does not hold lock during pairing; concurrent retry/replay and cached retry work.
+    receipt = await assert_writer_commits_while_paused(
+        authorizer.authorize(
+            credential.credential_nonce,
+            proof_bytes,
+            list(signals),
+            fact_ids,
+            fact_trust=fact_trust,
+            pii=raw_info,
+            information_approval=signed_info,
+            information_trust=info_trust,
+            decision_signer=decision_signer,
+            recipient_trust=recipient_trust,
+            recipient_key_id=recipient.key_id,
+            idempotency_key="lock-auth-1",
+            now=now,
+        ),
+        "writer-during-authorize",
+    )
+    assert receipt["outcome"] == "ALLOW"
+    entered.clear()
+    cached_auth = await authorizer.authorize(
+        credential.credential_nonce,
+        proof_bytes,
+        list(signals),
+        fact_ids,
+        fact_trust=fact_trust,
+        pii=raw_info,
+        information_approval=signed_info,
+        information_trust=info_trust,
+        decision_signer=decision_signer,
+        recipient_trust=recipient_trust,
+        recipient_key_id=recipient.key_id,
+        idempotency_key="lock-auth-1",
+        now=now,
+    )
+    assert cached_auth == receipt and not entered.is_set()
+
+    # 5. Replay on already-consumed nullifier rejects before pairing.
+    entered.clear()
+    with pytest.raises(ReplayConflict):
+        await authorizer.authorize(
+            credential.credential_nonce,
+            proof_bytes,
+            list(signals),
+            fact_ids,
+            fact_trust=fact_trust,
+            pii=raw_info,
+            information_approval=signed_info,
+            information_trust=info_trust,
+            decision_signer=decision_signer,
+            recipient_trust=recipient_trust,
+            recipient_key_id=recipient.key_id,
+            idempotency_key="lock-auth-replay",
+            now=now,
+        )
+    assert not entered.is_set()
+
+    # 6. Mirror prepare() does not hold lock during pairing.
+    plan = await assert_writer_commits_while_paused(
+        mirror.prepare(
+            receipt["receipt_id"],
+            pii=raw_info,
+            fact_trust=fact_trust,
+            decision_trust=decision_trust,
+            information_trust=info_trust,
+            recipient_trust=recipient_trust,
+            now=now,
+        ),
+        "writer-during-mirror",
+    )
+    assert plan["receipt_id"] == receipt["receipt_id"]
+
+    # 7. Concurrent authorize with fresh nullifier: two callers race during pairing;
+    #    the second hits ReplayConflict inside the commit tx re-check.
+    fresh_signals = list(signals)
+    fresh_signals[3] = str(int(signals[3]) + 1)
+    entered.clear()
+    release.clear()
+    call_count = 0
+
+    async def pause_first_only(*_args, **_kwargs):
+        nonlocal call_count
+        call_count += 1
+        if call_count == 1:
+            entered.set()
+            await release.wait()
+        return valid_inspection
+
+    monkeypatch.setattr(inspection_module, "inspect_current_statement", pause_first_only)
+    auth_slow = asyncio.create_task(
+        authorizer.authorize(
+            credential.credential_nonce,
+            proof_bytes,
+            fresh_signals,
+            fact_ids,
+            fact_trust=fact_trust,
+            pii=raw_info,
+            information_approval=signed_info,
+            information_trust=info_trust,
+            decision_signer=decision_signer,
+            recipient_trust=recipient_trust,
+            recipient_key_id=recipient.key_id,
+            idempotency_key="lock-auth-race-1",
+            now=now + 1,
+        )
+    )
+    await asyncio.wait_for(entered.wait(), 5)
+    winner = await authorizer.authorize(
+        credential.credential_nonce,
+        proof_bytes,
+        fresh_signals,
+        fact_ids,
+        fact_trust=fact_trust,
+        pii=raw_info,
+        information_approval=signed_info,
+        information_trust=info_trust,
+        decision_signer=decision_signer,
+        recipient_trust=recipient_trust,
+        recipient_key_id=recipient.key_id,
+        idempotency_key="lock-auth-race-2",
+        now=now + 1,
+    )
+    assert winner["outcome"] == "ALLOW"
+    release.set()
+    with pytest.raises(ReplayConflict):
+        await asyncio.wait_for(auth_slow, 5)
+
+    # 8. Invalid pairing rejects authorize() cleanly before commit tx.
+    invalid_signals = list(signals)
+    invalid_signals[3] = str(int(signals[3]) + 2)
+    pairing_result[0] = PairingInspection(
+        cryptographic_valid=False,
+        manifest_digest=manifest_digest,
+        proof_profile="pilot-transfer-v3",
+    )
+    monkeypatch.setattr(inspection_module, "inspect_current_statement", paused_pairing)
+    release.set()
+    with pytest.raises(AuthorizationRejected):
+        await authorizer.authorize(
+            credential.credential_nonce,
+            proof_bytes,
+            invalid_signals,
+            fact_ids,
+            fact_trust=fact_trust,
+            pii=raw_info,
+            information_approval=signed_info,
+            information_trust=info_trust,
+            decision_signer=decision_signer,
+            recipient_trust=recipient_trust,
+            recipient_key_id=recipient.key_id,
+            idempotency_key="lock-auth-invalid",
+            now=now,
+        )
+
+    # 9. Revocation while pairing is in flight causes authorize() commit re-check to reject.
+    pairing_result[0] = valid_inspection
+    revoke_signals = list(signals)
+    revoke_signals[3] = str(int(signals[3]) + 3)
+    entered.clear()
+    release.clear()
+    auth_revoked = asyncio.create_task(
+        authorizer.authorize(
+            credential.credential_nonce,
+            proof_bytes,
+            revoke_signals,
+            fact_ids,
+            fact_trust=fact_trust,
+            pii=raw_info,
+            information_approval=signed_info,
+            information_trust=info_trust,
+            decision_signer=decision_signer,
+            recipient_trust=recipient_trust,
+            recipient_key_id=recipient.key_id,
+            idempotency_key="lock-auth-revoked",
+            now=now,
+        )
+    )
+    await asyncio.wait_for(entered.wait(), 5)
+    await enrollment.revoke(
+        RevocationRequest(
+            credential_id=credential.credential_nonce,
+            idempotency_key="lock-revoke-during-auth",
+            reason_code="revoked",
+        ),
+        now=now,
+    )
+    release.set()
+    with pytest.raises(EnrollmentIneligible, match="revoked"):
+        await asyncio.wait_for(auth_revoked, 5)
+    # 10. Commit-time re-check branches: lookup_idempotent conflict, authorize() and
+    #     mirror.prepare() commit-time non-ALLOW policy recheck after pairing.
+    with pytest.raises(RecordConflict):
+        await observer.observe(
+            credential.credential_nonce,
+            proof_bytes,
+            list(signals),
+            (),
+            fact_trust=fact_trust,
+            idempotency_key="lock-observe-1",
+            now=now,
+        )
+
+    # Exercise commit-time non-ALLOW decision in authorize() and mirror.prepare() by
+    # returning a DENY decision only on the second _finish_evaluation call.
+    deny_decision = eval_dec.model_copy(update={"outcome": "DENY"})
+
+    # Re-enroll a clean credential (previous one was revoked in step 9) so authorize/mirror commit rechecks run.
+    cred2 = credential.model_copy(update={"credential_nonce": "ee" * 32})
+    consent2 = consent.model_copy(update={"credential": cred2})
+    await enrollment.enroll(
+        consent2,
+        "0x" + wallet.sign_message(consent2.signing_message()).signature.hex(),
+        idempotency_key="lock-enroll-2",
+        now=cred2.issued_at,
+    )
+    release.set()
+    monkeypatch.setattr(inspection_module, "inspect_current_statement", paused_pairing)
+    commit_signals = list(signals)
+    commit_signals[3] = str(int(signals[3]) + 4)
+
+    real_finish = authorizer._finish_evaluation
+    finish_calls = 0
+
+    def flip_to_deny(*args, **kwargs):
+        nonlocal finish_calls
+        finish_calls += 1
+        insp, dec = real_finish(*args, **kwargs)
+        if finish_calls == 2:
+            return insp, deny_decision
+        return insp, dec
+
+    with monkeypatch.context() as patch:
+        patch.setattr(authorizer, "_finish_evaluation", flip_to_deny)
+        with pytest.raises(AuthorizationRejected):
+            await authorizer.authorize(
+                cred2.credential_nonce,
+                proof_bytes,
+                commit_signals,
+                fact_ids,
+                fact_trust=fact_trust,
+                pii=raw_info,
+                information_approval=sign_information(
+                    InformationApproval(
+                        tenant_id=principal.tenant_id,
+                        transfer_digest=configuration.transfer.digest,
+                        context_digest=configuration.context.digest,
+                        credential_id=cred2.credential_nonce,
+                        payload_digest=hashlib.sha256(raw_info).hexdigest(),
+                        source_id="synthetic-kyc",
+                        source_evidence_digest="cd" * 32,
+                        signed_at=now,
+                        expires_at=cred2.expires_at,
+                        key_id=info_authority.key_id,
+                    ),
+                    info_key,
+                ),
+                information_trust=info_trust,
+                decision_signer=decision_signer,
+                recipient_trust=recipient_trust,
+                recipient_key_id=recipient.key_id,
+                idempotency_key="lock-auth-commit-deny",
+                now=now,
+            )
+
+    # Mirror prepare: valid pre-pairing evaluation, then commit-time recheck turns DENY.
+    receipt2 = await authorizer.authorize(
+        cred2.credential_nonce,
+        proof_bytes,
+        commit_signals,
+        fact_ids,
+        fact_trust=fact_trust,
+        pii=raw_info,
+        information_approval=sign_information(
+            InformationApproval(
+                tenant_id=principal.tenant_id,
+                transfer_digest=configuration.transfer.digest,
+                context_digest=configuration.context.digest,
+                credential_id=cred2.credential_nonce,
+                payload_digest=hashlib.sha256(raw_info).hexdigest(),
+                source_id="synthetic-kyc",
+                source_evidence_digest="cd" * 32,
+                signed_at=now,
+                expires_at=cred2.expires_at,
+                key_id=info_authority.key_id,
+            ),
+            info_key,
+        ),
+        information_trust=info_trust,
+        decision_signer=decision_signer,
+        recipient_trust=recipient_trust,
+        recipient_key_id=recipient.key_id,
+        idempotency_key="lock-auth-for-mirror-deny",
+        now=now + 2,
+    )
+    real_mirror_finish = mirror._finish_evaluation
+    mirror_finish_calls = 0
+
+    def flip_mirror_to_deny(*args, **kwargs):
+        nonlocal mirror_finish_calls
+        mirror_finish_calls += 1
+        insp, dec = real_mirror_finish(*args, **kwargs)
+        if mirror_finish_calls == 2:
+            return insp, deny_decision
+        return insp, dec
+
+    with monkeypatch.context() as patch:
+        patch.setattr(mirror, "_finish_evaluation", flip_mirror_to_deny)
+        with pytest.raises(ValueError, match="Current authorization checks did not confirm ALLOW"):
+            await mirror.prepare(
+                receipt2["receipt_id"],
+                pii=raw_info,
+                fact_trust=fact_trust,
+                decision_trust=decision_trust,
+                information_trust=info_trust,
+                recipient_trust=recipient_trust,
+                now=now + 2,
+            )
+
+    # Mirror prepare: invalid pairing rejects before commit tx.
+    pairing_result[0] = PairingInspection(
+        cryptographic_valid=False,
+        manifest_digest=manifest_digest,
+        proof_profile="pilot-transfer-v3",
+    )
+    with pytest.raises(ValueError, match="Current authorization checks did not confirm ALLOW"):
+        await mirror.prepare(
+            receipt2["receipt_id"],
+            pii=raw_info,
+            fact_trust=fact_trust,
+            decision_trust=decision_trust,
+            information_trust=info_trust,
+            recipient_trust=recipient_trust,
+            now=now + 2,
+        )
