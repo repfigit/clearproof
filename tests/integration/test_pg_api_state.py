@@ -25,7 +25,9 @@ from src.auth import siwe_auth as siwe_module
 from src.auth.siwe_auth import SIWEAuth
 from src.storage.api_state import (
     PostgresRateLimitStore,
+    PostgresSIWENonceStore,
     PostgresSIWESessionStore,
+    hash_nonce,
     hash_session_token,
 )
 from src.storage.database import _SCHEMA_MIGRATIONS, SCHEMA_VERSION, Database
@@ -64,13 +66,13 @@ async def test_fresh_db_migrations_create_rate_limit_and_siwe_tables_with_indexe
                         """
                         SELECT tablename FROM pg_tables
                         WHERE schemaname = %s
-                          AND tablename IN ('api_rate_limit_buckets', 'siwe_sessions')
+                          AND tablename IN ('api_rate_limit_buckets', 'siwe_sessions', 'siwe_nonces')
                         """,
                         (schema,),
                     )
                 ).fetchall()
             }
-            assert tables == {"api_rate_limit_buckets", "siwe_sessions"}
+            assert tables == {"api_rate_limit_buckets", "siwe_sessions", "siwe_nonces"}
 
             indexes = {
                 row[0]
@@ -79,7 +81,7 @@ async def test_fresh_db_migrations_create_rate_limit_and_siwe_tables_with_indexe
                         """
                         SELECT indexname FROM pg_indexes
                         WHERE schemaname = %s
-                          AND tablename IN ('api_rate_limit_buckets', 'siwe_sessions')
+                          AND tablename IN ('api_rate_limit_buckets', 'siwe_sessions', 'siwe_nonces')
                         """,
                         (schema,),
                     )
@@ -88,8 +90,11 @@ async def test_fresh_db_migrations_create_rate_limit_and_siwe_tables_with_indexe
             assert {
                 "idx_api_rate_limit_buckets_expires",
                 "idx_api_rate_limit_buckets_updated",
+                "idx_api_rate_limit_buckets_namespace_updated",
                 "idx_siwe_sessions_expires",
                 "idx_siwe_sessions_last_accessed",
+                "idx_siwe_nonces_expires",
+                "idx_siwe_nonces_created",
             }.issubset(indexes)
 
             # Reconnecting does not replay already-committed migrations.
@@ -613,3 +618,188 @@ async def test_api_state_stores_unwind_transactions_and_release_connections_on_c
     with pytest.raises(RuntimeError, match="simulated cursor execute failure"):
         await siwe_store.sweep_expired(batch_size=4)
     assert_clean_unwind(fake_db)
+
+
+async def test_upgrade_backfills_rate_limit_bucket_namespace_and_creates_siwe_nonces(monkeypatch):
+    """Upgrading from pre-nonce/pre-namespace schema backfills bucket_namespace and creates siwe_nonces."""
+    admin = os.environ["DATABASE_URL"]
+    schema = "api_state_ns_upg_" + uuid.uuid4().hex
+    async with await psycopg.AsyncConnection.connect(admin) as conn:
+        await conn.execute(sql.SQL("CREATE SCHEMA {}").format(sql.Identifier(schema)))
+    target_url = make_conninfo(admin, options=f"-c search_path={schema}")
+    monkeypatch.setenv("DATABASE_URL", target_url)
+
+    pre_count = len(_SCHEMA_MIGRATIONS) - 2
+    async with await psycopg.AsyncConnection.connect(target_url) as conn:
+        await conn.execute(
+            """
+            CREATE TABLE schema_migrations (
+                version INTEGER PRIMARY KEY,
+                applied_at TIMESTAMPTZ NOT NULL DEFAULT now()
+            )
+            """
+        )
+        for idx, mig in enumerate(_SCHEMA_MIGRATIONS[:pre_count], start=1):
+            if callable(mig):
+                await mig(conn)
+            else:
+                await conn.execute(mig)
+            await conn.execute("INSERT INTO schema_migrations (version) VALUES (%s)", (idx,))
+
+        # Insert pre-migration rate-limit rows (with and without namespace prefix).
+        await conn.execute(
+            """
+            INSERT INTO api_rate_limit_buckets (
+                bucket_key, window_started_at, window_expires_at, request_count
+            ) VALUES
+                ('RATE_LIMIT_AUTH_NONCE:ip:1.2.3.4', clock_timestamp(), clock_timestamp() + INTERVAL '60 seconds', 2),
+                ('legacy_bare_key', clock_timestamp(), clock_timestamp() + INTERVAL '60 seconds', 1)
+            """
+        )
+
+    database = Database(pool_min=1, pool_max=4)
+    try:
+        await database.connect()
+        async with database.connection() as conn:
+            rows = dict(
+                await (await conn.execute("SELECT bucket_key, bucket_namespace FROM api_rate_limit_buckets")).fetchall()
+            )
+            assert rows == {
+                "RATE_LIMIT_AUTH_NONCE:ip:1.2.3.4": "RATE_LIMIT_AUTH_NONCE",
+                "legacy_bare_key": "default",
+            }
+            assert (await (await conn.execute("SELECT count(*) FROM siwe_nonces")).fetchone())[0] == 0
+    finally:
+        await database.close()
+        async with await psycopg.AsyncConnection.connect(admin) as conn:
+            await conn.execute(sql.SQL("DROP SCHEMA {} CASCADE").format(sql.Identifier(schema)))
+
+
+async def test_rate_limit_cleanup_eviction_isolated_per_bucket_namespace(db):
+    """Flooding one endpoint's namespace cannot evict buckets belonging to another namespace."""
+    store = PostgresRateLimitStore(db, cleanup_interval_writes=3, cleanup_batch_size=50)
+
+    # Populate 4 live buckets in namespace B (e.g. /auth/verify).
+    for i in range(4):
+        await store.check_and_increment(
+            f"NS_B:ip:198.51.100.{i}",
+            max_requests=5,
+            window_seconds=60.0,
+            max_clients=10,
+            bucket_namespace="NS_B",
+        )
+    assert await store.count(bucket_namespace="NS_B") == 4
+
+    # Flood namespace A with 6 distinct clients and tight max_clients=2; periodic cleanup fires on NS_A.
+    for i in range(6):
+        await store.check_and_increment(
+            f"NS_A:ip:203.0.113.{i}",
+            max_requests=5,
+            window_seconds=60.0,
+            max_clients=2,
+            bucket_namespace="NS_A",
+        )
+
+    # Explicit namespace-scoped cleanup trims NS_A to 2 while leaving all 4 NS_B buckets intact.
+    await store.cleanup(max_buckets=2, batch_size=50, bucket_namespace="NS_A")
+    assert await store.count(bucket_namespace="NS_A") == 2
+    assert await store.count(bucket_namespace="NS_B") == 4
+
+    # Bare key without colon defaults to 'default' namespace.
+    await store.check_and_increment("barekey", max_requests=5, window_seconds=60.0, max_clients=10)
+    assert await store.count(bucket_namespace="default") == 1
+    assert await store.count() == 7
+
+
+async def test_cross_worker_siwe_nonce_success_expiry_and_single_use_race(monkeypatch):
+    """Nonces generated on worker A verify on worker B, expire via DB clock, and are strictly single-use."""
+    admin = os.environ["DATABASE_URL"]
+    schema = "api_nonce_xw_" + uuid.uuid4().hex
+    async with await psycopg.AsyncConnection.connect(admin) as conn:
+        await conn.execute(sql.SQL("CREATE SCHEMA {}").format(sql.Identifier(schema)))
+    url = make_conninfo(admin, options=f"-c search_path={schema}")
+    monkeypatch.setenv("DATABASE_URL", url)
+
+    worker_a_db = Database(pool_min=2, pool_max=8)
+    worker_b_db = Database(pool_min=2, pool_max=8)
+    try:
+        await worker_a_db.connect()
+        await worker_b_db.connect()
+
+        auth_a = SIWEAuth("wallet.example", max_nonces=5)
+        auth_b = SIWEAuth("wallet.example", max_nonces=5)
+        auth_a.bind_database(worker_a_db)
+        auth_b.bind_database(worker_b_db)
+
+        # 1. Cross-worker success: worker A generates nonce, worker B verifies signed SIWE message.
+        nonce = await auth_a.generate_nonce()
+        async with worker_a_db.connection() as conn:
+            rows = await (await conn.execute("SELECT nonce_hash FROM siwe_nonces")).fetchall()
+            stored_hashes = [row[0] for row in rows]
+            assert stored_hashes == [hash_nonce(nonce)]
+            assert nonce not in stored_hashes
+
+        msg, sig, addr = signed(nonce)
+        session = await auth_b.verify(msg, sig)
+        assert session["address"] == addr
+
+        # 2. Single-use: replaying the same nonce on either worker fails.
+        with pytest.raises(ValueError, match="Invalid or expired nonce"):
+            await auth_a.verify(msg, sig)
+
+        # 3. Concurrent cross-worker consume race: exactly one worker succeeds.
+        race_nonce = await auth_a.generate_nonce()
+        attempts = 12
+        barrier = asyncio.Barrier(attempts)
+
+        async def try_consume(idx: int) -> bool:
+            target = auth_a if idx % 2 == 0 else auth_b
+            await barrier.wait()
+            return await target._consume_nonce(race_nonce)
+
+        results = await asyncio.gather(*(try_consume(i) for i in range(attempts)))
+        assert results.count(True) == 1
+        assert results.count(False) == attempts - 1
+
+        # 4. DB-clock expiry (shifted timestamp and genuine short TTL).
+        expired_nonce = await auth_a.generate_nonce()
+        async with worker_a_db.connection() as conn:
+            await conn.execute(
+                """
+                UPDATE siwe_nonces
+                SET created_at = clock_timestamp() - INTERVAL '10 minutes',
+                    expires_at = clock_timestamp() - INTERVAL '1 second'
+                WHERE nonce_hash = %s
+                """,
+                (hash_nonce(expired_nonce),),
+            )
+        assert await auth_b._consume_nonce(expired_nonce) is False
+        assert await auth_a._pg_nonces.count() == 0
+
+        # Short-TTL genuine DB-clock expiry + sweep_expired + bounded cap + validation.
+        store = PostgresSIWENonceStore(worker_a_db, max_entries=3, cleanup_batch_size=10)
+        assert store.max_entries == 3
+        await store.create("short-ttl-nonce", ttl_seconds=0.12)
+        await asyncio.sleep(0.20)
+        assert await store.consume("short-ttl-nonce") is False
+
+        await store.create("sweep-1", ttl_seconds=0.05)
+        await store.create("sweep-2", ttl_seconds=0.05)
+        await asyncio.sleep(0.12)
+        assert await store.sweep_expired(batch_size=1) == 1
+        assert await store.sweep_expired() == 1
+        assert await store.count() == 0
+
+        for i in range(5):
+            await store.create(f"cap-nonce-{i}", ttl_seconds=60.0)
+        assert await store.count() == 3
+
+        with pytest.raises(ValueError, match="max_entries"):
+            PostgresSIWENonceStore(worker_a_db, max_entries=0)
+        with pytest.raises(ValueError, match="cleanup_batch_size"):
+            PostgresSIWENonceStore(worker_a_db, max_entries=5, cleanup_batch_size=0)
+    finally:
+        await worker_a_db.close()
+        await worker_b_db.close()
+        async with await psycopg.AsyncConnection.connect(admin) as conn:
+            await conn.execute(sql.SQL("DROP SCHEMA {} CASCADE").format(sql.Identifier(schema)))

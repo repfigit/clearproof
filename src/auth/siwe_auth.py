@@ -31,7 +31,7 @@ from typing import Any
 
 from siwe import SiweMessage
 
-from src.storage.api_state import PostgresSIWESessionStore
+from src.storage.api_state import PostgresSIWENonceStore, PostgresSIWESessionStore
 from src.storage.database import Database
 
 logger = logging.getLogger(__name__)
@@ -39,6 +39,7 @@ logger = logging.getLogger(__name__)
 _NONCE_TTL_SECONDS = int(os.getenv("SIWE_NONCE_TTL", "300"))  # 5 minutes
 _SESSION_TTL_SECONDS = int(os.getenv("SIWE_SESSION_TTL", "86400"))  # 24 hours
 DEFAULT_MAX_SESSIONS = 10_000
+DEFAULT_MAX_NONCES = 10_000
 
 
 def siwe_max_sessions() -> int:
@@ -49,6 +50,17 @@ def siwe_max_sessions() -> int:
     value = int(raw.strip())
     if value <= 0:
         raise ValueError("SIWE_MAX_SESSIONS must be a positive integer")
+    return value
+
+
+def siwe_max_nonces() -> int:
+    """Parse ``SIWE_MAX_NONCES`` (default 10000, positive integer)."""
+    raw = os.getenv("SIWE_MAX_NONCES")
+    if raw is None or not raw.strip():
+        return DEFAULT_MAX_NONCES
+    value = int(raw.strip())
+    if value <= 0:
+        raise ValueError("SIWE_MAX_NONCES must be a positive integer")
     return value
 
 
@@ -107,15 +119,16 @@ class BoundedSessionStore:
         return session
 
 
-# In-memory nonce store (used when Redis is not configured)
-_nonce_store: dict[str, float] = {}  # nonce -> created_at
+# Bounded in-memory nonce store (fallback when neither PostgreSQL nor Redis is configured)
+_nonce_store: OrderedDict[str, float] = OrderedDict()  # nonce -> created_at
 
 
 class SIWEAuth:
     """SIWE authentication handler.
 
-    Supports PostgreSQL-backed (``db`` / ``session_store``), Redis-backed, and
-    bounded in-memory (fallback when ``DATABASE_URL`` is absent) session storage.
+    Supports PostgreSQL-backed (``db`` / ``session_store`` / ``nonce_store``),
+    Redis-backed, and bounded in-memory (fallback when ``DATABASE_URL`` is
+    absent) nonce and session storage.
     """
 
     def __init__(
@@ -125,19 +138,27 @@ class SIWEAuth:
         *,
         db: Database | None = None,
         session_store: PostgresSIWESessionStore | None = None,
+        nonce_store: PostgresSIWENonceStore | None = None,
         max_sessions: int | None = None,
+        max_nonces: int | None = None,
     ) -> None:
         """
         Args:
             domain: The expected domain in SIWE messages (e.g. "app.clearproof.io").
             redis_client: Optional async Redis client.
-            db: Optional connected PostgreSQL ``Database`` for multi-worker session persistence.
+            db: Optional connected PostgreSQL ``Database`` for multi-worker nonce and session persistence.
             session_store: Optional explicit ``PostgresSIWESessionStore`` (overrides ``db``).
+            nonce_store: Optional explicit ``PostgresSIWENonceStore`` (overrides ``db``).
             max_sessions: Optional cap on stored sessions (defaults to ``SIWE_MAX_SESSIONS``).
+            max_nonces: Optional cap on stored nonces (defaults to ``SIWE_MAX_NONCES``).
         """
         self.domain = domain
         self.redis = redis_client
         cap = siwe_max_sessions() if max_sessions is None else max_sessions
+        nonce_cap = siwe_max_nonces() if max_nonces is None else max_nonces
+        if nonce_cap <= 0:
+            raise ValueError("max_nonces must be a positive integer")
+        self._max_nonces = nonce_cap
         self._sessions = BoundedSessionStore(max_entries=cap)
         if session_store is not None:
             self._pg_sessions: PostgresSIWESessionStore | None = session_store
@@ -145,10 +166,17 @@ class SIWEAuth:
             self._pg_sessions = PostgresSIWESessionStore(db, max_entries=cap)
         else:
             self._pg_sessions = None
+        if nonce_store is not None:
+            self._pg_nonces: PostgresSIWENonceStore | None = nonce_store
+        elif db is not None:
+            self._pg_nonces = PostgresSIWENonceStore(db, max_entries=nonce_cap)
+        else:
+            self._pg_nonces = None
 
     def bind_database(self, db: Database) -> None:
-        """Attach a connected PostgreSQL ``Database`` for multi-worker session persistence."""
+        """Attach a connected PostgreSQL ``Database`` for multi-worker nonce and session persistence."""
         self._pg_sessions = PostgresSIWESessionStore(db, max_entries=self._sessions.max_entries)
+        self._pg_nonces = PostgresSIWENonceStore(db, max_entries=self._max_nonces)
 
     def session_count(self) -> int:
         """Return the number of in-memory sessions currently retained (test hook)."""
@@ -163,8 +191,12 @@ class SIWEAuth:
 
         if self.redis is not None:
             await self.redis.setex(f"siwe:nonce:{nonce}", _NONCE_TTL_SECONDS, "1")
+        elif self._pg_nonces is not None:
+            await self._pg_nonces.create(nonce, ttl_seconds=_NONCE_TTL_SECONDS)
         else:
             self._purge_expired_nonces()
+            while len(_nonce_store) >= self._max_nonces:
+                del _nonce_store[next(iter(_nonce_store))]
             _nonce_store[nonce] = time.time()
 
         return nonce
@@ -177,6 +209,9 @@ class SIWEAuth:
         if self.redis is not None:
             result = await self.redis.delete(f"siwe:nonce:{nonce}")
             return result > 0
+
+        if self._pg_nonces is not None:
+            return await self._pg_nonces.consume(nonce)
 
         created_at = _nonce_store.pop(nonce, None)
         if created_at is None:

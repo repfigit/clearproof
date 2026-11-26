@@ -19,12 +19,26 @@ from src.storage.database import Database
 
 DEFAULT_RATE_LIMIT_CLEANUP_BATCH = 500
 DEFAULT_SIWE_CLEANUP_BATCH = 500
+DEFAULT_SIWE_NONCE_CLEANUP_BATCH = 500
 DEFAULT_CLEANUP_INTERVAL_WRITES = 64
 
 
 def hash_session_token(token: str) -> str:
     """Return the lowercase hex SHA-256 digest of a raw SIWE session token."""
     return hashlib.sha256(token.encode("utf-8")).hexdigest()
+
+
+def hash_nonce(nonce: str) -> str:
+    """Return the lowercase hex SHA-256 digest of a raw SIWE nonce."""
+    return hashlib.sha256(nonce.encode("utf-8")).hexdigest()
+
+
+def _resolve_bucket_namespace(bucket_key: str, bucket_namespace: str | None) -> str:
+    """Return explicit ``bucket_namespace`` or derive the prefix before ``:`` (else ``default``)."""
+    if bucket_namespace is not None:
+        return bucket_namespace
+    prefix, sep, _ = bucket_key.partition(":")
+    return prefix if sep and prefix else "default"
 
 
 @dataclass(frozen=True)
@@ -83,13 +97,16 @@ class PostgresRateLimitStore:
         max_requests: int,
         window_seconds: float,
         max_clients: int,
+        bucket_namespace: str | None = None,
     ) -> RateLimitDecision:
         """Atomically record a request or reject if ``max_requests`` is reached."""
+        namespace = _resolve_bucket_namespace(bucket_key, bucket_namespace)
         async with self._db.connection() as conn, conn.transaction(), conn.cursor() as cur:
             await cur.execute(
                 """
                 INSERT INTO api_rate_limit_buckets AS b (
                     bucket_key,
+                    bucket_namespace,
                     window_started_at,
                     window_expires_at,
                     request_count,
@@ -97,12 +114,14 @@ class PostgresRateLimitStore:
                 )
                 VALUES (
                     %(bucket_key)s,
+                    %(bucket_namespace)s,
                     clock_timestamp(),
                     clock_timestamp() + make_interval(secs => %(window_seconds)s),
                     1,
                     clock_timestamp()
                 )
                 ON CONFLICT (bucket_key) DO UPDATE SET
+                    bucket_namespace = EXCLUDED.bucket_namespace,
                     window_started_at = CASE
                         WHEN b.window_expires_at <= clock_timestamp()
                             THEN clock_timestamp()
@@ -127,6 +146,7 @@ class PostgresRateLimitStore:
                 """,
                 {
                     "bucket_key": bucket_key,
+                    "bucket_namespace": namespace,
                     "window_seconds": float(window_seconds),
                     "max_requests": int(max_requests),
                 },
@@ -138,7 +158,7 @@ class PostgresRateLimitStore:
         self._write_counter += 1
         if self._write_counter >= self._cleanup_interval_writes:
             self._write_counter = 0
-            await self.cleanup(max_buckets=max_clients)
+            await self.cleanup(max_buckets=max_clients, bucket_namespace=namespace)
 
         allowed = count <= max_requests
         retry_after = 0 if allowed else max(1, math.ceil(remaining))
@@ -149,8 +169,14 @@ class PostgresRateLimitStore:
         *,
         max_buckets: int | None = None,
         batch_size: int | None = None,
+        bucket_namespace: str | None = None,
     ) -> int:
-        """Delete expired buckets (bounded batch) and evict oldest rows above ``max_buckets``."""
+        """Delete expired buckets (bounded batch) and evict oldest rows above ``max_buckets``.
+
+        When ``bucket_namespace`` is provided, LRU eviction above ``max_buckets``
+        is scoped strictly to that namespace so traffic on one endpoint cannot
+        evict rate-limit buckets belonging to another endpoint.
+        """
         limit = self._cleanup_batch_size if batch_size is None else batch_size
         deleted = 0
         async with self._db.connection() as conn, conn.transaction(), conn.cursor() as cur:
@@ -170,26 +196,52 @@ class PostgresRateLimitStore:
             deleted += cur.rowcount
 
             if max_buckets is not None:
-                await cur.execute(
-                    """
-                    DELETE FROM api_rate_limit_buckets
-                    WHERE bucket_key IN (
-                        SELECT bucket_key
-                        FROM api_rate_limit_buckets
-                        ORDER BY updated_at DESC, bucket_key DESC
-                        OFFSET %(max_buckets)s
-                        LIMIT %(limit)s
+                if bucket_namespace is not None:
+                    await cur.execute(
+                        """
+                        DELETE FROM api_rate_limit_buckets
+                        WHERE bucket_key IN (
+                            SELECT bucket_key
+                            FROM api_rate_limit_buckets
+                            WHERE bucket_namespace = %(bucket_namespace)s
+                            ORDER BY updated_at DESC, bucket_key DESC
+                            OFFSET %(max_buckets)s
+                            LIMIT %(limit)s
+                        )
+                        """,
+                        {
+                            "bucket_namespace": bucket_namespace,
+                            "max_buckets": int(max_buckets),
+                            "limit": limit,
+                        },
                     )
-                    """,
-                    {"max_buckets": int(max_buckets), "limit": limit},
-                )
+                else:
+                    await cur.execute(
+                        """
+                        DELETE FROM api_rate_limit_buckets
+                        WHERE bucket_key IN (
+                            SELECT bucket_key
+                            FROM api_rate_limit_buckets
+                            ORDER BY updated_at DESC, bucket_key DESC
+                            OFFSET %(max_buckets)s
+                            LIMIT %(limit)s
+                        )
+                        """,
+                        {"max_buckets": int(max_buckets), "limit": limit},
+                    )
                 deleted += cur.rowcount
         return deleted
 
-    async def count(self) -> int:
+    async def count(self, *, bucket_namespace: str | None = None) -> int:
         """Return the number of persisted rate-limit buckets (diagnostic/test hook)."""
         async with self._db.connection() as conn, conn.cursor() as cur:
-            await cur.execute("SELECT count(*) FROM api_rate_limit_buckets")
+            if bucket_namespace is not None:
+                await cur.execute(
+                    "SELECT count(*) FROM api_rate_limit_buckets WHERE bucket_namespace = %s",
+                    (bucket_namespace,),
+                )
+            else:
+                await cur.execute("SELECT count(*) FROM api_rate_limit_buckets")
             row = await cur.fetchone()
             return int(row[0])
 
@@ -365,6 +417,129 @@ class PostgresSIWESessionStore:
         """Return the number of persisted sessions (diagnostic/test hook)."""
         async with self._db.connection() as conn, conn.cursor() as cur:
             await cur.execute("SELECT count(*) FROM siwe_sessions")
+            row = await cur.fetchone()
+            return int(row[0])
+
+
+class PostgresSIWENonceStore:
+    """PostgreSQL-backed SIWE nonce store keyed by SHA-256 nonce hash.
+
+    Raw nonces are never stored in PostgreSQL; only the 64-char hex SHA-256
+    digest (``nonce_hash``) is persisted. Expiry is evaluated against
+    PostgreSQL's ``clock_timestamp()``, consumption is atomic via
+    ``DELETE ... RETURNING``, and table growth is bounded via on-write
+    expired-row cleanup plus oldest-first eviction above ``max_entries``.
+    """
+
+    def __init__(
+        self,
+        db: Database,
+        *,
+        max_entries: int,
+        cleanup_batch_size: int = DEFAULT_SIWE_NONCE_CLEANUP_BATCH,
+    ) -> None:
+        if max_entries <= 0:
+            raise ValueError("max_entries must be a positive integer")
+        if cleanup_batch_size <= 0:
+            raise ValueError("cleanup_batch_size must be positive")
+        self._db = db
+        self._max_entries = max_entries
+        self._cleanup_batch_size = cleanup_batch_size
+
+    @property
+    def max_entries(self) -> int:
+        return self._max_entries
+
+    async def create(self, nonce: str, *, ttl_seconds: float) -> None:
+        """Persist ``sha256(nonce)`` with DB-clock expiry, pruning expired and excess rows."""
+        nonce_hash = hash_nonce(nonce)
+        async with self._db.connection() as conn, conn.transaction(), conn.cursor() as cur:
+            await cur.execute(
+                """
+                DELETE FROM siwe_nonces
+                WHERE nonce_hash IN (
+                    SELECT nonce_hash
+                    FROM siwe_nonces
+                    WHERE expires_at <= clock_timestamp()
+                    ORDER BY expires_at ASC
+                    LIMIT %(limit)s
+                )
+                """,
+                {"limit": self._cleanup_batch_size},
+            )
+            await cur.execute(
+                """
+                INSERT INTO siwe_nonces (
+                    nonce_hash,
+                    created_at,
+                    expires_at
+                )
+                VALUES (
+                    %(nonce_hash)s,
+                    clock_timestamp(),
+                    clock_timestamp() + make_interval(secs => %(ttl_seconds)s)
+                )
+                ON CONFLICT (nonce_hash) DO UPDATE SET
+                    created_at = EXCLUDED.created_at,
+                    expires_at = EXCLUDED.expires_at
+                """,
+                {
+                    "nonce_hash": nonce_hash,
+                    "ttl_seconds": float(ttl_seconds),
+                },
+            )
+            await cur.execute(
+                """
+                DELETE FROM siwe_nonces
+                WHERE nonce_hash IN (
+                    SELECT nonce_hash
+                    FROM siwe_nonces
+                    ORDER BY created_at DESC, nonce_hash DESC
+                    OFFSET %(max_entries)s
+                    LIMIT %(limit)s
+                )
+                """,
+                {"max_entries": self._max_entries, "limit": self._cleanup_batch_size},
+            )
+
+    async def consume(self, nonce: str) -> bool:
+        """Atomically delete ``sha256(nonce)`` and return ``True`` iff it was unexpired."""
+        nonce_hash = hash_nonce(nonce)
+        async with self._db.connection() as conn, conn.transaction(), conn.cursor() as cur:
+            await cur.execute(
+                """
+                DELETE FROM siwe_nonces
+                WHERE nonce_hash = %(nonce_hash)s
+                RETURNING (expires_at > clock_timestamp()) AS valid
+                """,
+                {"nonce_hash": nonce_hash},
+            )
+            row = await cur.fetchone()
+        return bool(row and row[0])
+
+    async def sweep_expired(self, *, batch_size: int | None = None) -> int:
+        """Delete a bounded batch of expired nonces using the PostgreSQL clock."""
+        limit = self._cleanup_batch_size if batch_size is None else batch_size
+        async with self._db.connection() as conn, conn.transaction(), conn.cursor() as cur:
+            await cur.execute(
+                """
+                DELETE FROM siwe_nonces
+                WHERE nonce_hash IN (
+                    SELECT nonce_hash
+                    FROM siwe_nonces
+                    WHERE expires_at <= clock_timestamp()
+                    ORDER BY expires_at ASC
+                    LIMIT %(limit)s
+                )
+                """,
+                {"limit": limit},
+            )
+            return cur.rowcount
+
+    async def count(self) -> int:
+        """Return the number of persisted nonces (diagnostic/test hook)."""
+        async with self._db.connection() as conn, conn.cursor() as cur:
+            await cur.execute("SELECT count(*) FROM siwe_nonces")
             row = await cur.fetchone()
             return int(row[0])
 

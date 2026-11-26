@@ -239,3 +239,47 @@ def test_siwe_auth_accepts_explicit_session_store():
     sentinel_store = object()
     auth = module.SIWEAuth("wallet.example", session_store=sentinel_store)
     assert auth._pg_sessions is sentinel_store
+
+
+def test_siwe_auth_accepts_explicit_nonce_store():
+    sentinel_store = object()
+    auth = module.SIWEAuth("wallet.example", nonce_store=sentinel_store)
+    assert auth._pg_nonces is sentinel_store
+
+
+def test_siwe_max_nonces_env_parsing(monkeypatch):
+    monkeypatch.delenv("SIWE_MAX_NONCES", raising=False)
+    assert module.siwe_max_nonces() == module.DEFAULT_MAX_NONCES
+
+    monkeypatch.setenv("SIWE_MAX_NONCES", "256")
+    assert module.siwe_max_nonces() == 256
+
+    monkeypatch.setenv("SIWE_MAX_NONCES", "0")
+    with pytest.raises(ValueError, match="SIWE_MAX_NONCES"):
+        module.siwe_max_nonces()
+
+    with pytest.raises(ValueError, match="max_nonces"):
+        module.SIWEAuth("wallet.example", max_nonces=0)
+
+
+async def test_in_memory_nonce_fallback_is_bounded_with_lru_eviction(monkeypatch):
+    monkeypatch.setattr(module, "_nonce_store", module.OrderedDict())
+    auth = module.SIWEAuth("wallet.example", max_nonces=3)
+
+    n1 = await auth.generate_nonce()
+    n2 = await auth.generate_nonce()
+    n3 = await auth.generate_nonce()
+    assert len(module._nonce_store) == 3
+
+    # Generating a 4th nonce evicts the oldest (n1) and keeps the cap at 3.
+    n4 = await auth.generate_nonce()
+    assert len(module._nonce_store) == 3
+    assert n1 not in module._nonce_store
+    assert await auth._consume_nonce(n1) is False
+
+    # Remaining nonces are still valid and single-use.
+    assert await auth._consume_nonce(n2) is True
+    assert await auth._consume_nonce(n2) is False
+    assert await auth._consume_nonce(n3) is True
+    assert await auth._consume_nonce(n4) is True
+    assert len(module._nonce_store) == 0
