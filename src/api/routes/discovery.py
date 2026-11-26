@@ -17,6 +17,11 @@ Configuration (environment):
     SUPPORTED_CHAINS          — comma-separated EVM chain IDs (default "1,11155111")
     COMPLIANCE_CONTACT        — compliance email (optional)
     TECHNICAL_CONTACT         — technical email (optional)
+
+Both keys are validated and the public key is derived once during application
+startup, then cached on ``app.state.hpke_public_key``; requests only read the
+cache. The cache re-derives when either configured value changes, so key
+rotation is picked up without a restart.
 """
 
 from __future__ import annotations
@@ -26,7 +31,7 @@ import os
 from datetime import datetime, timezone
 from typing import Any
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Request
 
 from src.protocol.discovery_profile import (
     HPKE_SUITE,
@@ -77,7 +82,36 @@ def get_own_hpke_public_key() -> bytes | None:
     return key
 
 
-def build_discovery_document() -> dict[str, Any]:
+class HpkePublicKeyCache:
+    """Startup-derived public key, re-derived only when the configured source changes.
+
+    Rotation safety does not depend on a restart: the pair of raw environment
+    values is the cache identity, so setting a new key invalidates the entry.
+    """
+
+    __slots__ = ("_source", "_key")
+
+    def __init__(self) -> None:
+        self._source: tuple[str | None, str | None] | None = None
+        self._key: bytes | None = None
+
+    def get(self) -> bytes | None:
+        source = (os.getenv("VASP_HPKE_PUBLIC_KEY"), os.getenv("VASP_HPKE_PRIVATE_KEY"))
+        if source != self._source:
+            try:
+                self._key = get_own_hpke_public_key()
+            except Exception:
+                # Retry on the next request instead of caching a broken state.
+                self._source = None
+                raise
+            self._source = source
+        return self._key
+
+
+_DEFAULT_KEY_CACHE = HpkePublicKeyCache()
+
+
+def build_discovery_document(cache: HpkePublicKeyCache | None = None) -> dict[str, Any]:
     """Assemble the well-known discovery document from environment config."""
     domain = os.getenv("VASP_DOMAIN")
     if not domain:
@@ -97,7 +131,7 @@ def build_discovery_document() -> dict[str, Any]:
         "proofFormat": "groth16",
     }
 
-    hpke_pub = get_own_hpke_public_key()
+    hpke_pub = (cache if cache is not None else _DEFAULT_KEY_CACHE).get()
     if hpke_pub is not None:
         from src.sar.hpke_envelope import derive_key_id
 
@@ -134,9 +168,10 @@ def build_discovery_document() -> dict[str, Any]:
 
 
 @router.get("/.well-known/clearproof.json", summary="clearproof discovery document")
-async def well_known_clearproof() -> dict[str, Any]:
+async def well_known_clearproof(request: Request) -> dict[str, Any]:
+    cache = getattr(request.app.state, "hpke_public_key", None)
     try:
-        return build_discovery_document()
+        return build_discovery_document(cache if isinstance(cache, HpkePublicKeyCache) else None)
     except (DiscoveryError, RuntimeError, ValueError) as exc:
         # Do not expose configuration values or key material in API errors.
         raise HTTPException(status_code=503, detail="Discovery is not configured correctly") from exc

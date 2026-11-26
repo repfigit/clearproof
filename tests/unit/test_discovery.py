@@ -561,3 +561,97 @@ def test_validated_did_preserves_exact_canonical_identity(host, port, path):
     assert target.port == (443 if port is None else port)
     assert target.url == f"https://{authority}/.well-known/clearproof.json"
     assert parse_target(target.did) == target
+
+
+# --- cached startup key derivation ------------------------------------------------
+
+
+def test_key_cache_retries_after_a_bad_value(publisher_env, monkeypatch):
+    from src.api.routes.discovery import HpkePublicKeyCache
+    from src.sar.hpke_envelope import generate_keypair
+
+    private, public = generate_keypair()
+    monkeypatch.delenv("VASP_HPKE_PUBLIC_KEY")
+    monkeypatch.setenv("VASP_HPKE_PRIVATE_KEY", "short")
+    cache = HpkePublicKeyCache()
+    with pytest.raises(RuntimeError, match="VASP_HPKE_PRIVATE_KEY"):
+        cache.get()
+    monkeypatch.setenv("VASP_HPKE_PRIVATE_KEY", base64.urlsafe_b64encode(private).decode())
+    assert cache.get() == public
+    # Unchanged configuration is served from the cache.
+    assert cache.get() == public
+
+
+def test_key_cache_follows_rotation_and_removal(publisher_env, monkeypatch):
+    from src.api.routes.discovery import HpkePublicKeyCache
+    from src.sar.hpke_envelope import generate_keypair
+
+    monkeypatch.delenv("VASP_HPKE_PUBLIC_KEY")
+    first_private, first_public = generate_keypair()
+    second_private, second_public = generate_keypair()
+    monkeypatch.setenv("VASP_HPKE_PRIVATE_KEY", base64.urlsafe_b64encode(first_private).decode())
+    cache = HpkePublicKeyCache()
+    assert cache.get() == first_public
+    monkeypatch.setenv("VASP_HPKE_PRIVATE_KEY", base64.urlsafe_b64encode(second_private).decode())
+    assert cache.get() == second_public
+    monkeypatch.delenv("VASP_HPKE_PRIVATE_KEY")
+    assert cache.get() is None
+
+
+async def test_endpoint_reads_the_app_state_cache(publisher_env, monkeypatch):
+    from fastapi import FastAPI
+    from httpx import ASGITransport, AsyncClient
+
+    import src.api.routes.discovery as discovery
+    from src.api.routes.discovery import HpkePublicKeyCache, router
+
+    original = discovery.get_own_hpke_public_key
+    calls = []
+    monkeypatch.setattr(discovery, "get_own_hpke_public_key", lambda: calls.append(1) or original())
+    app = FastAPI()
+    app.state.hpke_public_key = HpkePublicKeyCache()
+    app.include_router(router)
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        first = await client.get("/.well-known/clearproof.json")
+        second = await client.get("/.well-known/clearproof.json")
+    assert first.status_code == second.status_code == 200
+    assert first.json()["clearproof"]["hpkePublicKey"] == second.json()["clearproof"]["hpkePublicKey"]
+    assert len(calls) == 1
+
+
+async def test_endpoint_serves_a_rotated_key(publisher_env, monkeypatch):
+    from fastapi import FastAPI
+    from httpx import ASGITransport, AsyncClient
+
+    from src.api.routes.discovery import HpkePublicKeyCache, router
+    from src.sar.hpke_envelope import generate_keypair
+
+    monkeypatch.delenv("VASP_HPKE_PUBLIC_KEY")
+    first_private, first_public = generate_keypair()
+    second_private, second_public = generate_keypair()
+    monkeypatch.setenv("VASP_HPKE_PRIVATE_KEY", base64.urlsafe_b64encode(first_private).decode())
+    app = FastAPI()
+    app.state.hpke_public_key = HpkePublicKeyCache()
+    app.include_router(router)
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        before = (await client.get("/.well-known/clearproof.json")).json()["clearproof"]["hpkePublicKey"]
+        monkeypatch.setenv("VASP_HPKE_PRIVATE_KEY", base64.urlsafe_b64encode(second_private).decode())
+        after = (await client.get("/.well-known/clearproof.json")).json()["clearproof"]["hpkePublicKey"]
+    assert decode_hpke_key(before) == first_public
+    assert decode_hpke_key(after) == second_public
+    assert before != after
+
+
+async def test_endpoint_without_app_state_uses_the_module_cache(publisher_env, monkeypatch):
+    from fastapi import FastAPI
+    from httpx import ASGITransport, AsyncClient
+
+    from src.api.routes.discovery import router
+
+    app = FastAPI()
+    app.include_router(router)
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        first = await client.get("/.well-known/clearproof.json")
+        second = await client.get("/.well-known/clearproof.json")
+    assert first.status_code == second.status_code == 200
+    assert first.json()["clearproof"]["hpkePublicKey"] == second.json()["clearproof"]["hpkePublicKey"]

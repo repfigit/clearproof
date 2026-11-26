@@ -483,3 +483,45 @@ async def test_lifespan_shares_single_siwe_auth_across_routes_and_middleware(mod
             assert protected.status_code == 200
             assert protected.json()["sub"] == address
             assert get_siwe_auth(SimpleNamespace(app=app)) is lifespan_siwe
+
+
+async def test_lifespan_derives_caches_and_clears_the_discovery_key(module, monkeypatch):
+    import base64
+
+    from src.api.routes import discovery
+    from src.sar.hpke_envelope import generate_keypair
+
+    private, public = generate_keypair()
+    monkeypatch.setenv("VASP_DOMAIN", "beneficiary.example")
+    monkeypatch.setenv("VASP_DID", "did:web:beneficiary.example")
+    monkeypatch.setenv("VASP_HPKE_PRIVATE_KEY", base64.urlsafe_b64encode(private).decode())
+    monkeypatch.delenv("VASP_HPKE_PUBLIC_KEY", raising=False)
+    original = discovery.get_own_hpke_public_key
+    calls = []
+    monkeypatch.setattr(discovery, "get_own_hpke_public_key", lambda: calls.append(1) or original())
+
+    app = module.create_app()
+    async with module.lifespan(app):
+        cache = app.state.hpke_public_key
+        assert isinstance(cache, discovery.HpkePublicKeyCache)
+        assert cache.get() == public
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://local") as client:
+            for _ in range(2):
+                response = await client.get("/.well-known/clearproof.json")
+                assert response.status_code == 200
+                assert response.json()["clearproof"]["hpkePublicKey"] == base64.urlsafe_b64encode(public).decode()
+        # One derivation at startup; requests never re-derive.
+        assert calls == [1]
+    assert app.state.hpke_public_key is None
+
+
+async def test_invalid_discovery_key_blocks_startup_before_storage(module, monkeypatch):
+    database = Mock()
+    monkeypatch.setattr(module, "Database", database)
+    monkeypatch.setenv("DATABASE_URL", "configured")
+    monkeypatch.delenv("VASP_HPKE_PUBLIC_KEY", raising=False)
+    monkeypatch.setenv("VASP_HPKE_PRIVATE_KEY", "short")
+    with pytest.raises(RuntimeError, match="VASP_HPKE_PRIVATE_KEY"):
+        async with module.lifespan(module.create_app()):
+            pytest.fail("invalid HPKE key reached serving state")
+    database.assert_not_called()
