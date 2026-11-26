@@ -83,8 +83,9 @@ async def TenantPrincipalDependency(request: Request, claims: dict = Depends(JWT
     from src.api.config import resolve_auth_config
 
     config = resolve_auth_config(request)
+    mode = config.auth_mode.lower()
 
-    if config.auth_mode.lower() == "api-key":
+    if mode == "api-key":
         # A static development key maps to exactly one operator-selected tenant.
         # Header/body/query parameters cannot supply these scopes.
         claims = {
@@ -92,5 +93,19 @@ async def TenantPrincipalDependency(request: Request, claims: dict = Depends(JWT
             "actor_id": config.api_key_actor_id,
             "roles": list(config.api_key_roles),
             "issuer_dids": list(config.api_key_issuer_dids),
+        }
+    elif mode == "siwe":
+        if not config.siwe_tenant_id or not config.siwe_roles:
+            raise HTTPException(
+                status_code=403,
+                detail="SIWE tenant scope is not configured (set SIWE_TENANT_ID and SIWE_ROLES)",
+            )
+        raw_sub = claims.get("sub")
+        actor_id = config.siwe_actor_id or (raw_sub.lower() if isinstance(raw_sub, str) else raw_sub)
+        claims = {
+            "tenant_id": config.siwe_tenant_id,
+            "actor_id": actor_id,
+            "roles": list(config.siwe_roles),
+            "issuer_dids": list(config.siwe_issuer_dids),
         }
     return principal_from_claims(claims)

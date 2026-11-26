@@ -36,7 +36,7 @@ if TYPE_CHECKING:
 
 @dataclass(frozen=True, repr=False)
 class AuthConfig:
-    """Authentication and static API-key principal scope loaded at startup."""
+    """Authentication and static API-key / SIWE principal scope loaded at startup."""
 
     auth_mode: str = "api-key"
     api_key: str = ""
@@ -48,6 +48,10 @@ class AuthConfig:
     api_key_actor_id: Optional[str] = None
     api_key_roles: tuple[str, ...] = ()
     api_key_issuer_dids: tuple[str, ...] = ()
+    siwe_tenant_id: Optional[str] = None
+    siwe_actor_id: Optional[str] = None
+    siwe_roles: tuple[str, ...] = ()
+    siwe_issuer_dids: tuple[str, ...] = ()
 
     @classmethod
     def from_env(cls, env: Optional[Mapping[str, str]] = None) -> AuthConfig:
@@ -63,6 +67,10 @@ class AuthConfig:
             api_key_actor_id=source.get("API_KEY_ACTOR_ID"),
             api_key_roles=tuple(r for r in source.get("API_KEY_ROLES", "").split(",") if r),
             api_key_issuer_dids=tuple(d for d in source.get("API_KEY_ISSUER_DIDS", "").split(",") if d),
+            siwe_tenant_id=source.get("SIWE_TENANT_ID"),
+            siwe_actor_id=source.get("SIWE_ACTOR_ID"),
+            siwe_roles=tuple(r.strip() for r in source.get("SIWE_ROLES", "").split(",") if r.strip()),
+            siwe_issuer_dids=tuple(d.strip() for d in source.get("SIWE_ISSUER_DIDS", "").split(",") if d.strip()),
         )
 
 
@@ -111,6 +119,10 @@ def get_auth_config(request: Optional[Request] = None) -> AuthConfig:
         api_key_actor_id=os.getenv("API_KEY_ACTOR_ID"),
         api_key_roles=tuple(r for r in os.getenv("API_KEY_ROLES", "").split(",") if r),
         api_key_issuer_dids=tuple(d for d in os.getenv("API_KEY_ISSUER_DIDS", "").split(",") if d),
+        siwe_tenant_id=os.getenv("SIWE_TENANT_ID"),
+        siwe_actor_id=os.getenv("SIWE_ACTOR_ID"),
+        siwe_roles=tuple(r.strip() for r in os.getenv("SIWE_ROLES", "").split(",") if r.strip()),
+        siwe_issuer_dids=tuple(d.strip() for d in os.getenv("SIWE_ISSUER_DIDS", "").split(",") if d.strip()),
     )
 
 
