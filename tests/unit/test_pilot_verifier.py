@@ -1,23 +1,34 @@
 """Canonical proof parsing and actual owned-runtime lifecycle checks."""
 
 import asyncio
+import gc
 import hashlib
 import json
 import os
 import shutil
+import signal
+from collections import deque
 from pathlib import Path
+from types import SimpleNamespace
+from unittest.mock import AsyncMock, Mock
 
 import pytest
 
+import src.prover.pilot_verifier as pv
 from src.prover.pilot_artifacts import InspectedArtifacts, PilotArtifactManifest
 from src.prover.pilot_compliance import PUBLIC_SIGNALS
 from src.prover.pilot_verifier import (
     BASE_FIELD,
+    DEFAULT_PAIRING_PROCESS_LIMIT,
+    MAX_PAIRING_PAYLOAD,
+    MAX_PAIRING_PROCESS_LIMIT,
     PAIRING_PROCESS_LIMIT,
     PairingCapacityExceeded,
+    PairingConfigurationError,
     PilotPairingVerifier,
     PilotProof,
     ProofInspectionError,
+    pairing_process_limit,
     pinned_bundle,
     public_signals,
 )
@@ -278,7 +289,7 @@ async def test_cancellation_during_spawn_retains_process_ownership(tmp_path, art
             with pytest.raises(asyncio.CancelledError):
                 await task
         assert owned["process"].returncode is not None
-        assert not owned["script"].parent.exists()
+        assert owned["script"].exists()
         with pytest.raises(ProcessLookupError):
             os.kill(owned["process"].pid, 0)
     finally:
@@ -316,7 +327,7 @@ async def test_process_exit_race_during_cleanup_is_reaped(tmp_path, artifacts, m
             timeout=1,
         )
     assert owned["process"].returncode is not None
-    assert not owned["script"].parent.exists()
+    assert owned["script"].exists()
     with pytest.raises(ProcessLookupError):
         os.kill(owned["process"].pid, 0)
 
@@ -347,6 +358,7 @@ async def test_shared_pairing_limit_rejects_without_spawn_and_holds_slots_throug
 
     monkeypatch.setattr(asyncio, "create_subprocess_exec", track_spawn)
     tasks = []
+    verifiers = []
     proof = json.dumps(synthetic_proof()).encode()
     signals = ["0"] * 8
     for index in range(PAIRING_PROCESS_LIMIT):
@@ -355,6 +367,7 @@ async def test_shared_pairing_limit_rejects_without_spawn_and_holds_slots_throug
         verifier = runtime(
             folder, artifacts, b"const snarkjs={groth16:{verify:async()=>new Promise(()=>{setInterval(()=>{},1000)})}};"
         )
+        verifiers.append(verifier)
         tasks.append(asyncio.create_task(verifier.inspect(proof, signals, expected_signals=signals, timeout=60)))
     extra_folder = tmp_path / "extra"
     extra_folder.mkdir()
@@ -383,10 +396,6 @@ async def test_shared_pairing_limit_rejects_without_spawn_and_holds_slots_throug
             tasks[1].cancel()
             with pytest.raises(asyncio.CancelledError):
                 await tasks[1]
-        for proc in spawned:
-            assert proc.returncode is not None
-            with pytest.raises(ProcessLookupError):
-                os.kill(proc.pid, 0)
     finally:
         release_cleanup.set()
         for task in tasks:
@@ -396,3 +405,295 @@ async def test_shared_pairing_limit_rejects_without_spawn_and_holds_slots_throug
     # Both slots are reusable after failures/cancellation, across verifier objects.
     results = await asyncio.gather(*(extra.inspect(proof, signals, expected_signals=signals) for _ in range(2)))
     assert all(result.cryptographic_valid for result in results)
+    for verifier in (*verifiers, extra):
+        await verifier.aclose()
+    for proc in spawned:
+        assert proc.returncode is not None
+        with pytest.raises(ProcessLookupError):
+            os.kill(proc.pid, 0)
+
+
+# --- pool configuration, single bundle snapshot and worker reuse -----------------
+
+
+@pytest.mark.parametrize("raw", [None, "", "  "])
+def test_pairing_limit_defaults(raw):
+    environ = {} if raw is None else {"PAIRING_PROCESS_LIMIT": raw}
+    assert pairing_process_limit(environ) == DEFAULT_PAIRING_PROCESS_LIMIT == 2
+
+
+@pytest.mark.parametrize(
+    "raw,expected", [("1", 1), (" 4 ", 4), (str(MAX_PAIRING_PROCESS_LIMIT), MAX_PAIRING_PROCESS_LIMIT)]
+)
+def test_pairing_limit_accepts_bounded_decimal(raw, expected):
+    assert pairing_process_limit({"PAIRING_PROCESS_LIMIT": raw}) == expected
+
+
+@pytest.mark.parametrize("raw", ["0", "01", "1.0", "-1", "+2", "abc", "2 2", str(MAX_PAIRING_PROCESS_LIMIT + 1)])
+def test_pairing_limit_rejects_invalid_values(raw):
+    with pytest.raises(PairingConfigurationError, match="between 1 and 32"):
+        pairing_process_limit({"PAIRING_PROCESS_LIMIT": raw})
+
+
+@pytest.mark.parametrize("stage", ["directory", "write"])
+def test_runtime_directory_failure_is_bounded(tmp_path, artifacts, monkeypatch, stage):
+    source = tmp_path / "bundle"
+    source.write_bytes(b"synthetic")
+    if stage == "directory":
+        monkeypatch.setattr(pv.tempfile, "mkdtemp", Mock(side_effect=OSError))
+    else:
+        # The pin read uses the first os.open; the runtime write must fail.
+        original_open = os.open
+        calls = []
+
+        def failing_open(*args, **kwargs):
+            calls.append(1)
+            if len(calls) > 1:
+                raise OSError
+            return original_open(*args, **kwargs)
+
+        monkeypatch.setattr(pv.os, "open", failing_open)
+        monkeypatch.setattr(pv, "shutil", SimpleNamespace(rmtree=Mock()))
+    with pytest.raises(ProofInspectionError, match="^pairing_runtime_unavailable$"):
+        PilotPairingVerifier.load(
+            artifacts,
+            bundle_path=source,
+            bundle_sha256=hashlib.sha256(b"synthetic").hexdigest(),
+            node=Path(shutil.which("node")),
+        )
+
+
+async def test_bundle_is_written_once_and_workers_are_reused(tmp_path, artifacts, monkeypatch):
+    original_spawn = asyncio.create_subprocess_exec
+    spawned = []
+
+    async def track_spawn(*args, **kwargs):
+        proc = await original_spawn(*args, **kwargs)
+        spawned.append(proc)
+        return proc
+
+    monkeypatch.setattr(asyncio, "create_subprocess_exec", track_spawn)
+    source = b'const snarkjs={groth16:{verify:async(k,s)=>s[0]==="0"}};'
+    verifier = runtime(tmp_path, artifacts, source)
+    script = verifier._script
+    assert list(verifier._directory.iterdir()) == [script]
+    script_bytes = script.read_bytes()
+    assert script_bytes.startswith(source) and b"readline.createInterface" in script_bytes
+    stage = (script.stat().st_ino, script.stat().st_size, hashlib.sha256(script_bytes).hexdigest())
+
+    first = await verifier.inspect(json.dumps(synthetic_proof()).encode(), ["0"] * 8, expected_signals=["0"] * 8)
+    second = await verifier.inspect(json.dumps(synthetic_proof()).encode(), ["1"] * 8, expected_signals=["1"] * 8)
+    assert (first.cryptographic_valid, second.cryptographic_valid) == (True, False)
+    assert len(spawned) == 1
+    assert (script.stat().st_ino, script.stat().st_size, hashlib.sha256(script.read_bytes()).hexdigest()) == stage
+    assert list(verifier._directory.iterdir()) == [script]
+    await verifier.aclose()
+    assert not verifier._directory.exists()
+
+
+async def test_pooled_results_match_fresh_verifier(tmp_path, artifacts):
+    source = b'const snarkjs={groth16:{verify:async(k,s)=>s[3]==="7"}};'
+    pool = runtime(tmp_path, artifacts, source)
+    fresh = runtime(tmp_path, artifacts, source)
+    proof = json.dumps(synthetic_proof()).encode()
+    for signals, expected in ((["7"] * 8, True), (["8"] * 8, False)):
+        pooled = await pool.inspect(proof, signals, expected_signals=signals)
+        standalone = await fresh.inspect(proof, signals, expected_signals=signals)
+        assert pooled.cryptographic_valid is expected
+        assert (pooled.cryptographic_valid, pooled.manifest_digest, pooled.proof_profile) == (
+            standalone.cryptographic_valid,
+            standalone.manifest_digest,
+            standalone.proof_profile,
+        )
+    await pool.aclose()
+    await fresh.aclose()
+
+
+async def test_dead_idle_worker_is_replaced(tmp_path, artifacts):
+    verifier = runtime(tmp_path, artifacts, b"const snarkjs={groth16:{verify:async()=>true}};")
+    proof = json.dumps(synthetic_proof()).encode()
+    signals = ["0"] * 8
+    await verifier.inspect(proof, signals, expected_signals=signals)
+    (dead,) = verifier.runtime_processes()
+    os.killpg(dead.pid, signal.SIGKILL)
+    async with asyncio.timeout(5):
+        while dead.returncode is None:
+            await asyncio.sleep(0.01)
+    assert (await verifier.inspect(proof, signals, expected_signals=signals)).cryptographic_valid
+    (replacement,) = verifier.runtime_processes()
+    assert replacement is not dead
+    await verifier.aclose()
+
+
+async def test_garbage_collected_verifier_reaps_workers_and_directory(tmp_path, artifacts):
+    verifier = runtime(tmp_path, artifacts, b"const snarkjs={groth16:{verify:async()=>true}};")
+    await verifier.inspect(json.dumps(synthetic_proof()).encode(), ["0"] * 8, expected_signals=["0"] * 8)
+    (proc,) = verifier.runtime_processes()
+    directory = verifier._directory
+    del verifier
+    gc.collect()
+    assert not directory.exists()
+    async with asyncio.timeout(5):
+        while proc.returncode is None:
+            await asyncio.sleep(0.01)
+    pv._kill_group(proc)  # Already-reaped group is tolerated.
+
+
+async def test_park_drops_a_worker_that_exited_while_idle(tmp_path, artifacts):
+    verifier = runtime(tmp_path, artifacts, b"const snarkjs={groth16:{verify:async()=>true}};")
+    await verifier.inspect(json.dumps(synthetic_proof()).encode(), ["0"] * 8, expected_signals=["0"] * 8)
+    dead = pv._Worker(SimpleNamespace(returncode=0))
+    verifier._workers.append(dead)
+    verifier._park(dead)
+    assert dead not in verifier._idle and dead not in verifier._workers
+    live = verifier.runtime_processes()
+    await verifier.aclose()
+    assert live and verifier.runtime_processes() == ()
+
+
+async def test_exchange_treats_stream_limit_and_eof_as_runtime_failure(tmp_path, artifacts):
+    verifier = runtime(tmp_path, artifacts, b"const snarkjs={groth16:{verify:async()=>true}};")
+
+    class Stream:
+        def __init__(self, outcome):
+            self.outcome = outcome
+
+        def write(self, _data):
+            pass
+
+        async def drain(self):
+            pass
+
+        async def readline(self):
+            if isinstance(self.outcome, Exception):
+                raise self.outcome
+            return self.outcome
+
+    for outcome, returncode, expected in (
+        (ValueError("limit"), None, b""),
+        (b"", None, b""),
+        (b"1\n", 0, b""),
+        (b"1\n", None, b"1\n"),
+    ):
+        worker = SimpleNamespace(proc=SimpleNamespace(stdin=Stream(b""), stdout=Stream(outcome), returncode=returncode))
+        assert await verifier._exchange(worker, b"request", 1) == expected
+
+
+async def test_oversized_payload_fails_before_spawn(tmp_path, artifacts, monkeypatch):
+    verifier = runtime(tmp_path, artifacts, b"const snarkjs={groth16:{verify:async()=>true}};")
+    # strict_json caps the raw key at 64 KiB; widen only this projection to cross the line limit.
+    monkeypatch.setattr(pv, "strict_json", lambda _raw, **_kw: {"padding": "x" * MAX_PAIRING_PAYLOAD})
+    with pytest.raises(ProofInspectionError, match="^pairing_runtime_failed$"):
+        await verifier.inspect(json.dumps(synthetic_proof()).encode(), ["0"] * 8, expected_signals=["0"] * 8)
+    assert verifier.runtime_processes() == ()
+
+
+async def test_configured_limit_rebuilds_the_shared_pool(tmp_path, artifacts, monkeypatch):
+    monkeypatch.setattr(pv, "PAIRING_PROCESS_LIMIT", 1)
+    original_spawn = asyncio.create_subprocess_exec
+    spawned = []
+
+    async def track_spawn(*args, **kwargs):
+        proc = await original_spawn(*args, **kwargs)
+        spawned.append(proc)
+        return proc
+
+    monkeypatch.setattr(asyncio, "create_subprocess_exec", track_spawn)
+    verifier = runtime(
+        tmp_path, artifacts, b"const snarkjs={groth16:{verify:async()=>new Promise(()=>{setInterval(()=>{},1000)})}};"
+    )
+    proof = json.dumps(synthetic_proof()).encode()
+    signals = ["0"] * 8
+    task = asyncio.create_task(verifier.inspect(proof, signals, expected_signals=signals, timeout=60))
+    try:
+        async with asyncio.timeout(5):
+            while len(spawned) < 1:
+                await asyncio.sleep(0.01)
+            with pytest.raises(PairingCapacityExceeded):
+                await verifier.inspect(proof, signals, expected_signals=signals)
+            assert len(spawned) == 1
+            task.cancel()
+            with pytest.raises(asyncio.CancelledError):
+                await task
+    finally:
+        if not task.done():
+            task.cancel()
+            await asyncio.gather(task, return_exceptions=True)
+    # The single slot stays reusable after each retired worker.
+    for _ in range(2):
+        with pytest.raises(ProofInspectionError, match="^pairing_timeout$"):
+            await verifier.inspect(proof, signals, expected_signals=signals, timeout=1)
+    # Two concurrent calls cannot both pass a single configured slot.
+    results = await asyncio.gather(
+        *(verifier.inspect(proof, signals, expected_signals=signals, timeout=1) for _ in range(2)),
+        return_exceptions=True,
+    )
+    assert sum(isinstance(item, PairingCapacityExceeded) for item in results) == 1
+    # Restoring the process limit rebuilds the bound without a restart.
+    monkeypatch.setattr(pv, "PAIRING_PROCESS_LIMIT", PAIRING_PROCESS_LIMIT)
+    results = await asyncio.gather(
+        *(verifier.inspect(proof, signals, expected_signals=signals, timeout=1) for _ in range(2)),
+        return_exceptions=True,
+    )
+    assert all(
+        isinstance(item, ProofInspectionError) and not isinstance(item, PairingCapacityExceeded) for item in results
+    )
+    await verifier.aclose()
+
+
+async def test_retire_park_and_borrow_tolerate_untracked_workers(tmp_path, artifacts):
+    verifier = runtime(tmp_path, artifacts, b"const snarkjs={groth16:{verify:async()=>true}};")
+    dead = pv._Worker(SimpleNamespace(returncode=0, pid=1))
+    # Retiring a worker already dropped from the tracked set is a no-op removal.
+    await verifier._retire({"worker": dead})
+    assert dead not in verifier._workers
+    # Parking a dead, untracked worker does not raise.
+    verifier._park(dead)
+    assert verifier._idle == deque()
+    # A dead idle worker that is no longer tracked is skipped before spawning.
+    verifier._idle.append(dead)
+    worker = await verifier._borrow({"worker": None})
+    assert worker is not dead and dead not in verifier._idle
+    await verifier.aclose()
+
+
+def test_kill_group_tolerates_an_already_vanished_group(monkeypatch):
+    monkeypatch.setattr(pv.os, "killpg", Mock(side_effect=ProcessLookupError))
+    pv._kill_group(SimpleNamespace(returncode=None, pid=1))
+
+
+async def test_aclose_waits_for_an_in_flight_spawn(tmp_path, artifacts):
+    verifier = runtime(tmp_path, artifacts, b"const snarkjs={groth16:{verify:async()=>true}};")
+    directory = verifier._directory
+    task = asyncio.create_task(
+        verifier.inspect(json.dumps(synthetic_proof()).encode(), ["0"] * 8, expected_signals=["0"] * 8)
+    )
+    await asyncio.sleep(0)  # Let the spawn register while the directory still exists.
+    await verifier.aclose()
+    assert not directory.exists()
+    assert (await task).cryptographic_valid
+
+
+async def test_worker_readiness_is_bounded_and_fail_closed(tmp_path, artifacts, monkeypatch):
+    verifier = runtime(tmp_path, artifacts, b"const snarkjs={groth16:{verify:async()=>true}};")
+    stage = {"line": b"R\n"}
+
+    class Stream:
+        async def readline(self):
+            if isinstance(stage["line"], Exception):
+                raise stage["line"]
+            return stage["line"]
+
+    worker = SimpleNamespace(proc=SimpleNamespace(stdout=Stream()))
+    await verifier._await_ready(worker)
+    stage["line"] = b"X\n"
+    with pytest.raises(ProofInspectionError, match="^pairing_runtime_failed$"):
+        await verifier._await_ready(worker)
+    stage["line"] = OSError()
+    with pytest.raises(ProofInspectionError, match="^pairing_runtime_unavailable$"):
+        await verifier._await_ready(worker)
+    monkeypatch.setattr(pv, "STARTUP_TIMEOUT", 0.01)
+    stage["line"] = b""
+    worker.proc.stdout = SimpleNamespace(readline=AsyncMock(side_effect=asyncio.TimeoutError))
+    with pytest.raises(ProofInspectionError, match="^pairing_timeout$"):
+        await verifier._await_ready(worker)

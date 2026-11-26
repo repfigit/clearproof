@@ -39,8 +39,11 @@ proof workers treat saturation as a retryable interruption, preserving their
 original deadline and three-claim bound. Historical offline inspection remains
 indeterminate when pairing is unavailable.
 
-The limit is local to each Python process. Multiple API workers or replicas each
-have two slots; separately supervised proving workers retain PostgreSQL's shared
+The limit is local to each Python process and configurable through
+`PAIRING_PROCESS_LIMIT` (validated decimal 1..32, default 2; a bad value fails
+startup). Each verifier writes its verified bundle once and reuses long-lived
+Node workers; only a timeout, cancellation or runtime failure retires one.
+Multiple API workers or replicas each have their own slots; separately supervised proving workers retain PostgreSQL's shared
 proving-job limit. Do not multiply workers without accounting for that aggregate
 capacity. Bound incoming HTTP connections/tasks at the server or proxy as well:
 the pairing budget does not bound requests waiting on tenant locks or database

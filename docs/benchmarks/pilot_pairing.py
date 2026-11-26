@@ -21,19 +21,12 @@ ROOT = Path(__file__).resolve().parents[2]
 
 
 async def measure(verifier, proof, signals, concurrency):
-    owned = []
     peaks = {"aggregate": 0, "individual": 0}
-    original = asyncio.create_subprocess_exec
-
-    async def spawn(*args, **kwargs):
-        proc = await original(*args, **kwargs)
-        owned.append(proc)
-        return proc
 
     async def sample():
         while True:
             rss = []
-            for proc in owned:
+            for proc in verifier.runtime_processes():
                 if proc.returncode is not None:
                     continue
                 try:
@@ -54,8 +47,6 @@ async def measure(verifier, proof, signals, concurrency):
             raise RuntimeError("Synthetic proof failed independent pairing")
         return time.perf_counter() - started
 
-    # Instrument only this standalone benchmark process, never a serving API.
-    asyncio.create_subprocess_exec = spawn
     monitor = asyncio.create_task(sample())
     started = time.perf_counter()
     try:
@@ -64,9 +55,10 @@ async def measure(verifier, proof, signals, concurrency):
     finally:
         monitor.cancel()
         await asyncio.gather(monitor, return_exceptions=True)
-        asyncio.create_subprocess_exec = original
-    if len(owned) != concurrency or any(proc.returncode is None for proc in owned):
-        raise RuntimeError("Unexpected runtime count or unfinished child")
+    # The pool retains exactly the workers this mode touched, all still live and reusable.
+    owned = verifier.runtime_processes()
+    if len(owned) != concurrency or any(proc.returncode is not None for proc in owned):
+        raise RuntimeError("Unexpected runtime count or finished child")
     return dict(
         concurrent_processes=concurrency,
         elapsed_seconds=elapsed,
@@ -159,6 +151,7 @@ async def main():
     with args.output.open("x") as output:
         json.dump(report, output, indent=2)
         output.write("\n")
+    await verifier.aclose()
 
 
 if __name__ == "__main__":

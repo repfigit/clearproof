@@ -25,6 +25,7 @@ from src.api.config import (
 from src.api.routes.auth import router as auth_router
 from src.api.routes.authorization import router as authorization_router
 from src.api.routes.credential import router as credential_router
+from src.api.routes.discovery import HpkePublicKeyCache
 from src.api.routes.discovery import router as discovery_router
 from src.api.routes.enrollment import router as enrollment_router
 from src.api.routes.events import router as events_router
@@ -82,6 +83,11 @@ async def lifespan(app: FastAPI):
     # the preferred envelope path is HPKE: legacy derivation remains available.
     hkdf_salt()
 
+    # Derive the advertised HPKE key once here; requests only read the cache.
+    # Unset keys are allowed (discovery answers 503), invalid keys stop startup.
+    hpke_public_key = HpkePublicKeyCache()
+    hpke_public_key.get()
+
     # Construct shared cipher and runtime configs once during startup so route
     # handlers read app.state instead of re-parsing environment variables per request.
     record_cipher = RecordCipher(load_keyring())
@@ -117,6 +123,7 @@ async def lifespan(app: FastAPI):
     app.state.fireblocks_config = fireblocks_config
     app.state.wallet_web3 = wallet_web3
     app.state.wallet_ownership_config = wallet_ownership_config
+    app.state.hpke_public_key = hpke_public_key
     try:
         db_url = os.getenv("DATABASE_URL")
         if db_url:
@@ -151,6 +158,7 @@ async def lifespan(app: FastAPI):
         app.state.fireblocks_config = None
         app.state.wallet_web3 = None
         app.state.wallet_ownership_config = None
+        app.state.hpke_public_key = None
         await close_wallet_web3(wallet_web3)
         if db is not None:
             await db.close()
