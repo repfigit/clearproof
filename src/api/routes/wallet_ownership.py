@@ -1,12 +1,16 @@
 """Wallet ownership challenge/attestation endpoints (SIWE/EIP-4361 profile)."""
 
-import os
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import Field, ValidationError
 
-from src.api.config import build_wallet_web3, get_wallet_web3, require_record_cipher
+from src.api.config import (
+    build_wallet_web3,
+    get_wallet_ownership_config,
+    get_wallet_web3,
+    require_record_cipher,
+)
 from src.api.middleware.rate_limit import wallet_ownership_limiter
 from src.auth.principal import Principal, TenantPrincipalDependency
 from src.protocol.transfer import Hex32, Record
@@ -87,31 +91,21 @@ def chain_verifier(request: Optional[Request] = None):
     return verify
 
 
-def delegation_recheck_seconds() -> int:
-    """Parse WALLET_OWNERSHIP_DELEGATION_RECHECK_SECONDS (default 3600)."""
-    raw = os.environ.get("WALLET_OWNERSHIP_DELEGATION_RECHECK_SECONDS")
-    if raw is None or not raw.strip():
-        return 3600
-    value = int(raw.strip())
-    if value <= 0:
-        raise ValueError("WALLET_OWNERSHIP_DELEGATION_RECHECK_SECONDS must be positive")
-    return value
-
-
 def wallet_service(request: Request, principal: Principal = Depends(TenantPrincipalDependency)):
     db = getattr(request.app.state, "db", None)
     if db is None or not db.is_ready:
         raise HTTPException(status_code=503, detail="Wallet evidence database unavailable")
     try:
+        config = get_wallet_ownership_config(request)
         return WalletOwnershipService(
             db,
             require_record_cipher(request),
             principal,
-            chain_id=int(os.environ["PILOT_CHAIN_ID"]),
-            registry_address=os.environ["PILOT_REGISTRY_ADDRESS"],
+            chain_id=config.chain_id,
+            registry_address=config.registry_address,
             account_probe=account_probe(request),
             chain_verifier=chain_verifier(request),
-            delegation_recheck_seconds=delegation_recheck_seconds(),
+            delegation_recheck_seconds=config.delegation_recheck_seconds,
         )
     except (KeyError, ValueError, RuntimeError) as exc:
         raise HTTPException(status_code=503, detail="Wallet evidence configuration unavailable") from exc
@@ -132,9 +126,10 @@ async def invoke(operation):
         raise HTTPException(status_code=422, detail="Wallet evidence is invalid, expired or revoked") from exc
 
 
-@router.post("/challenge", summary="Prepare a five-minute signature challenge (SIWE when PILOT_SIWE_DOMAIN is set)")
-async def challenge(request: ChallengeRequest, service=Depends(wallet_service)):
-    value = await invoke(service.challenge(request.credential_id, siwe_domain=os.environ.get("PILOT_SIWE_DOMAIN")))
+@router.post("/challenge", summary="Prepare a five-minute signature challenge (EIP-4361 when PILOT_SIWE_DOMAIN is set)")
+async def challenge(request: ChallengeRequest, http: Request, service=Depends(wallet_service)):
+    siwe_domain = get_wallet_ownership_config(http).siwe_domain
+    value = await invoke(service.challenge(request.credential_id, siwe_domain=siwe_domain))
     return {
         "challenge": value.model_dump(mode="json"),
         "message": value.message(),

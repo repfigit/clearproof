@@ -1,6 +1,7 @@
 """Durable tenant/issuer-bound wallet ownership; no mutation of existing credentials."""
 
 import hashlib
+import re
 import secrets
 import time
 from typing import Awaitable, Callable
@@ -56,6 +57,10 @@ class WalletOwnershipService:
     ):
         self.principal = Principal.model_validate(principal)
         self.store = PilotStore(db, cipher, self.principal)
+        if type(chain_id) is not int or chain_id <= 0:
+            raise WalletOwnershipError("Invalid wallet evidence chain ID")
+        if not isinstance(registry_address, str) or re.fullmatch(r"0x[0-9a-fA-F]{40}", registry_address) is None:
+            raise WalletOwnershipError("Invalid wallet evidence registry address")
         self.chain_id, self.registry_address = chain_id, registry_address
         self.clock = clock or (lambda: int(time.time()))
         # Optional async callable address -> delegation probe dict

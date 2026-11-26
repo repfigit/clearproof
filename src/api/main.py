@@ -17,6 +17,7 @@ from src.api.config import (
     AuthConfig,
     EventConfig,
     FireblocksConfig,
+    WalletOwnershipConfig,
     build_wallet_web3,
     close_wallet_web3,
     legacy_api_enabled,
@@ -101,6 +102,10 @@ async def lifespan(app: FastAPI):
         wallet_web3 = build_wallet_web3()
     except (ValueError, TypeError, RuntimeError) as exc:
         raise RuntimeError("Invalid wallet ownership RPC configuration") from exc
+    try:
+        wallet_ownership_config = WalletOwnershipConfig.from_env()
+    except (KeyError, ValueError, TypeError) as exc:
+        raise RuntimeError("Invalid wallet ownership configuration") from exc
 
     db = None
     app.state.db = None
@@ -111,6 +116,7 @@ async def lifespan(app: FastAPI):
     app.state.event_config = event_config
     app.state.fireblocks_config = fireblocks_config
     app.state.wallet_web3 = wallet_web3
+    app.state.wallet_ownership_config = wallet_ownership_config
     try:
         db_url = os.getenv("DATABASE_URL")
         if db_url:
@@ -144,6 +150,7 @@ async def lifespan(app: FastAPI):
         app.state.event_config = None
         app.state.fireblocks_config = None
         app.state.wallet_web3 = None
+        app.state.wallet_ownership_config = None
         await close_wallet_web3(wallet_web3)
         if db is not None:
             await db.close()

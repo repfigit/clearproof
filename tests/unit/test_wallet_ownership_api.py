@@ -7,6 +7,7 @@ import httpx
 import pytest
 from fastapi import FastAPI
 
+from src.api.config import WalletOwnershipConfig
 from src.api.routes import wallet_ownership as routes
 from src.auth.principal import Principal, TenantPrincipalDependency
 from src.services.wallet_ownership import WalletOwnershipService
@@ -32,6 +33,7 @@ async def api(monkeypatch, principal):
     app.include_router(routes.router)
     app.dependency_overrides[TenantPrincipalDependency] = lambda: principal
     app.state.db = SimpleNamespace(is_ready=True)
+    app.state.wallet_ownership_config = WalletOwnershipConfig(chain_id=31337, registry_address="0x" + "1" * 40)
     service = MagicMock(spec=WalletOwnershipService)
     app.dependency_overrides[routes.wallet_service] = lambda: service
     async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://test") as client:
@@ -209,44 +211,57 @@ async def test_account_probe_delegation_helper(monkeypatch):
     assert result["has_code"] is True
 
 
-def test_delegation_recheck_seconds_env_parsing(monkeypatch):
-    monkeypatch.delenv("WALLET_OWNERSHIP_DELEGATION_RECHECK_SECONDS", raising=False)
-    assert routes.delegation_recheck_seconds() == 3600
-
-    monkeypatch.setenv("WALLET_OWNERSHIP_DELEGATION_RECHECK_SECONDS", "   ")
-    assert routes.delegation_recheck_seconds() == 3600
-
-    monkeypatch.setenv("WALLET_OWNERSHIP_DELEGATION_RECHECK_SECONDS", "45")
-    assert routes.delegation_recheck_seconds() == 45
-
-    for invalid in ("0", "-10", "not-an-int"):
-        monkeypatch.setenv("WALLET_OWNERSHIP_DELEGATION_RECHECK_SECONDS", invalid)
-        with pytest.raises(ValueError):
-            routes.delegation_recheck_seconds()
-
-
-def test_wallet_service_wires_delegation_recheck_seconds_from_env(monkeypatch, principal):
+def test_wallet_service_wires_startup_config_without_reading_environment(monkeypatch, principal):
     from src.storage.keyring import KeyRing, KeyVersion
     from src.storage.pilot_cipher import RecordCipher
 
-    monkeypatch.setenv("PII_MASTER_KEY", "ab" * 32)
-    monkeypatch.setenv("PILOT_CHAIN_ID", "31337")
-    monkeypatch.setenv("PILOT_REGISTRY_ADDRESS", "0x" + "1" * 40)
-    monkeypatch.setenv("WALLET_OWNERSHIP_DELEGATION_RECHECK_SECONDS", "120")
+    # Stale environment values prove the request path uses app.state only.
+    monkeypatch.setenv("PILOT_CHAIN_ID", "1")
+    monkeypatch.setenv("PILOT_REGISTRY_ADDRESS", "0x" + "9" * 40)
+    monkeypatch.setenv("WALLET_OWNERSHIP_DELEGATION_RECHECK_SECONDS", "15")
     monkeypatch.delenv("WALLET_OWNERSHIP_RPC_URL", raising=False)
 
-    request = SimpleNamespace(
-        app=SimpleNamespace(
-            state=SimpleNamespace(
-                db=SimpleNamespace(is_ready=True),
-                record_cipher=RecordCipher(KeyRing(KeyVersion("current", b"a" * 32, 0))),
-            )
-        )
+    state = SimpleNamespace(
+        db=SimpleNamespace(is_ready=True),
+        record_cipher=RecordCipher(KeyRing(KeyVersion("current", b"a" * 32, 0))),
+        wallet_ownership_config=WalletOwnershipConfig(
+            chain_id=31337, registry_address="0x" + "1" * 40, delegation_recheck_seconds=120
+        ),
     )
+    request = SimpleNamespace(app=SimpleNamespace(state=state))
     service = routes.wallet_service(request, principal)
+    assert service.chain_id == 31337
+    assert service.registry_address == "0x" + "1" * 40
     assert service.delegation_recheck_seconds == 120
 
-    monkeypatch.setenv("WALLET_OWNERSHIP_DELEGATION_RECHECK_SECONDS", "0")
-    with pytest.raises(routes.HTTPException) as exc_info:
-        routes.wallet_service(request, principal)
-    assert exc_info.value.status_code == 503
+    for invalid in (
+        WalletOwnershipConfig(chain_id=31337, registry_address="0x" + "1" * 40, delegation_recheck_seconds=0),
+        WalletOwnershipConfig(chain_id=31337, registry_address="not-an-address"),
+        WalletOwnershipConfig(chain_id="synthetic", registry_address="0x" + "1" * 40),
+    ):
+        state.wallet_ownership_config = invalid
+        with pytest.raises(routes.HTTPException) as exc_info:
+            routes.wallet_service(request, principal)
+        assert exc_info.value.status_code == 503
+
+
+async def test_challenge_uses_startup_siwe_domain(api, monkeypatch):
+    # A conflicting environment value proves the request path uses app.state only.
+    monkeypatch.setenv("PILOT_SIWE_DOMAIN", "stale.example")
+    api.app.state.wallet_ownership_config = WalletOwnershipConfig(
+        chain_id=31337, registry_address="0x" + "1" * 40, siwe_domain="configured.example"
+    )
+    value = SimpleNamespace(
+        model_dump=lambda **_: {},
+        message=lambda: "configured.example wants you to sign in",
+        siwe_domain="configured.example",
+        credential=SimpleNamespace(subject_wallet="0x" + "11" * 20, issuer_did="did:web:issuer.example"),
+        timestamp=100,
+        nonce="ab" * 32,
+        expires_at=400,
+    )
+    api.service.challenge = AsyncMock(return_value=value)
+    response = await api.client.post("/wallet/ownership/challenge", json={"credential_id": "ab" * 32})
+    assert response.status_code == 200
+    assert response.json()["message_format"] == "eip-4361"
+    assert api.service.challenge.call_args.kwargs["siwe_domain"] == "configured.example"

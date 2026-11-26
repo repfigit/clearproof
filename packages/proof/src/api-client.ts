@@ -1,7 +1,42 @@
 const INPUT_LIMIT = 1024 * 1024;
 const OUTPUT_LIMIT = 2 * 1024 * 1024;
 
-export type ReportPath = '/pilot/policy/diff' | '/pilot/policy/diff/stored' | '/pilot/events/investigate' | '/pilot/events/queue' | '/pilot/proof/inspect' | '/pilot/proof/observe' | '/pilot/proof/observations/read' | '/pilot/proof/observations/report' | '/pilot/proof/observations/list' | '/pilot/proof/authorize';
+/** Every authenticated pilot and wallet-ownership route, with path templates as published. */
+export const PILOT_AND_WALLET_ROUTES = [
+  '/pilot/credential/enroll',
+  '/pilot/credential/list',
+  '/pilot/credential/backfill',
+  '/pilot/credential/revoke',
+  '/pilot/policy/approve',
+  '/pilot/policy/diff',
+  '/pilot/policy/diff/stored',
+  '/pilot/proof/inspect',
+  '/pilot/proof/evaluate',
+  '/pilot/proof/authorize',
+  '/pilot/proof/observe',
+  '/pilot/proof/observations/read',
+  '/pilot/proof/observations/report',
+  '/pilot/proof/observations/list',
+  '/pilot/proof/jobs',
+  '/pilot/proof/jobs/{job_id}',
+  '/pilot/proof/jobs/{job_id}/cancel',
+  '/pilot/proof/jobs/{job_id}/retry',
+  '/pilot/events/ingest',
+  '/pilot/events/investigate',
+  '/pilot/events/queue',
+  '/pilot/fireblocks/{integration_id}',
+  '/pilot/usage',
+  '/pilot/readiness/{capability}/{target_id}',
+  '/wallet/ownership/challenge',
+  '/wallet/ownership/verify',
+  '/wallet/ownership/attestations/{attestation_id}',
+  '/wallet/ownership/revoke',
+  '/wallet/ownership/delegation-check',
+  '/wallet/ownership/evidence/{attestation_id}',
+  '/wallet/ownership/credential',
+] as const;
+
+export type ReportPath = (typeof PILOT_AND_WALLET_ROUTES)[number];
 
 export function reportEndpoint(base: string, path: ReportPath): URL {
   const url = new URL(base);

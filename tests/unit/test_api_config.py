@@ -9,6 +9,7 @@ from starlette.requests import Request
 
 from src.api.config import (
     AuthConfig,
+    WalletOwnershipConfig,
     _request_app_state,
     build_wallet_web3,
     close_wallet_web3,
@@ -17,6 +18,7 @@ from src.api.config import (
     get_fireblocks_config,
     get_record_cipher,
     get_siwe_auth,
+    get_wallet_ownership_config,
     get_wallet_web3,
     legacy_api_enabled,
     require_record_cipher,
@@ -138,6 +140,64 @@ async def test_fireblocks_route_returns_503_when_get_fireblocks_config_raises(mo
     assert response.status_code == 503
     assert response.json() == {"detail": "Fireblocks relay configuration is unavailable"}
     assert "SYNTHETIC-PRIVATE-PARSE-DETAIL" not in response.text
+
+
+def test_wallet_ownership_config_from_env_defaults_and_validation(monkeypatch):
+    valid = {"PILOT_CHAIN_ID": "31337", "PILOT_REGISTRY_ADDRESS": "0x" + "1" * 40}
+    config = WalletOwnershipConfig.from_env(valid)
+    assert (config.chain_id, config.registry_address) == (31337, "0x" + "1" * 40)
+    assert config.delegation_recheck_seconds == 3600
+    assert config.siwe_domain is None
+
+    config = WalletOwnershipConfig.from_env(
+        {
+            **valid,
+            "WALLET_OWNERSHIP_DELEGATION_RECHECK_SECONDS": " 45 ",
+            "PILOT_SIWE_DOMAIN": "  delegation.example  ",
+        }
+    )
+    assert config.delegation_recheck_seconds == 45
+    assert config.siwe_domain == "delegation.example"
+    assert WalletOwnershipConfig.from_env({**valid, "PILOT_SIWE_DOMAIN": " "}).siwe_domain is None
+    assert (
+        WalletOwnershipConfig.from_env(
+            {**valid, "WALLET_OWNERSHIP_DELEGATION_RECHECK_SECONDS": "  "}
+        ).delegation_recheck_seconds
+        == 3600
+    )
+
+    invalid = [
+        ({}, "PILOT_CHAIN_ID"),
+        ({**valid, "PILOT_CHAIN_ID": "synthetic-invalid-chain"}, "integer"),
+        ({**valid, "PILOT_CHAIN_ID": "0"}, "positive"),
+        ({**valid, "PILOT_REGISTRY_ADDRESS": "0x1234"}, "PILOT_REGISTRY_ADDRESS"),
+        ({**valid, "WALLET_OWNERSHIP_DELEGATION_RECHECK_SECONDS": "later"}, "integer"),
+        ({**valid, "WALLET_OWNERSHIP_DELEGATION_RECHECK_SECONDS": "0"}, "positive"),
+    ]
+    for env, pattern in invalid:
+        with pytest.raises(ValueError, match=pattern):
+            WalletOwnershipConfig.from_env(env)
+
+
+def test_get_wallet_ownership_config_prefers_state_and_lazily_falls_back(monkeypatch):
+    monkeypatch.setenv("PILOT_CHAIN_ID", "31337")
+    monkeypatch.setenv("PILOT_REGISTRY_ADDRESS", "0x" + "1" * 40)
+    config = WalletOwnershipConfig(chain_id=31337, registry_address="0x" + "1" * 40)
+    request = SimpleNamespace(app=SimpleNamespace(state=SimpleNamespace(wallet_ownership_config=config)))
+    assert get_wallet_ownership_config(request) is config
+
+    # A bare app or a stale value falls back to the environment and caches once.
+    state = SimpleNamespace(wallet_ownership_config="invalid")
+    fallback = get_wallet_ownership_config(SimpleNamespace(app=SimpleNamespace(state=state)))
+    assert fallback.chain_id == 31337
+    assert state.wallet_ownership_config is fallback
+    assert get_wallet_ownership_config(None).chain_id == 31337
+    assert get_wallet_ownership_config(Request({"type": "http", "headers": []})).chain_id == 31337
+    assert get_wallet_ownership_config(SimpleNamespace(app=SimpleNamespace())).chain_id == 31337
+
+    monkeypatch.delenv("PILOT_CHAIN_ID")
+    with pytest.raises(ValueError, match="PILOT_CHAIN_ID"):
+        get_wallet_ownership_config(None)
 
 
 def test_wallet_rpc_timeout_seconds_parsing_and_validation(monkeypatch):

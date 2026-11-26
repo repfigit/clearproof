@@ -7,17 +7,16 @@ GET  /credential/{credential_id}    — Retrieve credential status (not full dat
 """
 
 import logging
-import os
 import time
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, Field
 
-from src.api.config import require_record_cipher
+from src.api.config import get_wallet_ownership_config, require_record_cipher
 from src.api.dependencies import get_credential_registry
 from src.api.middleware.auth import JWTAuthDependency
-from src.api.routes.wallet_ownership import account_probe, delegation_recheck_seconds
+from src.api.routes.wallet_ownership import account_probe
 from src.auth.principal import Principal, TenantPrincipalDependency
 from src.registry.credential_registry import CredentialRegistry, zkKYCCredential
 from src.services.enrollment import EnrollmentIneligible, EnrollmentIntegrityError, EnrollmentNotFound
@@ -81,14 +80,15 @@ def _wallet_ownership_service(request: Request, principal: Principal) -> WalletO
     if db is None or not db.is_ready:
         raise HTTPException(status_code=503, detail="Wallet evidence database unavailable")
     try:
+        config = get_wallet_ownership_config(request)
         return WalletOwnershipService(
             db,
             require_record_cipher(request),
             principal,
-            chain_id=int(os.environ["PILOT_CHAIN_ID"]),
-            registry_address=os.environ["PILOT_REGISTRY_ADDRESS"],
+            chain_id=config.chain_id,
+            registry_address=config.registry_address,
             account_probe=account_probe(request),
-            delegation_recheck_seconds=delegation_recheck_seconds(),
+            delegation_recheck_seconds=config.delegation_recheck_seconds,
         )
     except (KeyError, ValueError, RuntimeError) as exc:
         raise HTTPException(status_code=503, detail="Wallet evidence configuration unavailable") from exc

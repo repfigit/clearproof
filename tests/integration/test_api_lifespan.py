@@ -12,6 +12,8 @@ def module(monkeypatch):
     monkeypatch.setenv("PII_MASTER_KEY", "a" * 64)
     monkeypatch.setenv("AUTH_MODE", "api-key")
     monkeypatch.setenv("API_KEY", "synthetic-api-key")
+    monkeypatch.setenv("PILOT_CHAIN_ID", "31337")
+    monkeypatch.setenv("PILOT_REGISTRY_ADDRESS", "0x" + "1" * 40)
     monkeypatch.delenv("DATABASE_URL", raising=False)
     from src.api import main
 
@@ -211,7 +213,7 @@ async def test_operator_target_factories_load_before_serving_and_close_on_failur
 async def test_lifespan_populates_shared_cipher_and_runtime_configs_and_clears_on_shutdown(module, monkeypatch):
     import json
 
-    from src.api.config import AuthConfig, EventConfig, FireblocksConfig
+    from src.api.config import AuthConfig, EventConfig, FireblocksConfig, WalletOwnershipConfig
     from src.storage.pilot_cipher import RecordCipher
 
     monkeypatch.setenv("AUTH_MODE", "jwt")
@@ -252,12 +254,15 @@ async def test_lifespan_populates_shared_cipher_and_runtime_configs_and_clears_o
         assert app.state.event_config.authorities == ()
         assert app.state.event_config.links == ()
         assert app.state.fireblocks_config is None
+        assert isinstance(app.state.wallet_ownership_config, WalletOwnershipConfig)
+        assert app.state.wallet_ownership_config.chain_id == 31337
 
     assert app.state.record_cipher is None
     assert app.state.auth_config is None
     assert app.state.siwe_auth is None
     assert app.state.event_config is None
     assert app.state.fireblocks_config is None
+    assert app.state.wallet_ownership_config is None
     assert isinstance(FireblocksConfig(), FireblocksConfig)
 
 
@@ -397,6 +402,17 @@ async def test_lifespan_constructs_and_disconnects_wallet_web3_on_every_exit(mod
     builder.assert_called_once_with()
     disconnect.assert_awaited_once()
     assert app.state.wallet_web3 is None
+
+
+async def test_invalid_wallet_chain_id_blocks_startup_before_db(module, monkeypatch):
+    monkeypatch.setenv("DATABASE_URL", "configured")
+    monkeypatch.setenv("PILOT_CHAIN_ID", "synthetic-invalid-chain")
+    database = Mock()
+    monkeypatch.setattr(module, "Database", database)
+    with pytest.raises(RuntimeError, match="Invalid wallet ownership configuration"):
+        async with module.lifespan(module.create_app()):
+            pytest.fail("invalid wallet chain ID reached serving state")
+    database.assert_not_called()
 
 
 async def test_invalid_wallet_rpc_timeout_blocks_startup_before_db(module, monkeypatch):

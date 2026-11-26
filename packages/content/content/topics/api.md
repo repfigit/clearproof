@@ -47,10 +47,12 @@ Current pilot pairing is capped at two active Node processes per Python process,
 
 | Route | Purpose |
 | --- | --- |
-| `POST /wallet/ownership/challenge` | Five-minute EOA signing challenge for an enrolled credential |
-| `POST /wallet/ownership/verify` | Verify the EIP-191 signature; issue a 24-hour attestation |
+| `POST /wallet/ownership/challenge` | Five-minute signing challenge for an enrolled credential; EIP-4361 when `PILOT_SIWE_DOMAIN` is set, otherwise the canonical Clearproof message |
+| `POST /wallet/ownership/verify` | Verify an EOA EIP-191 or smart-account ERC-1271/ERC-6492 signature; issue a 24-hour attestation |
 | `GET /wallet/ownership/attestations/{attestation_id}` | Current attestation eligibility |
 | `POST /wallet/ownership/revoke` | Revoke an attestation |
+| `POST /wallet/ownership/delegation-check` | Force an immediate EIP-7702 delegation re-check |
+| `GET /wallet/ownership/evidence/{attestation_id}` | Supervisor-readable evidence export for one verification |
 | `POST /wallet/ownership/credential` | Issue the optional versioned extension credential |
 
 The extension circuit is staged; no deployed verifier accepts it. See the [wallet ownership guide](https://github.com/repfigit/clearproof/blob/main/docs/internal/WALLET_OWNERSHIP.md).
