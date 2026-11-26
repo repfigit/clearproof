@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
-"""PostgreSQL schema for multi-worker API state (rate-limit buckets and SIWE sessions).
+"""PostgreSQL schema for multi-worker API state (rate-limit buckets, SIWE sessions, and SIWE nonces).
 
 Appended as ordered, transactional migrations in ``src/storage/database.py``.
 """
@@ -37,4 +37,34 @@ CREATE INDEX idx_siwe_sessions_expires
 
 CREATE INDEX idx_siwe_sessions_last_accessed
     ON siwe_sessions (last_accessed_at);
+"""
+
+SIWE_NONCES_MIGRATION = """
+CREATE TABLE siwe_nonces (
+    nonce_hash TEXT PRIMARY KEY CHECK (nonce_hash ~ '^[0-9a-f]{64}$' AND length(nonce_hash) = 64),
+    created_at TIMESTAMPTZ NOT NULL,
+    expires_at TIMESTAMPTZ NOT NULL,
+    CHECK (expires_at > created_at)
+);
+
+CREATE INDEX idx_siwe_nonces_expires
+    ON siwe_nonces (expires_at);
+
+CREATE INDEX idx_siwe_nonces_created
+    ON siwe_nonces (created_at);
+"""
+
+RATE_LIMIT_BUCKET_NAMESPACE_MIGRATION = """
+ALTER TABLE api_rate_limit_buckets
+    ADD COLUMN bucket_namespace TEXT NOT NULL DEFAULT 'default';
+
+UPDATE api_rate_limit_buckets
+SET bucket_namespace = CASE
+    WHEN position(':' IN bucket_key) > 1
+        THEN split_part(bucket_key, ':', 1)
+    ELSE 'default'
+END;
+
+CREATE INDEX idx_api_rate_limit_buckets_namespace_updated
+    ON api_rate_limit_buckets (bucket_namespace, updated_at DESC, bucket_key DESC);
 """

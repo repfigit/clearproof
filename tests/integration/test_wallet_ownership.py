@@ -253,7 +253,7 @@ async def test_additive_wallet_migration_preserves_enrollment(db, enrolled):
         await conn.execute("DELETE FROM pilot_records WHERE kind='enrollment-inventory'")
         await conn.execute("DROP TABLE pilot_enrollment_index")
         await conn.execute(OBSERVATION_MIGRATION)
-        await conn.execute("DROP TABLE api_rate_limit_buckets, siwe_sessions")
+        await conn.execute("DROP TABLE api_rate_limit_buckets, siwe_sessions, siwe_nonces")
         await conn.execute("DROP TABLE pilot_merkle_nodes, pilot_merkle_leaves, pilot_merkle_roots")
         await conn.execute("DROP TABLE proof_jobs, proof_job_control")
         await conn.execute("DELETE FROM schema_migrations WHERE version>=20")

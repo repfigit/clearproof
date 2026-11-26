@@ -306,6 +306,7 @@ class RateLimiter:
                 max_requests=max_requests,
                 window_seconds=window_seconds,
                 max_clients=max_clients,
+                bucket_namespace=self.bucket_namespace,
             )
             if not decision.allowed:
                 raise HTTPException(

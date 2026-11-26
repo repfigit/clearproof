@@ -458,7 +458,7 @@ async def test_migration_up_and_down_preserves_existing_records_and_reapplies_cl
             assert (await (await conn.execute("SELECT to_regclass(%s)", (tbl,))).fetchone())[0] == tbl
 
         # Downgrade back below ISSUANCE_MERKLE_MIGRATION (dropping later tables too)
-        await conn.execute("DROP TABLE api_rate_limit_buckets, siwe_sessions")
+        await conn.execute("DROP TABLE api_rate_limit_buckets, siwe_sessions, siwe_nonces")
         await conn.execute(ISSUANCE_MERKLE_DOWNGRADE)
         await conn.execute("DELETE FROM schema_migrations WHERE version >= %s", (merkle_version,))
         for tbl in ("pilot_merkle_roots", "pilot_merkle_leaves", "pilot_merkle_nodes"):
