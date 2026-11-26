@@ -22,6 +22,8 @@ os.environ.setdefault("PII_MASTER_KEY", "a" * 64)
 os.environ.setdefault("HKDF_SALT", "synthetic-test-deployment-salt-001")
 os.environ.setdefault("AUTH_MODE", "api-key")
 os.environ.setdefault("API_KEY", "test-api-key-for-integration")
+os.environ.setdefault("PILOT_CHAIN_ID", "31337")
+os.environ.setdefault("PILOT_REGISTRY_ADDRESS", "0x" + "1" * 40)
 os.environ.setdefault("API_KEY_TENANT_ID", "test-tenant")
 os.environ.setdefault("API_KEY_ACTOR_ID", "test-actor")
 os.environ.setdefault(

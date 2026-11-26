@@ -48,7 +48,7 @@ def test_route_dependencies_reject_unavailable_database(principal, module, funct
     ],
 )
 def test_route_dependencies_minimize_configuration_errors(principal, monkeypatch, module, function, kwargs, failure):
-    from src.api.config import EventConfig
+    from src.api.config import EventConfig, WalletOwnershipConfig
     from src.storage.keyring import KeyRing, KeyVersion
     from src.storage.pilot_cipher import RecordCipher
 
@@ -57,8 +57,12 @@ def test_route_dependencies_minimize_configuration_errors(principal, monkeypatch
     monkeypatch.setenv("PILOT_REGISTRY_ADDRESS", "0x" + "12" * 20)
     record_cipher = RecordCipher(KeyRing(KeyVersion("current", b"a" * 32, 0)))
     event_config = EventConfig()
+    wallet_config = WalletOwnershipConfig(chain_id=31337, registry_address="0x" + "12" * 20)
     if failure == "invalid-chain":
-        monkeypatch.setenv("PILOT_CHAIN_ID", "synthetic-invalid-chain")
+        if module == "wallet_ownership":
+            wallet_config = WalletOwnershipConfig(chain_id="synthetic-invalid-chain", registry_address="0x" + "12" * 20)
+        else:
+            monkeypatch.setenv("PILOT_CHAIN_ID", "synthetic-invalid-chain")
     elif failure == "missing-key":
         record_cipher = None
     elif failure == "missing-event-config":
@@ -69,6 +73,7 @@ def test_route_dependencies_minimize_configuration_errors(principal, monkeypatch
                 db=SimpleNamespace(is_ready=True),
                 record_cipher=record_cipher,
                 event_config=event_config,
+                wallet_ownership_config=wallet_config,
             )
         )
     )

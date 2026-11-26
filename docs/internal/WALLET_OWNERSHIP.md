@@ -2,8 +2,9 @@
 
 This source feature implements PR #11 / AIF-67 without changing legacy credentials,
 the pilot credential commitment, existing proof formats or deployed verifiers.
-It verifies control of an EOA signing key at challenge completion. It does not
-establish legal ownership, complete regulatory compliance, or settlement authority.
+It verifies control of an EOA signing key, or an ERC-1271/ERC-6492 smart account,
+at challenge completion. It does not establish legal ownership, complete
+regulatory compliance, or settlement authority.
 
 ## Flow
 
@@ -27,8 +28,9 @@ establish legal ownership, complete regulatory compliance, or settlement authori
 All calls require the existing authenticated tenant principal, `evidence:decrypt`
 and the relevant issuer grant. Challenge/verify/status/extension use
 `credential:issue`; revocation uses `credential:revoke`. There is no implicit
-administrator override. PostgreSQL, encryption keys, `PILOT_CHAIN_ID` and
-`PILOT_REGISTRY_ADDRESS` must be configured; unavailable storage fails closed.
+administrator override. PostgreSQL and encryption keys must be configured;
+`PILOT_CHAIN_ID` and `PILOT_REGISTRY_ADDRESS` are validated at startup. A
+missing or invalid value fails startup, and unavailable storage fails closed.
 
 ## Signing helper
 

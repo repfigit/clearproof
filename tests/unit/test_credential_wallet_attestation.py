@@ -7,6 +7,7 @@ import httpx
 import pytest
 from fastapi import FastAPI
 
+from src.api.config import WalletOwnershipConfig
 from src.api.dependencies import get_credential_registry
 from src.api.middleware.auth import JWTAuthDependency
 from src.api.routes import credential as routes
@@ -36,6 +37,7 @@ async def api(monkeypatch):
     app.dependency_overrides[get_credential_registry] = lambda: registry
     app.state.db = SimpleNamespace(is_ready=True)
     app.state.record_cipher = MagicMock()
+    app.state.wallet_ownership_config = WalletOwnershipConfig(chain_id=31337, registry_address="0x" + "1" * 40)
     ownership = MagicMock()
     ownership.assert_active = AsyncMock()
     with patch.object(routes, "WalletOwnershipService", return_value=ownership) as service_cls:
@@ -46,7 +48,12 @@ async def api(monkeypatch):
 
 
 async def test_issue_with_wallet_attestation_marks_credential(api, monkeypatch):
-    monkeypatch.setenv("WALLET_OWNERSHIP_DELEGATION_RECHECK_SECONDS", "90")
+    # Stale environment values prove the request path uses app.state only.
+    monkeypatch.setenv("PILOT_CHAIN_ID", "1")
+    monkeypatch.setenv("WALLET_OWNERSHIP_DELEGATION_RECHECK_SECONDS", "15")
+    api.app.state.wallet_ownership_config = WalletOwnershipConfig(
+        chain_id=31337, registry_address="0x" + "1" * 40, delegation_recheck_seconds=90
+    )
     fake_w3 = SimpleNamespace()
     api.app.state.wallet_web3 = fake_w3
     body = {
@@ -124,6 +131,7 @@ async def test_wallet_service_config_unavailable(monkeypatch):
     app.dependency_overrides[TenantPrincipalDependency] = lambda: principal
     app.dependency_overrides[JWTAuthDependency] = lambda: {"sub": "test"}
     app.state.db = SimpleNamespace(is_ready=True)
+    app.state.record_cipher = MagicMock()
     async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://test") as client:
         response = await client.post(
             "/credential/issue",

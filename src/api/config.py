@@ -1,9 +1,9 @@
 """Startup-loaded runtime configuration objects stored on ``app.state``.
 
 All environment-derived API configuration (auth settings, event authorities and
-investigation links, Fireblocks relay integrations, and the shared
-``RecordCipher``) is loaded once during FastAPI lifespan startup and attached to
-``app.state``. Route handlers and middleware read from ``request.app.state``
+investigation links, Fireblocks relay integrations, wallet ownership chain
+binding, and the shared ``RecordCipher``) is loaded once during FastAPI lifespan
+startup and attached to ``app.state``. Route handlers and middleware read from ``request.app.state``
 instead of re-parsing environment variables or constructing ``RecordCipher`` on
 every request.
 """
@@ -13,6 +13,7 @@ from __future__ import annotations
 import json
 import math
 import os
+import re
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any, Mapping, Optional
 
@@ -277,6 +278,82 @@ class FireblocksConfig:
                         raise ValueError("Fireblocks verifier unavailable") from exc
                 return CompiledFireblocksIntegration(integration=item, verifier=verifier)
         return None
+
+
+# ---------------------------------------------------------------------------
+# Wallet ownership configuration
+# ---------------------------------------------------------------------------
+
+_ADDRESS = re.compile(r"0x[0-9a-fA-F]{40}")
+
+
+@dataclass(frozen=True, repr=False)
+class WalletOwnershipConfig:
+    """Startup-validated chain binding and policy for wallet evidence routes."""
+
+    chain_id: int
+    registry_address: str
+    delegation_recheck_seconds: int = 3600
+    siwe_domain: Optional[str] = None
+
+    @classmethod
+    def from_env(cls, env: Optional[Mapping[str, str]] = None) -> WalletOwnershipConfig:
+        source = os.environ if env is None else env
+
+        chain_raw = source.get("PILOT_CHAIN_ID", "").strip()
+        if not chain_raw:
+            raise ValueError("PILOT_CHAIN_ID is required")
+        try:
+            chain_id = int(chain_raw)
+        except ValueError:
+            raise ValueError("PILOT_CHAIN_ID must be an integer chain ID") from None
+        if chain_id <= 0:
+            raise ValueError("PILOT_CHAIN_ID must be positive")
+
+        registry_address = source.get("PILOT_REGISTRY_ADDRESS", "").strip()
+        if not _ADDRESS.fullmatch(registry_address):
+            raise ValueError("PILOT_REGISTRY_ADDRESS must be a 0x-prefixed 20-byte hex address")
+
+        raw_recheck = source.get("WALLET_OWNERSHIP_DELEGATION_RECHECK_SECONDS")
+        if raw_recheck is None or not raw_recheck.strip():
+            delegation_recheck_seconds = 3600
+        else:
+            try:
+                delegation_recheck_seconds = int(raw_recheck.strip())
+            except ValueError:
+                raise ValueError("WALLET_OWNERSHIP_DELEGATION_RECHECK_SECONDS must be an integer") from None
+            if delegation_recheck_seconds <= 0:
+                raise ValueError("WALLET_OWNERSHIP_DELEGATION_RECHECK_SECONDS must be positive")
+
+        siwe_domain = (source.get("PILOT_SIWE_DOMAIN") or "").strip() or None
+
+        return cls(
+            chain_id=chain_id,
+            registry_address=registry_address,
+            delegation_recheck_seconds=delegation_recheck_seconds,
+            siwe_domain=siwe_domain,
+        )
+
+
+def get_wallet_ownership_config(request: Optional[Request] = None) -> WalletOwnershipConfig:
+    """Return ``app.state.wallet_ownership_config``, lazily resolving when absent.
+
+    Lifespan validates and installs the configuration before serving. A bare
+    app without lifespan (for example a focused test) falls back to
+    ``WalletOwnershipConfig.from_env()`` once and caches the result, so valid
+    configuration never 503s merely because startup did not run. Invalid
+    environment values still raise ``ValueError`` for the route boundary to map
+    to its redacted 503.
+    """
+    state = _request_app_state(request)
+    if state is not None:
+        config = getattr(state, "wallet_ownership_config", None)
+        if isinstance(config, WalletOwnershipConfig):
+            return config
+    config = WalletOwnershipConfig.from_env()
+    if state is not None:
+        state.wallet_ownership_config = config
+    return config
 
 
 # ---------------------------------------------------------------------------
